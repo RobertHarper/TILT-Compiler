@@ -65,7 +65,7 @@ struct
 	time is small to avoid communication traffic.
     *)
     fun compile (comm:comm, desc:IntSyn.desc,
-		 job:Name.label) : unit =
+		 job:Name.label, intonly:bool) : unit =
 	let val _ = Stats.clear_measurements()
 	    val start = Time.now()
 	    fun ack_interface () : unit =
@@ -75,7 +75,11 @@ struct
 		    else ()
 		end
 	    val (desc,pdec) = Compiler.get_inputs (desc, job)
-	    val finished = Compiler.compile (desc,pdec,ack_interface)
+	    val finished =
+		if intonly then
+		    (Compiler.compile_int (desc,pdec); true)
+		else
+		    Compiler.compile (desc,pdec,ack_interface)
 	    val meas = Stats.get_measurements()
 	    val msg =
 		if finished then Comm.ACK_FINISHED (job,meas)
@@ -91,6 +95,11 @@ struct
 
     type state = IntSyn.desc option
 
+    fun desc (state:state) : IntSyn.desc =
+	(case state
+	   of NONE => error "slave told to compile before INIT"
+	    | SOME desc => desc)
+
     fun process (comm:comm, state:state, msg:Comm.message) : state =
 	((case msg
 	   of Comm.INIT (objtype, flags, desc) =>
@@ -98,10 +107,8 @@ struct
 		 Target.setTarget objtype;
 		 Stats.set_flags flags;
 		 SOME desc)
-	    | Comm.COMPILE job =>
-		(case state
-		   of NONE => error "slave got COMPILE before INIT"
-		    | SOME desc => (compile(comm,desc,job); state))
+	    | Comm.COMPILE_INT job => (compile(comm,desc state,job,true); state)
+	    | Comm.COMPILE job => (compile(comm,desc state,job,false); state)
 	    | _ => error "slave got unexpected message")
 	 handle e =>
 	    let val _ = if !Standalone then UtilError.print e else ()

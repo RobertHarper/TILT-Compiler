@@ -125,18 +125,29 @@ structure TalOut :> TALOUT =
       in ()
       end
 
-    fun write_imp_header 
+    fun write_imp'
       (oc : TextIO.outstream)
       (unitname : string)
       (imports : Tal.int_ref vector) 	(* imported interface files *)
       (exports : Tal.int_ref vector) 	(* exported interface files *)
+      (imp : Tal.tal_imp)
       = 
       let
 	val () = channelwriter (Pptal.print_imp_header Pptal.std_options) oc unitname
 	val () = channelwriter (Pptal.print_tal_import_refs Pptal.std_options) oc imports
 	val () = channelwriter (Pptal.print_tal_export_refs Pptal.std_options) oc exports
+	val () = channelwriter (Pptal.print_tal_imp_body Pptal.std_options) oc imp
       in ()
       end
 
+    fun write_imp asmfile unitname imports exports imp =
+      let 
+	val oc = openOutput asmfile
+	val () = ((write_imp' oc unitname imports exports imp)
+		  handle any => (closeOutput oc;
+				 raise any))
+      in 
+	closeOutput oc
+      end 
 
   end (* EOF: talout.sml *)

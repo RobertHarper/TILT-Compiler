@@ -20,7 +20,7 @@ struct
 		\       -m       master only\n\
 		\       -c U     operate on unit U\n\
 		\       -C I     operate on interface I\n\
-		\       -t T     compile for target T (sparc, alpha, talx86)\n"
+		\       -t T     compile for target T (sparc or alpha)\n"
 	in  TextIO.output (TextIO.stdErr, msg);
 	    OS.Process.exit (OS.Process.failure)
 	end

@@ -6,10 +6,14 @@ structure LilToTal :> LILTOTAL =
     val error = fn s => Util.error "liltotal.sml" s
     val debug = Stats.ff "LilToTalDebug"
 
-    fun allocateModule asmfile lilmod = 
+    fun files2intrefs files = Vector.fromList (map Tal.Int_filename files)
+
+    fun allocateModule (asmfile : string) (unitname : string) (imports : string list) (exports : string list) (lilmod : Lil.module) : unit =
       let
+	val imports = files2intrefs imports
+	val exports = files2intrefs exports
 	val (unitname,tal_int_i,tal_imp,tal_int_e) = LTE.modtrans lilmod
-	val () = TalOut.write_imp_body asmfile tal_imp
+	val () = TalOut.write_imp asmfile unitname imports exports tal_imp
       in ()
       end
 
@@ -19,15 +23,5 @@ structure LilToTal :> LILTOTAL =
 	val () = TalOut.write_int unitname asmfile tal_int
       in ()
       end
-
-    fun files2intrefs files = Vector.fromList (map Tal.Int_filename files)
-
-    fun write_imp_headers (oc : TextIO.outstream) (unitname : string) (imports : string list) (exports : string list) = 
-      let
-	val imports = files2intrefs imports
-	val exports = files2intrefs exports
-      in TalOut.write_imp_header oc unitname imports exports
-      end
-      
 
 end  (* LilToTal *)

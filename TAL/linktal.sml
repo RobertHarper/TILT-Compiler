@@ -4,10 +4,10 @@ structure LinkTAL =
       
     fun msg str = if (!diag) then print str else ()
     
-    fun comp (asm_file : string ,lilmod : Lil.module) =
+    fun comp (asm_file : string, unitname : string, imports : string list, exports : string list, lilmod : Lil.module) =
       let 
 	val _ = msg "===== Translating to TAL assembly =====\n"
-	val () = LilToTal.allocateModule asm_file lilmod
+	val () = LilToTal.allocateModule asm_file unitname imports exports lilmod
       in ()
       end
 
@@ -20,7 +20,6 @@ structure LinkTAL =
     
     val lil_to_asm = Stats.timer("To TAL ASM",comp)
 
-    val to_tal_interface = fn filename => fn int => Stats.timer ("To TAL interface",comp_int) (filename,int)
-    val write_headers = LilToTal.write_imp_headers
+    val to_tal_interface = fn int => fn filename => Stats.timer ("To TAL interface",comp_int) (filename,int)
 
   end

@@ -55,6 +55,11 @@ struct
 	   of (objtype, Platform.SUPPORTED objtype') => objtype = objtype'
 	    | (_, Platform.UNSUPPORTED) => false)
 
+    fun tal () : bool =
+	(case (!target)
+	   of Platform.TALx86 => true
+	    | _ => false)
+
     fun checkNative () : unit =
 	if native() then ()
 	else error ("can not link " ^ Platform.toString (!target) ^ " binaries")

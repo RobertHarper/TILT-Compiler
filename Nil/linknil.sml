@@ -368,7 +368,7 @@ structure Linknil :> LINKNIL  =
 	
       exception Stop of Nil.interface
     in
-      fun compile_interface' (filename,ilinterface : Il.context * Il.sdec (*Il.interface*)) =
+      fun compile_interface' (filename,ilinterface : Il.sc_module) : Nil.interface =
 	let
 	    val pass = pass filename
 	    val transform = transform filename

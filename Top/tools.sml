@@ -107,11 +107,11 @@ struct
     val run : string list list -> unit =
 	run' o List.concat
 
-    fun assemble (asmFile : string, objFile : string) : unit =
+    fun assemble (tal_includes : string list, asmFile : string, objFile : string) : unit =
 	let val _ = msg "  Assembling\n"
 	    val _ = Target.checkNative()
 	    val {assembler, ...} = targetConfig()
-	    fun writer tmp = run [assembler,["-o", tmp, asmFile]]
+	    fun writer tmp = run [assembler,tal_includes,["-o", tmp, asmFile]]
 	in  Fs.write' writer objFile
 	end
 
@@ -119,11 +119,11 @@ struct
 	We do not have a good temporary name because exeFile is not
 	inside a TM directory.
     *)
-    fun link (objFiles : string list, exeFile : string) : unit =
+    fun link (tal_includes : string list, objFiles : string list, exeFile : string) : unit =
 	let val _ = msg "  Linking\n"
 	    val _ = Target.checkNative()
 	    val {linker, ldpre, ldpost, ...} = targetConfig()
-	in  run [linker, ["-o", exeFile], ldpre, objFiles, ldpost]
+	in  run [linker, tal_includes, ["-o", exeFile], ldpre, objFiles, ldpost]
 	end
 
     fun compress {src : string, dest : string} : unit =

@@ -95,6 +95,7 @@ qtext = (\032 | \033 | [\035-\091] | [\093-\126])+;
 <INITIAL>">"	=> (T.GT (curpos()));
 <INITIAL>">="	=> (T.GE (curpos()));
 <INITIAL>:	=> (T.COLON (curpos()));
+<INITIAL>::	=> (T.COLONCOLON (curpos()));
 <INITIAL>env	=> (T.ENV (curpos()));
 <INITIAL>true	=> (T.BOOL (true,curpos'(),curpos'()));
 <INITIAL>false	=> (T.BOOL (false,curpos'(),curpos'()));

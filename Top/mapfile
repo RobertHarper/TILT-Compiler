@@ -34,7 +34,7 @@ unit Pos = "pos.sml" {POS Util Blaster Formatter POS Int}
 unit INTSYN = "intsyn.sig.sml" {Pos Name Crc Blaster Formatter}
 unit IntSyn = "intsyn.sml" {
 	INTSYN Util Pos Name Blaster NameBlast Formatter
-	OS Target Fs Crc Listops Ppil 
+	OS Target Fs Crc Listops Ppil Option Bool
 }
 unit ExtSyn = "extsyn.sml" {Pos Name}
 
@@ -71,7 +71,7 @@ unit Compiler : Compiler = "compiler.sml" {
 	COMPILER Name IntSyn ExtSyn LinkParse LinkIl Linknil Linksparc
 	Linkalpha Formatter Timestamp Util Stats List Ppil Pos Fs Crc
 	Ast Lil Rtl Target Platform Tools Listops OS TextIO Project
-	Symbol Linkrtl Linklil LinkTAL
+	Symbol Linkrtl Linklil LinkTAL Option
 }
 
 unit COMMUNICATION = "communication.sig.sml" {
@@ -93,6 +93,7 @@ unit UPDATE = "update.sig.sml" {IntSyn}
 interface UPDATE = "update.int" {UPDATE}
 unit Update : UPDATE = "update.sml" {
 	UPDATE IntSyn Compiler Name Util Stats Crc Fs Blaster Pos List
+	Target
 }
 unit MASTER = "master.sig.sml" {Name}
 interface Master = "master.int" {MASTER}

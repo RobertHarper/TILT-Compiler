@@ -1,13 +1,13 @@
 (* Project description files. *)
 (*
-	Accrete well-formed project descriptions from a collection of
-	mutually inter-dependent project description files.  Performs
-	the checks described in ../Doc/tm and extsyn.sml; see those
-	files for more information.
+    Accrete well-formed project descriptions from a collection of
+    mutually inter-dependent project description files.	 Performs the
+    checks described in ../Doc/tm and extsyn.sml; see those files for
+    more information.
 *)
 (*
-	XXX: If there is an error, finish processing the current file to generate
-	more errors and then stop.
+    XXX: If there is an error, finish processing the current file to
+    generate more errors and then stop.
 *)
 structure Project :> PROJECT =
 struct
@@ -53,26 +53,26 @@ struct
 
     datatype value =
 	SVAL of string
-      | IVAL of int
-      | BVAL of bool
+    |	IVAL of int
+    |	BVAL of bool
 
     datatype entry =
 	PDEC of I.pdec
-      | VDEC of ty * value * pos
+    |	VDEC of ty * value * pos
 
     fun entry_pdec (e:entry) : I.pdec =
-	(case e
-	   of PDEC pdec => pdec
-	    | _ => error "entry_pdec")
+	(case e of
+	    PDEC pdec => pdec
+	|   _ => error "entry_pdec")
 
     fun entry_pos (e:entry) : pos =
-	(case e
-	   of PDEC pdec => I.P.pos pdec
-	    | VDEC (_,_,pos) => pos)
+	(case e of
+	    PDEC pdec => I.P.D.pos pdec
+	|   VDEC (_,_,pos) => pos)
 
     datatype file_entry =
-	ELABORATING of pos		(* starting point *)
-      | ELABORATED of Set.set	(* identifers defined in file *)
+	ELABORATING of pos  (* starting point *)
+    |	ELABORATED of Set.set	(* identifers defined in file *)
 
     (*
 	(rev desc_) is a well-formed project description.  Entries
@@ -80,7 +80,7 @@ struct
 	been defined.  Files records the project description files
 	that constitute desc.  We compares filenames (in canonical
 	form) to manage dependencies between project description
-	files.  We assume that distinct filenames map to distinct
+	files.	We assume that distinct filenames map to distinct
 	files; in particular, we can be confused by symbolic links or
 	similar mechanisms.  Vars names the variables that are defined
 	by empty() and made visible to every project description file.
@@ -125,8 +125,7 @@ struct
 
     fun predefined_vars {linking:bool} : entry Map.map =
 	let fun add_var (ty:ty,inj:'a -> value)
-			(entries:entry Map.map,
-			 name:string,a:'a) : entry Map.map =
+		    (entries:entry Map.map, name:string,a:'a) : entry Map.map =
 		let val x = Name.symbol_label(Symbol.varSymbol name)
 		    val value = inj a
 		    val entry = VDEC(ty,value,Pos.nopos)
@@ -171,9 +170,9 @@ struct
     fun insert (desc:desc, l:label, e:entry) : desc =
 	let val {desc_,entries,files,vars,pos,visible,ck} = desc
 	    val desc_ =
-		(case e
-		   of PDEC pdec => pdec::desc_
-		    | VDEC _ => desc_)
+		(case e of
+		    PDEC pdec => pdec::desc_
+		|   VDEC _ => desc_)
 	    val entries = Map.insert (entries,l,e)
 	    val visible = Set.add(visible,l)
 	in  {desc_=desc_,entries=entries,files=files,vars=vars,
@@ -246,51 +245,51 @@ struct
 	label_name l ^ " not defined"
 
     fun known_value (desc:desc, x:label) : ty * value * pos =
-	(case global_lookup (desc,x)
-	   of SOME (VDEC r) => r
-	    | _ => error (undefined x))
+	(case (global_lookup (desc,x)) of
+	    SOME (VDEC r) => r
+	|   _ => error (undefined x))
 
     fun unknown_value (desc:desc, x:label) : ty * value * pos =
-	(case lookup (desc,x)
-	   of SOME (VDEC r) => r
-	    | _ => fail (#pos desc) (undefined x))
+	(case (lookup (desc,x)) of
+	    SOME (VDEC r) => r
+	|   _ => fail (#pos desc) (undefined x))
 
     fun known_env (X:label) : string =
-	(case OS.Process.getEnv (Name.label2name X)
-	   of SOME s => s
-	    | NONE => error (undefined X))
+	(case (OS.Process.getEnv (Name.label2name X)) of
+	    SOME s => s
+	|   NONE => error (undefined X))
 
     fun check_env (desc:desc, X:label) : unit =
-	(case OS.Process.getEnv (Name.label2name X)
-	   of SOME _ => ()
-	    | NOEN => fail (#pos desc) (undefined X))
+	(case (OS.Process.getEnv (Name.label2name X)) of
+	    SOME _ => ()
+	|   NONE => fail (#pos desc) (undefined X))
 
-    fun known_interface (desc:desc, I:label) : label * I.iexp * pos =
-	(case global_lookup (desc,I)
-	   of SOME (PDEC (I.IDEC r)) => r
-	    | _ => error (undefined I))
+    fun known_interface (desc:desc, I:label) : I.idec =
+	(case (global_lookup (desc,I)) of
+	    SOME (PDEC (I.IDEC r)) => r
+	|   _ => error (undefined I))
 
-    fun unknown_interface (desc:desc, I:label) : label * I.iexp * pos =
-	(case lookup (desc,I)
-	   of SOME (PDEC (I.IDEC r)) => r
-	    | _ => fail (#pos desc) (undefined I))
+    fun unknown_interface (desc:desc, I:label) : I.idec =
+	(case (lookup (desc,I)) of
+	    SOME (PDEC (I.IDEC r)) => r
+	|   _ => fail (#pos desc) (undefined I))
 
     fun check_bound (desc:desc, l:label) : unit =
 	if Set.member(#visible desc, l) then ()
 	else fail (#pos desc) (undefined l)
 
-    fun check_opened (desc:desc, opened:E.opened) : unit =
-	app (fn U => check_bound (desc,U)) opened
+    fun check_units (desc:desc, units:E.units) : unit =
+	app (fn U => check_bound (desc,U)) units
 
     fun check_unbound (desc:desc, l:label) : unit =
-	(case global_lookup(desc,l)
-	   of NONE => ()
-	    | SOME e =>
+	(case (global_lookup(desc,l)) of
+	    NONE => ()
+	|   SOME e =>
 		fail (#pos desc)
 		(concat[label_name l," already defined at ",
 			Pos.tostring (entry_pos e)]))
 
-    fun check_using (desc:desc, using:I.using) : unit =
+    fun check_using (desc:desc, using:I.units) : unit =
 	let val {visible,pos,...} = desc
 	    fun check (U:label) : unit =
 		if Set.member(visible,U) then ()
@@ -316,19 +315,19 @@ struct
 		else (p"$"; pid l)
 
 	    fun atomic (e:exp) : bool =
-		(case e
-		   of EXP_VAR _ => true
-		    | EXP_ENV _ => true
-		    | EXP_STR _ => true
-		    | EXP_INT _ => true
-		    | EXP_BOOL _ => true
-		    | EXP_MARK (_,e) => atomic e
-		    | _ => false)
+		(case e of
+		    EXP_VAR _ => true
+		|   EXP_ENV _ => true
+		|   EXP_STR _ => true
+		|   EXP_INT _ => true
+		|   EXP_BOOL _ => true
+		|   EXP_MARK (_,e) => atomic e
+		|   _ => false)
 
 	    fun quote (c:char) : string =
-		(case c
-		   of #"\034" => "\034\034"
-		    | _ => str c)
+		(case c of
+		    #"\034" => "\034\034"
+		|   _ => str c)
 
 	    fun pstring (s':string) : unit =
 		p'["\034",String.translate quote s',"\034"]
@@ -341,53 +340,53 @@ struct
 		else (p"("; pexp' e; p")")
 
 	    and pexp' (e:exp) : unit =
-		(case e
-		   of EXP_VAR x => (p"$"; pid x)
-		    | EXP_ENV X => (p"env "; pid X)
-		    | EXP_STR s => pstring s
-		    | EXP_CAT es => pinfix(es,"^")
-		    | EXP_INT i => p (Int.toString i)
-		    | EXP_BOOL b => p (Bool.toString b)
-		    | EXP_IF (e1,e2,e3) => (p"if "; pexp e1; p" then ";
-					    pexp e2; p" else "; pexp e3)
-		    | EXP_NOT e => (p"not "; pexp e)
-		    | EXP_AND es => pinfix(es," andalso ")
-		    | EXP_OR es => pinfix(es," orelse ")
-		    | EXP_SEQ es => pinfix(es," S= ")
-		    | EXP_BEQ es => pinfix(es," B= ")
-		    | EXP_IEQ es => pinfix(es,"=")
-		    | EXP_ILT es => pinfix(es,"<")
-		    | EXP_ILE es => pinfix(es,"<=")
-		    | EXP_IGT es => pinfix(es,">")
-		    | EXP_IGE es => pinfix(es,">=")
-		    | EXP_DEF l => (p"defined "; pid' l)
-		    | EXP_MARK (_,e) => pexp' e)
+		(case e of
+		    EXP_VAR x => (p"$"; pid x)
+		|   EXP_ENV X => (p"env "; pid X)
+		|   EXP_STR s => pstring s
+		|   EXP_CAT es => pinfix(es,"^")
+		|   EXP_INT i => p (Int.toString i)
+		|   EXP_BOOL b => p (Bool.toString b)
+		|   EXP_IF (e1,e2,e3) =>
+			(p"if "; pexp e1; p" then "; pexp e2; p" else "; pexp e3)
+		|   EXP_NOT e => (p"not "; pexp e)
+		|   EXP_AND es => pinfix(es," andalso ")
+		|   EXP_OR es => pinfix(es," orelse ")
+		|   EXP_SEQ es => pinfix(es," S= ")
+		|   EXP_BEQ es => pinfix(es," B= ")
+		|   EXP_IEQ es => pinfix(es,"=")
+		|   EXP_ILT es => pinfix(es,"<")
+		|   EXP_ILE es => pinfix(es,"<=")
+		|   EXP_IGT es => pinfix(es,">")
+		|   EXP_IGE es => pinfix(es,">=")
+		|   EXP_DEF l => (p"defined "; pid' l)
+		|   EXP_MARK (_,e) => pexp' e)
 
-	    fun popened (opened:opened) : unit =
-		let val names = map Name.label2name' opened
+	    fun punits (units:units) : unit =
+		let val names = map Name.label2name' units
 		in  p' [" {",Listops.concatWith " " names,"}"]
 		end
 
-	    fun popopt (opopt:opopt) : unit =
-		(case opopt
-		   of NONE => ()
-		    | SOME opened => popened opened)
+	    fun punits' (units':units') : unit =
+		(case units' of
+		    NONE => ()
+		|   SOME opened => punits opened)
 
 	    fun pasc (I:label) : unit =
 		(p" : "; pid I)
 
 	    fun pascopt (I:label option) : unit =
-		(case I
-		   of NONE => ()
-		    | SOME I => pasc I)
+		(case I of
+		    NONE => ()
+		|   SOME I => pasc I)
 
 	    fun pie (ie:ie) : unit =
-		(case ie
-		   of SRCI (src,opened) => (pexp src; popopt opened)
-		    | PRIMI => p"primitive"
-		    | PRECOMPI (src,opened) =>
-			(p"compiled "; pexp src; popened opened)
-		    | COMPI => p"compiled")
+		(case ie of
+		    SRCI (src,opened) => (pexp src; punits' opened)
+		|   PRIMI => p"primitive"
+		|   PRECOMPI (src,opened) =>
+			(p"compiled "; pexp src; punits opened)
+		|   COMPI => p"compiled")
 
 	    fun pents (ents:ents) : unit = app pent ents
 
@@ -395,28 +394,29 @@ struct
 		(pent' e; p"\n")
 
 	    and pent' (e:ent) : unit =
-		(case e
-		   of INTERFACE(I,ie) => (p"interface "; pid I; p" = "; pie ie)
-		    | UNIT(U,SRCU (src,opopt,ascopt)) =>
+		(case e of
+		    INTERFACE(I,ie) => (p"interface "; pid I; p" = "; pie ie)
+		|   UNIT(U,SRCU (src,units',ascopt)) =>
 			(p"unit "; pid U; pascopt ascopt; p" = "; pexp src;
-			 popopt opopt)
-		    | UNIT(U,PRIMU asc) =>
+			 punits' units')
+		|   UNIT(U,PRIMU asc) =>
 			(p"unit "; pid U; pasc asc; p" = primitive")
-		    | UNIT(U,PRECOMPU (src,opened,asc)) =>
+		|   UNIT(U,PRECOMPU (src,opened,asc)) =>
 			(p"unit "; pid U; pasc asc; p" = compiled "; pexp src;
-			 popened opened)
-		    | UNIT(U,COMPU asc) =>
-			(p"unit "; pid U; pasc asc; p" = compiled")
-		    | SC (U,I) => (p"unit "; pid U; pasc I)
-		    | VAL (x,e) => (p"val "; pid x; p" = "; pexp e)
-		    | INCLUDE file => (p"include "; pexp file)
-		    | LOCAL file => (p"local "; pexp file)
-		    | IF (e1,ents1,ents2) =>
-		       (p"#if "; pexp e1; p"\n"; pents ents1;
-			p"#else\n"; pents ents2;
-			p"#endif")
-		    | ERROR e => (p"#error "; pexp e)
-		    | MARK (_,e) => (pent' e))
+			 punits opened)
+		|   UNIT(U,COMPU (requiring,asc)) =>
+			(p"unit "; pid U; pasc asc; p" = compiled"; punits requiring)
+		|   SC (U,I,false) => (p"unit "; pid U; pasc I)
+		|   SC (U,I,true) => (p"unit "; pid U; p" :: "; pid I)
+		|   VAL (x,e) => (p"val "; pid x; p" = "; pexp e)
+		|   INCLUDE file => (p"include "; pexp file)
+		|   LOCAL file => (p"local "; pexp file)
+		|   IF (e1,ents1,ents2) =>
+			(p"#if "; pexp e1; p"\n"; pents ents1;
+			 p"#else\n"; pents ents2;
+			 p"#endif")
+		|   ERROR e => (p"#error "; pexp e)
+		|   MARK (_,e) => (pent' e))
 
 	in  pents ents
 	end
@@ -434,7 +434,7 @@ struct
 		val errors = ref false
 		fun newline () : unit =
 		    let val n = !lineno + 1
-		    in  lineno := n;
+		    in	lineno := n;
 			curpos := Pos.pos (file,n)
 		    end
 	    in
@@ -445,20 +445,21 @@ struct
 		 start = fn () => !start,
 		 startCom = fn () => start := SOME ("comment",!curpos),
 		 nestCom = fn () => com := !com + 1,
-		 endCom = fn () => if !com = 0 then (start := NONE; true)
-				   else (com := !com - 1; false),
+		 endCom = fn () =>
+		    if !com = 0 then (start := NONE; true)
+		    else (com := !com - 1; false),
 		 startStr = fn () => start := SOME ("string",!curpos),
 		 addToStr = fn s => str := s :: (!str),
-		 finishStr = (fn () =>
-			      let val (_,startPos) = valOf (!start)
-				  val s = String.concat (rev (!str))
-			      in  start := NONE;
-				  str := nil;
-				  (s,startPos,!curpos)
-			      end),
-		 parseError = (fn (m,p,_) =>
-			       (errors := true;
-				print_error p m))}
+		 finishStr = fn () =>
+		    let val (_,startPos) = valOf (!start)
+			val s = String.concat (rev (!str))
+		    in	start := NONE;
+			str := nil;
+			(s,startPos,!curpos)
+		    end,
+		 parseError = fn (m,p,_) =>
+		    (errors := true;
+		     print_error p m)}
 	    end
 
 	structure LrVals = ProjectLrValsFun (structure Token = LrParser.Token)
@@ -475,38 +476,38 @@ struct
 		The lists of opened units associated with precompiled
 		units and interfaces already mention the basis.
 	*)
-	fun fix (opened : E.opened) : E.opened = Toplevel @ opened
-	fun fix' (opopt : E.opopt) : E.opopt = Option.map fix opopt
+	fun fix (opened : E.units) : E.units = Toplevel @ opened
+	fun fix' (units' : E.units') : E.units' = Option.map fix units'
 
 	fun fix_ie (ie:E.ie) : E.ie =
-	    (case ie
-	       of E.SRCI (src,opopt) => E.SRCI (src,fix' opopt)
-		| _ => ie)
+	    (case ie of
+		E.SRCI (src,units') => E.SRCI (src,fix' units')
+	    |	_ => ie)
 
 	fun fix_ue (ue:E.ue) : E.ue =
-	    (case ue
-	       of E.SRCU (src,opopt,asc) => E.SRCU (src,fix' opopt,asc)
-		| _ => ue)
+	    (case ue of
+		E.SRCU (src,units',asc) => E.SRCU (src,fix' units',asc)
+	    |	_ => ue)
 
 	fun fix_ent (ent:E.ent) : E.ent =
-	    (case ent
-	       of E.INTERFACE (I,ie) => E.INTERFACE (I,fix_ie ie)
-		| E.UNIT (U,ue) => E.UNIT (U,fix_ue ue)
-		| E.IF (c,ents1,ents2) => E.IF (c,fix_ents ents1,fix_ents ents2)
-		| E.MARK (p,ent) => E.MARK (p,fix_ent ent)
-		| _ => ent)
+	    (case ent of
+		E.INTERFACE (I,ie) => E.INTERFACE (I,fix_ie ie)
+	    |	E.UNIT (U,ue) => E.UNIT (U,fix_ue ue)
+	    |	E.IF (c,ents1,ents2) => E.IF (c,fix_ents ents1,fix_ents ents2)
+	    |	E.MARK (p,ent) => E.MARK (p,fix_ent ent)
+	    |	_ => ent)
 
 	and fix_ents (ents : E.ents) : E.ents = map fix_ent ents
 
 	fun add_basis (ents : E.ents) : E.ents =
 	    let val ents = fix_ents ents
-	    in  (E.LOCAL (E.EXP_STR (I.F.basisdesc()))) :: ents
+	    in	(E.LOCAL (E.EXP_STR (I.F.basisdesc()))) :: ents
 	    end
 
 	fun parse (pos : pos, file : file) : E.ents =
-	    let val ins = (TextIO.openIn file
-			   handle (e as IO.Io _) =>
-				fail pos (exnMessage e))
+	    let val ins =
+		    (TextIO.openIn file
+		     handle (e as IO.Io _) => fail pos (exnMessage e))
 		val read = fn n => TextIO.inputN (ins,n)
 		val lexarg = lexarg file
 		val s = P.makeLexer read lexarg
@@ -527,17 +528,17 @@ struct
 	Type-check and evaluate expressions.
     *)
     fun tyname (ty : ty) : string =
-	(case ty
-	   of STRING => "string"
-	    | INT => "int"
-	    | BOOL => "bool")
+	(case ty of
+	    STRING => "string"
+	|   INT => "int"
+	|   BOOL => "bool")
 
     fun eqty (ty1 : ty, ty2 : ty) : bool =
-	(case (ty1, ty2)
-	   of (STRING,STRING) => true
-	    | (INT,INT) => true
-	    | (BOOL,BOOL) => true
-	    | _ => false)
+	(case (ty1, ty2) of
+	    (STRING,STRING) => true
+	|   (INT,INT) => true
+	|   (BOOL,BOOL) => true
+	|   _ => false)
 
     fun tyof (desc:desc, e:E.exp) : ty =
 	let val fail : string -> 'a = fn s => fail (#pos desc) s
@@ -549,56 +550,56 @@ struct
 	    val stringop = binaryop STRING
 	    val boolop = binaryop BOOL
 	in
-	    (case e
-	       of E.EXP_VAR x => #1(unknown_value (desc,x))
-		| E.EXP_ENV X => (check_env (desc,X); STRING)
-		| E.EXP_STR _ => STRING
-		| E.EXP_CAT (e1,e2) => stringop (e1,e2,STRING)
-		| E.EXP_INT _ => INT
-		| E.EXP_BOOL _ => BOOL
-		| E.EXP_IF (e1,e2,e3) =>
-		    (case (self e1, self e2, self e3)
-		       of (BOOL, ty2, ty3) =>
+	    (case e of
+		E.EXP_VAR x => #1(unknown_value (desc,x))
+	    |	E.EXP_ENV X => (check_env (desc,X); STRING)
+	    |	E.EXP_STR _ => STRING
+	    |	E.EXP_CAT (e1,e2) => stringop (e1,e2,STRING)
+	    |	E.EXP_INT _ => INT
+	    |	E.EXP_BOOL _ => BOOL
+	    |	E.EXP_IF (e1,e2,e3) =>
+		    (case (self e1, self e2, self e3) of
+			(BOOL, ty2, ty3) =>
 			    if eqty(ty2,ty3) then ty2
 			    else fail "arm types differ"
-			| _ => fail "expected bool")
-		| E.EXP_NOT e =>
-		    (case self e
-		       of BOOL => BOOL
-			| _ => fail "expected bool")
-		| E.EXP_AND (e1,e2) => boolop (e1,e2,BOOL)
-		| E.EXP_OR (e1,e2) => boolop (e1,e2,BOOL)
-		| E.EXP_SEQ (e1,e2) => boolop (e1,e2,STRING)
-		| E.EXP_BEQ (e1,e2) => boolop (e1,e2,BOOL)
-		| E.EXP_IEQ (e1,e2) => boolop (e1,e2,INT)
-		| E.EXP_ILT (e1,e2) => boolop (e1,e2,INT)
-		| E.EXP_ILE (e1,e2) => boolop (e1,e2,INT)
-		| E.EXP_IGT (e1,e2) => boolop (e1,e2,INT)
-		| E.EXP_IGE (e1,e2) => boolop (e1,e2,INT)
-		| E.EXP_DEF _ => BOOL
-		| E.EXP_MARK (pos,e) => tyof (update_pos(desc,pos), e))
+		     |	_ => fail "expected bool")
+	    |	E.EXP_NOT e =>
+		    (case self e of
+			BOOL => BOOL
+		     |	_ => fail "expected bool")
+	    |	E.EXP_AND (e1,e2) => boolop (e1,e2,BOOL)
+	    |	E.EXP_OR (e1,e2) => boolop (e1,e2,BOOL)
+	    |	E.EXP_SEQ (e1,e2) => boolop (e1,e2,STRING)
+	    |	E.EXP_BEQ (e1,e2) => boolop (e1,e2,BOOL)
+	    |	E.EXP_IEQ (e1,e2) => boolop (e1,e2,INT)
+	    |	E.EXP_ILT (e1,e2) => boolop (e1,e2,INT)
+	    |	E.EXP_ILE (e1,e2) => boolop (e1,e2,INT)
+	    |	E.EXP_IGT (e1,e2) => boolop (e1,e2,INT)
+	    |	E.EXP_IGE (e1,e2) => boolop (e1,e2,INT)
+	    |	E.EXP_DEF _ => BOOL
+	    |	E.EXP_MARK (pos,e) => tyof (update_pos(desc,pos), e))
 	end
 
     fun value2exp (v:value) : E.exp =
-	(case v
-	   of SVAL s => E.EXP_STR s
-	    | IVAL i => E.EXP_INT i
-	    | BVAL b => E.EXP_BOOL b)
+	(case v of
+	    SVAL s => E.EXP_STR s
+	|   IVAL i => E.EXP_INT i
+	|   BVAL b => E.EXP_BOOL b)
 
     fun gets (v : value) : string =
-	(case v
-	   of SVAL s => s
-	    | _ => error "expected string value")
+	(case v of
+	    SVAL s => s
+	|   _ => error "expected string value")
 
     fun geti (v : value) : int =
-	(case v
-	   of IVAL i => i
-	    | _ => error "expected int value")
+	(case v of
+	    IVAL i => i
+	|   _ => error "expected int value")
 
     fun getb (v : value) : bool =
-	(case v
-	   of BVAL b => b
-	    | _ => error "expected bool value")
+	(case v of
+	    BVAL b => b
+	|   _ => error "expected bool value")
 
     fun ev (desc:desc, e:E.exp) : value =
 	let fun bad () : 'a = error "ev given unchecked expression"
@@ -610,26 +611,26 @@ struct
 	    val bcmp = binaryop BVAL getb
 	    val icmp = binaryop BVAL geti
 	in
-	    (case e
-	       of E.EXP_VAR x => #2(known_value (desc,x))
-		| E.EXP_ENV X => SVAL(known_env X)
-		| E.EXP_STR s => SVAL s
-		| E.EXP_CAT (e1,e2) => stringop (e1,e2,op^)
-		| E.EXP_INT i => IVAL i
-		| E.EXP_BOOL b => BVAL b
-		| E.EXP_IF (e1,e2,e3) => self(if getb(self e1) then e2 else e3)
-		| E.EXP_NOT e => BVAL (not (getb(self e)))
-		| E.EXP_AND (e1,e2) => BVAL(getb(self e1) andalso getb(self e2))
-		| E.EXP_OR (e1,e2) => BVAL(getb(self e1) orelse getb(self e2))
-		| E.EXP_SEQ (e1,e2) => scmp (e1,e2,op=)
-		| E.EXP_BEQ (e1,e2) => bcmp (e1,e2,op=)
-		| E.EXP_IEQ (e1,e2) => icmp (e1,e2,op=)
-		| E.EXP_ILT (e1,e2) => icmp (e1,e2,op<)
-		| E.EXP_ILE (e1,e2) => icmp (e1,e2,op<=)
-		| E.EXP_IGT (e1,e2) => icmp (e1,e2,op>)
-		| E.EXP_IGE (e1,e2) => icmp (e1,e2,op>=)
-		| E.EXP_DEF l => BVAL(isSome(lookup(desc,l)))
-		| E.EXP_MARK (_,e) => self e)
+	    (case e of
+		E.EXP_VAR x => #2(known_value (desc,x))
+	    |	E.EXP_ENV X => SVAL(known_env X)
+	    |	E.EXP_STR s => SVAL s
+	    |	E.EXP_CAT (e1,e2) => stringop (e1,e2,op^)
+	    |	E.EXP_INT i => IVAL i
+	    |	E.EXP_BOOL b => BVAL b
+	    |	E.EXP_IF (e1,e2,e3) => self(if getb(self e1) then e2 else e3)
+	    |	E.EXP_NOT e => BVAL (not (getb(self e)))
+	    |	E.EXP_AND (e1,e2) => BVAL(getb(self e1) andalso getb(self e2))
+	    |	E.EXP_OR (e1,e2) => BVAL(getb(self e1) orelse getb(self e2))
+	    |	E.EXP_SEQ (e1,e2) => scmp (e1,e2,op=)
+	    |	E.EXP_BEQ (e1,e2) => bcmp (e1,e2,op=)
+	    |	E.EXP_IEQ (e1,e2) => icmp (e1,e2,op=)
+	    |	E.EXP_ILT (e1,e2) => icmp (e1,e2,op<)
+	    |	E.EXP_ILE (e1,e2) => icmp (e1,e2,op<=)
+	    |	E.EXP_IGT (e1,e2) => icmp (e1,e2,op>)
+	    |	E.EXP_IGE (e1,e2) => icmp (e1,e2,op>=)
+	    |	E.EXP_DEF l => BVAL(isSome(lookup(desc,l)))
+	    |	E.EXP_MARK (_,e) => self e)
 	end
 
     (*
@@ -637,21 +638,21 @@ struct
     *)
 
     fun xfile (arg as (desc,_) : desc * E.exp) : file =
-	(case tyof arg
-	   of STRING =>
-	       let val file = gets(ev arg)
-		   val file =
+	(case (tyof arg) of
+	    STRING =>
+		let val file = gets(ev arg)
+		    val file =
 			if OS.Path.isRelative file then
 			    let val pos = #pos desc
 				val descfile = Pos.file pos
 				val dir = OS.Path.dir descfile
-			    in  OS.Path.joinDirFile {dir=dir, file=file}
+			    in	OS.Path.joinDirFile {dir=dir, file=file}
 			    end
 			else file
-		   val file = OS.Path.mkCanonical file
-	       in  file
-	       end
-	    | _ => fail (#pos desc) "expected filename")
+		    val file = OS.Path.mkCanonical file
+		in  file
+		end
+	|   _ => fail (#pos desc) "expected filename")
 
     (*
 	Decide HS interface equivalence.
@@ -665,9 +666,9 @@ struct
 		fail pos (concat["compiled file (",pinterface,") ",msg])
 	in
 	    if Fs.exists pinterface then
-		(case Fs.read_pinterface' pinterface
-		   of SOME pi => pi
-		    | NONE => bad "corrupt")
+		(case (Fs.read_pinterface' pinterface) of
+		    SOME pi => pi
+		|   NONE => bad "corrupt")
 	    else bad "missing"
 	end
 
@@ -684,24 +685,21 @@ struct
 	then |- iexp -> (opened,file)
     *)
 
-
-    fun has_src (iexp:I.iexp) : (I.opened * I.file) option =
-	(case iexp
-	   of I.SRCI (opened,{src,...}) => SOME (opened,src)
-	    | I.PRECOMPI (_,opened,{src,...}) => SOME (opened,src)
-	    | _ => NONE)
-
+    val has_src : I.iexp -> (I.units * I.file) option =
+	I.P.I.source'
 
     (*
 	Decide interface equivalence.
 
-	If check_interface ((_,iexp1,_), (_,iexp2,_)) = ()
+	If check_interface ({iexp1,...}, {iexp2,...}) = ()
 	then |- iexp1 == iexp2
     *)
 
-    fun check_interface ((I1:label, iexp1:I.iexp, pos1:pos),
-			 (I2:label, iexp2:I.iexp, pos2:pos)) : unit =
-	let
+    fun check_interface (idec1:I.idec, idec2:I.idec) : unit =
+	let val {name=I1,iexp=iexp1,...} = idec1
+	    val {name=I2,iexp=iexp2,...} = idec2
+	    val pos1 = I.P.I.pos iexp1
+	    val pos2 = I.P.I.pos iexp2
 	    fun ineq (msg:string) : 'a =
 		let val msg : string list =
 			if Name.eq_label(I1,I2) then
@@ -716,19 +714,19 @@ struct
 		in  fail pos2 (concat msg)
 		end
 	in
-	    (case (has_src iexp1, has_src iexp2)
-	       of (SOME (opened1,src1), SOME (opened2,src2)) =>
+	    (case (has_src iexp1, has_src iexp2) of
+		(SOME (opened1,src1), SOME (opened2,src2)) =>
 		    if Listops.eq_list(Name.eq_label,opened1,opened2) then
 			if Fs.crc src1 = Fs.crc src2 then ()
 			else ineq "their source files differ"
 		    else ineq "their opened units differ"
-		| _ =>
-		    (case (iexp1,iexp2)
-		       of (I.COMPI (nil, {pinterface=pi1}),
-			   I.COMPI (nil, {pinterface=pi2})) =>
+	    |	_ =>
+		    (case (iexp1,iexp2) of
+			(I.COMPI {using=nil, pinterface=pi1,...},
+			 I.COMPI {using=nil, pinterface=pi2,...}) =>
 			    if HS_eq(pos1,pi1,pos2,pi2) then ()
 			    else ineq "their compiled interfaces differ"
-			| _ => ineq "they are incomparable"))
+		    |	_ => ineq "they are incomparable"))
 	end
 
     (*
@@ -738,18 +736,18 @@ struct
 	then |- VDESC(d) downarrow units.
     *)
 
-    fun infer_opened (desc:desc) : I.opened =
+    fun infer_opened (desc:desc) : I.units =
 	let val {desc_,visible,...} = desc
 	    val desc_ = rev desc_
 	    fun visible_unit (pdec:I.pdec) : label option =
-		let val l = I.P.label pdec
+		let val l = I.P.D.name pdec
 		in  if Set.member(visible,l) andalso Name.is_unit l
 		    then SOME l
 		    else NONE
 		end
 	in  List.mapPartial visible_unit desc_
 	end
- 
+
     (*
 	Read off ascribed interface.
 
@@ -757,13 +755,8 @@ struct
 	then |- uexp : I.
     *)
 
-    fun uexp_asc (uexp:I.uexp) : label option =
-	(case uexp
-	   of I.SSRCU(_,I,_) => SOME I
-	    | I.PRIMU (I,_) => SOME I
-	    | I.PRECOMPU(_,_,I,_) => SOME I
-	    | I.COMPU(_,I,_) => SOME I
-	    | _ => NONE)
+    val uexp_asc : I.uexp -> label option =
+	I.P.U.asc'
 
     (*
 	Read off ascribed interface.
@@ -773,10 +766,9 @@ struct
     *)
 
     fun unit_asc (desc:desc, U:label) : label option =
-	(case global_lookup(desc,U)
-	   of SOME (PDEC (I.SCDEC (_,I,_))) => SOME I
-	    | SOME (PDEC (I.UDEC (_,uexp,_))) => uexp_asc uexp
-	    | _ => NONE)
+	(case (global_lookup(desc,U)) of
+	    SOME (PDEC pdec) => I.P.D.asc' pdec
+	|   _ => NONE)
 
 
     (*
@@ -787,47 +779,48 @@ struct
     *)
 
     fun xue (desc:desc, U:label, ue:E.ue) : I.uexp =
-	let val descfile = Pos.file(#pos desc)
-	in  (case ue
-	       of E.SRCU(src,NONE,NONE) =>
+	let val pos = #pos desc
+	in  (case ue of
+		E.SRCU(src,NONE,NONE) =>
 		    let val src = xfile (desc,src)
 			val opened = infer_opened desc
-		    in  I.C.U.src(descfile,U,opened,src)
+		    in	I.C.U.src(pos,U,opened,src)
 		    end
-		| E.SRCU(src,SOME opened,NONE) =>
+	    |	E.SRCU(src,SOME opened,NONE) =>
 		    let val src = xfile (desc,src)
-			val _ = check_opened (desc,opened)
-		    in  I.C.U.src(descfile,U,opened,src)
+			val _ = check_units (desc,opened)
+		    in	I.C.U.src(pos,U,opened,src)
 		    end
-		| E.SRCU(src,NONE,SOME I) =>
+	    |	E.SRCU(src,NONE,SOME I) =>
 		    let val src = xfile (desc,src)
 			val opened = infer_opened desc
 			val _ = check_bound (desc,I)
-		    in  I.C.U.ssrc(descfile,U,I,opened,src)
+		    in	I.C.U.ssrc(pos,U,I,opened,src)
 		    end
-		| E.SRCU(src,SOME opened,SOME I) =>
+	    |	E.SRCU(src,SOME opened,SOME I) =>
 		    let val src = xfile (desc,src)
-			val _ = check_opened (desc,opened)
+			val _ = check_units (desc,opened)
 			val _ = check_bound (desc,I)
-		    in  I.C.U.ssrc(descfile,U,I,opened,src)
+		    in	I.C.U.ssrc(pos,U,I,opened,src)
 		    end
-		| E.PRIMU I =>
+	    |	E.PRIMU I =>
 		    let val _ = check_bound (desc,I)
-		    in  I.C.U.prim(descfile,U,I)
+		    in	I.C.U.prim(pos,U,I)
 		    end
-		| E.PRECOMPU (src,opened,I) =>
+	    |	E.PRECOMPU (src,opened,I) =>
 		    let val src = xfile (desc,src)
-			val _ = check_opened (desc,opened)
+			val _ = check_units (desc,opened)
 			val _ = check_bound (desc,I)
-			val uexp = I.C.U.precomp(descfile,U,I,opened,src)
+			val uexp = I.C.U.precomp(pos,U,I,opened,src)
 			val _ = check_using (desc,I.P.U.using uexp)
-		    in  uexp
+		    in	uexp
 		    end
-		| E.COMPU I =>
-		    let val _ = check_bound (desc,I)
-			val uexp = I.C.U.comp(descfile,U,I)
+	    |	E.COMPU (opened,I) =>
+		    let val _ = check_units (desc,opened)
+			val _ = check_bound (desc,I)
+			val uexp = I.C.U.comp(pos,U,opened,I)
 			val _ = check_using (desc,I.P.U.using uexp)
-		    in  uexp
+		    in	uexp
 		    end)
 	end
 
@@ -839,27 +832,27 @@ struct
     *)
 
     fun xie (desc:desc, I:label, ie:E.ie) : I.iexp =
-	let val descfile = Pos.file(#pos desc)
-	in  (case ie
-	       of E.SRCI(src,NONE) =>
+	let val pos = #pos desc
+	in  (case ie of
+		E.SRCI(src,NONE) =>
 		    let val src = xfile (desc,src)
 			val opened = infer_opened desc
-		    in  I.C.I.src(descfile,I,opened,src)
+		    in	I.C.I.src(pos,I,opened,src)
 		    end
-		| E.SRCI(src,SOME opened) =>
+	    |	E.SRCI(src,SOME opened) =>
 		    let val src = xfile (desc,src)
-			val _ = check_opened (desc,opened)
-		    in  I.C.I.src(descfile,I,opened,src)
+			val _ = check_units (desc,opened)
+		    in	I.C.I.src(pos,I,opened,src)
 		    end
-		| E.PRIMI => I.C.I.prim (descfile,I)
-		| E.PRECOMPI(src,opened) =>
+	    |	E.PRIMI => I.C.I.prim (pos,I)
+	    |	E.PRECOMPI(src,opened) =>
 		    let val src = xfile (desc,src)
-			val _ = check_opened (desc,opened)
-			val iexp = I.C.I.precomp(descfile,I,opened,src)
+			val _ = check_units (desc,opened)
+			val iexp = I.C.I.precomp(pos,I,opened,src)
 			val _ = check_using (desc,I.P.I.using iexp)
-		    in  iexp
+		    in	iexp
 		    end
-		| E.COMPI => I.C.I.comp (descfile,I))
+	    |	E.COMPI => I.C.I.comp (pos,I))
 	end
 
     (*
@@ -868,74 +861,74 @@ struct
 
     fun xent (desc:desc, ent:E.ent) : desc =
 	let val pos = #pos desc
-	in  (case ent
-	       of E.INTERFACE (I,ie) =>
-		    (case global_lookup (desc,I)
-		       of SOME entry =>
+	in  (case ent of
+		E.INTERFACE (I,ie) =>
+		    (case (global_lookup (desc,I)) of
+			SOME entry =>
 			    let val pdec = entry_pdec entry
-				val idec1 = I.D.Pdec.idec pdec
+				val idec1 = I.D.D.i pdec
 				val iexp2 = xie (desc,I,ie)
-				val idec2 = (I,iexp2,pos)
+				val idec2 = {name=I,iexp=iexp2}
 				val _ = check_interface(idec1,idec2)
 			    in	reveal(desc,[I])
 			    end
-			| NONE =>
+		    |	NONE =>
 			    let val iexp = xie(desc,I,ie)
-				val pdec = I.IDEC (I,iexp,pos)
-			    in  insert(desc,I,PDEC pdec)
+				val pdec = I.C.D.i(I,iexp)
+			    in	insert(desc,I,PDEC pdec)
 			    end)
-		| E.SC (U,I) =>
-		    (case unit_asc (desc,U)
-		       of SOME I' =>
+	    |	E.SC (U,I,stable) =>
+		    (case (unit_asc (desc,U)) of
+			SOME I' =>
 			    let val idec1 = known_interface (desc,I')
 				val idec2 = unknown_interface (desc,I)
 				val _ = check_interface(idec1,idec2)
-			    in  reveal(desc,[U])
+			    in	reveal(desc,[U])
 			    end
-			| NONE =>
+		    |	NONE =>
 			    let val _ = check_bound(desc,I)
 				val _ = check_unbound(desc,U)
-				val pdec = I.SCDEC(U,I,pos)
-			    in  insert(desc,U,PDEC pdec)
+				val pdec = I.C.D.sc(pos,U,I,stable)
+			    in	insert(desc,U,PDEC pdec)
 			    end)
-		| E.UNIT (U,ue) =>
+	    |	E.UNIT (U,ue) =>
 		    let val _ = check_unbound(desc,U)
 			val uexp = xue(desc,U,ue)
-			val pdec = I.UDEC(U,uexp,pos)
-		    in  insert(desc,U,PDEC pdec)
+			val pdec = I.C.D.u(U,uexp)
+		    in	insert(desc,U,PDEC pdec)
 		    end
-		| E.VAL (x,exp) =>
+	    |	E.VAL (x,exp) =>
 		    let val _ = check_unbound(desc,x)
 			val ty = tyof (desc,exp)
 			val v = ev (desc,exp)
-		    in  insert(desc,x,VDEC (ty,v,pos))
+		    in	insert(desc,x,VDEC (ty,v,pos))
 		    end
-		| E.INCLUDE file => add_include (desc,xfile(desc,file))
-		| E.LOCAL file => add_include (desc,xfile(desc,file))	(* XXX *)
-		| E.IF (c,ents1,ents2) =>
-		    (case tyof (desc,c)
-		       of BOOL =>
+	    |	E.INCLUDE file => add_include (desc,xfile(desc,file))
+	    |	E.LOCAL file => add_include (desc,xfile(desc,file)) (* XXX *)
+	    |	E.IF (c,ents1,ents2) =>
+		    (case (tyof (desc,c)) of
+			BOOL =>
 			    let val (used,unused) =
 				    if getb(ev(desc,c))
 				    then (ents1,ents2)
 				    else (ents2,ents1)
 				val _ = check_ents(desc,unused)
-			    in  xents(desc,used)
+			    in	xents(desc,used)
 			    end
-			| _ => fail pos "expected boolean")
-		| E.ERROR msg =>
-		    (case tyof (desc,msg)
-		       of STRING =>
+		    |	_ => fail pos "expected boolean")
+	    |	E.ERROR msg =>
+		    (case (tyof (desc,msg)) of
+			STRING =>
 			    if #ck desc then desc
 			    else fail pos (gets(ev(desc,msg)))
-			| _ => fail pos "expected string")
-		| E.MARK(pos,ent) => xent(update_pos(desc,pos), ent))
+		    |	_ => fail pos "expected string")
+	    |	E.MARK(pos,ent) => xent(update_pos(desc,pos), ent))
 	end
 
     and xents (desc:desc, ents:E.ents) : desc =
-	(case ents
-	   of nil => desc
-	    | ent::ents => xents(xent(desc,ent), ents))
+	(case ents of
+	    nil => desc
+	|   ent::ents => xents(xent(desc,ent), ents))
 
     and check_ents (desc:desc, ents:E.ents) : unit =
 	let val desc = update_checking(desc,true)
@@ -943,16 +936,16 @@ struct
 	end
 
     and add_include (desc:desc, file:file) : desc =
-	(case lookup_file (desc,file)
-	   of SOME (ELABORATED labels) => reveal (desc, Set.listItems labels)
-	    | NONE =>
+	(case (lookup_file (desc,file)) of
+	    SOME (ELABORATED labels) => reveal (desc, Set.listItems labels)
+	|   NONE =>
 		let val pos = #pos desc
 		    val desc0 = desc
 		    val desc = start_file (desc,file)
 		    val desc = xents (desc, parse (pos,file))
 		in  finish_file (desc0, file, desc)
 		end
-	    | SOME (ELABORATING pos') =>
+	|   SOME (ELABORATING pos') =>
 		fail pos' ("include cycle at " ^ Pos.tostring (#pos desc)))
 
     fun finish (desc:desc) : I.desc =

@@ -304,7 +304,7 @@ struct
 			    UNITS units => units
 			|   _ => mismatch file)))
     val read_pinterface_parm =
-	Stats.count("CachePiParmCount",read_pinterface_parm)
+	Stats.count("CachePiUsingCount",read_pinterface_parm)
 
     fun read_pinterface' (file:file) : pinterface option =
 	if exists file then

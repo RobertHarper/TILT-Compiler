@@ -4589,7 +4589,7 @@ end (* local defining splitting context *)
 
    (* The top-level function for the phase-splitter.
     *)
-   fun phasesplit_interface (ilinterface : Il.context * Il.sdec) : Nil.interface =
+   fun phasesplit_interface (ilinterface : Il.sc_module) : Nil.interface =
      let
        val _ = reset_memo()
 

@@ -64,7 +64,7 @@ unit LilToTalExp = "liltotalexp.sml" {
 
 unit LILTOTAL = "liltotal.sig.sml" { Lil TextIO }
 unit LilToTal = "liltotal.sml" { 
-	LILTOTAL TAL TalOut LilToTalExp 
+	LILTOTAL Lil TAL TalOut LilToTalExp 
 	Util Stats Vector 
 	TextIO
 	}

@@ -12,8 +12,8 @@
 			 date pinterface files
 		READY: waiting for analysis
 		PENDING: waiting for compilation.  A pending node may
-			 have an up to date pinterface file; PENDING
-			 values carry a boolean.
+			 have up to date pinterface and tali files;
+			 PENDING values carry a boolean.
 		WORKING: compilation in progress and pinterface file
 			 is out of date.
 		PROCEEDING: compilation in progress and pinterface
@@ -55,7 +55,31 @@
 	response from such a slave.
 
 XXX:
-	Check that every source file named by the project description exists.
+	Warn the user if source changes between analysis and compilation.
+
+XXX:
+	Consider
+
+		interface I = "I.int" {}
+		unit A : I = "a.sml" {}
+		unit U = "u.sml" {A}
+
+	On untyped backends, the manager can compile U as soon as I is
+	compiled; U does not wait for A.
+
+	On the TAL backend, the manager can not assemble U before A's TAL
+	interface (tali) is ready.  This seems to imply that U must wait
+	for A to be compiled.
+
+	We reduce the amount of parallelism for talx86 parallel makes; in
+	this example, we have U wait for A to be compiled.
+
+	Eventually, we should change the DAG.  For every node u that
+	represents compiling a unit U with an ascribed interface I, add a
+	second node ui that represents generating the tali file for U. In
+	this example, the node for compiling U would depend on the node ai
+	for generating A's tali file rather than the node a for compiling
+	A.
 *)
 structure Master :> MASTER =
 struct
@@ -92,22 +116,6 @@ struct
 
     type targets = label list
 
-    fun is_source_iexp (iexp:I.iexp) : bool =
-	(case iexp
-	   of I.SRCI _ => true
-	    | I.PRIMI _ => true
-	    | _ => false)
-    fun is_source_uexp (uexp:I.uexp) : bool =
-	(case uexp
-	   of I.PRECOMPU _ => false
-	    | I.COMPU _ => false
-	    | _ => true)
-    fun is_source_pdec (pdec:I.pdec) : bool =
-	(case pdec
-	   of I.IDEC (_,iexp,_) => is_source_iexp iexp
-	    | I.SCDEC _ => false
-	    | I.UDEC (_,uexp,_) => is_source_uexp uexp)
-
     type time = Time.time
     type readytime = time
     type workingtime = time * time	(* ready, working *)
@@ -118,7 +126,7 @@ struct
     datatype status =
 	WAITING
       | READY of readytime
-      | PENDING of readytime * bool	(* pinterface up to date? *)
+      | PENDING of readytime * bool	(* interfaces up to date? *)
       | WORKING of workingtime
       | PROCEEDING of workingtime
       | PENDING' of slavetime
@@ -127,8 +135,8 @@ struct
 
     fun statusName WAITING = "waiting"
       | statusName (READY _) = "ready"
-      | statusName (PENDING (_,pinterface)) =
-	    "pending(" ^ Bool.toString pinterface ^ ")"
+      | statusName (PENDING (_,interfaces)) =
+	    "pending(" ^ Bool.toString interfaces ^ ")"
       | statusName (WORKING _) = "working"
       | statusName (PROCEEDING _) = "proceeding"
       | statusName (WORKING' _) = "working'"
@@ -161,7 +169,7 @@ struct
 	val lookup : label -> attr = wrap Graph.attribute
 
 	fun get_targets (desc:I.desc, targets:targets) : targets =
-	    let val labels = map I.P.label desc
+	    let val labels = map I.P.D.name desc
 		val bound = Set.addList(Set.empty,labels)
 		fun notbound t = not(Set.member(bound,t))
 	    in  (case List.find notbound targets
@@ -188,23 +196,18 @@ struct
 			| _ => ())
 		val {arcs,...} = OS.Path.fromString file
 		val _ = app checkarc arcs
-		fun checksrc (l:label, src:string, pos:Pos.pos) : unit =
-		    if src = file then
-			bad (Name.label2longname l ^ " (" ^
-			     Pos.tostring pos ^ ")")
-		    else ()
-		fun check (pdec:I.pdec) : unit =
-		    (case pdec
-		       of I.IDEC (I,iexp,pos) =>
-			    (case I.P.I.src' iexp
-			       of SOME src => checksrc(I,src,pos)
-				| NONE => ())
-			| I.SCDEC _ => ()
-			| I.UDEC (U,uexp,pos) =>
-			    (case I.P.U.src' uexp
-			       of SOME src => checksrc(U,src,pos)
-				| NONE => ()))
-		val _ = app check desc
+		fun checksrc (pdec:I.pdec) : unit =
+		    (case (I.P.D.src' pdec)
+		       of SOME src =>
+			    if src = file then
+				let val pos = I.P.D.pos pdec
+				    val name = I.P.D.name pdec
+				in  bad (Name.label2longname name ^ " (" ^
+					 Pos.tostring pos ^ ")")
+				end
+			    else ()
+			| NONE => ())
+		val _ = app checksrc desc
 	    in	()
 	    end
 
@@ -226,7 +229,7 @@ struct
 		val g = Graph.empty dummy
 		val ready = READY(Time.now())
 		fun add_pdec (pdec : I.pdec) : unit =
-		    let val l = I.P.label pdec
+		    let val l = I.P.D.name pdec
 			val f = I.free_pdec pdec
 			val status =
 			    if Set.isEmpty f then ready else WAITING
@@ -254,7 +257,7 @@ struct
 
 	fun sort (nodes : label list) : label list =
 	    let val set = Set.addList(Set.empty, nodes)
-		val order = map I.P.label (!desc)
+		val order = map I.P.D.name (!desc)
 	    in  List.filter (fn l => Set.member (set,l)) order
 	    end
 
@@ -277,6 +280,12 @@ struct
 	    (wrap Graph.reachable) o get_prerequisites
 
 	fun get_desc () : I.desc = !desc
+
+	fun get_inputs (node:label) : I.desc * I.pdec =
+	    let val desc = get_desc ()
+		val inputs = Compiler.get_inputs (desc,node)
+	    in	inputs
+	    end
 
     end
 
@@ -335,20 +344,16 @@ struct
 		(case get_status c'
 		   of WAITING => false
 		    | READY _ => false
-		    | PENDING (_,pinterface) => pinterface
+		    | PENDING (_,interfaces) => interfaces
 		    | WORKING _ => false
 		    | PROCEEDING _ => true
 		    | PENDING' _ => true
 		    | WORKING' _ => true
 		    | DONE _ => true)
 	    fun interface (c : label) : label =
-		(case get_pdec c
-		   of I.IDEC _ => c
-		    | I.SCDEC (_,I,_) => I
-		    | I.UDEC (_,uexp,_) =>
-			(case I.P.U.asc' uexp
-			   of SOME I => I
-			    | NONE => c))
+		(case I.P.D.asc' (get_pdec c)
+		   of SOME I => I
+		    | NONE => c)
 	    val hasInterface : label -> bool =
 		hasInterface' o interface
 	    fun now_ready (a : label) : bool =
@@ -368,11 +373,11 @@ struct
 	    else ()
 	end
 
-    fun markPending (node : label, pinterface : bool) : unit =
+    fun markPending (node : label, interfaces : bool) : unit =
 	(case get_status node
 	   of READY t =>
-		let val _ = set_status (node, PENDING (t, pinterface))
-		    val _ = if pinterface then enable(true,node) else ()
+		let val _ = set_status (node, PENDING (t, interfaces))
+		    val _ = if interfaces then enable(true,node) else ()
 		in  ()
 		end
 	    | status => badStatus (node, status, "making pending"))
@@ -678,13 +683,12 @@ struct
 	end
 
     fun analyzeReady (node : label) : unit =
-	let val desc = get_desc ()
-	    val inputs = Compiler.get_inputs (desc, node)
+	let val inputs = get_inputs node
 	    val status = Update.plan inputs
 	in  (case status
 	       of Update.EMPTY => markDone node
-		| Update.COMPILE => markPending (node, false)
-		| Update.GENERATE => markPending (node, true)
+		| Update.COMPILE {pinterface,tali} =>
+		    markPending (node, pinterface andalso tali)
 		| Update.ASSEMBLE => markPending' node)
 	end
 
@@ -705,18 +709,10 @@ struct
 	    val (waiting, pending, pending', done) = loop (waiting, [], [], [])
 	    (* Do not chat about stuff that is obviously done. *)
 	    fun neededCompilation (node:label) : bool =
-		(case get_pdec node
-		   of I.IDEC (_,iexp,_) =>
-			(case iexp
-			   of I.PRECOMPI _ => false
-			    | I.COMPI _ => false
-			    | _ => true)
-		    | I.SCDEC _ => false
-		    | I.UDEC (_,uexp,_) =>
-			(case uexp
-			   of I.PRECOMPU _ => false
-			    | I.COMPU _ => false
-			    | _ => true))
+		let val pdec = get_pdec node
+		    val stable = I.P.D.stable pdec
+		in  not stable
+		end
 	    val done = List.filter neededCompilation done
 	    val _ = if !MasterDiag andalso not (null done) then
 			(print "Already up-to-date: ";
@@ -799,8 +795,7 @@ struct
 	let
 	    fun useOne (node : label) =
 		let val _ = markWorking' node
-		    val pdec = get_pdec node
-		in  useLocal (node, fn () => Compiler.assemble pdec)
+		in  useLocal (node, fn () => Compiler.assemble (get_inputs node))
 		end
 	    fun useSome (0, _) = 0
 	      | useSome (n, nil) = n
@@ -952,7 +947,7 @@ struct
 	    val desc = get_desc()
 	    fun mapper (pdec : I.pdec) : label option =
 		(case pdec
-		   of I.SCDEC (U,_,_) => SOME U
+		   of I.SCDEC {name=U,...} => SOME U
 		    | _ => NONE)
 	    val sc = List.mapPartial mapper desc
 	    val link = I.F.link (hd projects,exe)
@@ -974,7 +969,7 @@ struct
 	    val desc = get_desc()
 	    fun mapper (pdec:I.pdec) : label option =
 		(case pdec
-		   of I.UDEC (U,I.SRCU _,_) => SOME U
+		   of I.UDEC {name=U,uexp=I.SRCU _,...} => SOME U
 		    | _ => NONE)
 	    val inferred = List.mapPartial mapper desc
 	    val _ = compile()
@@ -992,14 +987,15 @@ struct
     local
 	type droppings =
 	    (I.iexp -> string option) list *
-	    (I.uexp -> string option) list
+	    (I.uexp -> string option) list *
+	    (I.scdec -> string) list
 
-	val empty : droppings = (nil, nil)
+	val empty : droppings = (nil, nil, nil)
 
-	fun append (a : droppings, b : droppings) : droppings =
-	    let val (ia,ua) = a
-		val (ib,ub) = b
-	    in	(ia@ib, ua@ub)
+	fun append (a:droppings, b:droppings) : droppings =
+	    let val (ia,ua,sa) = a
+		val (ib,ub,sb) = b
+	    in	(ia@ib, ua@ub, sa@sb)
 	    end
 
 	val concat : droppings list -> droppings =
@@ -1009,7 +1005,7 @@ struct
 		       (projects : string list, targets : targets) : unit =
 	    let val _ = set_desc(projects,targets,false,nil)
 		val desc = get_desc()
-		val (iFiles,uFiles) = droppings
+		val (iFiles,uFiles,scFiles) = droppings
 		val _ = if !Compiler.CompilerDiag then
 			    print ("Purging " ^ what ^ ".\n")
 			else ()
@@ -1017,30 +1013,39 @@ struct
 		    let val files = List.mapPartial (fn f => f x) fs
 		    in  app Fs.remove files
 		    end
+		fun rm' (fs:('a -> string) list) (x:'a) : unit =
+		    let val files = map (fn f => f x) fs
+		    in  app Fs.remove files
+		    end
 		val rmi = rm iFiles
 		val rmu = rm uFiles
+		val rmsc = rm' scFiles
 		fun remove (pdec:I.pdec) : unit =
-		    if is_source_pdec pdec then
+		    if I.P.D.stable pdec then ()
+		    else
 			(case pdec
-			   of I.IDEC (_,iexp,_) => rmi iexp
-			    | I.UDEC (_,uexp,_) => rmu uexp
-			    | _ => error "source SCDEC")
-		    else ()
+			   of I.IDEC {iexp,...} => rmi iexp
+			    | I.SCDEC scdec => rmsc scdec
+			    | I.UDEC {uexp,...} => rmu uexp)
 	    in	app remove desc
 	    end
 
 	val meta : droppings =
 	    ([I.P.I.info'],
-	     [I.P.U.info'])
+	     [I.P.U.info'],
+	     [#info])
 	val iface : droppings =
 	    ([SOME o I.P.I.pinterface],
-	     [I.P.U.pinterface'])
+	     [I.P.U.pinterface'],
+	     nil)
 	val obj : droppings =
 	    (nil,
 	     [SOME o I.P.U.obj,
 	      I.P.U.asm',
 	      I.P.U.asmz',
-	      SOME o I.P.U.parm])
+	      SOME o I.P.U.using_file,
+	      SOME o I.P.U.tali],
+	     [#tali])
     in
 	val purge : string list * targets -> unit =
 	    purge_help ("binaries", obj)

@@ -33,6 +33,7 @@ struct
       | ACK_REJECT of label * string
       | BOMB of string
       | INIT of Platform.objtype * Stats.flags * IntSyn.desc
+      | COMPILE_INT of label
       | COMPILE of label
 
     val blastOutJob = NameBlast.blastOutLabel
@@ -62,8 +63,10 @@ struct
 		 Platform.blastOutObjtype os objtype;
 		 Stats.blastOutFlags os flags;
 		 IntSyn.blastOutDesc os desc)
+	     | COMPILE_INT job =>
+		(B.blastOutInt os 7; blastOutJob os job)
 	     | COMPILE job =>
-		(B.blastOutInt os 7; blastOutJob os job)))
+		(B.blastOutInt os 8; blastOutJob os job)))
 
     fun blastInMessage (is : B.instream) : message =
 	(say "blastInMessage";
@@ -76,7 +79,8 @@ struct
 	     | 5 => BOMB (B.blastInString is)
 	     | 6 => INIT (Platform.blastInObjtype is,
 			  Stats.blastInFlags is, IntSyn.blastInDesc is)
-	     | 7 => COMPILE (blastInJob is)
+	     | 7 => COMPILE_INT (blastInJob is)
+	     | 8 => COMPILE (blastInJob is)
 	     | _ => error "bad message"))
 
     val (blastOutMessages,blastInMessages') =
@@ -127,6 +131,9 @@ struct
 			  F.String "objtype = ",
 			  F.String (Platform.toString objtype), F.Break,
 			  F.String "desc = ", IntSyn.pp_desc desc]
+	    | COMPILE_INT job =>
+		F.HOVbox [F.String "COMPILE_INT", F.Break,
+			  F.String "job = ", pp_job job]
 	    | COMPILE job =>
 		F.HOVbox [F.String "COMPILE", F.Break,
 			  F.String "job = ", pp_job job])

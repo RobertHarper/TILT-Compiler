@@ -37,10 +37,11 @@ struct
 	val Info = "info"
 	val Context = "context"
 	val Pinterface = "pinterface"
-	val Parm = "parm"
+	val Using = "using"
 	val Asm = "asm"
 	val Asmz = "asmz"
 	val Obj = "obj"
+	val Tali = "tali"
 	val Tmp = "tmp"
 	val Lib = "Lib"
 	val Bin = "Bin"
@@ -53,99 +54,55 @@ struct
 
 	val Target : unit -> string = Target.targetString
 
-	fun pdir (desc:file) : file =
+	fun pdir' (desc:file) : file =
 	    dir desc/TM/file desc
 
-	structure I =
-	struct
-	    type src = {src:file, info:file, pinterface:file}
-	    type prim = {pinterface:file}
-	    type precomp = src
-	    type comp = prim
+	val pdir : pos -> file = pdir' o Pos.file
 
-	    fun idir (desc:file, l:label) : file =
-		pdir desc/I/Name.label2name' l
+	fun i (pos:pos, l:label) : {info:file, pinterface:file} =
+	    let val root = pdir pos/I/Name.label2name' l
+	    in	{info=root/Info, pinterface=root/Pinterface}
+	    end
 
-	    fun src (desc:file, I:label, src:file) : src =
-		let val root = idir (desc,I)
-		in  {src=src, info=root/Info,
-		     pinterface=root/Pinterface}
-		end
+	fun sc (pos:pos, l:label) : {info:file, tali:file, tali_rel:file} =
+	    let val l = Name.label2name' l
+		val t = Target()
+		val root = pdir pos/U/l
+		val root' = root/t
+		val relroot' = l/t
+		val info = root/Info
+		val tali_rel = relroot'/Tali
+		val tali = root'/Tali
+	    in	{info=info, tali=tali, tali_rel=tali_rel}
+	    end
 
-	    fun prim (desc:file, I:label) : prim =
-		let val root = idir (desc,I)
-		in  {pinterface=root/Pinterface}
-		end
-
-	    val precomp = src
-	    val comp = prim
-	end
-
-	structure U =
-	struct
-
-	    type src = {src:file, info:file, pinterface:file, obj:file,
-			asm:file, asmz:file, parm:file}
-	    type ssrc = {src:file, info:file, obj:file,
-			 asm:file, asmz:file, parm:file}
-	    type prim = {info:file, obj:file, asm:file,
-			 asmz:file, parm:file}
-	    type precomp = {obj:file, src:file, info:file,
-			    parm:file}
-	    type comp = {obj:file, parm:file}
-
-	    fun udir (desc:file, l:label) : file =
-		pdir desc/U/Name.label2name' l
-
-	    fun src (desc:file, U:label, src:file) : src =
-		let val root = udir (desc,U)
-		    val root' = root/Target()
-		in  {src=src, info=root/Info,
-		     pinterface=root/Pinterface, obj=root'/Obj,
-		     asm=root'/Asm, asmz=root'/Asmz, parm=root/Parm}
-		end
-
-	    fun ssrc (desc:file, U:label, src:file) : ssrc =
-		let val root = udir (desc,U)
-		    val root' = root/Target()
-		in  {src=src, info=root/Info, obj=root'/Obj,
-		     asm=root'/Asm, asmz=root'/Asmz, parm=root/Parm}
-		end
-
-	    fun prim (desc:file, U:label) : prim =
-		let val root = udir (desc,U)
-		    val root' = root/Target()
-		in  {info=root/Info, obj=root'/Obj,
-		     asm=root'/Asm, asmz=root'/Asmz, parm=root/Parm}
-		end
-
-	    fun precomp (desc:file, U:label, src:file) : precomp =
-		let val root = udir (desc,U)
-		    val root' = root/Target()
-		in  {obj=root'/Obj, src=src, info=root/Info,
-		     parm=root/Parm}
-		end
-
-	    fun comp (desc:file, U:label) : comp =
-		let val root = udir (desc,U)
-		    val root' = root/Target()
-		in  {obj=root'/Obj, parm=root/Parm}
-		end
-	end
+	fun u (pos:pos, l:label) : {info:file, pinterface:file, obj:file,
+		asm:file, asmz:file, using_file:file, tali:file, tali_rel:file} =
+	    let val l = Name.label2name' l
+		val target = Target()
+		val root = pdir pos/U/l
+		val root' = root/target
+	    in	{info=root/Info, pinterface=root/Pinterface,
+		 obj=root'/Obj, asm=root'/Asm, asmz=root'/Asmz,
+		 using_file=root/Using, tali=root'/Tali, tali_rel=l/target/Tali}
+	    end
 
 	type link = {exe:file, asm:file, asmz:file, obj:file}
 
-	fun link (project:file, exe:file) : link =
-	    let val root = pdir project/L/file exe
-	    in  {exe=exe, asm=root/Asm, asmz=root/Asmz, obj=root/Obj}
+	fun link (desc:file, exe:file) : link =
+	    let val root = pdir' desc/L/file exe
+	    in	{exe=exe, asm=root/Asm, asmz=root/Asmz, obj=root/Obj}
 	    end
 
-        type pack = {libdir:file, src:label -> file}
+	type pack =
+	    {src:label -> file,
+	     src_rel:label -> file,
+	     libdir:file, inter:file, impl:file, desc:file}
 	val inter = Inter
 	val impl = Impl
 	val desc = Desc
 	fun pack (libdir : file) : pack =
-	    let fun src (l:label) : file =
+	    let fun src_rel (l:label) : file =
 		    let val space =
 			    if Name.is_unit l then U
 			    else if Name.is_interface l then I
@@ -153,7 +110,12 @@ struct
 			val name = Name.label2name' l
 		    in	space/name
 		    end
-	    in  {libdir=libdir, src=src}
+		fun src (l:label) : file = libdir/src_rel l
+		val inter = libdir/inter
+		val impl = libdir/impl
+		val desc = libdir/desc
+	    in	{src=src, src_rel=src_rel, libdir=libdir, inter=inter,
+		 impl=impl, desc=desc}
 	    end
 
 	val cwd : unit -> string =
@@ -162,7 +124,7 @@ struct
 	fun commdir () : file =
 	    let val r = cwd()/TM/C
 		val _ = Fs.mkdirs r
-	    in  r
+	    in	r
 	    end
 	val commdir = Util.memoize commdir
 
@@ -172,262 +134,242 @@ struct
 	fun tiltroot () : file =
 	    let val Env = "TILTROOT"
 		val root =
-		    (case OS.Process.getEnv Env
-		       of NONE => ""
-			| SOME dir => dir)
+		    (case (OS.Process.getEnv Env) of
+			NONE => ""
+		    |	SOME dir => dir)
 		val root = full_path root
+		val rx = [OS.FileSys.A_READ, OS.FileSys.A_EXEC]
 		val have_root =
 		    (OS.FileSys.isDir root andalso
-		     OS.FileSys.access(root, [OS.FileSys.A_READ,
-					      OS.FileSys.A_EXEC]))
+		     OS.FileSys.access(root,rx))
 		    handle _ => false
 		val _ = if have_root then ()
 			else reject (Env ^ ": " ^ root ^ " inaccessible")
 	    in root
 	    end
-        val tiltroot = Util.memoize tiltroot
+	val tiltroot = Util.memoize tiltroot
 	val libdir = (fn () => tiltroot()/Lib)
 	val basisdir = Util.memoize (fn () => libdir()/Basis)
 	val basisdesc = Util.memoize (fn () => basisdir()/Desc)
 	fun is_basisdesc (file:file) : bool =
 	    let val file = full_path file
 		val dir = OS.Path.dir file
-	    in  dir = basisdir()
+	    in	dir = basisdir()
 	    end
 	val runtimedir = (fn () => tiltroot()/Runtime)
 	val til_slave = (fn () => tiltroot()/Bin/Tilslave)
 
+	fun tal_include (pos:pos) : file =
+	    pdir pos/U
+
     end
 
-    type opened = label list
-    type using = label list
+    type units = label list
+
+    type srci =
+	{pos:pos, opened:units, src:file,
+	 info:file, pinterface:file}
+    type primi =
+	{pos:pos,
+	 pinterface:file}
+    type precompi =
+	{pos:pos, pinterface:file, using:units, opened:units, src:file,
+	 info:file}
+    type compi =
+	{pos:pos, pinterface:file, using:units}
 
     datatype iexp =
-	SRCI of opened * F.I.src
-      | PRIMI of F.I.prim
-      | PRECOMPI of using * opened * F.I.precomp
-      | COMPI of using * F.I.comp
+	SRCI of srci
+    |	PRIMI of primi
+    |	PRECOMPI of precompi
+    |	COMPI of compi
+
+    type srcu =
+	{pos:pos, opened:units, src:file,
+	 info:file, pinterface:file, obj:file,
+	 asm:file, asmz:file, using_file:file,
+	 tali:file, tali_rel:file}
+    type ssrcu =
+	{pos:pos, opened:units, src:file, asc:label,
+	 info:file, obj:file, asm:file, asmz:file,
+	 using_file:file, tali:file, tali_rel:file}
+    type primu =
+	{pos:pos, asc:label,
+	 obj:file, asm:file, asmz:file,
+	 using_file:file, tali:file, tali_rel:file}
+    type precompu =
+	{pos:pos, obj:file, using:units, opened:units, src:file, asc:label,
+	 info:file, using_file:file, tali:file, tali_rel:file}
+    type compu =
+	{pos:pos, obj:file, using:units, opened:units, asc:label,
+	 using_file:file, tali:file, tali_rel:file}
 
     datatype uexp =
-	SRCU of opened * F.U.src
-      | SSRCU of opened * label * F.U.ssrc
-      | PRIMU of label * F.U.prim
-      | PRECOMPU of using * opened * label * F.U.precomp
-      | COMPU of using * label * F.U.comp
+	SRCU of srcu
+    |	SSRCU of ssrcu
+    |	PRIMU of primu
+    |	PRECOMPU of precompu
+    |	COMPU of compu
+
+    type idec = {name:label, iexp:iexp}
+    type scdec =
+	{pos:pos, name:label, asc:label,
+	 stable:bool, info:file, tali:file, tali_rel:file}
+    type udec = {name:label, uexp:uexp}
 
     datatype pdec =
-	IDEC of label * iexp * pos
-      | SCDEC of label * label * pos
-      | UDEC of label * uexp * pos
+	IDEC of idec
+    |	SCDEC of scdec
+    |	UDEC of udec
 
     type desc = pdec list
 
-    type crc = Crc.crc
-    type ue = (label * crc) list
+    val blastOutLabel : B.outstream -> label -> unit = NB.blastOutLabel
+    val blastInLabel : B.instream -> label = NB.blastInLabel
 
-    datatype info =
-	INFO_SRCI of ue * opened * crc
-      | INFO_SRCU of ue * opened * crc
-      | INFO_SSRCU of ue * opened * crc * crc
-      | INFO_PRIMU of crc
+    val blastOutUnits' : B.outstream -> units -> unit = B.blastOutList blastOutLabel
+    val blastInUnits' : B.instream -> units = B.blastInList blastInLabel
 
-    val (blastOutParm, blastInParm) =
-	B.magic (B.blastOutList NameBlast.blastOutLabel,
-		 B.blastInList NameBlast.blastInLabel,
-		 "using $Revision$")
+    val (blastOutUnits, blastInUnits) =
+	B.magic (blastOutUnits',blastInUnits',"units $Revision$")
 
     fun opt_out (what:string) (f:'a -> 'b option) : 'a -> 'b =
 	(fn x =>
-	 (case f x
-	    of SOME y => y
-	     | NONE => error (what ^ " failed")))
+	 (case (f x) of
+	    SOME y => y
+	 |  NONE => error (what ^ " failed")))
 
-    (* Projections. *)
-    structure P =
-    struct
-
-	structure I =
-	struct
-	    fun src' (iexp : iexp) : file option =
-		(case iexp
-		   of SRCI (_,files) => SOME (#src files)
-		    | PRECOMPI (_,_,files) => SOME (#src files)
-		    | _ => NONE)
-	    val src = opt_out "P.I.src" src'
-
-	    fun info' (iexp : iexp) : file option =
-		(case iexp
-		   of SRCI (_,files) => SOME (#info files)
-		    | PRECOMPI (_,_,files) => SOME (#info files)
-		    | _ => NONE)
-	    val info = opt_out "P.I.info" info'
-
-	    fun pinterface (iexp : iexp) : file =
-		(case iexp
-		   of SRCI (_,files) => #pinterface files
-		    | PRIMI files => #pinterface files
-		    | PRECOMPI (_,_,files) => #pinterface files
-		    | COMPI (_,files) => #pinterface files)
-
-	    fun using' (iexp : iexp) : using option =
-		(case iexp
-		   of PRECOMPI (using,_,_) => SOME using
-		    | _ => NONE)
-	    val using = opt_out "P.I.using" using'
-	end
-
-	structure U =
-	struct
-	    fun src' (uexp : uexp) : file option =
-		(case uexp
-		   of SRCU (_,files) => SOME (#src files)
-		    | SSRCU (_,_,files) => SOME (#src files)
-		    | PRECOMPU (_,_,_,files) => SOME (#src files)
-		    | _ => NONE)
-	    val src = opt_out "P.U.src" src'
-
-	    fun info' (uexp : uexp) : file option =
-		(case uexp
-		   of SRCU (_,files) => SOME (#info files)
-		    | SSRCU (_,_,files) => SOME (#info files)
-		    | PRIMU (_,files) => SOME (#info files)
-		    | PRECOMPU (_,_,_,files) => SOME (#info files)
-		    | _ => NONE)
-	    val info = opt_out "P.U.info" info'
-
-	    fun pinterface' (uexp : uexp) : file option =
-		(case uexp
-		   of SRCU (_,files) => SOME (#pinterface files)
-		    | _ => NONE)
-	    val pinterface = opt_out "P.U.pinterface" pinterface'
-
-	    fun obj (uexp : uexp) : file =
-		(case uexp
-		   of SRCU (_,files) => #obj files
-		    | SSRCU (_,_,files) => #obj files
-		    | PRIMU (_,files) => #obj files
-		    | PRECOMPU (_,_,_,files) => #obj files
-		    | COMPU (_,_,files) => #obj files)
-
-	    fun asm' (uexp : uexp) : file option =
-		(case uexp
-		   of SRCU (_,files) => SOME (#asm files)
-		    | SSRCU (_,_,files) => SOME (#asm files)
-		    | PRIMU (_,files) => SOME (#asm files)
-		    | _ => NONE)
-	    val asm = opt_out "P.U.asm" asm'
-
-	    fun asmz' (uexp : uexp) : file option =
-		(case uexp
-		   of SRCU (_,files) => SOME (#asmz files)
-		    | SSRCU (_,_,files) => SOME (#asmz files)
-		    | PRIMU (_,files) => SOME (#asmz files)
-		    | _ => NONE)
-	    val asmz = opt_out "P.U.asmz" asmz'
-
-	    fun parm (uexp : uexp) : file =
-		(case uexp
-		   of SRCU (_,files) => #parm files
-		    | SSRCU (_,_,files) => #parm files
-		    | PRIMU (_,files) => #parm files
-		    | PRECOMPU (_,_,_,files) => #parm files
-		    | COMPU (_,_,files) => #parm files)
-
-	    fun using' (uexp : uexp) : using option =
-		(case uexp
-		   of PRECOMPU (using,_,_,_) => SOME using
-		    | COMPU (using,_,_) => SOME using
-		    | _ => NONE)
-	    val using = opt_out "P.U.using" using'
-
-	    fun asc' (uexp : uexp) : label option =
-		(case uexp
-		   of SRCU _ => NONE
-		    | SSRCU (_,I,_) => SOME I
-		    | PRIMU (I,_) => SOME I
-		    | PRECOMPU (_,_,I,_) => SOME I
-		    | COMPU (_,I,_) => SOME I)
-	    val asc = opt_out "P.U.asc" asc'
-	end
-
-	fun label (pdec : pdec) : label =
-	    (case pdec
-	       of IDEC (I,_,_) => I
-		| SCDEC (U,_,_) => U
-		| UDEC (U,_,_) => U)
-
-	fun pos (pdec : pdec) : pos =
-	    (case pdec
-	       of IDEC (_,_,pos) => pos
-		| SCDEC (_,_,pos) => pos
-		| UDEC (_,_,pos) => pos)
-
-	fun info' (pdec : pdec) : file option =
-	    (case pdec
-	       of IDEC (_,iexp,_) => I.info' iexp
-		| SCDEC _ => NONE
-		| UDEC (_,uexp,_) => U.info' uexp)
-
-	val info = opt_out "P.info" info'
-    end
-
+    (* Constructors. *)
     structure C =
     struct
 	structure I =
 	struct
 
-	    fun src (desc:file, I:label, opened:opened, src:file) : iexp =
-		SRCI(opened, F.I.src (desc,I,src))
-
-	    fun prim (desc:file, I:label) : iexp =
-		PRIMI (F.I.prim (desc,I))
-
-	    fun precomp (desc:file, I:label, opened:opened, src:file) : iexp =
-		let val files = F.I.precomp (desc,I,src)
-		    val pi = #pinterface files
-		    val using = Fs.read_pinterface_parm pi
-		in  PRECOMPI(using,opened,files)
+	    fun src (pos:pos, I:label, opened:units, src:file) : iexp =
+		let val {info,pinterface} = F.i(pos,I)
+		in  SRCI
+			{pos=pos, opened=opened, src=src,
+			 info=info, pinterface=pinterface}
 		end
 
-	    fun comp (desc:file, I:label) : iexp =
-		let val files = F.I.comp (desc,I)
-		    val pi = #pinterface files
-		    val using = Fs.read_pinterface_parm pi
-		in  COMPI (using,files)
+	    fun prim (pos:pos, I:label) : iexp =
+		let val {pinterface,...} = F.i(pos,I)
+		in  PRIMI
+			{pos=pos, pinterface=pinterface}
+		end
+
+	    fun precomp (pos:pos, I:label, opened:units, src:file) : iexp =
+		let val {info,pinterface} = F.i(pos,I)
+		    val using = Fs.read_pinterface_parm pinterface
+		in  PRECOMPI
+			{pos=pos, pinterface=pinterface, using=using,
+			 opened=opened, src=src, info=info}
+		end
+
+	    fun precomp' (pos:pos, I:label, using:units, opened:units, src:file) : iexp =
+		let val {info,pinterface} = F.i(pos,I)
+		in  PRECOMPI
+			{pos=pos, pinterface=pinterface, using=using,
+			 opened=opened, src=src, info=info}
+		end
+
+	    fun comp (pos:pos, I:label) : iexp =
+		let val {pinterface,...} = F.i(pos,I)
+		    val using = Fs.read_pinterface_parm pinterface
+		in  COMPI
+			{pos=pos, pinterface=pinterface, using=using}
+		end
+
+	    fun comp' (pos:pos, I:label, using:units) : iexp =
+		let val {pinterface,...} = F.i(pos,I)
+		in  COMPI
+			{pos=pos, pinterface=pinterface, using=using}
 		end
 	end
 
 	structure U =
 	struct
 
-	    val read_using : file -> using =
-		Fs.read blastInParm
-
-	    fun src (desc:file, U:label, opened:opened, src:file) : uexp =
-		SRCU(opened,F.U.src (desc,U,src))
-
-	    fun ssrc (desc:file, U:label, I:label,
-		      opened:opened, src:file) : uexp =
-		SSRCU(opened,I,F.U.ssrc (desc,U,src))
-
-	    fun prim (desc:file, U:label, I:label) : uexp =
-		PRIMU(I,F.U.prim (desc,U))
-
-	    fun precomp (desc:file, U:label, I:label,
-			  opened:opened, src:file) : uexp =
-		let val files = F.U.precomp (desc,U,src)
-		    val using = read_using (#parm files)
-		in  PRECOMPU(using,opened,I,files)
+	    fun src (pos:pos, U:label, opened:units, src:file) : uexp =
+		let val {info,pinterface,obj,asm,asmz,using_file,tali,tali_rel,...} =
+			F.u(pos,U)
+		in  SRCU
+			{pos=pos, opened=opened, src=src, info=info,
+			 pinterface=pinterface, obj=obj, asm=asm,
+			 asmz=asmz, using_file=using_file, tali=tali,
+			 tali_rel=tali_rel}
 		end
 
-	    fun comp (desc:file, U:label, I:label) : uexp =
-		let val files = F.U.comp (desc,U)
-		    val using = read_using (#parm files)
-		in  COMPU(using,I,files)
+	    fun ssrc (pos:pos, U:label, I:label, opened:units, src:file) : uexp =
+		let val {info,obj,asm,asmz,using_file,tali,tali_rel,...} = F.u(pos,U)
+		in  SSRCU
+			{pos=pos, opened=opened, src=src, asc=I, info=info,
+			 obj=obj, asm=asm, asmz=asmz, using_file=using_file,
+			 tali=tali, tali_rel=tali_rel}
+		end
+
+	    fun prim (pos:pos, U:label, I:label) : uexp =
+		let val {obj,asm,asmz,using_file,tali,tali_rel,...} = F.u(pos,U)
+		in  PRIMU
+			{pos=pos, asc=I, obj=obj, asm=asm, asmz=asmz,
+			 using_file=using_file, tali=tali, tali_rel=tali_rel}
+		end
+
+	    fun precomp (pos:pos, U:label, I:label, opened:units, src:file) : uexp =
+		let val {obj,info,using_file,tali,tali_rel,...} = F.u(pos,U)
+		    val using = Fs.read blastInUnits using_file
+		in  PRECOMPU
+			{pos=pos, obj=obj, using=using, opened=opened,
+			 src=src, asc=I, info=info, using_file=using_file,
+			 tali=tali, tali_rel=tali_rel}
+		end
+
+	    fun precomp' (pos:pos, U:label, using:units, I:label, opened:units, src:file) : uexp =
+		let val {obj,info,using_file,tali,tali_rel,...} = F.u(pos,U)
+		in  PRECOMPU
+			{pos=pos, obj=obj, using=using, opened=opened,
+			 src=src, asc=I, info=info, using_file=using_file,
+			 tali=tali, tali_rel=tali_rel}
+		end
+
+	    fun comp (pos:pos, U:label, opened:units, I:label) : uexp =
+		let val {obj,using_file,tali,tali_rel,...} = F.u(pos,U)
+		    val using = Fs.read blastInUnits using_file
+		in  COMPU
+			{pos=pos, obj=obj, using=using, opened=opened,
+			 asc=I,using_file=using_file, tali=tali,
+			 tali_rel=tali_rel}
+		end
+
+	    fun comp' (pos:pos, U:label, using:units, opened:units, I:label) : uexp =
+		let val {obj,using_file,tali,tali_rel,...} = F.u(pos,U)
+		in  COMPU
+			{pos=pos, obj=obj, using=using, opened=opened,
+			 asc=I,using_file=using_file, tali=tali,
+			 tali_rel=tali_rel}
 		end
 	end
+
+	structure D =
+	struct
+
+	    fun i (I:label, iexp:iexp) : pdec =
+		IDEC {name=I, iexp=iexp}
+
+	    fun sc (pos:pos, U:label, I:label, stable:bool) : pdec =
+		let val {info, tali, tali_rel} = F.sc(pos,U)
+		in  SCDEC
+			{pos=pos, name=U, asc=I, stable=stable,
+			 info=info, tali=tali, tali_rel=tali_rel}
+		end
+
+	    fun u (U:label, uexp:uexp) : pdec =
+		UDEC {name=U, uexp=uexp}
+	end
+
     end
 
+    (* Deconstructors. *)
     structure D =
     struct
 
@@ -464,194 +406,383 @@ struct
 	    val comp = opt_out "D.U.comp" comp'
 	end
 
-	structure Pdec =
+	structure D =
 	struct
-	    fun idec' (IDEC a) = SOME a | idec' _ = NONE
-	    val idec = opt_out "D.Pdec.idec" idec'
+	    fun i' (IDEC a) = SOME a | i' _ = NONE
+	    val i = opt_out "D.D.i" i'
 
-	    fun scdec' (SCDEC a) = SOME a | scdec' _ = NONE
-	    val scdec = opt_out "D.Pdec.scdec" scdec'
+	    fun sc' (SCDEC a) = SOME a | sc' _ = NONE
+	    val sc = opt_out "D.D.sc" sc'
 
-	    fun udec' (UDEC a) = SOME a | udec' _ = NONE
-	    val udec = opt_out "D.Pdec.udec" udec'
+	    fun u' (UDEC a) = SOME a | u' _ = NONE
+	    val u = opt_out "D.D.u" u'
 	end
 
+    end
+
+    (* Projections. *)
+    structure P =
+    struct
+
+	structure I =
+	struct
+	    fun source' (iexp : iexp) : (units * file) option =
+		(case iexp of
+		    SRCI {opened,src,...} => SOME (opened,src)
+		|   PRECOMPI {opened,src,...} => SOME (opened,src)
+		|   _ => NONE)
+	    val source = opt_out "P.I.source" source'
+
+	    val opened = #1 o source
+	    val opened' = Option.compose(#1,source')
+
+	    val src = #2 o source
+	    val src' = Option.compose(#2,source')
+
+	    fun pos (iexp:iexp) : pos =
+		(case iexp of
+		    SRCI {pos,...} => pos
+		|   PRIMI {pos,...} => pos
+		|   PRECOMPI {pos,...} => pos
+		|   COMPI {pos,...} => pos)
+
+	    fun info' (iexp : iexp) : file option =
+		(case iexp of
+		    SRCI {info,...} => SOME info
+		|   PRECOMPI {info,...} => SOME info
+		|   _ => NONE)
+	    val info = opt_out "P.I.info" info'
+
+	    fun pinterface (iexp : iexp) : file =
+		(case iexp of
+		    SRCI {pinterface,...} => pinterface
+		|   PRIMI {pinterface,...} => pinterface
+		|   PRECOMPI {pinterface,...} => pinterface
+		|   COMPI {pinterface,...} => pinterface)
+
+	    fun using' (iexp : iexp) : units option =
+		(case iexp of
+		    PRECOMPI {using,...} => SOME using
+		|   COMPI {using,...} => SOME using
+		|   _ => NONE)
+	    val using = opt_out "P.I.using" using'
+
+	    fun stable (iexp:iexp) : bool =
+		(case iexp of
+		    PRECOMPI _ => true
+		|   COMPI _ => true
+		|   _ => false)
+	end
+
+	structure U =
+	struct
+	    fun source' (uexp : uexp) : (units * file) option =
+		(case uexp of
+		    SRCU {opened,src,...} => SOME (opened,src)
+		|   SSRCU {opened,src,...} => SOME (opened,src)
+		|   PRECOMPU {opened,src,...} => SOME (opened,src)
+		|   _ => NONE)
+	    val source = opt_out "P.U.source" source'
+
+	    val opened = #1 o source
+	    val opened' = Option.compose(#1,source')
+
+	    val src = #2 o source
+	    val src' = Option.compose(#2,source')
+
+	    fun pos (uexp:uexp) : pos =
+		(case uexp of
+		    SRCU {pos,...} => pos
+		|   SSRCU {pos,...} => pos
+		|   PRIMU {pos,...} => pos
+		|   PRECOMPU {pos,...} => pos
+		|   COMPU {pos,...} => pos)
+
+	    fun asc' (uexp : uexp) : label option =
+		(case uexp of
+		    SRCU _ => NONE
+		|   SSRCU {asc,...} => SOME asc
+		|   PRIMU {asc,...} => SOME asc
+		|   PRECOMPU {asc,...} => SOME asc
+		|   COMPU {asc,...} => SOME asc)
+	    val asc = opt_out "P.U.asc" asc'
+
+	    fun using' (uexp : uexp) : units option =
+		(case uexp of
+		    PRECOMPU {using,...} => SOME using
+		|   COMPU {using,...} => SOME using
+		|   _ => NONE)
+	    val using = opt_out "P.U.using" using'
+
+	    fun using_file (uexp : uexp) : file =
+		(case uexp of
+		    SRCU {using_file,...} => using_file
+		|   SSRCU {using_file,...} => using_file
+		|   PRIMU {using_file,...} => using_file
+		|   PRECOMPU {using_file,...} => using_file
+		|   COMPU {using_file,...} => using_file)
+
+	    fun asm' (uexp : uexp) : file option =
+		(case uexp of
+		    SRCU {asm,...} => SOME asm
+		|   SSRCU {asm,...} => SOME asm
+		|   PRIMU {asm,...} => SOME asm
+		|   _ => NONE)
+	    val asm = opt_out "P.U.asm" asm'
+
+	    fun asmz' (uexp : uexp) : file option =
+		(case uexp of
+		    SRCU {asmz,...} => SOME asmz
+		|   SSRCU {asmz,...} => SOME asmz
+		|   PRIMU {asmz,...} => SOME asmz
+		|   _ => NONE)
+	    val asmz = opt_out "P.U.asmz" asmz'
+
+	    fun info' (uexp : uexp) : file option =
+		(case uexp of
+		    SRCU {info,...} => SOME info
+		|   SSRCU {info,...} => SOME info
+		|   PRECOMPU {info,...} => SOME info
+		|   _ => NONE)
+	    val info = opt_out "P.U.info" info'
+
+	    fun obj (uexp : uexp) : file =
+		(case uexp of
+		    SRCU {obj,...} => obj
+		|   SSRCU {obj,...} => obj
+		|   PRIMU {obj,...} => obj
+		|   PRECOMPU {obj,...} => obj
+		|   COMPU {obj,...} => obj)
+
+	    fun pinterface' (uexp : uexp) : file option =
+		(case uexp of
+		    SRCU {pinterface,...} => SOME pinterface
+		|   _ => NONE)
+	    val pinterface = opt_out "P.U.pinterface" pinterface'
+
+	    fun tali (uexp : uexp) : file =
+		(case uexp of
+		    SRCU {tali,...} => tali
+		|   SSRCU {tali,...} => tali
+		|   PRIMU {tali,...} => tali
+		|   PRECOMPU {tali,...} => tali
+		|   COMPU {tali,...} => tali)
+
+	    fun tali_rel (uexp : uexp) : file =
+		(case uexp of
+		    SRCU {tali_rel,...} => tali_rel
+		|   SSRCU {tali_rel,...} => tali_rel
+		|   PRIMU {tali_rel,...} => tali_rel
+		|   PRECOMPU {tali_rel,...} => tali_rel
+		|   COMPU {tali_rel,...} => tali_rel)
+
+	    fun stable (uexp:uexp) : bool =
+		(case uexp of
+		    PRECOMPU _ => true
+		|   COMPU _ => true
+		|   _ => false)
+	end
+
+	structure D =
+	struct
+
+	    fun name (pdec : pdec) : label =
+		(case pdec of
+		    IDEC {name,...} => name
+		|   SCDEC {name,...} => name
+		|   UDEC {name,...} => name)
+
+	    fun pos (pdec : pdec) : pos =
+		(case pdec of
+		    IDEC {iexp,...} => I.pos iexp
+		|   SCDEC {pos,...} => pos
+		|   UDEC {uexp,...} => U.pos uexp)
+
+	    fun iexp' (pdec:pdec) : iexp option =
+		(case pdec of
+		    IDEC {iexp,...} => SOME iexp
+		|   _ => NONE)
+	    val iexp = opt_out "P.D.iexp" iexp'
+
+	    fun uexp' (pdec:pdec) : uexp option =
+		(case pdec of
+		    UDEC {uexp,...} => SOME uexp
+		|   _ => NONE)
+	    val uexp = opt_out "P.D.uexp" uexp'
+
+	    fun asc' (pdec:pdec) : label option =
+		(case pdec of
+		    SCDEC {asc,...} => SOME asc
+		|   UDEC {uexp,...} => U.asc' uexp
+		|   _ => NONE)
+	    val asc = opt_out "P.D.asc" asc'
+
+	    fun stable (pdec:pdec) : bool =
+		(case pdec of
+		    IDEC {iexp,...} => I.stable iexp
+		|   SCDEC {stable,...} => stable
+		|   UDEC {uexp,...} => U.stable uexp)
+
+	    fun src' (pdec:pdec) : file option =
+		(case pdec of
+		    IDEC {iexp,...} => I.src' iexp
+		|   SCDEC _ => NONE
+		|   UDEC {uexp,...} => U.src' uexp)
+	    val src = opt_out "P.D.src" src'
+
+	    fun tali' (pdec:pdec) : file option =
+		(case pdec of
+		    IDEC _ => NONE
+		|   SCDEC {tali,...} => SOME tali
+		|   UDEC {uexp,...} => SOME (U.tali uexp))
+	    val tali = opt_out "P.D.tali" tali'
+
+	    fun tali_rel' (pdec:pdec) : file option =
+		(case pdec of
+		    IDEC _ => NONE
+		|   SCDEC {tali_rel,...} => SOME tali_rel
+		|   UDEC {uexp,...} => SOME (U.tali_rel uexp))
+	    val tali_rel = opt_out "P.D.tali_rel" tali_rel'
+
+	    fun info' (pdec : pdec) : file option =
+		(case pdec of
+		    IDEC {iexp,...} => I.info' iexp
+		|   SCDEC {info,...} => SOME info
+		|   UDEC {uexp,...} => U.info' uexp)
+	    val info = opt_out "P.D.info" info'
+	end
     end
 
     (*
 	Syntactic definitions and well-formedness checks.
     *)
 
-    fun free_opened (opened : opened) : set = S.addList (S.empty, opened)
-
-    val free_using = free_opened
+    fun free_units (units : units) : set = S.addList (S.empty, units)
 
     fun free_iexp (iexp : iexp) : set =
-	(case iexp
-	   of SRCI (opened,_) => free_opened opened
-	    | PRIMI _ => S.empty
-	    | PRECOMPI (using,opened,_) =>
-		S.union (free_using using, free_opened opened)
-	    | COMPI (using,_) => free_using using)
+	(case iexp of
+	    SRCI {opened,...}=> free_units opened
+	|   PRIMI _ => S.empty
+	|   PRECOMPI {using,opened,...} =>
+		S.union (free_units using, free_units opened)
+	|   COMPI {using,...} => free_units using)
 
     fun free_uexp (uexp : uexp) : set =
-	(case uexp
-	   of SRCU (opened,_) => free_opened opened
-	    | SSRCU (opened,I,_) => S.add(free_opened opened, I)
-	    | PRIMU (I,_) => S.singleton I
-	    | PRECOMPU (using, opened, I, _) =>
-		S.add(S.union(free_using using, free_opened opened), I)
-	    | COMPU (using,I,_) => S.add(free_using using,I))
+	(case uexp of
+	    SRCU {opened,...}=> free_units opened
+	|   SSRCU {opened,asc=I,...} => S.add(free_units opened, I)
+	|   PRIMU {asc=I,...} => S.singleton I
+	|   PRECOMPU {using,opened,asc=I,...} =>
+		S.add(S.union(free_units using, free_units opened), I)
+	|   COMPU {using,opened,asc=I,...} =>
+		S.add(S.union(free_units using, free_units opened),I))
 
     fun free_pdec (pdec : pdec) : set =
-	(case pdec
-	   of IDEC (_,iexp,_) => free_iexp iexp
-	    | SCDEC (_,I,_) => S.singleton I
-	    | UDEC (_,uexp,_) => free_uexp uexp)
+	(case pdec of
+	    IDEC {iexp,...} => free_iexp iexp
+	|   SCDEC {asc=I,...} => S.singleton I
+	|   UDEC {uexp,...} => free_uexp uexp)
 
     fun pdec_ok (pdec : pdec, dom : set) : set =
-	let val l = P.label pdec
+	let val l = P.D.name pdec
 	    val redefined = S.member (dom,l)
 	    val missing = S.difference (free_pdec pdec, dom)
 	    fun fail msg =
-		error (concat[Pos.tostring (P.pos pdec), ": ",
-			      Name.label2longname (P.label pdec),
-			      " ", msg])
+		error (concat[Pos.tostring (P.D.pos pdec), ": ",
+		    Name.label2longname l, " ", msg])
 	in
-	    (case (redefined, not (S.isEmpty missing))
-	       of (false, false) => S.add(dom,l)
-		| (true, _) => fail "redefined"
-		| (_, true) =>
+	    (case (redefined, not (S.isEmpty missing)) of
+		(false, false) => S.add(dom,l)
+	    |	(true, _) => fail "redefined"
+	    |	(_, true) =>
 		    let val labels = S.listItems missing
 			val strings = map Name.label2longname labels
-			val missing = Listops.concatWith "    " strings
-		    in  fail ("names undefined units/interfaces: " ^ missing)
+			val missing = Listops.concatWith " " strings
+		    in	fail ("names undefined units/interfaces: " ^ missing)
 		    end)
 	end
 
     fun check_desc (desc : desc) : unit =
 	ignore (foldl pdec_ok S.empty desc)
 
-    fun say (s : string) : unit =
-	if !B.BlastDebug then (print s; print "\n") else ()
+    fun blastOutIexp (os:B.outstream) (iexp:iexp) : unit =
+	(case iexp of
+	    SRCI {pos,opened,src,...} =>
+		(B.blastOutInt os 0; Pos.blastOutPos os pos;
+		 blastOutUnits' os opened; B.blastOutString os src)
+	|   PRIMI {pos,...} =>
+		(B.blastOutInt os 1; Pos.blastOutPos os pos)
+	|   PRECOMPI {pos,opened,src,...} =>
+		(B.blastOutInt os 2; Pos.blastOutPos os pos;
+		 blastOutUnits' os opened; B.blastOutString os src)
+	|   COMPI {pos,...} =>
+		(B.blastOutInt os 3; Pos.blastOutPos os pos))
 
-    val blastInLabel = NB.blastInLabel
-    val blastOutLabel = NB.blastOutLabel
+    fun blastInIexp (is:B.instream) (I:label) : iexp =
+	(case (B.blastInInt is) of
+	    0 => C.I.src(Pos.blastInPos is,I,blastInUnits' is,B.blastInString is)
+	|   1 => C.I.prim(Pos.blastInPos is,I)
+	|   2 => C.I.precomp(Pos.blastInPos is,I,blastInUnits' is,B.blastInString is)
+	|   3 => C.I.comp(Pos.blastInPos is,I)
+	|   _ => error "blastInIexp")
 
-    val blastOutOpened : B.outstream -> opened -> unit =
-	B.blastOutList blastOutLabel
-    val blastInOpened : B.instream -> opened =
-	B.blastInList blastInLabel
+    fun blastOutUexp (os:B.outstream) (uexp:uexp) : unit =
+	(case uexp of
+	    SRCU {pos,opened,src,...} =>
+		(B.blastOutInt os 0; Pos.blastOutPos os pos;
+		 blastOutUnits' os opened; B.blastOutString os src)
+	|   SSRCU {pos,asc=I,opened,src,...} =>
+		(B.blastOutInt os 1; Pos.blastOutPos os pos;
+		 blastOutLabel os I; blastOutUnits' os opened;
+		 B.blastOutString os src)
+	|   PRIMU {pos,asc=I,...} =>
+		(B.blastOutInt os 2; Pos.blastOutPos os pos;
+		 blastOutLabel os I)
+	|   PRECOMPU {pos,asc=I,opened,src,...} =>
+		(B.blastOutInt os 3; Pos.blastOutPos os pos;
+		 blastOutLabel os I; blastOutUnits' os opened;
+		 B.blastOutString os src)
+	|   COMPU {pos,opened,asc=I,...} =>
+		(B.blastOutInt os 4; Pos.blastOutPos os pos;
+		 blastOutUnits' os opened; blastOutLabel os I))
+
+    fun blastInUexp (is:B.instream) (U:label) : uexp =
+	(case (B.blastInInt is) of
+	    0 => C.U.src(Pos.blastInPos is,U,blastInUnits' is,B.blastInString is)
+	|   1 =>
+		C.U.ssrc(Pos.blastInPos is,U,blastInLabel is,blastInUnits' is,
+		    B.blastInString is)
+	|   2 => C.U.prim(Pos.blastInPos is,U,blastInLabel is)
+	|   3 =>
+		C.U.precomp(Pos.blastInPos is,U,blastInLabel is,
+		    blastInUnits' is,B.blastInString is)
+	|   4 => C.U.comp(Pos.blastInPos is,U,blastInUnits' is,blastInLabel is)
+	|   _ => error "blastInUexp")
 
     fun blastOutPdec (os:B.outstream) (pdec:pdec) : unit =
-	(case pdec
-	   of IDEC(I,SRCI(opened,{src,...}),pos) =>
-		(B.blastOutInt os 0; Pos.blastOutPos os pos;
-		 blastOutLabel os I; blastOutOpened os opened;
-		 B.blastOutString os src)
-	    | IDEC(I,PRIMI _,pos) =>
-		(B.blastOutInt os 1; Pos.blastOutPos os pos; blastOutLabel os I)
-	    | IDEC(I,PRECOMPI (_,opened,{src,...}),pos) =>
-		(B.blastOutInt os 2; Pos.blastOutPos os pos;
-		 blastOutLabel os I; blastOutOpened os opened;
-		 B.blastOutString os src)
-	    | IDEC(I,COMPI _,pos) =>
-		(B.blastOutInt os 3; Pos.blastOutPos os pos; blastOutLabel os I)
-	    | UDEC(U,SRCU(opened,{src,...}),pos) =>
-		(B.blastOutInt os 4; Pos.blastOutPos os pos;
-		 blastOutLabel os U; blastOutOpened os opened;
-		 B.blastOutString os src)
-	    | UDEC(U,SSRCU(opened,I,{src,...}),pos) =>
-		(B.blastOutInt os 5; Pos.blastOutPos os pos;
-		 blastOutLabel os U; blastOutLabel os I;
-		 blastOutOpened os opened; B.blastOutString os src)
-	    | UDEC(U,PRIMU(I,_),pos) =>
-		(B.blastOutInt os 6; Pos.blastOutPos os pos; blastOutLabel os U;
-		 blastOutLabel os I)
-	    | UDEC(U,PRECOMPU(_,opened,I,{src,...}),pos) =>
-		(B.blastOutInt os 7; Pos.blastOutPos os pos;
-		 blastOutLabel os U; blastOutLabel os I;
-		 blastOutOpened os opened; B.blastOutString os src)
-	    | UDEC(U,COMPU(_,I,_),pos) =>
-		(B.blastOutInt os 8; Pos.blastOutPos os pos; blastOutLabel os U;
-		 blastOutLabel os I)
-	    | SCDEC(U,I,pos) =>
-		(B.blastOutInt os 9; blastOutLabel os U; blastOutLabel os I;
-		 Pos.blastOutPos os pos))
+	(case pdec of
+	    IDEC {name=I,iexp,...} =>
+		(B.blastOutInt os 0; blastOutLabel os I; blastOutIexp os iexp)
+	|   SCDEC {pos,name=U,asc=I,stable,...} =>
+		(B.blastOutInt os 1; Pos.blastOutPos os pos; blastOutLabel os U;
+		 blastOutLabel os I; B.blastOutBool os stable)
+	|   UDEC {name=U,uexp=uexp,...} =>
+		(B.blastOutInt os 2; blastOutLabel os U; blastOutUexp os uexp))
 
     fun blastInPdec (is:B.instream) : pdec =
-	(case B.blastInInt is
-	   of 0 =>
-		let val pos = Pos.blastInPos is
-		    val I = blastInLabel is
-		    val opened = blastInOpened is
-		    val src = B.blastInString is
-		    val iexp = C.I.src (Pos.file pos,I,opened,src)
-		in  IDEC (I,iexp,pos)
+	(case (B.blastInInt is) of
+	    0 =>
+		let val I = blastInLabel is
+		in  C.D.i(I,blastInIexp is I)
 		end
-	    | 1 =>
-		let val pos = Pos.blastInPos is
-		    val I = blastInLabel is
-		    val iexp = C.I.prim (Pos.file pos,I)
-		in  IDEC (I,iexp,pos)
+	|   1 =>
+		C.D.sc(Pos.blastInPos is, blastInLabel is,
+		    blastInLabel is, B.blastInBool is)
+	|   2 =>
+		let val U = blastInLabel is
+		in  C.D.u(U,blastInUexp is U)
 		end
-	    | 2 =>
-		let val pos = Pos.blastInPos is
-		    val I = blastInLabel is
-		    val opened = blastInOpened is
-		    val src = B.blastInString is
-		    val iexp = C.I.precomp (Pos.file pos,I,opened,src)
-		in  IDEC (I,iexp,pos)
-		end
-	    | 3 =>
-		let val pos = Pos.blastInPos is
-		    val I = blastInLabel is
-		    val iexp = C.I.comp (Pos.file pos,I)
-		in  IDEC (I,iexp,pos)
-		end
-	    | 4 =>
-		let val pos = Pos.blastInPos is
-		    val U = blastInLabel is
-		    val opened = blastInOpened is
-		    val src = B.blastInString is
-		    val uexp = C.U.src (Pos.file pos,U,opened,src)
-		in  UDEC (U,uexp,pos)
-		end
-	    | 5 =>
-		let val pos = Pos.blastInPos is
-		    val U = blastInLabel is
-		    val I = blastInLabel is
-		    val opened = blastInOpened is
-		    val src = B.blastInString is
-		    val uexp = C.U.ssrc (Pos.file pos,U,I,opened,src)
-		in  UDEC (U,uexp,pos)
-		end
-	    | 6 =>
-		let val pos = Pos.blastInPos is
-		    val U = blastInLabel is
-		    val I = blastInLabel is
-		    val uexp = C.U.prim (Pos.file pos,U,I)
-		in  UDEC (U,uexp,pos)
-		end
-	    | 7 =>
-		let val pos = Pos.blastInPos is
-		    val U = blastInLabel is
-		    val I = blastInLabel is
-		    val opened = blastInOpened is
-		    val src = B.blastInString is
-		    val uexp = C.U.precomp (Pos.file pos,U,I,opened,src)
-		in  UDEC (U,uexp,pos)
-		end
-	    | 8 =>
-		let val pos = Pos.blastInPos is
-		    val U = blastInLabel is
-		    val I = blastInLabel is
-		    val uexp = C.U.comp (Pos.file pos,U,I)
-		in  UDEC (U,uexp,pos)
-		end
-	    | 9 => SCDEC (blastInLabel is, blastInLabel is,
-			  Pos.blastInPos is)
-	    | _ => error "bad pdec")
+	|   _ => error "blastInPdec")
 
     val blastOutDesc : B.outstream -> desc -> unit =
 	B.blastOutList blastOutPdec
@@ -661,49 +792,6 @@ struct
 
     val (blastOutDesc, blastInDesc) =
 	B.magic (blastOutDesc, blastInDesc, "desc $Revision$")
-
-    fun blastOutEntry (os : B.outstream) (e : label * Crc.crc) : unit =
-	(say "blastOutEntry";
-	 B.blastOutPair NB.blastOutLabel Crc.blastOutCrc os e)
-    fun blastInEntry (is : B.instream) : label * Crc.crc =
-	(say "blastInEntry";
-	 B.blastInPair NB.blastInLabel Crc.blastInCrc is)
-
-    fun blastOutUe (os : B.outstream) (ue : ue) : unit =
-	(say "blastOutUe"; B.blastOutList blastOutEntry os ue)
-    fun blastInUe (is : B.instream) : ue =
-	(say "blastInUe"; B.blastInList blastInEntry is)
-
-    fun blastOutInfo (os : B.outstream) (info : info) : unit =
-	(say "blastOutInfo";
-	 (case info
-	    of INFO_SRCI (ue, opened, src) =>
-		(B.blastOutInt os 0; blastOutUe os ue;
-		 blastOutOpened os opened; Crc.blastOutCrc os src)
-	     | INFO_SRCU (ue, opened, src) =>
-		(B.blastOutInt os 1; blastOutUe os ue;
-		 blastOutOpened os opened; Crc.blastOutCrc os src)
-	     | INFO_SSRCU (ue, opened, src, pi) =>
-		(B.blastOutInt os 2; blastOutUe os ue;
-		 blastOutOpened os opened; Crc.blastOutCrc os src;
-		 Crc.blastOutCrc os pi)
-	     | INFO_PRIMU pi =>
-		(B.blastOutInt os 3; Crc.blastOutCrc os pi)))
-
-    fun blastInInfo (is : B.instream) : info =
-	(say "blastInInfo";
-	 (case B.blastInInt is
-	    of 0 => INFO_SRCI (blastInUe is, blastInOpened is,
-			       Crc.blastInCrc is)
-	     | 1 => INFO_SRCU (blastInUe is, blastInOpened is,
-			       Crc.blastInCrc is)
-	     | 2 => INFO_SSRCU (blastInUe is, blastInOpened is,
-				Crc.blastInCrc is, Crc.blastInCrc is)
-	     | 3 => INFO_PRIMU (Crc.blastInCrc is)
-	     | _ => error "bad info"))
-
-    val (blastOutInfo, blastInInfo) =
-	B.magic (blastOutInfo, blastInInfo, "info $Revision$")
 
     type format = Fmt.format
     val String = Fmt.String
@@ -715,88 +803,104 @@ struct
     val pp_label = Ppil.pp_label'
     val pp_pos = Pos.pp_pos
 
-    fun pp_parm (using:using) : format =
-	Fmt.pp_list pp_label using
-
-    fun pp_opened (opened:opened) : format =
-	Fmt.pp_list pp_label opened
+    fun pp_units (units:units) : format =
+	Fmt.pp_list pp_label units
 
     fun pp_iexp (iexp : iexp) : format =
-	(case iexp
-	   of SRCI (opened,{src,info,pinterface}) =>
+	(case iexp of
+	    SRCI {pos,opened,src,info,pinterface} =>
 		Box[String "SRCI", Break,
-		    String "opened = ", pp_opened opened, Break,
+		    String "pos = ", pp_pos pos, Break,
+		    String "opened = ", pp_units opened, Break,
 		    String "src = ", String src, Break,
 		    String "info = ", String info, Break,
 		    String "pinterface = ", String pinterface]
-	    | PRIMI {pinterface} =>
-	    	Box[String "PRIMI", Break,
+	|   PRIMI {pos,pinterface} =>
+		Box[String "PRIMI", Break,
+		    String "pos = ", pp_pos pos, Break,
 		    String "pinterface = ", String pinterface]
-	    | PRECOMPI (using,opened,{pinterface,src,info}) =>
+	|   PRECOMPI {pos,pinterface,using,opened,src,info} =>
 		Box[String "PRECOMPI", Break,
-		    String "using = ", pp_parm using, Break,
-		    String "opened = ", pp_opened opened, Break,
+		    String "pos = ", pp_pos pos, Break,
 		    String "pinterface = ", String pinterface, Break,
+		    String "using = ", pp_units using, Break,
+		    String "opened = ", pp_units opened, Break,
 		    String "src = ", String src, Break,
 		    String "info = ", String info]
-	    | COMPI (using,{pinterface}) =>
+	|   COMPI {pos,pinterface,using} =>
 		Box[String "COMPI", Break,
-		    String "using = ", pp_parm using, Break,
-		    String "pinterface = ", String pinterface])
+		    String "pos = ", pp_pos pos, Break,
+		    String "pinterface = ", String pinterface, Break,
+		    String "using = ", pp_units using])
 
     fun pp_uexp (uexp : uexp) : format =
-	(case uexp
-	   of SRCU (opened,{src,info,pinterface,obj,asm,asmz,parm}) =>
+	(case uexp of
+	    SRCU {pos,opened,src,info,pinterface,obj,asm,asmz,using_file,tali,tali_rel} =>
 		Box[String "SRCU", Break,
-		    String "opened = ", pp_opened opened, Break,
+		    String "pos = ", pp_pos pos, Break,
+		    String "opened = ", pp_units opened, Break,
 		    String "src = ", String src, Break,
 		    String "info = ", String info, Break,
 		    String "pinterface = ", String pinterface, Break,
 		    String "obj = ", String obj, Break,
 		    String "asm = ", String asm, Break,
 		    String "asmz = ", String asmz, Break,
-		    String "parm = ", String parm]
-	    | SSRCU (opened,I,{src,info,obj,asm,asmz,parm}) =>
+		    String "using_file = ", String using_file, Break,
+		    String "tali = ", String tali, Break,
+		    String "tali_rel = ", String tali_rel]
+	|   SSRCU {pos,opened,src,asc=I,info,obj,asm,asmz,using_file,tali,tali_rel} =>
 		Box[String "SSRCU", Has, pp_label I, Break,
-		    String "opened = ", pp_opened opened, Break,
+		    String "pos = ", pp_pos pos, Break,
+		    String "opened = ", pp_units opened, Break,
 		    String "src = ", String src, Break,
 		    String "info = ", String info, Break,
 		    String "obj = ", String obj, Break,
 		    String "asm = ", String asm, Break,
 		    String "asmz = ", String asmz, Break,
-		    String "parm = ", String parm]
-	    | PRIMU (I,{info,obj,asm,asmz,parm}) =>
+		    String "using_file = ", String using_file, Break,
+		    String "tali = ", String tali, Break,
+		    String "tali_rel = ", String tali_rel]
+	|   PRIMU {pos,asc=I,obj,asm,asmz,using_file,tali,tali_rel} =>
 		Box[String "PRIMU", Has, pp_label I, Break,
-		    String "info = ", String info, Break,
+		    String "pos = ", pp_pos pos, Break,
 		    String "obj = ", String obj, Break,
 		    String "asm = ", String asm, Break,
 		    String "asmz = ", String asmz, Break,
-		    String "parm = ", String parm]
-	    | PRECOMPU (using,opened,I,{obj,src,info,parm}) =>
+		    String "using_file = ", String using_file, Break,
+		    String "tali = ", String tali, Break,
+		    String "tali_rel = ", String tali_rel]
+	|   PRECOMPU {pos,obj,using,opened,src,asc=I,info,using_file,tali,tali_rel} =>
 		Box[String "PRECOMPU", Has, pp_label I, Break,
-		    String "using = ", pp_parm using, Break,
-		    String "opened = ", pp_opened opened, Break,
+		    String "pos = ", pp_pos pos, Break,
 		    String "obj = ", String obj, Break,
+		    String "using = ", pp_units using, Break,
+		    String "opened = ", pp_units opened, Break,
 		    String "src = ", String src, Break,
 		    String "info = ", String info, Break,
-		    String "parm = ", String parm]
-	    | COMPU (using,I,{obj,parm}) =>
+		    String "using_file = ", String using_file, Break,
+		    String "tali = ", String tali, Break,
+		    String "tali_rel = ", String tali_rel]
+	|   COMPU {pos,obj,using,opened,asc=I,using_file,tali,tali_rel} =>
 		Box[String "COMPU", Has, pp_label I, Break,
-		    String "using = ", pp_parm using, Break,
+		    String "pos = ", pp_pos pos, Break,
 		    String "obj = ", String obj, Break,
-		    String "parm = ", String parm])
+		    String "using = ", pp_units using, Break,
+		    String "opened = ", pp_units opened, Break,
+		    String "using_file = ", String using_file, Break,
+		    String "tali = ", String tali, Break,
+		    String "tali_rel = ", String tali_rel])
 
     fun pp_pdec (pdec:pdec) : format =
-	(case pdec
-	   of IDEC (I,iexp,pos) =>
-		Box[pp_label I, Eq, pp_iexp iexp, Break,
-		    String "pos = ", pp_pos pos]
-	    | SCDEC (U,I,pos) =>
+	(case pdec of
+	    IDEC {name=I,iexp} => Box[pp_label I, Eq, pp_iexp iexp]
+	|   SCDEC {pos,name=U,asc=I,stable,info,tali,tali_rel} =>
 		Box[pp_label U, Has, pp_label I, Break,
-		    String "pos = ", pp_pos pos]
-	    | UDEC (U,uexp,pos) =>
-		Box[pp_label U, Eq, pp_uexp uexp, Break,
-		    String "pos = ", pp_pos pos])
+		    String "pos = ", pp_pos pos, Break,
+		    String "stable = ", String (Bool.toString stable), Break,
+		    String "info = ", String info, Break,
+		    String "tali = ", String tali, Break,
+		    String "tali_rel = ", String tali_rel]
+	|   UDEC {name=U,uexp} => Box[pp_label U, Eq, pp_uexp uexp])
 
     fun pp_desc (desc:desc) : format =
 	let val formats = map pp_pdec desc
@@ -804,34 +908,70 @@ struct
 	in  Fmt.Vbox formats
 	end
 
+    (*
+	Info files
+    *)
+    type crc = Crc.crc
+    type ue = (label * crc) list
+
+    datatype info =
+	INFO_I of {ue:ue, src:(units * crc) option}
+    |	INFO_U of {ue:ue, src:(units * crc) option, pinterface:crc option}
+
+    val blastOutEntry : B.outstream -> label * Crc.crc -> unit =
+	B.blastOutPair NB.blastOutLabel Crc.blastOutCrc
+    val blastInEntry : B.instream -> label * Crc.crc =
+	B.blastInPair NB.blastInLabel Crc.blastInCrc
+
+    val blastOutUe : B.outstream -> ue -> unit =
+	B.blastOutList blastOutEntry
+    val blastInUe : B.instream -> ue =
+	B.blastInList blastInEntry
+
+    val blastOutSrc : B.outstream -> units * crc -> unit =
+	B.blastOutPair blastOutUnits Crc.blastOutCrc
+    val blastInSrc : B.instream -> units * crc =
+	B.blastInPair blastInUnits Crc.blastInCrc
+
+    fun blastOutInfo (os : B.outstream) (info : info) : unit =
+	(case info of
+	    INFO_I {ue,src} =>
+		(B.blastOutInt os 0; blastOutUe os ue;
+		 B.blastOutOption blastOutSrc os src)
+	 |  INFO_U {ue,src,pinterface} =>
+		(B.blastOutInt os 1; blastOutUe os ue;
+		 B.blastOutOption blastOutSrc os src;
+		 B.blastOutOption Crc.blastOutCrc os pinterface))
+
+    fun blastInInfo (is : B.instream) : info =
+	(case (B.blastInInt is) of
+	    0 => INFO_I {ue=blastInUe is, src=B.blastInOption blastInSrc is}
+	 |  1 => INFO_U
+		{ue=blastInUe is, src=B.blastInOption blastInSrc is,
+		 pinterface=B.blastInOption Crc.blastInCrc is}
+	|   _ => error "blastInInfo")
+
+    val (blastOutInfo, blastInInfo) =
+	B.magic (blastOutInfo, blastInInfo, "info $Revision$")
+
     fun pp_entry (name : label, crc : Crc.crc) : format =
 	Fmt.Hbox [String (Name.label2string name), Has, Crc.pp_crc crc]
 
     fun pp_ue (ue : ue) : format = Fmt.pp_list pp_entry ue
 
-    val pp_opened : opened -> format =
-	Fmt.pp_list' Fmt.Hbox (String o Name.label2string)
+    fun pp_src (opened:units, crc:crc) : format =
+	Box[String "OPEN ", pp_units opened, String " IN ", Crc.pp_crc crc]
 
     fun pp_info (info : info) : format =
-	(case info
-	   of INFO_SRCI (ue,opened,src) =>
+	(case info of
+	    INFO_I {ue,src} =>
 		Box[String "INFO_SRCI", Break,
 		    String "ue = ", pp_ue ue, Break,
-		    String "opened = ", pp_opened opened, Break,
-		    String "source = ", Crc.pp_crc src]
-	    | INFO_SRCU (ue,opened,src) =>
+		    String "src = ", Fmt.pp_option pp_src src]
+	|   INFO_U {ue,src,pinterface} =>
 		Box[String "INFO_SRCU", Break,
 		    String "ue = ", pp_ue ue, Break,
-		    String "opened = ", pp_opened opened, Break,
-		    String "source = ", Crc.pp_crc src]
-	    | INFO_SSRCU (ue, opened, src, pi) =>
-		Box[String "INFO_SSRCU", Break,
-		    String "ue = ", pp_ue ue, Break,
-		    String "opened = ", pp_opened opened, Break,
-		    String "source = ", Crc.pp_crc src, Break,
-		    String "pinterface = ", Crc.pp_crc pi]
-	    | INFO_PRIMU pi =>
-		Box[String "INFO_PRIMU", Break,
-		    String "pinterface = ", Crc.pp_crc pi])
+		    String "src = ", Fmt.pp_option pp_src src, Break,
+		    String "pinterface = ", Fmt.pp_option Crc.pp_crc pinterface])
 
 end

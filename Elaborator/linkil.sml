@@ -640,6 +640,20 @@ struct
 	in  SOME m
 	end handle Fail => NONE
 
+    fun sc_module (precontext, U:label, pi:pinterface) : sc_module =
+	let val (ilctx,(ctx,_)) = start_elab (precontext,nil)
+	    val i = instantiate(ctx,pi)
+	    val {main=(v,signat),...} = i
+	    val sdec = SDEC(U,DEC_MOD(v,false,signat))
+	    val sc_mod = (ilctx,sdec)
+	    val _ =
+		if !ShowHIL then
+		    (print "\nsc_module:\n"; Ppil.pp_sc_module sc_mod;
+		     print "\n\n")
+		else ()
+	in  sc_mod
+	end
+
     val eq = Stats.timer("Elaboration:eq",eq)
     val elab_topspec = Stats.timer("Elaboration:elab_topspec",elab_topspec)
     val elab_primspec = Stats.timer("Elaboration:elab_primspec",elab_primspec)

@@ -9,10 +9,15 @@
 	Info computes an Info.info value for the project description.
 	This is used for cut-off recompilation.
 
-	Compile builds pdec against desc, assuming all the pinterfaces
-	in desc are up to date.  Compile returns true if compilation
+	Compile_int generates a TAL interface (tali) for pdec against
+	desc, assuming that all the pinterfaces in desc are up to date and
+	that pdec defines a unit with an ascribed interface.
+
+	Compile builds pdec against desc, assuming all the pinterfaces and
+	talis in desc are up to date.  Compile returns true if compilation
 	is done and false if further assembly (on a native slave) is
-	required.
+	required.  The supplied function is called once the pinterface and
+	tali files are up to date.
 
 	Assemble creates an object file from an up to date assembler
 	file; it is used to finish compilation jobs.
@@ -42,8 +47,10 @@ sig
 
     val info : desc * pdec -> IntSyn.info
 
+    val compile_int : desc * pdec -> unit
     val compile : desc * pdec * (unit -> unit) -> bool
-    val assemble : pdec -> unit
+
+    val assemble : desc * pdec -> unit
 
     val link : IntSyn.desc * IntSyn.F.link -> unit
     val pack : desc * string -> unit	(* library directory *)

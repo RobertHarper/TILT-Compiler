@@ -33,6 +33,7 @@ signature PPIL =
     val pp_phrase_class' : Il.phrase_class -> Formatter.format
     val pp_decresult' : Il.decresult -> Formatter.format
     val pp_module'  : Il.module -> Formatter.format
+    val pp_sc_module'  : Il.sc_module -> Formatter.format
     val pp_parm'    : Il.parm -> Formatter.format
     val pp_parms'   : Il.parms -> Formatter.format
     val pp_pinterface' : Il.pinterface -> Formatter.format
@@ -68,6 +69,7 @@ signature PPIL =
     val pp_phrase_class : Il.phrase_class -> unit
     val pp_decresult : Il.decresult -> unit
     val pp_module  : Il.module -> unit
+    val pp_sc_module  : Il.sc_module -> unit
     val pp_parm    : Il.parm -> unit
     val pp_parms   : Il.parms -> unit
     val pp_pinterface : Il.pinterface -> unit

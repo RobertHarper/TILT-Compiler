@@ -12,6 +12,7 @@ sig
     val targetString : unit -> string
 
     val native : unit -> bool
+    val tal : unit -> bool
 
     val checkNative : unit -> unit
 end

@@ -26,6 +26,7 @@ val ELSE:  'a * 'a -> (svalue,'a) token
 val THEN:  'a * 'a -> (svalue,'a) token
 val IF:  'a * 'a -> (svalue,'a) token
 val ENV:  'a * 'a -> (svalue,'a) token
+val COLONCOLON:  'a * 'a -> (svalue,'a) token
 val COLON:  'a * 'a -> (svalue,'a) token
 val GE:  'a * 'a -> (svalue,'a) token
 val GT:  'a * 'a -> (svalue,'a) token

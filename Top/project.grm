@@ -14,7 +14,7 @@ val interface_label = Name.interface_label
 
 %term
 	EOF | DOLLAR | CARAT | LPAREN | RPAREN | LBRACE |
-	RBRACE | EQ | SEQ | BEQ | LT | LE | GT | GE | COLON |
+	RBRACE | EQ | SEQ | BEQ | LT | LE | GT | GE | COLON | COLONCOLON |
 	ENV | IF | THEN | ELSE | NOT | ANDALSO | ORELSE |
 	DEFINED | UNIT | INTERFACE | COMPILED | PRIMITIVE |
 	VAL | INCLUDE | LOCAL | IF' | ELIF | ELSE' | ENDIF | ERROR |
@@ -47,11 +47,11 @@ val interface_label = Name.interface_label
     aexp of E.exp
   | dexp of E.exp
   | exp of E.exp
-  | units of label list
-  | opened of E.opened
-  | opopt of E.opopt
+  | unit_list of E.units
+  | units of E.units
+  | units' of E.units'
   | asc of E.asc
-  | ascopt of E.ascopt
+  | asc' of E.asc'
   | ie of E.ie
   | ue of E.ue
   | cc of E.ents
@@ -111,34 +111,34 @@ exp	: aexp
 		(E.EXP_MARK(GEleft,E.EXP_IGE(exp1,exp2)))
 	| DEFINED dexp
 		(dexp)
-units	:	(nil)
-	| ID units
-		((unit_label ID) :: units)
-opened	: LBRACE units RBRACE
-		(units)
-opopt	:	(NONE)
-	| opened
-		(SOME opened)
+unit_list	:	(nil)
+	| ID unit_list
+		((unit_label ID) :: unit_list)
+units	: LBRACE unit_list RBRACE
+		(unit_list)
+units'	:	(NONE)
+	| units
+		(SOME units)
 asc	: COLON ID
 		(interface_label ID)
-ascopt	:	(NONE)
+asc'	:	(NONE)
 	| asc	(SOME asc)
-ie	: exp opopt
-		(E.SRCI(exp,opopt))
+ie	: exp units'
+		(E.SRCI(exp,units'))
 	| PRIMITIVE
 		(E.PRIMI)
-	| COMPILED exp opened
-		(E.PRECOMPI(exp,opened))
+	| COMPILED exp units
+		(E.PRECOMPI(exp,units))
 	| COMPILED
 		(E.COMPI)
-ue	: exp opopt ascopt
-		(E.SRCU(exp,opopt,ascopt))
+ue	: exp units' asc'
+		(E.SRCU(exp,units',asc'))
 	| PRIMITIVE asc
 		(E.PRIMU asc)
-	| COMPILED exp opened asc
-		(E.PRECOMPU(exp,opened,asc))
-	| COMPILED asc
-		(E.COMPU asc)
+	| COMPILED exp units asc
+		(E.PRECOMPU(exp,units,asc))
+	| COMPILED units asc
+		(E.COMPU (units,asc))
 cc	:	(nil)
 	| ELSE' ents
 		(ents)
@@ -146,18 +146,20 @@ cc	:	(nil)
 		([E.MARK(ELIFleft,E.IF(exp,ents,cc))])
 ent	: INTERFACE ID EQ ie
 		(E.INTERFACE(interface_label ID,ie))
+	| UNIT ID COLONCOLON ID
+		(E.SC(unit_label ID1, interface_label ID2, true))
 	| UNIT ID COLON ID
-		(E.SC(unit_label ID1, interface_label ID2))
+		(E.SC(unit_label ID1, interface_label ID2, false))
 	| UNIT ID EQ ue
 		(E.UNIT(unit_label ID, ue))
-	| UNIT ID asc EQ exp opopt
-		(E.UNIT(unit_label ID, E.SRCU(exp,opopt,SOME asc)))
+	| UNIT ID asc EQ exp units'
+		(E.UNIT(unit_label ID, E.SRCU(exp,units',SOME asc)))
 	| UNIT ID asc EQ PRIMITIVE
 		(E.UNIT(unit_label ID, E.PRIMU asc))
-	| UNIT ID asc EQ COMPILED exp opened
-		(E.UNIT(unit_label ID, E.PRECOMPU(exp,opened,asc)))
-	| UNIT ID asc EQ COMPILED
-		(E.UNIT(unit_label ID, E.COMPU asc))
+	| UNIT ID asc EQ COMPILED exp units
+		(E.UNIT(unit_label ID, E.PRECOMPU(exp,units,asc)))
+	| UNIT ID asc EQ COMPILED units
+		(E.UNIT(unit_label ID, E.COMPU (units,asc)))
 	| VAL ID EQ exp
 		(E.VAL(var_label ID,exp))
 	| INCLUDE exp

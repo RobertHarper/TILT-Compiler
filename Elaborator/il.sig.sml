@@ -214,13 +214,9 @@ sig
 
     type entries = context_entry list
 
-    (*
-	A module's context contains only those top-level sdecs and
-	signatures needed to support sbnd and sdec.  This is
-	accomplished with IlContext.gc_context.
-    *)
-
     type module = context * sbnd * sdec
+
+    type sc_module = context * sdec
 
     (*
 	Parameterized compilation unit interfaces can be written to

@@ -4,6 +4,7 @@ sig
     type filepos = LinkParse.filepos
     type label = Il.label
     type module = Il.module
+    type sc_module = Il.sc_module
 
     val LinkIlDiag : bool ref
     val ShowHIL : bool ref
@@ -33,5 +34,7 @@ sig
 	precontext * label * opened * filepos * Ast.dec * pinterface
 	-> module option
     val elab_primdec : label * pinterface -> module option
+
+    val sc_module : precontext * label * pinterface -> Il.sc_module
 
 end

@@ -629,6 +629,9 @@ struct
 	HOVbox[String "SBND: ", pp_sbnd' sbnd, Break,
 	       String "SDEC: ", pp_sdec' sdec]
 
+    fun pp_sc_module' ((ctxt,sdec) : sc_module) =
+	HOVbox[String "SDEC: ", pp_sdec' sdec]
+
     fun pp_parm' parm =
 	(case parm
 	   of PARM mainlab => pp_label' mainlab
@@ -681,6 +684,7 @@ struct
     val pp_phrase_class = help' (pp_phrase_class true [])
     val pp_decresult = help' pp_decresult'
     val pp_module = help' pp_module'
+    val pp_sc_module = help' pp_sc_module'
     val pp_parm = help' pp_parm'
     val pp_parms = help' pp_parms'
     val pp_pinterface = help' pp_pinterface'

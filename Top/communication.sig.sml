@@ -34,6 +34,7 @@ sig
       | ACK_REJECT of label * string
       | BOMB of string
       | INIT of Platform.objtype * Stats.flags * IntSyn.desc
+      | COMPILE_INT of label
       | COMPILE of label
 
     (* Debugging support *)
