@@ -306,11 +306,14 @@ functor IlStatic(structure Il : IL
 				    SOME c' => self(constrained,tyvar,c',decs,is_sub)
 				  | NONE => (set(constrained,tyvar,c); true))
 			 | _ => 
-			       (print "unifying tyvar with non-tyvar "; pp_con c;
+			       (
+(*
+				print "unifying tyvar with non-tyvar "; pp_con c;
 				print "\ntyvar has "; print (Int.toString (length tyvar_ctxts));
 				print " contexts and they are:\n";
 				app (fn ctxt => pp_context ctxt) tyvar_ctxts;
 				print "\n\n";
+*)
 			       not (con_occurs(c,tyvar))
 			       andalso (map (fn ctxt => GetConKind(c,ctxt)) tyvar_ctxts; true
 					handle _ => false)
