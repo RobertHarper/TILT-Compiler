@@ -341,8 +341,7 @@ struct
 	   | SOME _ => true)
     fun nodeWeight ({attributes, ...} : 'a graph, node) = 
 	(case StringMap.find(!attributes, node) of
-	     NONE => (print ("nodeWeight could not find " ^ node ^ "\n");
-		      raise (UnknownNode node))
+	     NONE => raise (UnknownNode node)
 	   | SOME (w,_) => w)
     fun nodeAttribute ({attributes, ...} : 'a graph, node) = 
 	(case StringMap.find(!attributes, node) of
