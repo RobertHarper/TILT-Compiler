@@ -84,5 +84,5 @@
 0084 [open]	Shadowing :: or nil makes list patterns fail to compile.
 0085 [open]     Elaborator/Pattern compiler not using correct exceptions.
 0086 [open]     Matching against an external interface file is broken.
-0087 [open]     Possible "conservative" bug in Analyze avoiding desired optimizations
+0087 [closed]   Possible "conservative" bug in Analyze avoiding desired optimizations
 0088 [open]	Tests that fail.
