@@ -18,8 +18,6 @@
 #include "client.h"
 #include "show.h"
 
-
-
 mem_t AllocBigArray_Gen(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
 {
   mem_t region;

@@ -17,7 +17,6 @@
 #include "client.h"
 #include "show.h"
 
-
 int largeheapsize = 16384;  /* measure in Kb */
 static int largebitmapsize = 512;
 static Bitmap_t  *allocMap = NULL;
