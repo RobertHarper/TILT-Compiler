@@ -389,8 +389,14 @@ functor Datatype(structure Il : IL
 		       | PHRASE_CLASS_EXP(_,con) => con
 		       | _ => (error "ill-formed constructor phrase_class"))
 		in  (case innercon of
-			 CON_ARROW(_,CON_RECORD[],false,_) => true
-		       | _ => false)
+			 CON_ARROW _ => false
+		       | CON_APP _ => true
+		       | CON_VAR _ => true
+		       | CON_SUM _ => true
+		       | CON_MODULE_PROJECT _ => true
+		       | _ => (print "ill-formed constructor type: ";
+			       Ppil.pp_con innercon; print "\n";
+			       error "ill-formed constructor type"))
 		end
 	    val _ = (debugdo (fn () => (print "constr_lookup called with path = ";
 					AstHelp.pp_path p;

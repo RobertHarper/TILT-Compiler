@@ -2,12 +2,11 @@ functor Pat(structure Il : IL
 	    structure IlStatic : ILSTATIC
 	    structure IlUtil : ILUTIL
 	    structure Ppil : PPIL
-	    structure InfixParse : INFIXPARSE
 	    structure AstHelp : ASTHELP
 	    structure Datatype : DATATYPE
 	    structure IlContext : ILCONTEXT
 	    sharing Datatype.IlContext = IlContext
-	    sharing IlContext.Il = InfixParse.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il)
+	    sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il)
   : PAT =
   struct
     
@@ -764,25 +763,6 @@ functor Pat(structure Il : IL
     end
 
 
-    (* ============ parse possibly infix patterns =========================== *)
-    fun parse_pats ({context,...} : patarg, pats) : Ast.pat list = 
-      let 
-	fun is_non_const (syms : Symbol.symbol list) = 
-	     (syms = [Symbol.varSymbol "ref"]) orelse
-	     (case (Datatype.constr_lookup context syms) of
-	      NONE => (case Datatype.exn_lookup context syms of
-			   NONE => false
-			 | SOME {stamp,carried_type=NONE} => false
-			 | SOME {stamp,carried_type=SOME _} => true)
-	    | (SOME {name,datatype_path,is_const,datatype_sig}) => 
-		 not is_const)
-	val res = InfixParse.parse_pat(fixity context, is_non_const, pats)
-      in res
-      end
-
-    fun parse_pat (patarg,pat) : Ast.pat = (case (parse_pats(patarg,[pat])) of
-							[p] => p
-						      | _ => error "parse_pat got pats")
 
 
     fun get_bound (pat : Ast.pat) : Ast.symbol list = 
@@ -820,11 +800,10 @@ functor Pat(structure Il : IL
 		 print "bindcompile called with context = \n";
 		 Ppil.pp_context context; print "\n\n")
 *)
-	val pat = parse_pat(patarg,bindpat)
-	val boundsyms = get_bound pat
+	val boundsyms = get_bound bindpat
 
 	val args = [CASE_VAR (argvar,argc)] 
-	val arms = [([pat],[],SOME(Ast.TupleExp(map (fn s => Ast.VarExp [s]) boundsyms)))]
+	val arms = [([bindpat],[],SOME(Ast.TupleExp(map (fn s => Ast.VarExp [s]) boundsyms)))]
 	val res_con = fresh_con context
 	val def = SOME (Il.RAISE(res_con,bindexn_exp),res_con)
 	val (binde,bindc,_) = compile(patarg,args,arms,def)
@@ -907,7 +886,7 @@ functor Pat(structure Il : IL
 		      | make_sbnd(BND_MOD(v,m)) = SBND(namer v, BND_MOD(v,m))
 		      | make_sbnd(BND_CON(v,c)) = SBND(namer v, BND_CON(v,c))
 *)
-		    val sbnds_first = map (fn b => SBND(internal_label "lblx", b)) bnds
+		    val sbnds_first = map (fn b => SBND(fresh_internal_label "lblx", b)) bnds
 		    val sbnds = sbnds_first @ sbnds_second
 		    val sdecs = IlStatic.GetSbndsSdecs(context,sbnds)
 		in  Listops.zip sbnds sdecs
@@ -931,7 +910,7 @@ functor Pat(structure Il : IL
       : Il.exp * Il.con = 
       let 
 	val args = [CASE_VAR (argvar,argc)]
-	val arms : arm list = map (fn (pat,body) => ([parse_pat(patarg,pat)],[], SOME body)) cases
+	val arms : arm list = map (fn (pat,body) => ([pat],[], SOME body)) cases
 	val res_con = fresh_con context
 (*	val def = SOME (Il.RAISE(res_con,matchexn_exp),res_con) *)
 	val def = NONE
@@ -969,7 +948,7 @@ functor Pat(structure Il : IL
 	end
 	(* ---- call main routine to get compiled body; creating arms by
 	   ---- adding context entries to reflect these arguments ----- *)
-	val arms : arm list = map (fn (cl,body) => (parse_pats(patarg,cl),bound, SOME body)) cases
+	val arms : arm list = map (fn (cl,body) => (cl,bound, SOME body)) cases
 	val args = map2 (fn (v,c) => CASE_VAR(v,c)) (argvars,argcons)
 	val default = if (reraise) 
 			then let val (v,c) = (hd argvars, hd argcons)

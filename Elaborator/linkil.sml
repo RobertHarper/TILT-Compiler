@@ -62,8 +62,7 @@ structure LinkIl (* : LINKIL *) =
 			    structure IlUtil = IlUtil
 			    structure AstHelp = AstHelp
 			    structure Datatype = Datatype
-			    structure Ppil = Ppil
-			    structure InfixParse = InfixParse);
+			    structure Ppil = Ppil)
 	structure Toil = Toil(structure Il = Il
 			      structure IlContext = IlContext
 			      structure AstHelp = AstHelp
@@ -174,8 +173,8 @@ structure LinkIl (* : LINKIL *) =
 
 	fun elaborate (context,filename) : (sbnds * context_entry list) option = 
 	    let val (filepos,imports,astdec) = LinkParse.parse_impl filename
-	    in
-		(case (Toil.xdec(context,filepos,astdec)) of
+		val res = 
+		    (case (Toil.xdec(context,filepos,astdec)) of
 		     SOME sbnd_ctxt_list =>
 			 let 
 (*			     val sbnd_ctxt_list = List.mapPartial kill_datatype sbnd_ctxt_list *)
@@ -184,6 +183,8 @@ structure LinkIl (* : LINKIL *) =
 			 in  SOME(sbnds,entries)
 			 end
 		   | _ => NONE)
+		val _ = print "Elaboration complete\n"
+	    in  res
 	    end
 	val elaborate = Stats.timer("Elaboration",elaborate)
 

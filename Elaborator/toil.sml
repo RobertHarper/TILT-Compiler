@@ -105,8 +105,7 @@ functor Toil(structure Il : IL
 	fun add_overload_entry ocon = (overload_table := ocon::(!overload_table))
 
 	fun get_flex_table () = !flex_table
-	fun add_flex_entry (l,rc,fc,e) = (print "ADDING FLEX ENTRY\n";
-					  flex_table := (l,rc,fc,e)::(!flex_table))
+	fun add_flex_entry (l,rc,fc,e) = flex_table := (l,rc,fc,e)::(!flex_table)
 	    
 	fun get_eq_table () = (case !eq_stack of
 				   [] => !eq_table
@@ -189,6 +188,21 @@ functor Toil(structure Il : IL
 	end
 
      (* ----------------- Helper Functions ----------------------- *)
+    fun is_non_const context (syms : Symbol.symbol list) = 
+	(syms = [Symbol.varSymbol "ref"]) orelse
+	(case (Datatype.constr_lookup context syms) of
+	     NONE => (case Datatype.exn_lookup context syms of
+			  NONE => false
+			| SOME {stamp,carried_type=NONE} => false
+			| SOME {stamp,carried_type=SOME _} => true)
+	   | (SOME {name,datatype_path,is_const,datatype_sig}) => not is_const)
+    fun parse_pats context pats = InfixParse.parse_pat(fixity context,is_non_const context, pats)
+    fun parse_pat context pat = (case parse_pats context [pat] of
+				     [pat] => pat
+				   | _ => error "parse_pat getting back more than 1 pat")
+
+
+
     fun dummy_exp (context,str) =
 	let val c = fresh_named_con(context,str)
 	    val e = RAISE(c,EXN_INJECT("elab_fail",NEW_STAMP con_unit,RECORD[]))
@@ -766,7 +780,7 @@ functor Toil(structure Il : IL
 			       polyinst = poly_inst,
 			       error_region = error_region,
 			       fresh_con = fresh_con}
-		 val arms = map (fn (Ast.Rule{pat,exp})=>(pat,exp)) rules
+		 val arms = map (fn (Ast.Rule{pat,exp})=>(parse_pat context pat,exp)) rules
 		 val (hbe,hbc) = caseCompile{patarg = patarg,
 					     arms = arms,
 					     arg = (v,CON_ANY)}
@@ -799,7 +813,7 @@ functor Toil(structure Il : IL
 			       polyinst = poly_inst,
 			       error_region = error_region,
 			       fresh_con = fresh_con}
-		 val arms = map (fn (Ast.Rule{pat,exp}) => ([pat],exp)) rules
+		 val arms = map (fn (Ast.Rule{pat,exp}) => (parse_pats context [pat],exp)) rules
 		 val {arglist,body} = funCompile{patarg = patarg,
 						 rules = arms,
 						 reraise = false}
@@ -808,7 +822,7 @@ functor Toil(structure Il : IL
 	     in  (e,c,true)
 	     end
        | Ast.CaseExp {expr,rules} =>  
-	     let fun getarm (Ast.Rule{pat,exp}) = (pat,exp)
+	     let fun getarm (Ast.Rule{pat,exp}) = (parse_pat context pat,exp)
 		 val arms = map getarm rules
 		 val (arge,argc,_) = xexp(context,expr)
 		 val (context,wrap,v) = (case arge of 
@@ -970,7 +984,7 @@ functor Toil(structure Il : IL
 			      error_region = error_region,
 			      fresh_con = fresh_con}
 		val bind_sbnd_sdec = (bindCompile{patarg = patarg,
-						  bindpat = pat,
+						  bindpat = parse_pat context pat,
 						  arg = (v,con)})
 		val sbnd_sdec_list = sbnd_sdec::bind_sbnd_sdec
 		val is_irrefutable = va andalso Sbnds_IsValuable(context', map #1 bind_sbnd_sdec)
@@ -1075,36 +1089,15 @@ functor Toil(structure Il : IL
 			  let 
 			      val fun_con = fresh_named_con (context',"fun_con")
 			      val body_con = fresh_named_con (context',"body_con")
-			      fun help (Ast.Clause{pats : Ast.pat Ast.fixitem list, resultty,exp}) =
-				  let 
-				      fun getitem ({item,...} : Ast.pat Ast.fixitem) = item
-				      fun default () = 
-					  (case pats of
-					       ({item=Ast.VarPat[s],...}::rest) => (s, map getitem rest)
-					     | _ => parse_error "can't find funid")
-				      val (s,restpats) = 
-					  (case pats of
-					       [p1,{item=Ast.VarPat[s],...},p2] => 
-						   (case (assoc_eq(eq_label,symbol_label s,fixity context)) of
-							SOME _ => (s, [Ast.TuplePat[getitem p1,getitem p2]])
-						      | NONE => default())
-					     | {item=Ast.FlatAppPat[p1,{item=Ast.VarPat[s],...},p2],
-							...}::rest => (s, (Ast.TuplePat
-									   [getitem p1,
-									    getitem p2]) :: (map getitem rest))
-					     | _ => default())
-				      val _  = (case resultty of
-						    NONE => ()
-						  | SOME ty => 
-							let val given_result_con = xty(context',ty)
-							in if (eq_con(context',given_result_con,body_con))
-							       then ()
-							   else (error_region();
-								 print "funtion type constraints do not match,";
-								 print " using the first one\n")
-							end)
-				  in (symbol_label s, (restpats, exp))
-				  end
+			      fun help (Ast.Clause{pats = {item=Ast.VarPat[s],
+							   fixity=NONE,...}::rest, resultty,exp}) =
+				  (symbol_label s, (parse_pats context' (map #item rest),exp))
+				| help (Ast.Clause{pats : Ast.pat Ast.fixitem list, resultty,exp}) =
+				  (case (parse_pats context' (map #item pats)) of
+				       (Ast.VarPat[s])::rest => (symbol_label s, (rest, exp))
+				     | (Ast.AppPat{constr = Ast.VarPat[s],
+						   argument}::rest) => (symbol_label s, (argument::rest, exp))
+				     | _ => error "illegal pattern for function declaraion")
 			      fun getid [] = parse_error "no ids"
 				| getid [a] = a
 				| getid (a::(rest as b::_)) = 
@@ -1134,9 +1127,9 @@ functor Toil(structure Il : IL
 					     else (error_region();
 						   print "fn matches have conflicting constraints,";
 						   print " using the first one\n");
-					     ([pattern],exp)
+					     (parse_pats context' [pattern],exp)
 					 end
-				   | _ => ([pat],exp))
+				   | _ => (parse_pats context' [pat],exp))
 			    val matches = 
 				(case exp of 
 				     Ast.FnExp rules => map help rules
@@ -2708,7 +2701,6 @@ functor Toil(structure Il : IL
         val tyvar_table = get_tyvar_table()
 	val overload_table = get_overload_table()
 	val flex_table = get_flex_table()
-val _ = print "\n\n-----------calling overload_help on table---------\n\n"
         val _ = overload_loop false overload_table 
 	val _ = app flex_help flex_table 
         val _ = app tyvar_help tyvar_table

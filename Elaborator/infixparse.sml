@@ -101,8 +101,10 @@ functor InfixParse(structure Il : IL
 			  e1 :: app_obj :: (loop (e2 :: rest))))
 	      | loop leftover = leftover
 	    val objs = loop objlist
-	    val _ = debugdo (fn () => (print "objs are\n"; 
-				       app (fn e => (print_obj e; print "\n")) objs; print "\n"))
+	    val _ = debugdo (fn () => (print "objlist is\n"; 
+				       app (fn e => (print "  "; print_obj e; print "\n")) objlist; print "\n"))
+	    val _ = debugdo (fn () => (print "objs is\n"; 
+				       app (fn e => (print "  "; print_obj e; print "\n")) objs; print "\n"))
 	  in  (objs, !preclist)
 	  end
 	(* --------------------------------------------------------
@@ -193,11 +195,11 @@ functor InfixParse(structure Il : IL
       | parse_exp (table : fixity_table, e) = e
 
     fun parse_pat (table : fixity_table, 
-		   is_constr : Ast.symbol list -> bool, 
+		   is_nonconst_constr : Ast.symbol list -> bool, 
 		   pat_list : Ast.pat list) : Ast.pat list = 
       let
-	fun self arg = parse_pat(table,is_constr,arg)
-	fun self_one arg = (case (parse_pat(table,is_constr,[arg])) of
+	fun self arg = parse_pat(table,is_nonconst_constr,arg)
+	fun self_one arg = (case (parse_pat(table,is_nonconst_constr,[arg])) of
 				[p] => p
 			      | pats => (print "parse_pat on subcall yielded multiple patterns";
 					 app (fn p => (AstHelp.pp_pat p; print "\n")) pats;
@@ -206,7 +208,7 @@ functor InfixParse(structure Il : IL
 	val table = (app_lab, Fixity.infixleft 10) :: table  
 	fun apper (f,a) = Ast.AppPat{constr=f,argument=a}
 	val tupler = Ast.TuplePat
-	fun is_applicable (Ast.VarPat p) = is_constr p
+	fun is_applicable (Ast.VarPat p) = is_nonconst_constr p
 	  | is_applicable _ = false
 	fun help (pat : Ast.pat) : Ast.pat = 
 	    (case pat of
@@ -233,6 +235,8 @@ functor InfixParse(structure Il : IL
 	      | Ast.MarkPat (p,r) => Ast.MarkPat(self_one p,r)
 	      | Ast.OrPat pats => Ast.OrPat (map self_one pats))
 	  val pat_list' = map help pat_list
+
+		   
 	  val res = driver(pat_list', 
 			   pp_pat,
 			   pat_fixity_lookup table, 
