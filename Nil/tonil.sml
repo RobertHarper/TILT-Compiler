@@ -25,7 +25,6 @@ struct
    val keep_hil_numbers = Stats.ff("keep_hil_numbers")
 
    val elaborator_specific_optimizations = ref true
-   val omit_datatype_bindings = ref true
    fun error msg = Util.error "tonil.sml" msg
 
    fun msg str = if (!diag) then print str else ()
@@ -725,11 +724,10 @@ end (* local defining splitting context *)
            val Il.MOD_PROJECT(il_module, lbl) = initial_mod
 	   val lbls = [lbl]
 
-	   val _ = if (!omit_datatype_bindings)
-		       then app (fn l => if (IlUtil.is_dt l)
+	   val _ = app (fn l => if (IlUtil.is_dt l)
 					     then error "use of datatype labels detected"
 					 else ()) lbls
-		   else ()
+
 	   val {cbnd_cat = cbnd_mod_cat, 
 		ebnd_cat = ebnd_mod_cat,
 		name_c   = name_mod_c, 
@@ -987,15 +985,12 @@ end (* local defining splitting context *)
 	record_c_knd_items = nil,
 	record_r_exp_items = nil}
 
-     | xsbnds_rewrite_1 context (il_sbnds as (Il.SBND(lab, _))::rest_il_sbnds) =
-        if ((IlUtil.is_dt lab) andalso (! omit_datatype_bindings)) then
+     | xsbnds_rewrite_1 context (il_sbnds as (Il.SBND(lab, Il.BND_MOD(var,_, _)))::rest_il_sbnds) =
+        if ((IlUtil.is_dt lab) orelse (IlUtil.is_dt_var var)) then
 	    xsbnds context rest_il_sbnds
         else
 	    xsbnds_rewrite_2 context il_sbnds
-(*
-     | xsbnds_rewrite_1 context il_sbnds = 
-	    xsbnds_rewrite_2 context il_sbnds
-*)
+
 
    and xsbnds_rewrite_2 context 
                         (il_sbnds as
@@ -1068,13 +1063,8 @@ end (* local defining splitting context *)
 			 :: rest_il_sbnds) =
 
        if ((!elaborator_specific_optimizations)
-(***       
-           ((Name.is_label_internal lbl)  (* this or is needed to handler bnds *)
-		    orelse (Util.substring("polyfun!",Name.label2string lbl))
-		    orelse (Util.substring("polyfun!",Name.var2name top_var)))
-***)
-	   andalso  
-           (not (Name.eq_label (lbl, IlUtil.expose_lab)))
+	   andalso (Name.is_label_internal lbl) 
+           andalso (not (Name.eq_label (lbl, IlUtil.expose_lab)))
 	   andalso (not (IlUtil.is_eq lbl))
            ) then
 				  
@@ -2198,8 +2188,10 @@ end (* local defining splitting context *)
 
   and rewrite_sdecs sdecs =
        let 
-	   fun filter (Il.SDEC(lab,_)) =
-	       not ((IlUtil.is_dt lab) andalso (! omit_datatype_bindings)) 
+	   fun filter (Il.SDEC(lab,Il.DEC_MOD(var,_,_))) =
+	       not ((IlUtil.is_dt lab) orelse (IlUtil.is_dt_var var))
+             | filter _ = true
+
 	   fun loop [] = []
 	     | loop ((sdec as 
 		     Il.SDEC(lab,Il.DEC_EXP(top_var,il_con))) :: rest) = 
@@ -2371,7 +2363,6 @@ end (* local defining splitting context *)
 			    val context = update_NILctx_insert_kind(context, v_c, knd)
 			    val iv = ImportValue(l_r,v_r,type_r)
 			    val it = ImportType(l_c,v_c,knd)
-
 			in
 			    if is_polyfun then
 				(iv::imports, update_polyfuns(context, v_r))
@@ -2383,7 +2374,7 @@ end (* local defining splitting context *)
 		  | _ => (imports,context))
 	   fun folder (v,acc) =
 	       let val SOME(l,pc) = IlContext.Context_Lookup'(HILctx,v)
-	       in  if (IlUtil.is_dt l andalso (!omit_datatype_bindings)
+	       in  if ((IlUtil.is_dt l)
 		       orelse (IlUtil.is_nonexport l))
 		       then acc
 		   else dopc(v,l,pc,acc)
