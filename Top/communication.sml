@@ -292,44 +292,60 @@ struct
     fun source (src, _) = src
     fun destination (_, dest) = dest
 	
-    val sep = "-to-"
-    val sep_length = String.size sep
-    fun channelToName' (from,to) = from ^ sep ^ to
-
-    val commDir = Dirs.getCommDir o Dirs.getDirs (* : unit -> string *)
-    fun channelToName chan = Dirs.relative (commDir(), channelToName' chan)
-
-    val lock = #"#"
-    val sendLock = #"!"
-    val recvLock = #"@"
-
-    fun channelToLockName (chan, lock) = channelToName chan ^ String.str lock
+    datatype file_type = BUFFER | LOCK | SENDLOCK | RECVLOCK
+    datatype name =
+	JUNK_NAME of string
+      | CHAN_NAME of string * file_type * channel
 	
-    (* directory has been stripped already *)
-    fun nameToChannel name : channel option = 
-	(case Util.substring (sep, name) of
-	     NONE => NONE
-	   | SOME pos => let val last = String.sub(name, size name - 1)
-			 in  if (last = lock orelse last = sendLock orelse last = recvLock)
-				 then NONE
-			     else let val from = String.substring(name,0,pos)
-				      val to = String.substring(name, 
-								pos+sep_length, 
-								(size name) - 
-								(pos+sep_length))
-				  in  SOME (from, to)
-				  end
-			 end)
+    local
+	val sep = "-to-"
+	val sep_length = String.size sep
+    in
+	(* does not include directory *)
+	fun channelToName' (BUFFER,(from,to))   = from ^ sep ^ to ^ "+"
+	  | channelToName' (LOCK,(from,to))     = from ^ sep ^ to ^ "#"
+	  | channelToName' (SENDLOCK,(from,to)) = from ^ sep ^ to ^ "!"
+	  | channelToName' (RECVLOCK,(from,to)) = from ^ sep ^ to ^ "@"
+
+	(* directory has been stripped already *)
+	fun nameToChannel' name : name =
+	    (case Util.substring (sep, name) of
+		 NONE => JUNK_NAME name
+	       | SOME pos =>
+		     if size name > pos + 2 then
+			 let 
+			     val from = String.substring(name,0,pos)
+			     val to = String.substring(name, pos+sep_length, (size name) - (pos+sep_length) - 1)
+			     val chan = (from, to)
+			     val last = String.sub(name, size name - 1)
+			 in
+			     case last
+			       of #"+" => CHAN_NAME (name, BUFFER, chan)
+				| #"#" => CHAN_NAME (name, LOCK, chan)
+				| #"!" => CHAN_NAME (name, SENDLOCK, chan)
+				| #"@" => CHAN_NAME (name, RECVLOCK, chan)
+				| _ => JUNK_NAME name
+			 end
+		     else JUNK_NAME name)
+    end
+
+    (* nameToChannel : string -> channel option *)
+    fun nameToChannel name = (case nameToChannel' name
+				of CHAN_NAME (_, BUFFER, chan) => SOME chan
+				 | _ => NONE)
+	
+    val commDir = Dirs.getCommDir o Dirs.getDirs (* : unit -> string *)
+    fun channelToName arg = Dirs.relative (commDir(), channelToName' arg)
 
     type in_channel = channel * message Q.queue	(* channel and buffered messages from peer *)
     type out_channel = channel * string Q.queue	(* channel and pending output *)
 
     local
-	(* opener : 'a queue map * char -> channel -> channel * 'a queue *)
+	(* opener : 'a queue map * file_type -> channel -> channel * 'a queue *)
 	fun opener (queues, lockType) chan =
-	    let val lockfile = channelToLockName (chan, lockType)
+	    let val lockfile = channelToName (lockType, chan)
 		val _ = zeroFile lockfile
-		val name = channelToName' chan
+		val name = channelToName' (BUFFER, chan)
 		val queue = case Map.find (!queues, name)
 			      of NONE => let val q = Q.mkQueue ()
 					     val _ = queues := Map.insert (!queues, name, q)
@@ -344,10 +360,10 @@ struct
 	    ref Map.empty
     in
 	(* openIn : channel -> in_channel *)
-	val openIn = opener (recvQueues, recvLock)
+	val openIn = opener (recvQueues, RECVLOCK)
 
 	(* openOut : channel -> out_channel *)
-	val openOut = opener (sendQueues, sendLock)
+	val openOut = opener (sendQueues, SENDLOCK)
 
 	(* resetBuffers : unit -> unit *)
 	fun resetBuffers () = (recvQueues := Map.empty;
@@ -356,7 +372,7 @@ struct
 
     (* exists : channel -> bool *)
     fun exists channel =
-	let val filename = channelToName channel
+	let val filename = channelToName (BUFFER, channel)
 	in  fileExists filename andalso
 	    (case fileNonempty filename
 	       of SOME r => r
@@ -367,17 +383,17 @@ struct
     (* canReceive : in_channel -> bool *)
     fun canReceive (channel, queue) = Q.length queue > 0 orelse exists channel
 
-    (* lockChannel : channel * char -> (unit -> unit) *)
+    (* lockChannel : channel * file_type -> (unit -> unit) *)
     fun lockChannel (channel, myLock) =
-	let val file = channelToLockName (channel, lock)
-	    val myFile = channelToLockName (channel, myLock)
+	let val file = channelToName (LOCK, channel)
+	    val myFile = channelToName (myLock, channel)
 	in  lockFile (myFile, file)
 	end
 
     (* fillBuffer : in_channel -> unit *)
     fun fillBuffer (channel, queue) =
-	let val file = channelToName channel
-	    val unlock = lockChannel (channel, recvLock)
+	let val file = channelToName (BUFFER, channel)
+	    val unlock = lockChannel (channel, RECVLOCK)
 	    fun wrap f arg = (f arg handle e => (unlock(); raise e))
 	    val _ =
 		if wrap exists channel then
@@ -411,7 +427,7 @@ struct
 
     (* closeIn : in_channel -> unit *)
     fun closeIn (arg as (channel, queue)) =
-	let val lockFile = channelToLockName (channel, recvLock)
+	let val lockFile = channelToName (RECVLOCK, channel)
 	    fun clear q = if Q.isEmpty q then ()
 			  else (ignore (Q.dequeue q); clear q)
 	    val _ = clear queue
@@ -421,8 +437,8 @@ struct
     
     (* emptyBuffer : out_channel -> unit *)
     fun emptyBuffer (channel, queue) =
-	let val file = channelToName channel
-	    val unlock = lockChannel (channel, sendLock)
+	let val file = channelToName (BUFFER, channel)
+	    val unlock = lockChannel (channel, SENDLOCK)
 	    fun wrap f arg = (f arg handle e => (unlock(); raise e))
 	    val stream = wrap TextIO.openAppend file
 	    fun wrap' f arg = (f arg handle e => (TextIO.closeOut stream;
@@ -455,32 +471,44 @@ struct
     (* closeOut : out_channel -> unit *)
     fun closeOut (arg as (channel, queue)) =
 	let val _ = emptyBuffer arg
-	    val lockFile = channelToLockName (channel, sendLock)
+	    val lockFile = channelToName (SENDLOCK, channel)
 	    val _ = removeFile lockFile
 	in  ()
 	end
 
+    (* destroyAllChannels : unit -> unit *)
+    fun destroyAllChannels () =
+	let val commDir = commDir()
+	    fun removeName name = removeFile (OS.Path.joinDirFile{dir=commDir, file=name})
+	    val names = map nameToChannel' (scanDir commDir)
+	    (* Clean up junk *)
+	    fun removeJunk (JUNK_NAME name) = (removeName name; false)
+	      | removeJunk _ = true
+	    val names = List.filter removeJunk names
+	    (* Clean up files left over from inactive readers and writers *)
+	    fun removeOld' (name, chan) = if exists chan then () else removeName name
+	    fun removeOld (CHAN_NAME (name, RECVLOCK, chan)) = (removeOld' (name, reverse chan); false)
+	      | removeOld (CHAN_NAME (name, SENDLOCK, chan)) = (removeOld' (name, chan); false)
+	      | removeOld _ = true
+	    val names = List.filter removeOld names
+	    (* Clean up files which an active writer will replace *)
+	    fun removeActive (CHAN_NAME (name, LOCK, _)) = (removeName name; false)
+	      | removeActive (CHAN_NAME (name, BUFFER, _)) = (removeName name; false)
+	      | removeActive _ = true
+	    val names = List.filter removeActive names
+	    val _ = if null names then ()
+		    else error ("destroyAllChannels didn't consider all commdir files")
+	    val _ = resetBuffers()
+	in  ()
+	end
+    
     (* findChannels : (channel -> bool) -> channel list *)
     fun findChannels pred =
-	let val files = scanDir (commDir())
+	let val files = scanDir(commDir())
 	    val channels = List.mapPartial nameToChannel files
 	in  List.filter (fn ch => pred ch) channels
 	end
 
-    (* destroyAllChannels : unit -> unit *)
-    fun destroyAllChannels () =
-	let val channels = findChannels (fn _ => true)
-	    fun destroy channel =
-		let val file = channelToName channel
-		    val lockFile = channelToLockName (channel, lock)
-		    val _ = removeFile file
-		    val _ = removeFile lockFile
-		in  ()
-		end
-	    val _ = app destroy channels
-	    val _ = resetBuffers()
-	in  ()
-	end
     (* findSlaves : unit -> identity list *)
     fun findSlaves () =
 	let fun isSlave ch = (destination ch = master)
