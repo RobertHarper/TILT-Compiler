@@ -30,6 +30,15 @@ distribute.sml
 *)
 compiler.sig.sml
 compiler.sml
+tophelp.sml
+communication.sig.sml
+communication.sml
+filecache.sig.sml
+filecache.sml
+master.sig.sml
+master.sml
+slave.sig.sml
+slave.sml
 manager.sig.sml
 manager.sml
 linker.sig.sml

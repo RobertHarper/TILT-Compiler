@@ -69,6 +69,15 @@ LINKER Top/linker.sig
 Linker Top/linker
 MAKEDEP Top/makedep.sig
 MakeDep Top/makedep
+TopHelp Top/tophelp
+COMMUNICATION Top/communication.sig
+Communication Top/communication
+FILECACHE Top/filecache.sig
+FileCache Top/filecache
+MASTER Top/master.sig
+Master Top/master
+SLAVE Top/slave.sig
+Slave Top/slave
 MANAGER Top/manager.sig
 Manager Top/manager
 GETOPT Top/getopt.sig
