@@ -26,10 +26,8 @@ datatype module_code =
 
 type module = name * module_code
 
-A module is not limited to being a structure/signature/functor; it can be
-several structures, or top-level value declarations, etc. {***Is this a
-'program' in the Definition?***} It can be defined by an interface file,
-an implementation file, or both.
+A module can contain any number of top-level declarations.  It can be
+defined by an interface file, an implementation file, or both.
 
 type dependencies = {imports: name set,
                      includes: name set}
