@@ -10,12 +10,17 @@ structure Optimize
     :> OPTIMIZE =
 struct
 
-	open Util Nil NilUtil NilContext Listops
+	open Util Nil NilUtil Listops
  	val error = fn s => Util.error "optimize.sml" s
 
 	val debug = Stats.ff("Optimize_debug")
 	val do_diag = ref false
 	fun diag s = if !do_diag then print s else()
+
+val Normalize_type_of = Stats.timer("optimize_typeof", Normalize.type_of);
+val Normalize_reduce_hnf = Stats.timer("optimize_typeof", Normalize.reduce_hnf);
+val Normalize_allprim_uses_carg = Stats.timer("optimize_typeof", Normalize.allprim_uses_carg);
+val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceToSumtype);
 
 	val do_lift_array = ref true
 	val do_dead = ref true
@@ -350,7 +355,7 @@ struct
 
 	  fun find_curry_pair(STATE{curry_processed,...},v) = Name.VarMap.find(#2 curry_processed,v)
 	  fun is_curry_processed(STATE{curry_processed,...},v) = Name.VarSet.member(#1 curry_processed,v)
-	  fun type_of(STATE{equation,...},e) = Normalize.type_of(equation,e)
+	  fun type_of(STATE{equation,...},e) = Normalize_type_of(equation,e)
 	  fun get_trace(STATE{equation,...},t) = TraceOps.get_trace (equation,t)
 	end
 
@@ -694,7 +699,7 @@ struct
 	and do_aggregate (state : state) funnames_opt (constr,t,clist,elist)  = 
 	    let open Prim
 		fun helper is_array c = 
-		(case (is_array,Normalize.reduce_hnf(get_env state, c)) of
+		(case (is_array,Normalize_reduce_hnf(get_env state, c)) of
 		     (true,(_, Prim_c(Int_c is, _))) => (IntArray is,[]) 
 		   | (false,(_, Prim_c(Int_c is, _))) => (IntVector is,[]) 
 		   | (true,(_, Prim_c(Float_c is, _))) => (FloatArray is,[]) 
@@ -739,7 +744,7 @@ struct
 	       | [Prim_e(NilPrimOp(record _),_,elist)] =>
 		     do_prim state (NilPrimOp(inject_record k),clist,elist)
 	       | [Var_e v] => 
-		     (case (Normalize.reduce_hnf(get_env state, find_con(state,v))) of
+		     (case (Normalize_reduce_hnf(get_env state, find_con(state,v))) of
 			  (_, Prim_c(Record_c (labs,vlist),cons)) => 
 			      let val fields = map (fn l =>
 						    Prim_e(NilPrimOp(select l),[],
@@ -768,7 +773,7 @@ struct
 	       | (PrimOp(sub t), _) => do_aggregate state (SOME (local_sub,local_vsub)) (sub,t,clist,elist)
 	       | (PrimOp(update t), _) => do_aggregate state (SOME (local_update,local_update)) (update,t,clist,elist)
 	       | (PrimOp(length_table t), _) => do_aggregate state (SOME (local_len,local_vlen)) (length_table,t,clist,elist)
-	       | _ => Prim_e(prim,map ((if Normalize.allprim_uses_carg prim 
+	       | _ => Prim_e(prim,map ((if Normalize_allprim_uses_carg prim 
 					    then do_con else do_type)
 				       state) clist, 
 			     map (do_exp state) elist))
@@ -851,7 +856,7 @@ struct
 	       | Sumsw_e {sumtype,arg,bound,arms,default} =>
 		     let val arg = do_exp state arg
 			 val sumtype = do_type state sumtype
-			 val (tagcount,_,carrier) = Normalize.reduceToSumtype(get_env state,sumtype) 
+			 val (tagcount,_,carrier) = Normalize_reduceToSumtype(get_env state,sumtype) 
 		 	 val totalcount = TilWord32.uplus(tagcount,TilWord32.fromInt(length carrier))	
 			 fun make_ssum i = Prim_c(Sum_c{tagcount=tagcount,
 							totalcount=totalcount,
@@ -929,9 +934,9 @@ struct
 		     | Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv]) =>
 			 let val c = type_of(state,e)
 			     val sv_con = find_con(state,sv)
-			     val (tagcount,SOME k,clist) = Normalize.reduceToSumtype(get_env state,sv_con)
+			     val (tagcount,SOME k,clist) = Normalize_reduceToSumtype(get_env state,sv_con)
 			     val fieldcon = List.nth(clist, TilWord32.toInt(TilWord32.uminus(k,tagcount)))
-			 in  case Normalize.reduce_hnf(get_env state, fieldcon) of
+			 in  case Normalize_reduce_hnf(get_env state, fieldcon) of
 			       (_,Prim_c (Record_c (labs,_), rcons)) => 
 				 let val vars = map (fn l => Name.fresh_named_var
 						     (Name.label2string l)) labs
