@@ -1,4 +1,4 @@
-(* sml90.sig
+(* sml90.sml
  *
  * COPYRIGHT (c) 1997 Bell Labs, Lucent Technologies.
  *)

@@ -39,34 +39,11 @@ unit Symbol : Symbol = "env.sml" {
 	ENV String Int List StrgHash Array Vector Control ErrorMsg
 }
 unit Fixity = "fixity.sml" {Int}
-unit AST = "ast.sig.sml" {
-	Fixity Symbol TilWord64
-}
-unit Ast = "ast.sml" {
-	Symbol AST Fixity TilWord64
-}
-
-
-unit ASTHELP = "asthelp.sig.sml" {
-	Ast Symbol Formatter
-}
-interface AstHelp = "asthelp.int" {ASTHELP}
-unit AstHelp : AstHelp = "asthelp.sml" {
-	TilWord64 TextIO ASTHELP Ast Util Listops Symbol Formatter
-}
 
 unit PRINTUTIL = "printutil.sig.sml" {SYMBOL ENV}
 interface PrintUtil = "printutil.int" {PRINTUTIL Symbol}
 unit PrintUtil : PrintUtil = "printutil.sml" {
 	PRINTUTIL Symbol SYMBOL Control Char TextIO Int String
-}
-
-unit ASTUTIL = "astutil.sig.sml" {
-	ErrorMsg Symbol Ast
-}
-unit AstUtil = "astutil.sml" {
-	Fixity ErrorMsg Ast Util Listops Symbol Formatter ASTUTIL
-	PrintUtil
 }
 
 unit NAME = "name.sig.sml" {
@@ -83,14 +60,101 @@ unit NAMEBLAST = "nameblast.sig.sml" {
 unit NameBlast = "nameblast.sml" {
 	Name NAMEBLAST Blaster Util Symbol Int
 }
-unit TVClose = "tvclose.sml" {Ast Int Symbol}
-unit NamedForm = "namedform.sml" {
-	Int Symbol Ast ListPair List
-}
-
 unit INTSTRMAP = "intstrmap.sig.sml" {}
 unit IntStrMap = "intstrmap.sml" {
 	INTSTRMAP Array List Word Int Control
+}
+
+#if defined (env TILT_FRONTEND) andalso env TILT_FRONTEND S= "2" 
+
+unit AST = "ast2.sig.sml" {
+	Fixity Symbol TilWord64
+}
+unit Ast = "ast2.sml" {
+	Symbol AST Fixity TilWord64
+}
+
+unit ASTHELP = "asthelp2.sig.sml" {
+	Ast Symbol Formatter
+}
+interface AstHelp = "asthelp.int" {ASTHELP}
+unit AstHelp : AstHelp = "asthelp2.sml" {
+	TilWord64 TextIO ASTHELP Ast Util Listops Symbol Formatter
+}
+
+unit ASTUTIL = "astutil2.sig.sml" {
+	ErrorMsg Symbol Ast
+}
+unit AstUtil = "astutil2.sml" {
+	Fixity ErrorMsg Ast Util Listops Symbol Formatter ASTUTIL
+	PrintUtil
+}
+
+unit TVClose = "tvclose2.sml" {Ast Int Symbol}
+unit NamedForm = "namedform2.sml" {
+	Int Symbol Ast ListPair List
+}
+
+unit ML_TOKENS = "ml2.grm.sig" {
+	TilWord64 Symbol PARSER_DATA
+}
+
+unit TokenTable = "tokentable2.sml" {
+	ML_TOKENS Symbol StrgHash IntStrMap
+}
+interface MLLexFun = "ml.lex.int" {
+	ARG_LEXER ML_TOKENS SourceMap ErrorMsg
+}
+unit MLLexFun : MLLexFun = "ml2.lex.sml" {
+	StrgHash Control SourceMap Int String Char ML_TOKENS Symbol
+	ErrorMsg TilWord64 TokenTable Vector
+}
+
+interface MLLrValsFun = "ml.grm.int" {TOKEN ML_TOKENS ErrorMsg Ast}
+unit MLLrValsFun : MLLrValsFun = "ml2.grm.sml" {
+	Fixity Char String TilWord64 TOKEN PARSER_DATA ML_TOKENS
+	Symbol Ast ErrorMsg AstUtil StrgHash Array Int
+}
+
+unit FRONTEND = "frontend2.sig.sml" {Ast Source}
+unit FrontEnd = "frontend2.sml" {
+	ErrorMsg TextIO SourceMap FRONTEND JoinWithArg MLLrValsFun
+	MLLexFun Ast Source Control LrParser Stats
+}
+unit LINKPARSE = "linkparse2.sig.sml" {Ast SourceMap}
+unit LinkParse = "linkparse2.sml" {
+	TextIO Source SourceMap FrontEnd LINKPARSE NamedForm TVClose
+	ErrorMsg Util Stats
+}
+
+#else
+
+unit AST = "ast.sig.sml" {
+	Fixity Symbol TilWord64
+}
+unit Ast = "ast.sml" {
+	Symbol AST Fixity TilWord64
+}
+
+unit ASTHELP = "asthelp.sig.sml" {
+	Ast Symbol Formatter
+}
+interface AstHelp = "asthelp.int" {ASTHELP}
+unit AstHelp : AstHelp = "asthelp.sml" {
+	TilWord64 TextIO ASTHELP Ast Util Listops Symbol Formatter
+}
+
+unit ASTUTIL = "astutil.sig.sml" {
+	ErrorMsg Symbol Ast
+}
+unit AstUtil = "astutil.sml" {
+	Fixity ErrorMsg Ast Util Listops Symbol Formatter ASTUTIL
+	PrintUtil
+}
+
+unit TVClose = "tvclose.sml" {Ast Int Symbol}
+unit NamedForm = "namedform.sml" {
+	Int Symbol Ast ListPair List
 }
 
 unit ML_TOKENS = "ml.grm.sig" {
@@ -124,3 +188,6 @@ unit LinkParse = "linkparse.sml" {
 	TextIO Source SourceMap FrontEnd LINKPARSE NamedForm TVClose
 	ErrorMsg Util Stats
 }
+
+#endif
+

@@ -85,6 +85,8 @@ structure IlUtil :> ILUTIL =
 		  CON_MODULE_PROJECT (m',l')) = eq_label(l,l') andalso eq_mpath(m,m')
       | eq_cpath _ = false
 
+    fun is_elimform m = eq_mpath(m,m)
+
     (* -------------------------------------------------------- *)
     (* --------------------- Misc helper functions ------------ *)
 
@@ -164,6 +166,11 @@ structure IlUtil :> ILUTIL =
     fun exp_tuple explist = let fun help(i,e) = (generate_tuple_label (i+1),e)
 			    in  RECORD(mapcount help explist)
 			    end
+
+    local val ident_var = fresh_var() in
+      val ident_sbnd = SBND(ident_lab,BND_CON(ident_var,con_unit))
+      val ident_sdec = SDEC(ident_lab,DEC_CON(ident_var,KIND,NONE,false))
+    end
 
     local
 	fun errorMsg (ctxt : context, msg : string, labs : labels) : 'a =
@@ -373,16 +380,28 @@ structure IlUtil :> ILUTIL =
     val prim_etaexpand = etaexpand_help (PRIM,IlPrimUtil.get_type')
     val ilprim_etaexpand = etaexpand_help (ILPRIM,IlPrimUtil.get_iltype')
 
-    fun is_existential_sig (s : signat) : (signat * signat) option = (
+    fun is_existential_sig (s : signat) : (var * signat * signat) option = (
       case s of
-	  SIGNAT_STRUCTURE[SDEC(maybe_unseen,DEC_MOD(_,_,sig_unseen)),
+	  SIGNAT_STRUCTURE[SDEC(maybe_unseen,DEC_MOD(v,_,sig_unseen)),
 			   SDEC(maybe_visible,DEC_MOD(_,_,sig_visible))] =>
 	    if eq_label(maybe_unseen,unseen_lab) andalso
                eq_label(maybe_visible,visible_lab)
-            then SOME(sig_unseen,sig_visible)
+            then SOME(v,sig_unseen,sig_visible)
 	    else NONE
         | _ => NONE
     )
+
+    local val visible_var = fresh_var() in
+
+      fun make_existential_mod (unseen_var,m1,m2) : mod =
+	MOD_STRUCTURE[SBND(unseen_lab,BND_MOD(unseen_var,false,m1)),
+		      SBND(visible_lab,BND_MOD(visible_var,false,m2))]
+
+      fun make_existential_sig (unseen_var,s1,s2) : signat =
+        SIGNAT_STRUCTURE[SDEC(unseen_lab,DEC_MOD(unseen_var,false,s1)),
+			 SDEC(visible_lab,DEC_MOD(visible_var,false,s2))]
+
+    end
 
 
     fun con_deref (c : con) : con =

@@ -115,10 +115,14 @@ struct
 
 	fun blastOutArrow TOTAL = blastOutInt 0
 	  | blastOutArrow PARTIAL = blastOutInt 1
+	  | blastOutArrow APPLICATIVE = blastOutInt 2
+	  | blastOutArrow GENERATIVE = blastOutInt 3
 	fun blastInArrow () =
 	    (case (blastInInt()) of
 		 0 => TOTAL
 	       | 1 => PARTIAL
+	       | 2 => APPLICATIVE
+	       | 3 => GENERATIVE
 	       | _ => error "bad blastInArrow")
 
 	fun blastOutIS Prim.W8 = blastOutInt 0

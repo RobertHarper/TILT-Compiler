@@ -4,4 +4,5 @@ Project_LRVALS
 	where type ParserData.arg = unit
 	where type ParserData.result = ExtSyn.ents
 	where ParserData.LrTable = Token.LrTable
-	where type ('a,'b) ParserData.Token.token = ('a,'b) Token.token
+        where ParserData.Token = Token
+

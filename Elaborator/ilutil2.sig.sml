@@ -43,6 +43,7 @@ signature ILUTIL =
     val eq_mpath : mod * mod -> bool
     val eq_cpath : con * con -> bool
     val eq_epath : exp * exp -> bool
+    val is_elimform : mod -> bool
 
     (* error functions *)
     val error_exp : string -> exp -> string -> 'a
@@ -62,7 +63,9 @@ signature ILUTIL =
     val prim_etaexpand : (context * Prim.prim * con list) -> exp
     val ilprim_etaexpand : (context * Prim.ilprim * con list) -> exp
 
-    val is_existential_sig : signat -> (signat * signat) option
+    val is_existential_sig : signat -> (var * signat * signat) option
+    val make_existential_mod : var * mod * mod -> mod
+    val make_existential_sig : var * signat * signat -> signat
 
     (* some simple local reductions *)
     val exp_reduce : context * exp -> exp option
@@ -127,6 +130,9 @@ signature ILUTIL =
     val unit_exp : exp
     val bind_exn : context -> exp
     val match_exn : context -> exp
+
+    val ident_sbnd : sbnd
+    val ident_sdec : sdec
 
     (* Sort labels into canonical order *)
     val sort_labelpair : (label * 'a) list -> (label * 'a) list

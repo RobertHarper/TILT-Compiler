@@ -33,6 +33,8 @@ signature ILSTATIC =
     val con_normalize      : Il.context * Il.con -> Il.con
     val eq_exp             : Il.context * Il.exp * Il.exp -> bool
     val eq_kind            : Il.kind * Il.kind -> bool
+    val eq_sigarrow        : Il.arrow * Il.arrow -> bool
+    val sub_sigarrow       : Il.arrow * Il.arrow -> bool
 
     (* ---------- Tests for well-formedness ---------------------- *)
 (*
@@ -52,11 +54,13 @@ signature ILSTATIC =
     val GetExpCon     : Il.context * Il.exp  -> Il.con
     val GetConKind    : Il.context * Il.con  -> Il.kind
     val GetModSig     : Il.context * Il.mod  -> Il.signat
+    val GetModSigPurity : Il.context * Il.mod -> Il.signat * bool
+(*
     val GetBndDec     : Il.context * Il.bnd  -> Il.dec
     val GetBndsDecs   : Il.context * Il.bnds -> Il.decs
     val GetSbndSdec   : Il.context * Il.sbnd -> Il.sdec
     val GetSbndsSdecs : Il.context * Il.sbnds-> Il.sdecs
-
+*)
     (* ---------- Valuability ------------------------------------- *)
     val Module_IsValuable : Il.context * Il.mod   -> bool
     val Exp_IsValuable    : Il.context * Il.exp   -> bool

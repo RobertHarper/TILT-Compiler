@@ -17,7 +17,7 @@
 # Please keep the status bits up to date.
 
 0001	pass	[Bug #0039 on alpha] Arithmetic exceptions.
-0002	pass	Top-level types and values, basis structures and sharing.
+0002	fail	[Should fail due to stronger structure sharing in tilt2] Top-level types and values, basis structures and sharing.
 0003	pass	Overloading.
 0004	pass	Hello world.
 0006	pass	More infix decls that should be accepted.

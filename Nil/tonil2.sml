@@ -907,6 +907,8 @@ end (* local defining splitting context *)
     *)
    fun xeffect (Il.TOTAL) = Total
      | xeffect (Il.PARTIAL) = Partial
+     | xeffect (Il.APPLICATIVE) = Partial
+     | xeffect (Il.GENERATIVE) = Partial
 
    (* xilprim.  Translates the simplest "IL primitives" (primitives
        which are only segregated in the IL for typing reasons) into
@@ -1686,9 +1688,13 @@ end (* local defining splitting context *)
         else
 	    xsbnds_rewrite_2 context il_sbnds
 
-
-     | xsbnds_rewrite_1 context il_sbnds =
-	    xsbnds_rewrite_2 context il_sbnds
+     | xsbnds_rewrite_1 context
+                       (il_sbnds as (Il.SBND(lab, _)) ::
+			             rest_il_sbnds) =
+        if (!elaborator_specific_optimizations)
+	    andalso (N.eq_label(lab,IlUtil.ident_lab))
+	then xsbnds context rest_il_sbnds
+	else xsbnds_rewrite_2 context il_sbnds
 
    (* xsbnds_rewrite_2.  Phase 2 of rewriting for structure binidngs.
 
@@ -2082,7 +2088,7 @@ end (* local defining splitting context *)
                         (Il.SBND(lbl, Il.BND_CON(var, il_con)) ::
 			 rest_il_sbnds) =
        (* Translation of a binding for a type *)
-       let
+        let
 	   val _ = if !debug then
 	       (print "Bind constructor ";
 		Ppil.pp_var var;
@@ -3704,7 +3710,7 @@ end (* local defining splitting context *)
    and rewrite_sdecs (sdecs : Il.sdec list) : Il.sdec list =
      let
        fun filter (Il.SDEC(lab,Il.DEC_MOD(var,_,_))) = not (N.is_dt lab)
-	 | filter _ = true
+	 | filter (Il.SDEC(lab,_)) = not (N.eq_label(lab,IlUtil.ident_lab))
 
        fun loop [] = []
 	 | loop ((sdec as

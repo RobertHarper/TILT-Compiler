@@ -28,32 +28,52 @@ intstrmap.sig.sml
 intstrmap.sml
 fixity.sml
 
-(* --------------- the Parser files --------------- *)
+name.sig.sml
+name.sml
+nameblast.sig.sml
+nameblast.sml
+
+#if (defined(TILT_FRONTEND) && TILT_FRONTEND == 2)
+
+ast2.sig.sml
+ast2.sml
+asthelp2.sig.sml
+asthelp2.sml
+astutil2.sig.sml
+astutil2.sml
+tvclose2.sml
+namedform2.sml
+
+tokentable2.sml
+ml2.lex.sml
+ml2.grm.sig
+ml2.grm.sml
+
+frontend2.sig.sml
+frontend2.sml
+linkparse2.sig.sml
+linkparse2.sml
+
+#else
 
 ast.sig.sml
 ast.sml
+asthelp.sig.sml
+asthelp.sml
 astutil.sig.sml
 astutil.sml
+tvclose.sml
+namedform.sml
 
-ml.lex.sml
 tokentable.sml
-
+ml.lex.sml
 ml.grm.sig
 ml.grm.sml
 
 frontend.sig.sml
 frontend.sml
-tvclose.sml
 linkparse.sig.sml
 linkparse.sml
-asthelp.sig.sml
-asthelp.sml
-name.sig.sml
-name.sml
-nameblast.sig.sml
-nameblast.sml
-namedform.sml
-(*
-nj/redblack-map-fn.sml
-nj/redblack-set-fn.sml
-*)
+
+#endif
+

@@ -79,6 +79,8 @@ struct
       end
     fun pp_arrow PARTIAL = String "->"
       | pp_arrow TOTAL = String "=>"
+      | pp_arrow APPLICATIVE = String "->"
+      | pp_arrow GENERATIVE = String "->>"
     fun complete2string oneshot =
 	(case (oneshot_deref oneshot) of
 	     (SOME TOTAL) => "=>"
@@ -256,7 +258,9 @@ struct
 			    pp_mod seen body,
 			    Break,
 			    String "END"]
-	   | MOD_SEAL(m,s) => pp_listid [pp_mod seen m, pp_signat seen s] ("MOD_SEAL(", ",", ")", true))
+	   | MOD_SEAL(m,s) => 
+		 pp_listid [pp_mod seen m, pp_signat seen s] ("MOD_SEAL(", ",", ")", true)
+    )
 
     and pp_phrase_class full seen pc =
 	let val pp_con = pp_con seen

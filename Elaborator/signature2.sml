@@ -777,7 +777,7 @@ structure Signature :> SIGNATURE =
 		 (SIGNAT_FUNCTOR(v1,s1,s1',a1),
 		  SIGNAT_FUNCTOR(v2,s2,s2',a2)) =>
 		 let
-		     val _ = if (a1 = a2) then ()
+		     val _ = if sub_sigarrow(a1,a2) then ()
 			     else raise (FAILURE "arrow mismatch in xcoerce")
 		     val p2 = PATH(v2,[])
 		     val context' = add_context_mod'(context,v2,s2)
@@ -821,22 +821,22 @@ structure Signature :> SIGNATURE =
 				   else ();
 				   coerced := true)
 (*	  val sdecs_target = sdecs_rename(sdecs_target, sdecs_actual) *)
-	  local
-	      val sig_actual_self = GetModSig (ctxt,path2mod path_actual)
-	      val SIGNAT_STRUCTURE sdecs_actual_self = reduce_signat ctxt sig_actual_self
-	      val _ = debugdo (fn () =>
-			       (print "\n\n-------xcoerce_structure------\n";
-				print "path_actual = "; pp_path path_actual; print "\n";
-				print "sdecs_actual = \n"; pp_sdecs sdecs_actual; print "\n";
-				print "sdecs_actual_self = \n"; pp_sdecs sdecs_actual_self; print "\n";
-				print "sdecs_target = \n"; pp_sdecs sdecs_target; print "\n"))
-	      val _ = if (Listops.eq_list (fn (SDEC(l1,_),SDEC(l2,_)) => eq_label(l1,l2),
-					   sdecs_actual, sdecs_target))
-			  then ()
-		      else coerce (true,"length/order mismatch")
-	      val self = path2mod path_actual
-	  in  fun actual_self_lookup lbl = Sdecs_Lookup ctxt (self, sdecs_actual_self, [lbl])
-	  end
+	  
+	  val self = path2mod path_actual
+	  val sig_actual_self = GetModSig (ctxt,self)
+	  val SIGNAT_STRUCTURE sdecs_actual_self = reduce_signat ctxt sig_actual_self
+	  val _ = debugdo (fn () =>
+			   (print "\n\n-------xcoerce_structure------\n";
+			    print "path_actual = "; pp_path path_actual; print "\n";
+			    print "sdecs_actual = \n"; pp_sdecs sdecs_actual; print "\n";
+			    print "sdecs_actual_self = \n"; pp_sdecs sdecs_actual_self; print "\n";
+			    print "sdecs_target = \n"; pp_sdecs sdecs_target; print "\n"))
+	  val _ = if (Listops.eq_list (fn (SDEC(l1,_),SDEC(l2,_)) => eq_label(l1,l2),
+				       sdecs_actual, sdecs_target))
+		      then ()
+		  else coerce (true,"length/order mismatch")
+
+	  fun actual_self_lookup lbl = Sdecs_Lookup ctxt (self, sdecs_actual_self, [lbl])
 
         val xcoerce_error = ref false
 
@@ -848,7 +848,6 @@ structure Signature :> SIGNATURE =
 	     NONE)
 
 	fun doit ctxt (lab,spec_dec) : (bnd * dec) option =
-
 	    (case (Name.is_eq lab, spec_dec, actual_self_lookup lab) of
 
 		(* --------- coercion of an equality function spec to an equality function ---- *)
@@ -1103,12 +1102,13 @@ structure Signature :> SIGNATURE =
         val (sbnds_coerced, sdecs_coerced) = loop ctxt sdecs_target
 
         val _ = if (!xcoerce_error) then reject "signature matching failed" else ()
+        
+        val _ = coerced := (!coerced orelse not(Sdecs_IsSub(ctxt,sdecs_actual,sdecs_target)))
 
-	val res = if !coerced
+	val res = if !coerced 
 		      then (true, MOD_STRUCTURE sbnds_coerced,
 			    SIGNAT_STRUCTURE sdecs_coerced)
-		  else (false, path2mod path_actual,
-			SIGNAT_STRUCTURE sdecs_actual)
+		  else (false, self, sig_actual_self)
 	val _ = if (!debug)
 		    then let val (_,m,s) = res
 			 in  print "\n\n-------xcoerce_structure------\n";
@@ -1119,33 +1119,49 @@ structure Signature :> SIGNATURE =
       in  res
       end
 
+    (* xcoerce_after_peeling calls xcoerce after first peeling the given module.
+       This ensures that xcoerce's argument is in peeled form.
+    *)
+    fun xcoerce_after_peeling (context : context, path_actual : path,
+			       sig_actual : signat, sig_target : signat) : bool * mod * signat =
+	let val (path_actual_peeled,sig_actual_peeled) = 
+	    (case Context_Lookup_Path(context,path_actual) of
+		 SOME (p,PHRASE_CLASS_MOD(_,_,s,_)) => (p,s)
+	       | NONE => error "xcoerce given ill-formed path")
+	    val (coerced,mod_coerced,sig_coerced) = 
+		       xcoerce(context,path_actual_peeled,sig_actual_peeled,sig_target)
+	in  (coerced orelse not(eq_path(path_actual,path_actual_peeled)),
+	     mod_coerced,sig_coerced)
+        end
 
     (* ---------- The exported signature coercion routines ------------ *)
 
+    (* xcoerce_seal DOES NOT assume that sig_actual is in peeled form. *)
     fun xcoerce_seal (context : context,
 		      mod_actual : mod,
 		      sig_actual : signat,
 		      sig_target : signat) : mod =
-	    let val var_actual = fresh_named_var "origSeal"
+	    let val var_actual = fresh_named_var "varActual"
 		val path_actual = PATH(var_actual,[])
 		val context' = add_context_mod'(context,var_actual,sig_actual)
 		val (coerced,mod_coerced,_) =
-		    xcoerce(context', path_actual, sig_actual, sig_target)
+		    xcoerce_after_peeling(context', path_actual, sig_actual, sig_target)
 	    in  if coerced
 		then MOD_LET(var_actual, mod_actual,
 			     MOD_SEAL(mod_coerced, sig_target))
-		else mod_actual
+		else MOD_SEAL(mod_actual,sig_target)
 	    end
 
+    (* xcoerce_functor DOES assume that sig_actual is in peeled form. *)
     fun xcoerce_functor (context : context,
 			 path_actual : path,
 			 sig_actual : signat,
-			 sig_target : signat) : mod =
-	    let val (coerced,mod_coerced,_) =
+			 sig_target : signat) : mod * signat =
+	    let val (coerced,mod_coerced,sig_coerced) =
 		    xcoerce(context, path_actual, sig_actual, sig_target)
 	    in  if coerced
-		then mod_coerced
-		else path2mod path_actual
+		then (mod_coerced,sig_coerced)
+		else (path2mod path_actual, sig_actual)
 	    end
 
     fun sig_describe_size s =
@@ -1358,6 +1374,7 @@ structure Signature :> SIGNATURE =
 	   In particular, sigThin contains fewer term components than sigCoerced.
     *)
 
+    (* xcoerce_transparent DOES NOT assume that sig_actual is in peeled form. *)
     fun xcoerce_transparent (context : context,
 			     mod_actual : mod,
 			     sig_actual : signat,
@@ -1367,10 +1384,11 @@ structure Signature :> SIGNATURE =
 	    val _ = if (!track_coerce)
 			then Stats.bool("IlstaticShowing") := true
 		    else ()
-	    val var_actual = fresh_named_var "origModule"
+	    val var_actual = fresh_named_var "varActual"
 	    val path_actual = PATH(var_actual,[])
 	    val context = add_context_mod'(context,var_actual,sig_actual)
-	    val (coerced,mod_coerced,sig_coerced) = xcoerce(context,path_actual,sig_actual,sig_target)
+	    val (coerced,mod_coerced,sig_coerced) = 
+		xcoerce_after_peeling(context,path_actual,sig_actual,sig_target)
 	    val _ = if (!debug)
 			then (print "coerced to mod_coerced = \n"; pp_mod mod_coerced; print "\n";
 			      print "coerced to sig_coerced = \n"; pp_signat sig_coerced; print "\n")
@@ -1381,7 +1399,14 @@ structure Signature :> SIGNATURE =
 
 	in
 	    if (coerced)
-	      then let val hidden_lbl = internal_label "hiddenThinModule"
+		then (make_existential_mod(var_actual,mod_actual,mod_coerced),
+		      make_existential_sig(var_actual,sig_actual,sig_coerced))
+	    else  (mod_actual, sig_actual)
+	end
+
+
+(*
+		       val hidden_lbl = internal_label "hiddenThinModule"
 		       val var_coerced = fresh_named_var "coercedModule"
 		       val var_thin = fresh_named_var "thinModule"
 		       val SOME(mod_thick, sig_thick) = generateModFromSig(context, path_actual, sig_coerced, false)
@@ -1423,8 +1448,7 @@ structure Signature :> SIGNATURE =
 			 | _ => ()
 		   in  (mod_result, sig_result)
 		   end
-	    else  (mod_actual, sig_actual)
-	end
+*)
 
     fun subtimer(str,f) = f  (* use Stats.subtimer for real timing *)
     val xsig_where_type = subtimer("Elab-Signature",xsig_where_type)

@@ -81,7 +81,8 @@ structure IlStatic
       | _ => false)
    and Module_IsSyntacticValue module =
       (case module of
-	 MOD_STRUCTURE sbnds => foldr (fn (a,b) => a andalso b) true
+         MOD_VAR _ => true
+       | MOD_STRUCTURE sbnds => foldr (fn (a,b) => a andalso b) true
 	                        (map (fn SBND(l,b) => Bnd_IsSyntacticValue b) sbnds)
        | MOD_LET (v,m1,m2) => (Module_IsSyntacticValue m1) andalso (Module_IsSyntacticValue m2)
        | (MOD_FUNCTOR _) => true
@@ -124,7 +125,7 @@ structure IlStatic
          (APPLICATIVE,APPLICATIVE) => true
        | (GENERATIVE,GENERATIVE) => true
        | (APPLICATIVE,GENERATIVE) => is_sub
-       (* Remove this case once functors are switched over to APPLICATIVE vs. GENERATIVE *)
+       (* XXX Remove this case once functors are switched over to APPLICATIVE vs. GENERATIVE *)
        | _ => eq_arrow(a1,a2,is_sub)
    )
 
@@ -174,7 +175,7 @@ structure IlStatic
 	    fun funArgSdecs (SIGNAT_FUNCTOR (_, SIGNAT_STRUCTURE sdecs, _, _)) = sdecs
 	      | funArgSdecs _ = error "find_tyvars_flexes: expected SIGNAT_FUNCTOR"
 	    fun geteqmodsig (CON_MODULE_PROJECT (m,l)) =
-		let val (_,s) = GetModSig (m,ctxt)
+		let val (_,s,_) = GetModSig (m,ctxt)
 		in
 		    (case ProjectModSig (ctxt,m,s,to_eq l)
 		       of SOME (PHRASE_CLASS_MOD(_,_,signat,_)) => SOME signat
@@ -665,6 +666,7 @@ structure IlStatic
 		      else (false,NONE)
 	       | (true, _) => error "path_eq_mod': modpath ill-typed"
 	       | _ => (false,NONE))
+	 | _ => (false,NONE)
      end
    )
 
@@ -720,7 +722,7 @@ structure IlStatic
 		BND_EXP (v,e) => if (Exp_IsValuable(ctxt,e))
 				     then self (add_context_exp'(ctxt,v,#2 (GetExpCon(e,ctxt))))
 				 else NONE
-	      | BND_MOD (v,_,m) => let val (va,s) = GetModSig(m,ctxt)
+	      | BND_MOD (v,_,m) => let val (va,s,_) = GetModSig(m,ctxt)
 				   in if va then self (add_context_mod'(ctxt,v,s))
 				      else NONE
 				   end
@@ -738,12 +740,12 @@ structure IlStatic
      (case m of
        MOD_VAR v => true
      | MOD_STRUCTURE sbnds => Sbnds_IsValuable sbnds ctxt
-     | MOD_LET (v,m1,m2) => let val (va1,s1) = GetModSig(m1,ctxt)
+     | MOD_LET (v,m1,m2) => let val (va1,s1,_) = GetModSig(m1,ctxt)
 			    in va1 andalso
 				(Module_IsValuable m2 (add_context_mod'(ctxt,v,s1)))
 			    end
      | MOD_PROJECT (m,l) => Module_IsValuable m ctxt
-     | MOD_APP (m1,m2) => let val (va1,s1) = GetModSig(m1,ctxt)
+     | MOD_APP (m1,m2) => let val (va1,s1,_) = GetModSig(m1,ctxt)
 			  in case s1 of
 			      SIGNAT_FUNCTOR(_,_,_,TOTAL) =>
 				  va1 andalso (Module_IsValuable m2 ctxt)
@@ -844,8 +846,9 @@ structure IlStatic
 						       print "\n"));
 					     error "got CON_TUPLE_PROJECT in GetConKind"))
      | (CON_MODULE_PROJECT (m,l)) =>
-	   let val (_,signat) = GetModSig (m,ctxt)
+	   let val (_,signat,pure) = GetModSig (m,ctxt)
 	   in
+              if pure then
 	       (case ProjectModSig (ctxt,m,signat,l)
 		  of NONE => (debugdo (fn () =>
 				       (print "no such label = ";
@@ -854,6 +857,7 @@ structure IlStatic
 			      error "no such label in sig")
 		   | SOME(PHRASE_CLASS_CON(_,k,_,_)) => k
 		   | _ => error "label in sig not a DEC_CON")
+	      else error "GetConKind: attempted to project from impure module"
 	   end)
 
 
@@ -866,7 +870,7 @@ structure IlStatic
 	  handle e => (if !trace then msg() else (); raise e)
      end
 
-  and etaize c = (case c of
+   and etaize c = (case c of
 		      CON_ARROW([_],rescon,b,a) => c
 		    | CON_ARROW(cons,rescon,b,a) => CON_ARROW([con_tuple cons],rescon,b,a)
 		    | _ => c)
@@ -1084,17 +1088,12 @@ structure IlStatic
 		 | _ => error "type of expression raised is not ANY")
 	   end
      | (LET (bnds,e)) =>
-	   let fun sfolder (bnd,subst) = (case bnd
-					    of BND_EXP _ => subst
-					     | BND_CON (v,c) => subst_add_convar(subst,v,(con_subst(c,subst)))
-					     | BND_MOD (v,_,m) => subst_add_modvar(subst,v,(mod_subst(m,subst))))
-	       fun cfolder ((_,dec),ctxt) = add_context_dec(ctxt,dec)
-	       val vdecs = GetBndsDecs(ctxt,bnds)
-	       val va_decs = andfold #1 vdecs
-	       val ctxt' = foldl cfolder ctxt vdecs
-	       val subst = foldl sfolder empty_subst bnds
+	   let 
+	       val (_,(va_decs,ctxt',_)) = GetBndsDecs(ctxt,bnds)
 	       val (va,econ) = GetExpCon(e,ctxt')
-	   in (va andalso va_decs,con_subst(econ,subst))
+	       val _ = (GetConKind(econ,ctxt) handle _ =>
+		   error "GetExpCon: LET bnds in e -- type of e refers to bnds")
+	   in (va andalso va_decs,econ)
 	   end
      | (NEW_STAMP con) => ((GetConKind(con,ctxt); (true,CON_TAG con))
 			   handle _ => error "NEW_STAMP: type is ill-formed")
@@ -1277,12 +1276,12 @@ structure IlStatic
 		   error "CASE: expression type and decoration type are unequal")
 	   end
      | (MODULE_PROJECT(m,l)) =>
-	   let val (va,signat) = GetModSig(m,ctxt)
+	   let val (va,signat,pure) = GetModSig(m,ctxt)
 	       val c = (case ProjectModSig (ctxt,m,signat,l)
 			  of (SOME (PHRASE_CLASS_EXP(_,c,_,_))) => c
 			   | _ => error "MODULE_PROJECT lookup failed")
-	   in  if va then (va,c)
-	       else error "trying to obtain type of invaluable term projection"
+	   in  if pure andalso is_elimform m then (va,c)
+	       else error "GetExpCon: attempted to project from impure module"
 	   end
 
      | (SEAL (e,c)) => let val (va,c') = GetExpCon(e,ctxt)
@@ -1295,35 +1294,36 @@ structure IlStatic
 
    (* ----------- rules 22 - 25 ------------------------- *)
    and GetBndDec (ctxt,BND_EXP (v,e))  = let val (va,c) = GetExpCon (e,ctxt)
-					 in (va,DEC_EXP(v,c,NONE,false))
+					 in (va,DEC_EXP(v,c,NONE,false),true)
 					 end
-     | GetBndDec (ctxt,BND_MOD (v,b,m))  = let val (va,s) = GetModSig(m,ctxt)
-					 in (va,DEC_MOD(v,b,s))
+     | GetBndDec (ctxt,BND_MOD (v,b,m))  = let val (va,s,pure) = GetModSig(m,ctxt)
+					 in (va,DEC_MOD(v,b,s),pure)
 					 end
-     | GetBndDec (ctxt,BND_CON (v,c))  = (true,DEC_CON(v,GetConKind(c,ctxt),SOME c,false))
-   and GetBndsDecs (ctxt,bnds) = GetBndsDecs'(ctxt,bnds,[])
-   and GetBndsDecs' (ctxt,[],acc) = rev acc
-     | GetBndsDecs' (ctxt,bnd::rest,acc) =
-       let val (va,d) = GetBndDec(ctxt,bnd)
-	   val ctxt' = add_context_dec(ctxt,d)
-       in GetBndsDecs' (ctxt',rest, (va,d)::acc)
+     | GetBndDec (ctxt,BND_CON (v,c))  = (true,DEC_CON(v,GetConKind(c,ctxt),SOME c,false),true)
+
+   and GetBndDecFolder (bnd,(va,ctxt,pure)) =
+       let val (va',dec,pure') = GetBndDec(ctxt,bnd)
+       in (dec,(va andalso va', add_context_dec(ctxt,dec), pure andalso pure'))
        end
-   and GetSbndSdec (ctxt,SBND (l, bnd)) = let val (va,dec) = GetBndDec(ctxt,bnd)
-					  in (va,SDEC(l,dec))
+
+   and GetBndsDecs (ctxt,bnds) : decs * (bool * context * bool) =
+       foldl_acc GetBndDecFolder (true,ctxt,true) bnds
+
+   and GetSbndSdec (ctxt,SBND (l, bnd)) = let val (va,dec,pure) = GetBndDec(ctxt,bnd)
+					  in (va,SDEC(l,dec),pure)
 					  end
 
-   and GetSbndsSdecs (ctxt, []) = []
-     | GetSbndsSdecs (ctxt, (sbnd as (SBND(l,bnd))) :: rest) =
-       let val (va,dec) = GetBndDec(ctxt,bnd)
-	   val sdec = SDEC(l,dec)
-	   val ctxt' = add_context_dec(ctxt, dec)
-       in (sbnd,sdec)::(GetSbndsSdecs(ctxt',rest))
-       end
+   and GetSbndsSdecs (ctxt,sbnds) : sdecs * (bool * context * bool) =
+       foldl_acc (fn (SBND(l,bnd),stuff) =>
+		  let val (dec,stuff) = GetBndDecFolder(bnd,stuff)
+		  in (SDEC(l,dec),stuff)
+		  end) (true,ctxt,true) sbnds
+
 
 
    (* ------------ Return a module's signature    -------------- *)
 
-   and GetModSig (module, ctxt : context) : bool * signat =
+   and GetModSig(module, ctxt : context) : bool * signat * bool =
      let fun msg() = (print "GetModSig called with module = \n";
 			 pp_mod module; print "\n")
 	 val _ = debugdo msg
@@ -1333,77 +1333,87 @@ structure IlStatic
 	handle e => (if !trace then msg() else (); raise e)
      end
 
-   and GetModSig' (module, ctxt : context) : (bool * signat) option =
+   and GetModSig' (module, ctxt : context) : (bool * signat * bool) option =
      (case module of
        (MOD_VAR v) =>
 	   (case Context_Lookup_Var(ctxt,v) of
-		SOME(_,PHRASE_CLASS_MOD(_,_,s,_)) => SOME (true,s)
+		SOME(_,PHRASE_CLASS_MOD(_,_,s,_)) => SOME (true,s,true)
 	      | SOME _ => error ("MOD_VAR " ^ (Name.var2string v) ^ " bound to a non-module")
 	      | NONE => NONE)
      | MOD_STRUCTURE (sbnds) =>
-	   let fun loop va [] acc ctxt = (va,rev acc)
-		 | loop va (sb::sbs) acc ctxt =
-		   let
-		       val (lva,sdec) = GetSbndSdec(ctxt,sb)
-		       val SDEC(_,dec) = sdec
-		   in loop (va andalso lva) sbs (sdec::acc) (add_context_dec(ctxt,dec))
-		   end
-	       val (va,sdecs) = (loop true sbnds [] ctxt)
-	       val res = SIGNAT_STRUCTURE sdecs
-	   in SOME (va,res)
+           let val (sdecs,(va,_,pure)) = GetSbndsSdecs(ctxt,sbnds)
+	   in SOME (va,SIGNAT_STRUCTURE(sdecs),pure)
 	   end
      | MOD_FUNCTOR (a,v,s,m,s2) =>
 	   let val ctxt' = add_context_dec(ctxt,DEC_MOD(v,false,s))
-	       val (va,signat) = GetModSig(m,ctxt')
-	       val a =
-		case a of
-		 TOTAL => if va then TOTAL
-			else error "TOTAL annotation on non-valuable functor"
-		| PARTIAL => a
-	       (* check equivalence of s2 and signat *)
-	   in  SOME (true,SIGNAT_FUNCTOR(v,s,s2,a))
+	       val (va,signat,pure) = GetModSig(m,ctxt')
+	       val _ =
+		(case a of
+		  TOTAL => va orelse error "TOTAL annotation on non-valuable functor"
+		| APPLICATIVE => pure orelse error "APPLICATIVE annotation on generative functor"
+		| _ => true)
+(*
+	       val _ = Sig_IsSub(ctxt',signat,s2) orelse
+		   error "GetModSig': body of functor does not match result signature annotation"
+*)
+	   in  SOME (true,SIGNAT_FUNCTOR(v,s,s2,a),true)
 	   end
      | MOD_APP (a,b) =>
 	   let val _ = debugdo (fn () => (print "\n\nMOD_APP case in GetModSig\n";
 					  print "a is\n"; pp_mod a; print "\n";
 					  print "b is\n"; pp_mod b; print "\n"))
-	       val (vaa,asignat) = GetModSig(a,ctxt)
-	       val (vab,bsignat) = GetModSig(b,ctxt)
+	       val (vaa,asignat,purea) = GetModSig(a,ctxt)
+	       val (vab,bsignat,pureb) = GetModSig(b,ctxt)
 	       val _ = debugdo (fn () => (print "\n\nMOD_APP case in GetModSig got asignat and bsignat\n";
 					  print "asignat is\n"; pp_signat asignat; print "\n";
 					  print "bsignat is\n"; pp_signat bsignat; print "\n"))
-	       val _ = if vab then ()
-		       else error "trying to obtain signature of MOD_APP with invaluable module"
+	       val _ = (vab andalso pureb)
+		       orelse error "trying to apply functor to invaluable/impure/non-named-form argument"
 	   in case (reduce_signat ctxt asignat) of
 	       SIGNAT_FUNCTOR (v,csignat,dsignat,ar) =>
+(*
 		   if (Sig_IsSub(ctxt, bsignat, csignat))
-		       then SOME (vaa andalso vab andalso (ar = TOTAL),
-				  sig_subst(dsignat,subst_modvar(v,b)))
-			    else error "MOD_APP argument and parameter signature mismatch"
+		       then 
+*)
+			    SOME (vaa andalso vab andalso (ar = TOTAL),
+				  sig_subst(dsignat,subst_modvar(v,b)),
+				  purea andalso pureb andalso ((ar = APPLICATIVE) orelse (ar = TOTAL)))
+(*
+			    else (print "Signat of actual arg:"; pp_signat bsignat;
+				  print "\nSignat of formal arg:"; pp_signat csignat; print "\n";
+				  error "MOD_APP argument and parameter signature mismatch")
+*)
 	     | SIGNAT_STRUCTURE _ => error "Can't apply a structure"
 	     | _ => error "signat_var is not reduced"
 	   end
      | MOD_LET (v,m1,m2) =>
-	   let val (va1,s1) = GetModSig(m1,ctxt)
+	   let val (va1,s1,pure1) = GetModSig(m1,ctxt)
 	       val ctxt' = add_context_mod'(ctxt,v,s1)
-	       val (va2,s2) = GetModSig(m2,ctxt')
-	       val _ = if va1 then () else
-		       error "trying to obtain signature of MOD_LET with invaluable module"
-	   in  SOME (va1 andalso va2,sig_subst(s2,subst_modvar(v,m1)))
+	       val (va2,s2,pure2) = GetModSig(m2,ctxt')
+(*
+	       val _ = Sig_Valid(ctxt,s2) orelse
+		       error "result signature of MOD_LET refers to hidden bound variable"
+*)
+	   in  SOME (va1 andalso va2,s2,pure1 andalso pure2)
 	   end
      | MOD_PROJECT (m,l) =>
 	   (case GetModSig'(m,ctxt)
 	      of NONE => NONE
-	       | SOME (false,_) => error "trying to obtain signature of invaluable projection"
-	       | SOME (true,signat) =>
+	       | SOME (_,_,false) => error "trying to obtain signature of impure projection"
+	       | SOME (va,signat,true) =>
 		   (case ProjectModSig (ctxt,m,signat,l)
-		      of SOME (PHRASE_CLASS_MOD(_,_,s,_)) => SOME (true,s)
+		      of SOME (PHRASE_CLASS_MOD(_,_,s,_)) => SOME (va,s,true)
 		       | _ => NONE))
-     | MOD_SEAL (m,s) => let val (va,ps) = GetModSig(m,ctxt)
-			     val _ = if (Sig_IsSub(ctxt,ps,s)) then()
-				     else error "MOD_SEAL: Sig_IsSub failed"
-			 in SOME (va,s)
-			 end)
+     | MOD_SEAL (m,s) => 
+		let val (va,ps,pure) = GetModSig(m,ctxt)
+(*
+		    val _ = Sig_IsSub(ctxt,ps,s) orelse
+			error "MOD_SEAL: Sig_IsSub failed"
+*)
+		in SOME (va,s,pure)
+		end
+    )
+
 
     and Normalize (con,ctxt) : con =
 	let fun msg() = (print "Normalize called with con =\n";
@@ -1572,7 +1582,7 @@ structure IlStatic
 			    |   NONE => NONE))
 	    | CON_MODULE_PROJECT (m,l) =>
 		(let
-		   val (_,s) = GetModSig(m,ctxt)
+		   val (_,s,_) = GetModSig(m,ctxt)
 		   val cOpt : con option =
 			(case ProjectModSig (ctxt,m,s,l)
 			   of SOME(PHRASE_CLASS_CON(_,_,cOpt,_)) => cOpt
@@ -1651,7 +1661,7 @@ structure IlStatic
 	    | (DEC_EXP(v1,c1,eopt1,inline1),DEC_EXP(v2,c2,eopt2,inline2)) =>
 		  eq_var(v1,v2) andalso (if isSub then sub_con(ctxt,c1,c2) else eq_con(ctxt,c1,c2))
 		  andalso (case (eopt1,eopt2) of
-			       (SOME e1, SOME e2) => eq_exp(ctxt,e1,e2)
+			       (SOME e1, SOME e2) => true
 			     | (NONE, NONE) => true
 			     | (NONE, SOME _) => false
 			     | (SOME _, NONE) => isSub)
@@ -1837,7 +1847,7 @@ structure IlStatic
           fun peel (m,s,acc_labels) : labels * mod * signat =
             let val s = reduce_signat ctxt s in
               case is_existential_sig s of
-                SOME(_,visible_sig) =>
+                SOME(_,_,visible_sig) =>
                   peel(MOD_PROJECT(m,visible_lab),
 		       visible_sig,
 		       visible_lab::acc_labels)
@@ -1940,14 +1950,13 @@ structure IlStatic
     fun con_normalize (context,c) = Normalize(c,context)
     fun con_head_normalize (context,c) = HeadNormalize(c,context)
 
+    val sub_sigarrow = fn (s1,s2) => eq_sigarrow(s1,s2,true)
+    val eq_sigarrow = fn (s1,s2) => eq_sigarrow(s1,s2,false)
+
     val GetExpCon = fn (d,e) => #2(GetExpCon(e,d))
     val GetConKind = fn (d,c) => GetConKind(c,d)
-    val GetModSig = fn (d,m) => ((* Stats.counter "ilstatic.externgetmodsig" (); *)
-				#2(GetModSig(m,d)))
-    val GetBndDec = fn arg => #2(GetBndDec arg)
-    val GetSbndSdec = fn arg => #2(GetSbndSdec arg)
-    val GetBndsDecs = fn arg => map #2 (GetBndsDecs arg)
-    val GetSbndsSdecs = fn arg => map #2(GetSbndsSdecs arg)
+    val GetModSigPurity = fn (d,m) => let val (_,s,p) = GetModSig(m,d) in (s,p) end
+    val GetModSig = fn (d,m) => #2(GetModSig(m,d))
     val Module_IsValuable = fn (d,m) => Module_IsValuable m d
     val Bnds_IsValuable = fn (d,bs) => Bnds_IsValuable bs d
     val Sbnds_IsValuable = fn (d,ss) => Sbnds_IsValuable ss d

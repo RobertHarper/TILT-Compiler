@@ -28,6 +28,8 @@ struct
 
     fun arrow2int TOTAL = 0
       | arrow2int PARTIAL = 1
+      | arrow2int APPLICATIVE = 2
+      | arrow2int GENERATIVE = 3
 
     fun cmp_arrow(ef1,ef2) = cmp_int(arrow2int ef1, arrow2int ef2)
 
