@@ -71,6 +71,7 @@ signature ILUTIL =
     val stamp_lab   : label
     val case_lab : label
     val expose_lab : label
+    val to_export_lab : label -> label
     val to_top_lab : label -> label
     val to_eq_lab : label -> label       (* takes any internal label and 
 				           generate the unique eq internal label *)
@@ -101,8 +102,10 @@ signature ILUTIL =
     val con_deref : con -> con
 
     (*  ConApply: takes two types and if they are CON_FUN and CON_TUPLE,
-                  performs a substitution(i.e. beta reduction. *)
-    val ConApply       : con * con -> con
+                  performs a substitution(i.e. beta reduction. 
+		  If the flag is true, then the reduction occurs if each argument variable
+		  is used at most once in the function body.  This prevents code explosion. *)
+    val ConApply       : bool * con * con -> con
     val make_inline_module : Il.context * Il.mod * Il.path option * bool -> Il.mod option 
     val is_inline_bnd  : bnd -> bool
 

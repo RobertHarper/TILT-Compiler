@@ -5,6 +5,7 @@ signature TOIL =
 
     val debug : bool ref
     val debug_coerce : bool ref
+    val debug_coerce_full : bool ref
 
     (* ---------------------- Translations --------------------------- *)
     type decresult = (Il.sbnd option * Il.context_entry) list

@@ -104,6 +104,9 @@ functor IlStatic(structure Il : IL
 	       then con_subst_conmodvar(c,conself,modself)
 	   else  con_subst_allproj(c,ehandler state, chandler state, 
 				   mhandler state, fn _ => NONE)
+       fun selfify_kind(selfify,state,KIND_INLINE(k,c)) = KIND_INLINE(selfify_kind(selfify,state,k),
+								      selfify_con(selfify,state,c))
+	 | selfify_kind(_,_,k) = k
 
        fun selfify_mod(selfify,state as {conself,modself,...}:state,m) = 
 	   if selfify
@@ -125,9 +128,10 @@ functor IlStatic(structure Il : IL
 		     let 
 			 val this_dec = 
 			 (case copt of  (*  if we do this, Unselfify is hard to write. *)
-			      NONE => DEC_CON(v,k,(case popt of
-						       NONE => NONE
-						     | SOME p => SOME(path2con p)))
+			      NONE => DEC_CON(v,selfify_kind(selfify,state,k),
+					      (case popt of
+						   NONE => NONE
+						 | SOME p => SOME(path2con p)))
 			    | SOME c => 
 				  let val c' = selfify_con(selfify,state,c)
 				      val copt' = 
@@ -144,7 +148,8 @@ functor IlStatic(structure Il : IL
 						 | _ => false)
 					       then NONE
 					   else SOME c')
-				  in  DEC_CON(v,k,copt')
+				      val k' = selfify_kind(selfify,state,k)
+				  in  DEC_CON(v,k',copt')
 				  end)
 			 val state = add_conpath(state,v,popt)
 		     in (state,(SDEC(l,this_dec))::rev_sdecs)
@@ -1414,7 +1419,7 @@ end
 		      val (f2,c2') = HeadNormalize(c2,ctxt)
 		      val (f,c) = (case (c1',c2') of
 				       (CON_FUN(vars,cons), _) =>
-					   HeadNormalize(ConApply(c1',c2'),ctxt)
+					   HeadNormalize(ConApply(false,c1',c2'),ctxt)
 				     | _ => (false,CON_APP(c1',c2')))
 		  in (f1 orelse f2 orelse f, c)
 		  end

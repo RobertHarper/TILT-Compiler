@@ -105,8 +105,9 @@ structure LinkIl (* : LINKIL *) =
 *)	    
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
 
+	fun SelfifySdec(SDEC(l,dec)) = SDEC(l,SelfifyDec dec)
 	fun local_add_context_entries(ctxt,entries) = 
-	    let fun help (CONTEXT_SDEC(SDEC(l,dec))) = CONTEXT_SDEC(SDEC(l,SelfifyDec dec))
+	    let fun help (CONTEXT_SDEC sdec) = CONTEXT_SDEC(SelfifySdec sdec)
 		  | help ce = ce
 		val entries' = map help entries
 	    in IlContext.add_context_entries(ctxt,entries')
@@ -457,12 +458,13 @@ structure LinkIl (* : LINKIL *) =
 					    structure Ppil = Ppil)
 	val eq_context = IlContextEq.eq_context
 	val init_context = empty_context
-	type spec = Ast.spec and dec = Ast.dec
 
 	type filepos = SourceMap.charpos -> string * int * int
 	fun elab_specs (ctxt, fp, specs) = 
-	    case Toil.xspec(ctxt, fp, specs)
-		of SOME sdecs => SOME(IlContext.add_context_sdecs(empty_context, sdecs))
+	    case Toil.xspec(ctxt, fp, specs) of
+		SOME sdecs => let val sdecs' = map SelfifySdec sdecs
+			      in  SOME(IlContext.add_context_sdecs(empty_context, sdecs'))
+			      end
 	      | NONE => NONE
 
 	fun elab_dec (ctxt, fp, dec) = 
@@ -476,7 +478,26 @@ structure LinkIl (* : LINKIL *) =
 		    end
 	      | NONE => NONE
 
-	fun elab_dec_constrained (ctxt1, fp, dec, ctxt2) = error "elab_dec_constrained - not implemented"
-
+	fun elab_dec_constrained (ctxt1, fp, dec, fp2, specs : Ast.spec list) = 
+	    let open Ast
+		fun seqDec [d] = d
+		  | seqDec decs = SeqDec decs
+		fun valspec2dec (sym,ty) = ValDec([Vb{pat = ConstraintPat{pattern = VarPat [sym], 
+									  constraint = ty},
+						      exp = VarExp [sym]}],
+						  ref [])
+		fun strspec2dec (sym,SOME sigexp,path_opt) = StrDec[Strb{name = sym,
+								     def = VarStr [sym],
+								     constraint = Opaque sigexp}]
+		  | strspec2dec _ = error "strspec2dec no constraining signature"
+		fun spec2dec (MarkSpec(spec,r)) = MarkDec(spec2dec spec, r)
+		  | spec2dec (StrSpec ls) = seqDec(map strspec2dec ls)
+		  | spec2dec (TycSpec (ls,_)) = error "elab_dec_constrained: type spec not implemented"
+		  | spec2dec (ValSpec ls) = seqDec(map valspec2dec ls)
+		  | spec2dec _ = error "elab_dec_constrained: unhandled spec"
+		val fp' = fp
+		val dec' = seqDec(dec::(map spec2dec specs))
+	    in  elab_dec(ctxt1,fp',dec')
+	    end
     end (* struct *)
 

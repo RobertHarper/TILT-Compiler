@@ -44,6 +44,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
     val error = fn s => error "toil.sml" s
     val debug = ref false
     val debug_coerce = ref false
+    val debug_coerce_full = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
     fun debugdo' t = (t(); ())
     fun nada() = ()
@@ -189,7 +190,9 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			    end
     fun fresh_con ctxt = CON_TYVAR(fresh_tyvar ctxt)
 
-
+    fun kind_eq_shape (KIND_INLINE(k1,_),k2) = kind_eq_shape(k1,k2)
+      | kind_eq_shape (k1,KIND_INLINE(k2,_)) = kind_eq_shape(k1,k2)
+      | kind_eq_shape (k1,k2) = k1 = k2
 
      (* ----------------- overload_resolver ----------------------- *)
     fun overload_help warn (region,ocon) =
@@ -216,6 +219,91 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	    val _ = pop_region()
 	in res
 	end
+
+
+     (* ----------------- Substiution Helper Functions ----------------------- *)
+    local
+	type mapping = (con * con) list * (mod * mod) list * 
+	    ((con * con) list Name.LabelMap.map) * (con Name.VarMap.map) *
+	    ((mod * mod) list Name.LabelMap.map) * (mod Name.VarMap.map)
+
+	fun chandle (_,_,clmap,cvmap,_,_) (CON_VAR v) = Name.VarMap.find(cvmap,v) 
+	  | chandle (_,_,clmap,cvmap,_,_) (c as CON_MODULE_PROJECT(_,l)) = 
+	    (case Name.LabelMap.find(clmap,l) of
+		 NONE => NONE
+	       | SOME (cclist) => assoc_eq(eq_conproj, c, cclist))
+	  | chandle _ _ = NONE
+
+	fun mhandle (_,_,_,_,mlmap,mvmap) (MOD_VAR v) = Name.VarMap.find(mvmap,v) 
+	  | mhandle (_,_,_,_,mlmap,mvmap) (m as MOD_PROJECT(_,l)) = 
+	    (case Name.LabelMap.find(mlmap,l) of
+		 NONE => NONE
+	       | SOME (mmlist) => assoc_eq(eq_modproj, m, mmlist))
+	  | mhandle _ _ = NONE
+
+	fun sdechandle mapping (SDEC(l,DEC_CON(v,k,SOME c))) =
+	    (case chandle mapping c of
+		 NONE => NONE
+	       | SOME (CON_VAR v') => 
+		     if (Name.eq_var(v,v'))
+			 then SOME(SDEC(l,DEC_CON(v,kind_substconmod(k,mapping),SOME c)))
+		     else NONE
+	       | _ => NONE)
+	  | sdechandle _ _ = NONE
+
+	and kind_substconmod(KIND_INLINE(k,c),mapping) = KIND_INLINE(k,con_substconmod(c,mapping))
+	  | kind_substconmod(k,_) = k
+	and con_substconmod(c,mapping) = con_all_handle(c, fn _ => NONE, chandle mapping, mhandle mapping,
+							sdechandle mapping)
+	and sig_substconmod(s,mapping) = sig_all_handle(s, fn _ => NONE, chandle mapping, mhandle mapping,
+							sdechandle mapping)
+    in
+	type mapping = mapping
+	val empty_mapping = ([],[],Name.LabelMap.empty,Name.VarMap.empty,
+			     Name.LabelMap.empty,Name.VarMap.empty)
+	fun getcclist((cclist,_,_,_,_,_) : mapping) = cclist
+	fun getmmlist((_,mmlist,_,_,_,_) : mapping) = mmlist
+	fun join_maps((cclist1,mmlist1,cllist1,cvlist1,mllist1,mvlist1) : mapping,
+		      (cclist2,mmlist2,cllist2,cvlist2,mllist2,mvlist2) : mapping) : mapping = 
+	    (cclist1 @ cclist2, mmlist1 @ mmlist2,
+	     Name.LabelMap.unionWith (op @) (cllist1,cllist2),
+	     Name.VarMap.unionWith (fn (x,y) => x) (cvlist1,cvlist2),
+	     Name.LabelMap.unionWith (op @) (mllist1,mllist2),
+	     Name.VarMap.unionWith (fn (x,y) => y) (mvlist1,mvlist2))
+	fun convar_addmap(v,c,(cclist,mmlist,clmap,cvmap,mlmap,mvmap)) = 
+	    let val cclist = (CON_VAR v, c)::cclist
+		val cvmap = Name.VarMap.insert(cvmap,v,c)
+	    in  (cclist,mmlist,clmap,cvmap,mlmap,mvmap)
+	    end
+	fun modvar_addmap(v,m,(cclist,mmlist,clmap,cvmap,mlmap,mvmap)) = 
+	    let val mmlist = (MOD_VAR v, m)::mmlist
+		val mvmap = Name.VarMap.insert(mvmap,v,m)
+	    in  (cclist,mmlist,clmap,cvmap,mlmap,mvmap)
+	    end
+	fun conproj_addmap(CON_MODULE_PROJECT(m,l),c,(cclist,mmlist,clmap,cvmap,mlmap,mvmap)) = 
+	    let val pair = (CON_MODULE_PROJECT(m,l), c)
+		val cclist = pair::cclist
+		val temp = pair::(case Name.LabelMap.find(clmap,l) of
+				      NONE => []
+				    | SOME ccs => ccs)
+		val clmap = Name.LabelMap.insert(clmap,l,temp)
+	    in  (cclist,mmlist,clmap,cvmap,mlmap,mvmap)
+	    end
+	  | conproj_addmap _ = error "conproj_addmap not given a CON_MODULE_PROJECT"
+	fun modproj_addmap(MOD_PROJECT(m,l),m',(cclist,mmlist,clmap,cvmap,mlmap,mvmap)) = 
+	    let val pair = (MOD_PROJECT(m,l), m')
+		val mmlist = pair::mmlist
+		val temp = pair::(case Name.LabelMap.find(mlmap,l) of
+				      NONE => []
+				    | SOME mms => mms)
+		val mlmap = Name.LabelMap.insert(mlmap,l,temp)
+	    in  (cclist,mmlist,clmap,cvmap,mlmap,mvmap)
+	    end
+	  | modproj_addmap _ = error "modproj_addmap not given a MOD_PROJECT"
+	val kind_substconmod = kind_substconmod
+	val con_substconmod = con_substconmod
+	val sig_substconmod = sig_substconmod
+    end
 
      (* ----------------- Helper Functions ----------------------- *)
     fun is_non_const context (syms : Symbol.symbol list) = 
@@ -821,7 +909,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				va1 andalso va2 andalso va3)
 			   end)
 		 else
-		     (case (con_deref con1) of
+		     (case (con_normalize(context,con1)) of
 			 CON_ARROW([argcon],rescon,_,_) => 
 			     (error_region(); print " application is ill-typed.\n";
 			      print "  Function domain: "; pp_con argcon;
@@ -1687,7 +1775,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			      ([],KIND_TUPLE 1) => con
 			    | (_,KIND_ARROW(n,1)) => 
 				  if (n = length con_list) 
-				      then CON_APP(con,con_tuple_inject con_list)
+				      then ConApply(true,con,con_tuple_inject con_list)
 				  else (error_region();
 					tab_region();
 					print "type constructor wants ";
@@ -1866,14 +1954,19 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		       let val mjunk = MOD_VAR(fresh_named_var "mjunk")
 		       in (case (Sdecs_Lookup'(mjunk,sdecs,map symbol_label syms)) of
 			       SOME(labels,PHRASE_CLASS_CON(_,k)) => 
-				   let fun folder (tv,context) = 
-				       let val s = AstHelp.tyvar_strip tv
-				       in add_context_sdec(context,SDEC(symbol_label s, 
-						       DEC_CON(gen_var_from_symbol s, 
-							       KIND_TUPLE 1, NONE)))
-				       end
-				       val context = foldl folder context tyvars
+				   let val sym_vars = map (fn tv => 
+							   let val sym = AstHelp.tyvar_strip tv
+							   in  (sym, gen_var_from_symbol sym)
+							   end) tyvars
+				       fun folder ((sym,var),context) = 
+				        add_context_sdec(context,SDEC(symbol_label sym, 
+								      DEC_CON(var,
+									      KIND_TUPLE 1, NONE)))
+				       val context = foldl folder context sym_vars
 				       val c = xty(context,ty)
+				       val c = (case sym_vars of
+						    [] => c
+						  | _ => CON_FUN(map #2 sym_vars, c))
 				   in SIGNAT_STRUCTURE(popt,xsig_wheretype(context,sdecs,labels,c,k))
 				   end
 			     | _ => (error_region();
@@ -2112,13 +2205,17 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
      and xstrexp (context : context, strb : Ast.strexp,  Ast.Opaque sigexp) 
 	 : (decresult * mod * signat) = 
 	 let 
-	     val (sbnd_ce_list,module,signat) = xstrexp(context,strb,Ast.NoSig)
+	     val (sbnd_ce_list,module,sig_actual) = xstrexp(context,strb,Ast.NoSig)
 	     val (_,context') = add_context_sbnd_ctxts(context,sbnd_ce_list)
-	     val sig' = xsigexp(context,sigexp)
+	     val sig_target = xsigexp(context,sigexp)
 	     val mod_var = fresh_named_var "inner_mod"
-	     val (mod'_body,sig_ret') = xcoerce_seal(context',mod_var,signat,sig')
-	     val resmod =  MOD_LET(mod_var,module, MOD_SEAL(mod'_body, sig'))
-	 in  (sbnd_ce_list,resmod, sig')
+	 in  if (Sig_IsSub(context,sig_target,sig_actual))
+		 then
+		     (sbnd_ce_list,module, sig_actual)
+	     else let val (mod'_body,sig_ret') = xcoerce_seal(context',mod_var,sig_actual,sig_target)
+		      val resmod =  MOD_LET(mod_var,module, MOD_SEAL(mod'_body, sig_target))
+		  in  (sbnd_ce_list,resmod, sig_target)
+		  end
 	 end
       | xstrexp (context, strb, Ast.Transparent sigexp) = 
 	let 
@@ -2178,7 +2275,6 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					    pp_signat sig1';
 					    print "\n")
 
-
 			      val newvar = fresh_named_var "coerced_structure"
 			      val sig2' = sig_subst_modvar(sig2,[(var1,MOD_VAR newvar)])
 			      val fsig = SIGNAT_FUNCTOR(var1,sig1',sig2,PARTIAL)
@@ -2204,7 +2300,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			      val temp = mod_subst_modvar(modc_body,
 							  [(modc_v0,argmod)])
 			      val sealed = MOD_SEAL(temp,sig1')
-			      val lbl = fresh_internal_label "coerced"
+			      val lbl = to_export_lab(fresh_internal_label "coerced")
 			      val sbnd_ce = 
 				  (SOME(SBND(lbl,BND_MOD(newvar,sealed))),
 				   CONTEXT_SDEC(SDEC(lbl,DEC_MOD(newvar,sig1'))))
@@ -2323,10 +2419,14 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			    DEC_CON(v,k,NONE) => 
 				(bound v; 
 				 if eq_label(l,curl)
-				     then if (k = kind) 
+				     then if (kind_eq_shape(k,kind))
 					      then (SDEC(l,DEC_CON(v,k,SOME con)))::rest
 					  else (error_region();
 						print "signature wheretype failed due to constructor arity\n";
+						print "\nExpected kind: ";
+						pp_kind k;
+						print "\nActual kind: ";
+						pp_kind kind; print "\n";
 						sdecs)
 				 else sdec::(docon curl rest))
 			  | (DEC_EXP(v,_) | DEC_MOD(v,_) | DEC_CON(v,_,_)) => (bound v; sdec::(docon curl rest))
@@ -2505,37 +2605,15 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		      var_actual : var,
 		      sig_actual : signat,
 		      sig_target : signat) : Il.mod * Il.signat =
-	let val (m,s,_) = xcoerce_help([],
-				       true,
-				       add_context_mod'(context,var_actual,
+	    let val (m,s,_) = xcoerce_help(empty_mapping,
+					   true,
+					   add_context_mod'(context,var_actual,
 							SelfifySig(SIMPLE_PATH var_actual, sig_actual)),
-				       SIMPLE_PATH var_actual,
-				       sig_actual,sig_target)
-	in  (m,s)
-	end
+					   SIMPLE_PATH var_actual,
+					   sig_actual,sig_target)
+	    in  (m,s)
+	    end
 
-    and chandle cmap c = assoc_eq(eq_conproj, c, cmap)
-    and mhandle mmap m = assoc_eq(eq_modproj, m, mmap)
-
-    and sdechandle cmap mmap (SDEC(l,DEC_CON(v,k,SOME c))) =
-		(case chandle cmap c of
-		     NONE => NONE
-		   | SOME (CON_VAR v') => 
-			 if (Name.eq_var(v,v'))
-			     then SOME(SDEC(l,DEC_CON(v,kind_substconmod(k,cmap,mmap),SOME c)))
-			 else NONE
-		   | _ => NONE)
-      | sdechandle _ _ _ = NONE
-
-    and kind_substconmod(KIND_INLINE(k,c),cmap,mmap) = KIND_INLINE(k,con_substconmod(c,cmap,mmap))
-      | kind_substconmod(k,_,_) = k
-    and con_substconmod(c,cmap,mmap) = con_all_handle(c, fn _ => NONE, chandle cmap, mhandle mmap, 
-						      sdechandle cmap mmap)
-    and sig_substconmod(s,cmap,mmap) = sig_all_handle(s, fn _ => NONE, chandle cmap, mhandle mmap, 
-						      sdechandle cmap mmap)
-    and con_substcon(c,cmap) = con_substconmod(c, cmap, [])
-    and kind_substcon(k,cmap) = kind_substconmod(k, cmap, [])
-    and sig_substcon(s,cmap) = sig_substconmod(s, cmap, [])
 
     (* Augment coerced_mod and coerced_sig so that all references to
       var_actual are removed from coerced_sig.  *)
@@ -2573,18 +2651,18 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
             (* we create the augmentation module and name it var_local; 
 	      note that only the label of the var_local must be hidden;
 	      for now, we copy all type components *)
-	    fun dosdec (p,cs : (con * con) list, ms : (mod * mod) list, sdec) = 
+	    fun dosdec (p,mapping : mapping, sdec) = 
 		case sdec of
 		    SDEC(l,DEC_CON(v,k,copt)) => 
 			let val v' = Name.derived_var v
-			    val k' = kind_substconmod(k,cs,ms)
-			    val copt' = Util.mapopt (fn c => con_substconmod(c,cs,ms)) copt
+			    val k' = kind_substconmod(k,mapping)
+			    val copt' = Util.mapopt (fn c => con_substconmod(c,mapping)) copt
 			    val c' = path2con(labels2path_actual(rev(l::p)))
-			    val cs = (CON_VAR v, CON_VAR v')::cs
-			    val cs = (case p of
-					  [] => (c',CON_VAR v')::cs
-					| _ => cs)
-			in  SOME(cs,ms,
+			    val mapping = convar_addmap(v,CON_VAR v',mapping)
+			    val mapping = (case p of
+					       [] => conproj_addmap(c',CON_VAR v',mapping)
+					     | _ => mapping)
+			in  SOME(mapping,
 				 SBND(l,BND_CON(v',c')),
 				 SDEC(l,DEC_CON(v',k',copt')))
 			end
@@ -2593,46 +2671,48 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			    then
 				let val v' = Name.derived_var v
 				    val e = path2exp(labels2path_actual(rev(l::p)))
-				    val c' = con_substconmod(c,cs,ms)
-				in  SOME(cs,ms,
+				    val c' = con_substconmod(c,mapping)
+				in  SOME(mapping,
 					 SBND(l,BND_EXP(v',e)),
 					 SDEC(l,DEC_EXP(v',c')))
 				end
 			else NONE
 		  | SDEC(l,DEC_MOD(v,s)) => 
-			(case dosig(l::p, cs, ms, s) of
-			     SOME(m,s) => let val v' = Name.derived_var v
-					      val ms = (MOD_VAR v, MOD_VAR v')::ms
-					      val ms = (case p of
-							    [] => (path2mod(labels2path_actual[l]),MOD_VAR v')::ms
-							  | _ => ms)
-					  in  SOME(cs,ms,
+			(case dosig(l::p, mapping, s) of
+			     SOME(_,m,s) => let val v' = Name.derived_var v
+					      val mapping = modvar_addmap(v, MOD_VAR v', mapping)
+					      val m' = path2mod(labels2path_actual[l])
+					      val mapping = 
+						  (case p of
+						       [] => modproj_addmap(m',MOD_VAR v',mapping)
+						     | _ => mapping)
+					  in  SOME(mapping,
 						   SBND(l,BND_MOD(v',m)), 
 						   SDEC(l,DEC_MOD(v',s)))
 					  end
 			   | NONE => NONE)
 		  | _ => NONE
-	    and dosdecs (p,_,_,[]) = ([],[])
-	      | dosdecs (p,cs,ms,sdec::rest) = 
-		let val (cs,ms,sbsdopt) = (case dosdec(p,cs,ms,sdec) of
-					   NONE => (cs,ms, NONE)
-					 | SOME(cs,ms,sbnd,sdec) => (cs,ms,SOME(sbnd,sdec)))
-		    val (restsbnds,restsdecs) = dosdecs(p,cs,ms,rest)
+	    and dosdecs (p,mapping,[]) = (mapping,[],[])
+	      | dosdecs (p,mapping,sdec::rest) = 
+		let val (mapping,sbsdopt) = (case dosdec(p,mapping,sdec) of
+					   NONE => (mapping, NONE)
+					 | SOME(mapping,sbnd,sdec) => (mapping,SOME(sbnd,sdec)))
+		    val (mapping,restsbnds,restsdecs) = dosdecs(p,mapping,rest)
 		in  (case sbsdopt of
-			 NONE => (restsbnds,restsdecs)
-		       | SOME(sbnd,sdec) => (sbnd::restsbnds, sdec::restsdecs))
+			 NONE => (mapping,restsbnds,restsdecs)
+		       | SOME(sbnd,sdec) => (mapping,sbnd::restsbnds, sdec::restsdecs))
 		end
-            and dosig (p, cs, ms, (SIGNAT_STRUCTURE(_,sdecs)
+            and dosig (p, mapping, (SIGNAT_STRUCTURE(_,sdecs)
 	                 | SIGNAT_INLINE_STRUCTURE{imp_sig=sdecs,...})) =  
-		let val (sbnds,sdecs) = dosdecs(p,cs,ms,sdecs)
-		in  SOME(MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE(NONE,sdecs))
+		let val (mapping,sbnds,sdecs) = dosdecs(p,mapping,sdecs)
+		in  SOME(mapping,MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE(NONE,sdecs))
 		end
 	      | dosig _ = NONE
-	    val (augment_m,augment_s) = (case dosig([],[],[],sig_actual) of
-					     SOME modsig => modsig
-					   | NONE => (print "sig_actual is not a structure\n";
-						      elab_error "sig_actual is not a structure"))
-
+	    val (mapping,augment_m,augment_s) = (case dosig([],empty_mapping,sig_actual) of
+						     SOME mapmodsig => mapmodsig
+						   | NONE => (print "sig_actual is not a structure\n";
+							      elab_error "sig_actual is not a structure"))
+	    val coerced_sig = sig_substconmod(coerced_sig,mapping)
 	    val sbnd_augment = SBND(label_local,BND_MOD(var_local, augment_m))
 	    val sdec_augment = SDEC(label_local,DEC_MOD(var_local, augment_s))
 	    val res as (m,s) = case (coerced_mod, coerced_sig) of
@@ -2649,12 +2729,16 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			     sig_target : signat) : Il.mod * Il.signat =
 	let val _ = if (!debug_coerce)
 			then (print "xcoerce_transparent just started... sig_actual = \n";
-			      pp_signat sig_actual; print "\nand sig_target = \n";
-			      pp_signat sig_target; print "\n\n")
+			      pp_signat sig_actual; 
+			      if (!debug_coerce_full)
+				  then (print "\nand sig_target = \n";
+					pp_signat sig_target)
+			      else ();
+			      print "\n\n")
 		    else ()
 	    (* first call perform an opaque sealing for type-checking reasons *)
-	    val (coerced_mod,coerced_sig,mapping) = 
-		xcoerce_help([],
+	    val (coerced_mod,coerced_sig,mapping : mapping) = 
+		xcoerce_help(empty_mapping,
 			     true,
 			     add_context_mod'(context,var_actual,
 					      SelfifySig(SIMPLE_PATH var_actual, sig_actual)),
@@ -2662,7 +2746,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			     sig_actual,sig_target)
 (*
 	    (* second call performs transparent sealing using the obtained coerced_sig *)
-	    val (m,s,mapping) = xcoerce_help([],
+	    val (m,s,mapping) = xcoerce_help(empty_mapping,
 					     false,
 					     add_context_mod'(context,var_actual,
 							      SelfifySig(SIMPLE_PATH var_actual, sig_actual)),
@@ -2672,15 +2756,21 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	    val s' = sig_substcon(s,mapping)
 *)
 	    (* first we get rid of some references to var_actual with internal variables *)
-	    val coerced_sig' = sig_substcon(coerced_sig,mapping)
+	    val coerced_sig' = sig_substconmod(coerced_sig,mapping)
 	    val _ = if (!debug_coerce)
-			then (print "xcoerce_transparent about to call extrct_hidden..\ncsubst =";
-			      app (fn (c1,c2) => (pp_con c1; print "  --> "; pp_con c2; print "\n")) mapping;
-			      print "\nand s = \n";
-			      pp_signat coerced_sig; print "\nand s' = \n";
-			      pp_signat coerced_sig'; print "\n\n")
+			then (print "xcoerce_transparent about to call extract_hidden..\n";
+			      if (!debug_coerce_full)
+			      then (print "csubst =";
+				    app (fn (c1,c2) => (pp_con c1; print "  --> "; pp_con c2; print "\n")) 
+				    (getcclist mapping))
+			      else ();
+			      print "\nand coerced_sig' = \n";
+			      pp_signat coerced_sig'; 
+			      print "\n\n")
 		    else ()
-	    (* now, we must augment with additional hidden types and modules *)
+	    (* now, we must augment with additional hidden types and modules;
+	       note that coerced_sig' does not contain internal variables of sig_actual;
+	       but has projections from var_actual *)
 	    val (m,s) = extract_hidden(coerced_mod, coerced_sig', var_actual, sig_actual)
 	in  (m, s)
 	end
@@ -2696,12 +2786,12 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
               The current list of labels indicating our current position.
 	          This list allows us to look up components in the 
 		    sig_actual and sig_target to type-check. *)
-    and xcoerce_help (mapping,
+    and xcoerce_help (mapping : mapping,
 		      opaque : bool,
 		      context : context,
 		      path_actual : path,
 		      sig_actual : signat,
-		      sig_target : signat) : Il.mod * Il.signat * (con * con) list =
+		      sig_target : signat) : Il.mod * Il.signat * mapping =
       let 
 
 
@@ -2709,8 +2799,11 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 
 	  val _ =  if (!debug_coerce)
 		       then (print "trying to xcoerce with signat_actual = \n";
-			     pp_signat sig_actual; print "\nand signat_target = \n";
-			     pp_signat sig_target; 
+			     pp_signat sig_actual; 
+			     if (!debug_coerce_full)
+				 then (print "\nand signat_target = \n";
+				       pp_signat sig_target)
+			     else ();
 (*			     print "\nand ctxt = \n"; pp_context context;  *)
 			     print "\n")
 		   else ()
@@ -2756,7 +2849,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 
         (* ---- coercion of a polymorphic component to a mono or polymorphic specification --- *)
 	fun polyval_case mapping (ctxt : context) (labs,v,con : con,varsig_option) 
-	    : (bnd * dec * context * (con * con) list) option = 
+	    : (bnd * dec * context * mapping) option = 
 	    let 
 		exception Bad of int
 		(* dispatch is passed the actual signature *)
@@ -2797,13 +2890,16 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		    in  case varsig_option of
 			NONE => let val mtemp = MOD_APP(path2mod path,MOD_STRUCTURE sbnds_poly)
 				in if (not opaque orelse
-				       sub_con(ctxt',con'',con_substcon(con,mapping)))
-				       then SOME(BND_EXP(v',MODULE_PROJECT(mtemp,it_lab)),
+				       sub_con(ctxt',con'',con_substconmod(con,mapping)))
+				       then 
+					   let val mapping = convar_addmap(v,CON_VAR v', mapping)
+					       val mapping = conproj_addmap(makecon(path_actual,labs), 
+									    CON_VAR v', mapping)
+					   in  SOME(BND_EXP(v',MODULE_PROJECT(mtemp,it_lab)),
 						 DEC_EXP(v',con''),
-						 ctxt,
-						 (makecon(path_actual,labs), CON_VAR v')::
-						 (CON_VAR v, CON_VAR v')::mapping)
-				   else (local_error(con_substcon(con,mapping),con'');
+						 ctxt, mapping)
+					   end
+				   else (local_error(con_substconmod(con,mapping),con'');
 					 raise (Bad 4))
 				end
 		      | SOME (v1,s1) => 
@@ -2813,13 +2909,16 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 											DEC_EXP(fresh_var(),con''))]),
 							    TOTAL)
 				in  if (not opaque orelse
-					sub_con(ctxt',con'',con_substcon (con,mapping)))
-					then SOME(BND_MOD(v',MOD_FUNCTOR(v1,s1,mtemp)),
+					sub_con(ctxt',con'',con_substconmod (con,mapping)))
+					then 
+					    let val mapping = convar_addmap(v,CON_VAR v', mapping)
+						val mapping = conproj_addmap(makecon(path_actual,labs), 
+									     CON_VAR v', mapping)
+					    in  SOME(BND_MOD(v',MOD_FUNCTOR(v1,s1,mtemp)),
 						  DEC_MOD(v', s2),
-						  ctxt,
-						  (makecon(path_actual,labs), CON_VAR v')::
-						  (CON_VAR v, CON_VAR v')::mapping)
-				    else (local_error(con_substcon(con,mapping),con'');
+						  ctxt, mapping)
+					    end
+				    else (local_error(con_substconmod(con,mapping),con'');
 					  raise (Bad 5))
 				end
 		    end
@@ -2838,14 +2937,17 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	    end (* polyval_case *)
 
 		  
-	fun doit mapping ctxt labs : (bnd * dec * context * (con * con) list) option = 
+	fun doit mapping ctxt labs : (bnd * dec * context * mapping) option = 
 	    let 
 		val _ = if (!debug_coerce)
 			    then (print "\n\ndoit called with labs = ";
-				  pp_pathlist pp_label' labs; print "\nand mapping = \n";
-				  app (fn (c1,c2) => (print "  "; pp_con c1;
-						      print "  -->  "; pp_con c2;
-						      print "\n")) mapping;
+				  pp_pathlist pp_label' labs; 
+				  if (!debug_coerce_full)
+				      then (print "\nand mapping = \n";
+					    app (fn (c1,c2) => (print "  "; pp_con c1;
+								print "  -->  "; pp_con c2;
+								print "\n")) (getcclist mapping))
+				  else ();
 				  print "\n\n\n")
 			else ()
 		fun general_mod v =
@@ -2863,7 +2965,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				    | _ => SIGNAT_STRUCTURE(NONE,[]))
 			 val (mbody,sig_ret,mapping') = 
 			     xcoerce_help(mapping,opaque,ctxt,join_path_labels(path_actual,lbls),s1,s)
-			 val mapping = mapping @ mapping'
+(*			 val mapping = join_maps(mapping, mapping') *)
+			 val mapping = mapping'
 			 val v1 = fresh_var()
 			 val v' = Name.derived_var v
 			 val bnd = BND_MOD(v',mbody)
@@ -2889,7 +2992,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					     print " with labs = "; pp_pathlist pp_label' labs;
 					     print "\nand sig_actual = "; pp_signat sig_actual;
 					     print "\ngot back "; pp_con con; print "\n")))
-				      val c' = con_substcon(c,mapping)
+				      val c' = con_substconmod(c,mapping)
 				  in
 				      if (not opaque orelse
 					  sub_con(ctxt,con,c'))
@@ -2897,7 +3000,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					  let 
 					      val v' = Name.derived_var v
 					      val bnd = BND_EXP(v',path2exp(join_path_labels(path_actual,lbls)))
-					      val dec = DEC_EXP(v',con_substcon(con,mapping))
+					      val dec = DEC_EXP(v',con_substconmod(con,mapping))
 					      val extdec = DEC_EXP(v,con)
 					  in SOME(bnd,dec,ctxt,mapping)
 					  end 
@@ -2965,12 +3068,13 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				      val v' = Name.derived_var v
 				      val ctxt = add_context_dec(ctxt,DEC_CON(v,k,SOME con))
 				      val ctxt = add_context_dec(ctxt,DEC_CON(v',k,SOME con))
-				      val mapping = (makecon(path_actual,labs), CON_VAR v')::
-					  (CON_VAR v, con)::mapping
+				      val mapping = convar_addmap(v,con,mapping)
+				      val mapping = conproj_addmap(makecon(path_actual,labs), 
+								   CON_VAR v', mapping)
 				      val (mapping,actual_con) = 
 					  (case actual_decopt of
 					       SOME(DEC_CON(va,_,copt)) => 
-						   ((CON_VAR va, CON_VAR v')::mapping, copt)
+						   (convar_addmap(va, CON_VAR v',mapping), copt)
 					     | _ => (mapping, NONE))
 				      val _ = (case copt of 
 						   NONE => ()
@@ -2978,16 +3082,23 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 						       if (not opaque orelse
 							   sub_con(ctxt,con,spec_con))
 							   then ()
-						       else (error_region();
-							     print "coercion of a type component to a ";
-							     print "type specification failed at ";
-							     pp_pathlist pp_label' labs;
-							     print "\nExpected type: ";
-							     pp_con spec_con;
-							     print "\nActual type: ";
-							     pp_con con;
-							     print "\n"))
-				      val k' = kind_substcon(k,mapping)
+						       else (let val con' = con_normalize(ctxt,con)
+								 val spec_con' = con_normalize(ctxt,spec_con)
+							     in  error_region();
+								 print "coercion of a type component to a ";
+								 print "type specification failed at ";
+								 pp_pathlist pp_label' labs;
+								 print "\nExpected type: ";
+								 pp_con spec_con;
+								 print "\nActual type: ";
+								 pp_con con;
+								 print "\nReduced Expected type: ";
+								 pp_con spec_con';
+								 print "\nReduced Actual type: ";
+								 pp_con con';
+								 print "\n"
+							     end))
+				      val k' = kind_substconmod(k,mapping)
 				      val bnd = BND_CON(v',con)
 				      val dec = DEC_CON(v',k',SOME con)
 				  in SOME(bnd,dec,ctxt,mapping)
@@ -3007,14 +3118,16 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					   val bnd = BND_CON(v',con')
 					   val dec = DEC_CON(v',k,copt)
 					   val ctxt = add_context_dec(ctxt,DEC_CON(v,k,copt))
-				       in  SOME(bnd,dec,ctxt,(makecon(path_actual,labs), CON_VAR v')
-						::(CON_VAR v, con')::mapping)
+					   val mapping = convar_addmap(v,con',mapping)
+					   val mapping = conproj_addmap(makecon(path_actual,labs), CON_VAR v',
+									mapping)
+				       in  SOME(bnd,dec,ctxt,mapping)
 				       end
 				 | _ => error "traversing according to sig_actual but lookup failed")
 		   | _ => elab_error "ill-formed specification")
 	    end
 
-	fun sdecs_loop lbls (mapping,ctxt,sdecs) : sbnd list * sdec list * (con * con) list = 
+	fun sdecs_loop lbls (mapping,ctxt,sdecs) : sbnd list * sdec list * mapping =
 	    let fun loop (m,ctxt,[]) = ([],[],m)
 		  | loop (m,ctxt,(SDEC(l,_))::rest) =
 		     (case (doit m ctxt (lbls @ [l])) of
@@ -3041,7 +3154,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	    in  (sbnds,sbnds_code,sdecs_imp,sdecs,mapping)
 	    end
 
-	val (m,s,mapping) = 
+	val (m,s,mapping : mapping) = 
 	    (case (opaque,sig_actual,sig_target) of
 		       (_,SIGNAT_FUNCTOR(v1,s1,s1',a1), SIGNAT_FUNCTOR(v2,s2,s2',a2)) =>
 			 let 
@@ -3064,7 +3177,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			   val s = GetModSig(context',m4body)
 			 in (MOD_FUNCTOR(v2,s2,m4body),
 			     SIGNAT_FUNCTOR(v2,s2,s,a1),
-			     []) (* XXX empty mapping ? *)
+			     empty_mapping) (* XXX empty mapping ? *)
 			 end
 		   | (true,_,SIGNAT_STRUCTURE (_,sdecs)) =>
 			 let val (sbnds,sdecs,mapping) = sdecs_loop [] (mapping,context,sdecs)
@@ -3103,18 +3216,20 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		   | (_,SIGNAT_FUNCTOR _, ((SIGNAT_STRUCTURE _) | (SIGNAT_INLINE_STRUCTURE _))) => 
 			   (error_region();
 			    print "cannot coerce a functor to a structure\n";
-			    (MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[]),[]))
+			    (MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[]),empty_mapping))
 		  | (_,((SIGNAT_STRUCTURE _) | (SIGNAT_INLINE_STRUCTURE _)),SIGNAT_FUNCTOR _) => 
 			   (error_region();
 			    print "cannot coerce a structure to a functor\n";
-			    (MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[]),[])))
+			    (MOD_STRUCTURE [], SIGNAT_STRUCTURE(NONE,[]),empty_mapping)))
 
 	val _ = if (!debug_coerce) 
 		    then (print "\n\nxcoerce result:\n";
-			  print "\nmodule:\n";
-			  pp_mod m;
-			  print "\nsig:\n";
-			  pp_signat s;
+			  if (!debug_coerce_full)
+			      then (print "\nmodule:\n";
+				    pp_mod m;
+				    print "\nsig:\n";
+				    pp_signat s)
+			  else ();
 			  print "\n")
 		else ()
 
@@ -3321,7 +3436,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			     val ctxt = foldl efolder ctxt (zip3 evars cvars eq_lbls)
 
 			     local
-				 val applied = ConApply(con',con_tuple_inject (map CON_VAR cvars))
+				 val applied = ConApply(false,con',con_tuple_inject (map CON_VAR cvars))
 			     in
 				 val reduced_cons = (case applied of
 							 CON_TUPLE_INJECT conlist => conlist

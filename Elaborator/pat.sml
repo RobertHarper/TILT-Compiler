@@ -507,27 +507,36 @@ functor Pat(structure Il : IL
 	 let
 	   (* this gets rid of MarkPat, ConstraintPat, ListPat of the first pattern *)
 	   local
-	     fun dopat (Ast.MarkPat(p,r)) = dopat p
-	       | dopat (Ast.ConstraintPat{pattern,constraint}) = 
-		 let val c = xty(context,constraint)
-		     val con = get_case_exp_con arg1
-		     val _ = if (eq_con(context,c,con))
-				 then ()
-			     else (error_region();
-				   print "constraint pattern mismatches pattern type\n";
-				   print "actual type:\n";
-				   pp_con con;
-				   print "\nconstraint type:\n";
-				   pp_con c;
-				   print "\n")
-		 in dopat pattern
-		 end
-	       | dopat (Ast.ListPat []) = Ast.VarPat [Symbol.varSymbol "nil"]
-	       | dopat (Ast.ListPat (p::rest)) = Ast.AppPat{constr=Ast.VarPat[Symbol.varSymbol "::"],
-							    argument=Ast.TuplePat[p,dopat (Ast.ListPat rest)]}
-	       | dopat p = p
-	     fun do_mark_and_constraint ([],bound,body) = error "no pattern but have arguments"
-	       | do_mark_and_constraint (hdpat::tlpat,bound,b) = ((dopat hdpat)::tlpat,bound,b)
+	     fun listpat2pat [] = Ast.VarPat [Symbol.varSymbol "nil"]
+	       | listpat2pat (p::rest) = Ast.AppPat{constr=Ast.VarPat[Symbol.varSymbol "::"],
+						     argument=Ast.TuplePat[p,listpat2pat rest]}
+	     fun do_arm ([],bound,body) = error "no pattern but have arguments"
+	       | do_arm (hdpat::tlpat,bound,b) = 
+		 case hdpat of
+		     (Ast.MarkPat(p,r)) => do_arm (p::tlpat,bound,b)
+		   | (Ast.LayeredPat{varPat=Ast.VarPat[s],expPat}) =>
+			 let val (v,c) = (case arg1 of
+					      CASE_VAR(v,c) => (v,c)
+					    | CASE_NONVAR _ => error "CASE_NONVAR obsolete")
+			 in  do_arm(arm_addbind(s,v,c,(expPat::tlpat,bound,b)))
+			 end
+		   | (Ast.LayeredPat _) => error "Funny varPat in LayeredPat"
+		   | (Ast.ConstraintPat{pattern,constraint}) =>
+			 let val c = xty(context,constraint)
+			     val con = get_case_exp_con arg1
+			     val _ = if (eq_con(context,c,con))
+					 then ()
+				     else (error_region();
+					   print "constraint pattern mismatches pattern type\n";
+					   print "actual type:\n";
+					   pp_con con;
+					   print "\nconstraint type:\n";
+					   pp_con c;
+					   print "\n")
+			 in do_arm (pattern::tlpat, bound, b)
+			 end
+		   | (Ast.ListPat pats) => ((listpat2pat pats)::tlpat, bound, b)
+		   | _ => (hdpat::tlpat,bound,b)
 	   in
 	     val _ = debugdo (fn () => (print "got "; printint (length args); 
 					print " args\n";
@@ -535,7 +544,7 @@ functor Pat(structure Il : IL
 							       print " has ";
 							       printint (length(#1 a));
 							       print " pats in clause\n")) arms))
-	     val arms = map do_mark_and_constraint arms
+	     val arms = map do_arm arms
 	     val (arm1,armrest) = (hd arms, tl arms)
 	     val (clauses, bound, bodies) = (map #1 arms, map #2 arms, map #3 arms)
 	     val (clause1,clauserest) = (#1 arm1, map #1 armrest)

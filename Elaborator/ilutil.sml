@@ -150,6 +150,7 @@ functor IlUtil(structure Ppil : PPIL
 	     (MOD_FUNCTOR(v,s,m), _) => SOME (MOD_LET(v,y,m))
 	   | _ => NONE)
 
+
     fun beta_reduce(x : exp, y : exp) : exp option = 
 	let fun red (exp as (OVEREXP (c,_,oe))) = 
 		      (case (oneshot_deref oe) of
@@ -212,6 +213,7 @@ functor IlUtil(structure Ppil : PPIL
 		      print "\n";
 		      error "exp2path called on non-projection")
     end
+
 
     fun eq_path(SIMPLE_PATH v1, SIMPLE_PATH v2) = eq_var(v1,v2)
       | eq_path(COMPOUND_PATH (v1,l1), COMPOUND_PATH(v2,l2)) = 
@@ -673,97 +675,106 @@ functor IlUtil(structure Ppil : PPIL
 
 
       local
-	  fun exp_handler table (VAR var,bound) = if (member_eq(eq_var,var,bound)) 
+	  val assoc_eq = fn count => fn (eq,key,table) => let val res = (assoc_eq(eq,key,table)) 
+							val _ = (case res of
+								     NONE => ()
+								   | SOME _ => (count := !count + 1))
+						    in  res
+						    end
+	  fun exp_handler count table (VAR var,bound) = if (member_eq(eq_var,var,bound)) 
 						      then NONE
-						  else assoc_eq(eq_var,var,table)
-	    | exp_handler _ _ = NONE
-	  fun con_handler table (CON_VAR var,bound) = if (member_eq(eq_var,var,bound)) 
+						  else assoc_eq count (eq_var,var,table)
+	    | exp_handler _ _ _ = NONE
+	  fun con_handler count table (CON_VAR var,bound) = if (member_eq(eq_var,var,bound)) 
 							  then NONE
-						      else assoc_eq(eq_var,var,table)
-	    | con_handler _ _ = NONE
-	  fun ehandlers table = STATE(default_bound,
+						      else assoc_eq count (eq_var,var,table)
+	    | con_handler _ _ _ = NONE
+	  fun ehandlers count table = STATE(default_bound,
 				     {sdec_handler = default_sdec_handler,
-				      exp_handler = exp_handler table,
+				      exp_handler = exp_handler count table,
 				      con_handler = default_con_handler,
 				      mod_handler = default_mod_handler,
 				      sig_handler = default_sig_handler})
-	  fun chandlers table = STATE(default_bound,
+	  fun chandlers count table = STATE(default_bound,
 				      {sdec_handler = default_sdec_handler,
 				       exp_handler = default_exp_handler,
-				       con_handler = con_handler table,
+				       con_handler = con_handler count table,
 				       mod_handler = default_mod_handler,
 				       sig_handler = default_sig_handler})
-	  fun mod_handler table (MOD_VAR var,bound) = if (member_eq(eq_var,var,bound)) 
+	  fun mod_handler count table (MOD_VAR var,bound) = if (member_eq(eq_var,var,bound)) 
 					       then NONE
-					   else assoc_eq(eq_var,var,table)
-	    | mod_handler _ _ = NONE
-	  fun sig_handler handler_thunk table (SIGNAT_STRUCTURE (SOME p,sdecs)) = 
+					   else assoc_eq count (eq_var,var,table)
+	    | mod_handler _ _ _ = NONE
+	  fun sig_handler count handler_thunk table (SIGNAT_STRUCTURE (SOME p,sdecs)) = 
 	      let val v = (case p of
 			       SIMPLE_PATH v => v
 			     | COMPOUND_PATH (v,_) => v)
-		  val popt = (case (assoc_eq(eq_var,v,table)) of
+		  val popt = (case (assoc_eq count (eq_var,v,table)) of
 				  NONE => SOME p
 				| SOME _ => NONE)
 	      in case (f_signat (handler_thunk()) (SIGNAT_STRUCTURE (NONE,sdecs))) of
 		  (SIGNAT_STRUCTURE (_,sdecs)) => SOME(SIGNAT_STRUCTURE (popt,sdecs))
 		| _ => error "f_signat changed shape"
 	      end
-	    | sig_handler _ _ _ = NONE
-	  fun mhandlers table = 
-	      let val self = fn () => mhandlers table
+	    | sig_handler _ _ _ _ = NONE
+	  fun mhandlers count table = 
+	      let val self = fn () => mhandlers count table
 	      in STATE(default_bound,
 		       {sdec_handler = default_sdec_handler,
 			exp_handler = default_exp_handler,
 			con_handler = default_con_handler,
-			mod_handler = mod_handler table,
-			sig_handler = sig_handler self table})
+			mod_handler = mod_handler count table,
+			sig_handler = sig_handler count self table})
 	      end
-	  fun cmhandlers ctable mtable =
-	      let val self = fn () => cmhandlers ctable mtable
+	  fun cmhandlers count ctable mtable =
+	      let val self = fn () => cmhandlers count ctable mtable
 	      in STATE(default_bound,
 		       {sdec_handler = default_sdec_handler,
 			exp_handler = default_exp_handler,
-			con_handler = con_handler ctable,
-			mod_handler = mod_handler mtable,
-			sig_handler = sig_handler self mtable})
+			con_handler = con_handler count ctable,
+			mod_handler = mod_handler count mtable,
+			sig_handler = sig_handler count self mtable})
 	      end
-	  fun echandlers etable ctable =
-	      let val self = fn () => echandlers etable ctable
+	  fun echandlers count etable ctable =
+	      let val self = fn () => echandlers count etable ctable
 	      in STATE(default_bound,
 		       {sdec_handler = default_sdec_handler,
-			exp_handler = exp_handler etable,
-			con_handler = con_handler ctable,
+			exp_handler = exp_handler count etable,
+			con_handler = con_handler count ctable,
 			mod_handler = default_mod_handler,
 			sig_handler = default_sig_handler})
 	      end
-	  fun ecmhandlers etable ctable mtable =
-	      let val self = fn () => echandlers etable ctable
+	  fun ecmhandlers count etable ctable mtable =
+	      let val self = fn () => echandlers count etable ctable
 	      in STATE(default_bound,
 		       {sdec_handler = default_sdec_handler,
-			exp_handler = exp_handler etable,
-			con_handler = con_handler ctable,
-			mod_handler = mod_handler mtable,
-			sig_handler = sig_handler self mtable})
+			exp_handler = exp_handler count etable,
+			con_handler = con_handler count ctable,
+			mod_handler = mod_handler count mtable,
+			sig_handler = sig_handler count self mtable})
 	      end
       in 
-	  fun exp_subst_expvar(arg,table) = f_exp (ehandlers table) arg
-	  fun con_subst_expvar(arg,table) = f_con (ehandlers table) arg
-	  fun mod_subst_expvar(arg,table) = f_mod (ehandlers table) arg
-	  fun sig_subst_expvar(arg,table) = f_signat (ehandlers table) arg
-	  fun exp_subst_convar(arg,table) = f_exp (chandlers table) arg
-	  fun con_subst_convar(arg,table) = f_con (chandlers table) arg
-	  fun mod_subst_convar(arg,table) = f_mod (chandlers table) arg
-	  fun sig_subst_convar(arg,table) = f_signat (chandlers table) arg
-	  fun exp_subst_modvar(arg,table) = f_exp (mhandlers table) arg
-	  fun con_subst_modvar(arg,table) = f_con (mhandlers table) arg
-	  fun mod_subst_modvar(arg,table) = f_mod (mhandlers table) arg
-	  fun sig_subst_modvar(arg,table) = f_signat (mhandlers table) arg
-	  fun con_subst_conmodvar(arg,ctable,mtable) = f_con (cmhandlers ctable mtable) arg
-	  fun mod_subst_conmodvar(arg,ctable,mtable) = f_mod (cmhandlers ctable mtable) arg
-	  fun exp_subst_expconmodvar(arg,etable,ctable,mtable) = f_exp (ecmhandlers etable ctable mtable) arg
-	  fun con_subst_expconmodvar(arg,etable,ctable,mtable) = f_con (ecmhandlers etable ctable mtable) arg
-	  fun kind_subst_expconmodvar(arg,etable,ctable,mtable) = f_kind (ecmhandlers etable ctable mtable) arg
-	  fun sig_subst_expconmodvar(arg,etable,ctable,mtable) = f_signat (ecmhandlers etable ctable mtable) arg
+	  fun exp_subst_expvar(arg,table) = f_exp (ehandlers (ref 0) table) arg
+	  fun con_subst_expvar(arg,table) = f_con (ehandlers (ref 0) table) arg
+	  fun mod_subst_expvar(arg,table) = f_mod (ehandlers (ref 0) table) arg
+	  fun sig_subst_expvar(arg,table) = f_signat (ehandlers (ref 0) table) arg
+	  fun exp_subst_convar(arg,table) = f_exp (chandlers (ref 0) table) arg
+	  fun con_subst_convar(arg,table) = f_con (chandlers (ref 0) table) arg
+	  fun con_subst_convar'(arg,table) = let val r = ref 0 
+					     in (r, f_con (chandlers r table) arg)
+					     end
+	  fun mod_subst_convar(arg,table) = f_mod (chandlers (ref 0) table) arg
+	  fun sig_subst_convar(arg,table) = f_signat (chandlers (ref 0) table) arg
+	  fun exp_subst_modvar(arg,table) = f_exp (mhandlers (ref 0) table) arg
+	  fun con_subst_modvar(arg,table) = f_con (mhandlers (ref 0) table) arg
+	  fun mod_subst_modvar(arg,table) = f_mod (mhandlers (ref 0) table) arg
+	  fun sig_subst_modvar(arg,table) = f_signat (mhandlers (ref 0) table) arg
+	  fun con_subst_conmodvar(arg,ctable,mtable) = f_con (cmhandlers (ref 0) ctable mtable) arg
+	  fun mod_subst_conmodvar(arg,ctable,mtable) = f_mod (cmhandlers (ref 0) ctable mtable) arg
+	  fun exp_subst_expconmodvar(arg,etable,ctable,mtable) = f_exp (ecmhandlers (ref 0) etable ctable mtable) arg
+	  fun con_subst_expconmodvar(arg,etable,ctable,mtable) = f_con (ecmhandlers (ref 0) etable ctable mtable) arg
+	  fun kind_subst_expconmodvar(arg,etable,ctable,mtable) = f_kind (ecmhandlers (ref 0) etable ctable mtable) arg
+	  fun sig_subst_expconmodvar(arg,etable,ctable,mtable) = f_signat (ecmhandlers (ref 0) etable ctable mtable) arg
       end
 
       local
@@ -917,15 +928,28 @@ functor IlUtil(structure Ppil : PPIL
 	  end
 
 
-      fun ConApply (c1,c2) = 
-	(case (c1,c2) of
-	     (CON_FUN([var],c),CON_TUPLE_INJECT[arg_con]) => con_subst_convar(c, [(var,arg_con)])
-	   | (CON_FUN([var],c),arg_con) => con_subst_convar(c, [(var,arg_con)])
-	   | (CON_FUN(vars,c),CON_TUPLE_INJECT(arg_cons)) => con_subst_convar(c, zip vars arg_cons)
-	   | _ => (print "ConApply got bad arguments\nc1 = ";
-		   pp_con c1; print "\nc2 = "; 
-		   pp_con c2; print "\n";
-		   error "ConApply got bad arguments"))
+      fun ConApply (reduce_small,c1,c2) = 
+	  let fun help(vars,body,args) = 
+		 let val (ref count,res) = con_subst_convar'(body, zip vars args)
+		 in  if (count <= length vars)
+			 then res
+		     else CON_APP(c1,c2)
+		 end
+	  in 
+	      (case (reduce_small,c1,c2) of
+		   (true,CON_FUN([var],body),arg) => help([var],body,[arg])
+		 | (true,CON_FUN(vars,body),CON_TUPLE_INJECT args) => help(vars,body,args)
+		 | (true,_,_) => CON_APP(c1,c2)
+		 | (_,CON_FUN([var],c),CON_TUPLE_INJECT[arg_con]) => con_subst_convar(c, [(var,arg_con)])
+		 | (_,CON_FUN([var],c),arg_con) => con_subst_convar(c, [(var,arg_con)])
+		 | (_,CON_FUN(vars,c),CON_TUPLE_INJECT(arg_cons)) => con_subst_convar(c, zip vars arg_cons)
+		 | _ => (print "ConApply got bad arguments\nc1 = ";
+			 pp_con c1; print "\nc2 = "; 
+			 pp_con c2; print "\n";
+			 error "ConApply got bad arguments"))
+	  end
+
+
 
       fun mod_free_expvar module : var list = 
 	  let
@@ -1125,7 +1149,9 @@ functor IlUtil(structure Ppil : PPIL
     val eq_str = "*eq_"
     val dt_str = "*dt_"
     val top_str = "*top_"
+    val export_str = "*export_"
     fun is_eq_lab lab = is_label_internal lab andalso (substring (eq_str,label2string lab))
+    fun is_export_lab lab = is_label_internal lab andalso (substring (export_str,label2string lab))
     fun is_datatype_lab lab = is_label_internal lab andalso (substring (dt_str,label2string lab))
     fun is_top_lab lab = is_label_internal lab andalso (substring (top_str,label2string lab))
     local
@@ -1135,7 +1161,8 @@ functor IlUtil(structure Ppil : PPIL
 	      val final_str = meta_str ^ str
 	  in  internal_label final_str
 	  end
-    in  fun to_top_lab lab = to_meta_lab top_str lab 
+    in  fun to_export_lab lab = to_meta_lab export_str lab 
+	fun to_top_lab lab = to_meta_lab top_str lab 
 	fun to_eq_lab lab = to_meta_lab eq_str(if (is_top_lab lab)
 						   then lab
 					       else to_top_lab lab)
@@ -1147,6 +1174,7 @@ functor IlUtil(structure Ppil : PPIL
 	(not (is_label_internal l)) orelse
 	(is_eq_lab l) orelse
 	(is_top_lab l) orelse
+	(is_export_lab l) orelse
 	let val str = label2string l
 	in (substring ("open",str))
 	end
