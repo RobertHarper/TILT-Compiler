@@ -745,7 +745,11 @@ struct
 		     | _ => e_find_fv (state,frees) coercion
 		   else
 		     e_find_fv (state,frees) coercion
-		 val f = foldl (fn (c,f) => c_find_fv (state,f) c) f cargs
+		 (* The cargs are ignored -- they have to be, since the reifier *)
+		 (* may have already decided not to make their free variables   *)
+		 (* available.  (If we ever really need these cargs, then the   *)
+		 (* reifier will have to be changed.)                           *)
+		 (* val f = foldl (fn (c,f) => c_find_fv (state,f) c) f cargs *)
 		 val f = e_find_fv (state,f) exp
 	     in f
 	     end)

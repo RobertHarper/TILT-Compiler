@@ -1537,7 +1537,7 @@ struct
 						      | REGISTER (const,_) => const)
 				in  (const, LOCATION vl)
 				end
-			  | (NONE,NONE) => error ("no info on convar" ^ (Name.var2string v)))
+			  | (NONE,NONE) => error ("no info on convar " ^ (Name.var2string v)))
 		   in  (vl,vv,state)
 		   end
 	     | Let_c (letsort, cbnds, c) => 

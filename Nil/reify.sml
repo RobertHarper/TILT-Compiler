@@ -204,6 +204,8 @@ struct
 	    (* Since we plan to erase the coercion application entirely, *)
 	    (* the constructor arguments need not be reified.            *)
 	    val (coercion,pset) = reify_exp ctxt (coercion,pset)
+            (* ...but we'll try doing it anyway to see if it fixes a bug. *)
+	    (* val pset = reify_cons_rt (cargs,pset) *)
 	    val (exp,pset) = reify_exp ctxt (exp,pset)
 	in 
 	    (Coerce_e (coercion,cargs,exp),pset)

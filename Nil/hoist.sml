@@ -1027,8 +1027,10 @@ struct
 	  val (inner_env,state,ccnlevel) = bumpCurrentlevel (env,state)
 	  fun folder (v,e) = bindLevel (e,v,ccnlevel)
 	  val inner_env = foldl folder inner_env vars
-	  val (from,state,levels1) = rcon (from,inner_env,state)
-	  val (to,state,levels2) = rcon (to,inner_env,state)
+	  val (from,state,levels1) = 
+	      rcon_limited ccnlevel (from,inner_env,state)
+	  val (to,state,levels2) = 
+	      rcon_limited ccnlevel (to,inner_env,state)
 	  val levels = mergeLevels (levels1,levels2)
 	  val valuable = true
 	  val eff = UNKNOWN_EFF
@@ -1040,8 +1042,10 @@ struct
 	  val (inner_env,state,ccnlevel) = bumpCurrentlevel (env,state)
 	  fun folder (v,e) = bindLevel (e,v,ccnlevel)
 	  val inner_env = foldl folder inner_env vars
-	  val (from,state,levels1) = rcon (from,inner_env,state)
-	  val (to,state,levels2) = rcon (to,inner_env,state)
+	  val (from,state,levels1) = 
+	      rcon_limited ccnlevel (from,inner_env,state)
+	  val (to,state,levels2) = 
+	      rcon_limited ccnlevel (to,inner_env,state)
 	  val levels = mergeLevels (levels1,levels2)
 	  val valuable = true
 	  val eff = UNKNOWN_EFF
@@ -1050,10 +1054,12 @@ struct
       end
     | rexp' (Coerce_e (coercion,cargs,exp), env, state) =
       let
-	  val (coerceion,state,levels1,effs1,valuable1) = rexp (coercion,env,state)
+	  val (coercion,state,levels1,effs1,valuable1) = 
+	      rexp (coercion,env,state)
 	  val (cargs,state,levels2) = rcons (cargs,env,state)
 	  val (exp,state,levels3,effs3,valuable3) = rexp (exp,env,state)
-	  val levels = foldr mergeLevels levels1 [levels2,levels3]
+(*	  val levels = foldr mergeLevels levels1 [levels2,levels3] *)
+	  val levels = mergeLevels (levels1, mergeLevels(levels2,levels3))
 	  val valuable = valuable1 andalso valuable3
 	  val eff = UNKNOWN_EFF
       in
