@@ -1373,7 +1373,6 @@ structure IlStatic
 	end
 
 
-    (* Derek: NormOnce appears to be implemented the same as Normalize!! *)
     and NormOnce (con,ctxt) : con option =
 	let fun msg() = (print "NormOnce called with con =\n";
 			 pp_con con; print "\n")
@@ -1402,25 +1401,34 @@ structure IlStatic
 			 pp_con argcon; print "\n")
 	    val _ = debugdo msg
 	    fun ReduceAgain c =
-		(case Reduce how (c,ctxt) of
-		     NONE => SOME(c, [])
-		   | someopt => someopt)
+		(case how of
+		    ONCE => SOME(c,[])
+		|   _ =>
+			(case (Reduce how (c,ctxt)) of
+			    NONE => SOME (c,[])
+			 |  r => r))
 	    fun ReduceAgainWith (c, p) =
-		(case Reduce how (c,ctxt) of
-		     NONE => SOME(c, [p])
-		   | SOME(c,paths) => SOME(c, p :: paths))
+		(case how of
+		    ONCE => SOME(c,[p])
+		 |  _ =>
+			(case (Reduce how (c,ctxt)) of
+			    NONE => SOME (c,[p])
+			|   SOME (c,paths) => SOME(c, p :: paths)))
+	    fun reducelist clist : con list option =
+		let fun folder (c,change) =
+			(case Reduce how (c,ctxt) of
+			    NONE => (c, change)
+			 |  SOME(c,paths) => (c, true))
+		    val (clist,change) = foldl_acc folder false clist
+		in  if change then SOME clist else NONE
+		end
 	    fun helplist constr clist =
-	      (case how of
-		   HEAD => NONE
-		 | _ => let fun folder (c,change) =
-		                 (case Reduce how (c,ctxt) of
-				      NONE => (c, change)
-				    | SOME(c,paths) => (c, true))
-			    val (clist,change) = foldl_acc folder false clist
-			in  if change
-				then SOME(constr clist, [])
-			    else NONE
-			end)
+		(case how of
+		    HEAD => NONE
+		 |  _ =>
+			(case (reducelist clist) of
+			    SOME clist => SOME(constr clist,[])
+			 |  NONE => NONE))
 	    fun help constr c = helplist (fn clist => constr (hd clist)) [c]
        in
 	   (case argcon of
@@ -1475,7 +1483,7 @@ structure IlStatic
 		      fun constr cons =
 			  let val rdecs = Listops.zip labs cons
 			      val _ = r := FLEXINFO(stamp,flag,rdecs)
-			  in  CON_FLEXRECORD r
+			  in  argcon
 			  end
 		  in  helplist constr cons
 		  end
@@ -1490,24 +1498,22 @@ structure IlStatic
 		      | SOME(_,PHRASE_CLASS_CON (_,_,NONE,_)) => NONE
 		      | SOME _ => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound to a con")
 		      | NONE => NONE)
-	    | CON_TUPLE_PROJECT (i,c) =>
-		  let fun reducible cons =
-		      let val len = length cons
-			  val _ = if (i >= 0 andalso i < len)
-				      then ()
-				  else
-				      error "Reduce: con tuple projection - index wrong"
-			  val c = List.nth(cons,i)
-		      in  ReduceAgain c
-		      end
-		  in
-		      (case Reduce how (c,ctxt) of
-			   NONE => (case c of
-					CON_TUPLE_INJECT cons => reducible cons
-				      | _ => NONE)
-			 | SOME(CON_TUPLE_INJECT cons, _) => reducible cons
-			 | SOME(c,_) => SOME(CON_TUPLE_PROJECT(i,c), []))
+	    | CON_TUPLE_PROJECT (i,CON_TUPLE_INJECT cons) =>
+		  let val len = length cons
+		      val _ = if (i >= 0 andalso i < len) then ()
+			      else error "Reduce: con tuple projection - index wrong"
+		      val c = List.nth(cons,i)
+		  in  ReduceAgain c
 		  end
+	    | CON_TUPLE_PROJECT (i,c) =>
+		  (case (Reduce how (c,ctxt)) of
+		       NONE => NONE
+		   |   SOME (c,_) =>
+			   let val reduced = CON_TUPLE_PROJECT(i,c)
+			   in  (case c of
+				    CON_TUPLE_INJECT _ => ReduceAgain reduced
+				|   _ => SOME (reduced,[]))
+			   end)
 	    | CON_FUN(formals,CON_APP(f,args)) =>
 		let fun match (v,(CON_VAR v')) = eq_var(v,v')
 		      | match _ = false
@@ -1516,21 +1522,21 @@ structure IlStatic
 		      then ReduceAgain f
 		    else NONE
 		end
-	    | CON_FUN(formals,_) => NONE
-	    | CON_APP(f as CON_FUN(vars,body),args) => ReduceAgain(ConApply(false,f,args))
-	    | CON_APP(c1,cargs) =>
-		  let val c1' = Reduce how (c1,ctxt)
-		      fun folder(carg,reduced) = (case Reduce how (carg,ctxt) of
-						      NONE => (carg, reduced)
-						    | SOME (c, _) => (c, true))
-		      val (cargs, cargsReduced) = foldl_acc folder false cargs
-		  in  (case c1' of
-			   SOME(c1 as (CON_FUN _),_) => ReduceAgain(CON_APP(c1,cargs))
-			 | SOME(c1,_) => SOME(CON_APP(c1,cargs),[])
-			 | _ => if cargsReduced
-				   then SOME(CON_APP(c1,cargs),[])
-				else NONE)
+	    | CON_FUN _ => NONE
+	    | CON_APP(f as CON_FUN _,args) =>
+		  let val c =
+			(case (reducelist args) of
+			    SOME args => CON_APP(f,args)
+			 |  NONE => ConApply(false,f,args))
+		  in  ReduceAgain c
 		  end
+	    | CON_APP(f,args) =>
+		  (case (Reduce how (f,ctxt)) of
+		       SOME (f,_) => ReduceAgain(CON_APP(f,args))
+		   |   NONE =>
+			   (case (reducelist args) of
+				SOME args => SOME(CON_APP(f,args),[])
+			    |   NONE => NONE))
 	    | CON_MODULE_PROJECT (m,l) =>
 		(let
 		   val sOpt : (bool * signat) option =
