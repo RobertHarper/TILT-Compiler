@@ -306,19 +306,8 @@ structure Basis
 
 
 		   ("floor", (float2int)),
-		   ("real", (int2float)),
-	   
-		   ("open_in", open_in),
-		   ("lookahead", lookahead),
-		   ("input", input),
-		   ("input1", input1),
-		   ("end_of_stream", end_of_stream),
-		   ("close_in", close_in),
+		   ("real", (int2float)) ]
 
-		   ("open_out", open_out),
-		   ("output", output),
-		   ("flush_out", flush_out),
-		   ("close_out", close_out)]
 (* real_getexp should take a 64-bit IEEE float:
     (1) it the loads the 64-bit pattern as a long
     (2) shift right logical 52 bits

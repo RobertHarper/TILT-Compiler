@@ -104,18 +104,6 @@ structure Prim :> PRIM =
       | length_table of table
       | equal_table of table (* pointer equality for array and element-wise equality for vector *)
 
-      (* IO stuff *)
-      | open_in
-      | input
-      | input1
-      | lookahead
-      | end_of_stream
-      | open_out
-      | close_in
-      | output
-      | flush_out
-      | close_out
-
     datatype ilprim = 
       (* unsigned int operations: separated for type reasons; they are identical to
          the signed version when viewed at the bit-pattern level *)

@@ -111,17 +111,6 @@ struct
        | (uinta2uinta(is1,is2),[]) => help(con_array(con_uint is1), con_array(con_uint is2))
        | (uintv2uintv(is1,is2),[]) => help(con_vector(con_uint is1), con_vector(con_uint is2))
 
-       | (open_in,[]) => help(con_string, con_int W32)
-       | (input,[]) => help'([con_int W32, con_int W32], con_vector (con_uint W8))
-       | (input1,[]) => help(con_int W32, con_uint W8)
-       | (lookahead,[]) => help(con_int W32, con_uint W8)
-       | (end_of_stream,[]) => help(con_int W32, con_bool)
-       | (open_out,[]) => help(con_string, con_int W32)
-       | (close_in,[]) => help(con_int W32, con_unit)
-       | (output,[]) => help'([con_int W32, con_vector (con_uint W8)], con_unit)
-       | (flush_out,[]) => help(con_int W32, con_unit)
-       | (close_out,[]) => help(con_int W32, con_unit)
-
 
        | (plus_float fs,[]) => help'([con_float fs, con_float fs], con_float fs)
        | (minus_float fs,[]) =>  help'([con_float fs, con_float fs], con_float fs)
@@ -358,30 +347,6 @@ struct
 	  | (update _, _, _) => raise UNIMP
 	  | (equal_table _, _,_)  => raise UNIMP
 
-	  | (output,_,[e]) => 
-		(case (exp2value e) of
-		     vector(_,a) =>
-			 (case (PrimUtilParam.exp2value(Array.sub(a,0))) of
-			      SOME(uint(W8,_)) => 
-				  let fun folder(e,acc) = 
-				      (case (PrimUtilParam.exp2value e) of
-					   SOME(uint(W8,c)) => (chr(TilWord64.toInt c))::acc
-					 | _ => error "bad vector value: corrupt string")
-				  in  print(implode((Array.foldr folder [] a)));
-				      unit_value
-				  end
-			    | _ => bad "output")
-		   | _ => bad "output")
-	  | (input,_,_) => error "UNIMP"
-	  | (input1,_,_) => error "UNIMP"
-	  | (open_in,_,_) => error "UNIMP"
-	  | (open_out,_,_) => error "UNIMP"
-	  | (close_in,_,_) => error "UNIMP"
-	  | (close_out,_,_) => error "UNIMP"
-	  | (lookahead,_,_) => error "UNIMP"
-	  | (end_of_stream,_,_) => error "UNIMP"
-	  | (flush_out,_,_) => error "UNIMP"
-
 	  | _ => bad "general"())
 	end
 
@@ -560,17 +525,7 @@ struct
 				  in  (61, a, b)
 				  end
 
-	  (* IO operations *)
-	  | open_in => (62, 0, 0)
-	  | input => (63, 0, 0)
-	  | input1 => (64, 0, 0)
-	  | lookahead => (65, 0, 0)
-	  | open_out => (66, 0, 0)
-	  | close_in => (67, 0, 0)
-	  | output => (62, 0, 0)
-	  | flush_out => (62, 0, 0)
-	  | close_out => (62, 0, 0)
-	  | end_of_stream => (62, 0, 0)
+
 
 *)
 

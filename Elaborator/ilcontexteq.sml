@@ -405,19 +405,9 @@ struct
 		   | sub t => (blastOutChoice 58; blastOutTable t)
 		   | update t => (blastOutChoice 59; blastOutTable t)
 		   | length_table t => (blastOutChoice 60; blastOutTable t)
-		   | equal_table t => (blastOutChoice 61; blastOutTable t)
+		   | equal_table t => (blastOutChoice 61; blastOutTable t))
 
-		   (* IO operations *)
-		   | open_in => (blastOutChoice 62)
-		   | input => (blastOutChoice 63)
-		   | input1 => (blastOutChoice 64)
-		   | lookahead => (blastOutChoice 65)
-		   | open_out => (blastOutChoice 66)
-		   | close_in => (blastOutChoice 67)
-		   | output => (blastOutChoice 68)
-		   | flush_out => (blastOutChoice 69)
-		   | close_out => (blastOutChoice 70)
-		   | end_of_stream => (blastOutChoice 71))
+
 
 	    end
 
@@ -495,17 +485,6 @@ struct
 		   | 60 => length_table (blastInTable ())
 		   | 61 => equal_table (blastInTable ())
 
-		   (* IO operations *)
-		   | 62 => open_in
-		   | 63 => input
-		   | 64 => input1
-		   | 65 => lookahead
-		   | 66 => open_out
-		   | 67 => close_in
-		   | 68 => output
-		   | 69 => flush_out
-		   | 70 => close_out
-		   | 71 => end_of_stream
 		   | _ => error "bad blastInPrim")
 
 	    end

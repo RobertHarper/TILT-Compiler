@@ -1021,8 +1021,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		 
 	     val fbnds = map #1 fbnd_con_list
 	     val fbnd_cons : con list = map #2 fbnd_con_list
-	     val top_label = to_nonexport_lab(fresh_internal_label "polyfuns")
-	     val top_var = fresh_named_var "polyfuns"
+	     val top_label = to_nonexport_lab(fresh_internal_label "polyfun!")
+	     val top_var = fresh_named_var "polyfun!"
 	     val top_exp_con = (FIX(true,PARTIAL,fbnds),
 				case fbnd_cons of
 				    [c] => c

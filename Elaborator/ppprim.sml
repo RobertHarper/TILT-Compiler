@@ -163,19 +163,6 @@ structure Ppprim :> PPPRIM =
 	  | greatereq_uint is => Hbox[String "greatereqUI", pp_is is]
 	  | rshift_uint is => Hbox[String "rshiftUI", pp_is is]
 
-	  | open_in => String "open_in"
-	  | input => String "input"
-	  | input1 => String "input1"
-	  | lookahead => String "lookahead"
-	  | open_out => String "open_out"
-	  | close_in => String "close_in"
-	  | close_out => String "close_out"
-	  | flush_out => String "flush_out"
-	  | output => String "output"
-	  | end_of_stream => String "end_of_stream"
-
-
-
 	  | array2vector t => pp_aggregate "array2vector" t
 	  | vector2array t => pp_aggregate "vector2array" t
 	  | create_table t => pp_aggregate "create" t

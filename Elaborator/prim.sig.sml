@@ -102,17 +102,6 @@ signature PRIM =
       | length_table of table
       | equal_table of table (* pointer equality for array and element-wise equality for vector *)
 
-      (* IO operations *)
-      | open_in
-      | input
-      | input1
-      | lookahead
-      | open_out
-      | close_in
-      | output
-      | flush_out
-      | close_out
-      | end_of_stream
 
     datatype ilprim = 
       (* unsigned int operations: separated for type reasons; they are identical to

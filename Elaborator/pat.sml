@@ -510,7 +510,7 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 					   print "mc is "; Ppil.pp_con mc; 
 					   print "\n rescon is "; Ppil.pp_con (!rescon); print "\n";
 					   print "results types of rules mismatch\n")
-			  in SOME me
+			  in compress_expression me 
 			  end
 	    | (_,SOME rcon) => let 
 			   val var = fresh_var()
