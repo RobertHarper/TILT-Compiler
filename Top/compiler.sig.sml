@@ -3,9 +3,9 @@
 
 signature COMPILER =
  sig
-   type sbnds and context
+   type sbnd and context_entry and context
 
-   val compile : context * string * sbnds * context -> unit
+   val compile : context * string * (sbnd option * context_entry) list * context -> unit
 
    (* compile(ctxt, unitName, sbnds, ctxt') compiles sbnds into an
     * object file `unitName.o'. ctxt is the context in which the sbnds

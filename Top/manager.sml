@@ -3,7 +3,8 @@ functor Manager (structure Parser: LINK_PARSE
 		 structure Compiler: COMPILER
 		 structure Linker: LINKER
 		 structure Makedep: MAKEDEP
-		 sharing type Elaborator.sbnds = Compiler.sbnds
+		 sharing type Elaborator.sbnd = Compiler.sbnd
+		 sharing type Elaborator.context_entry = Compiler.context_entry
 		 sharing type Elaborator.context = Compiler.context
 		) : MANAGER = 
 struct
@@ -67,12 +68,12 @@ struct
 
   fun elab_nonconstrained(ctxt,sourcefile,fp,dec,uiFile) =
       case Elaborator.elab_dec(ctxt, fp, dec)
-	of SOME(sbnds, ctxt') => 
+	of SOME(sbnd_entries, ctxt') => 
 	    let	
 		val _ = (if Elaborator.eq_context(ctxt', readContext uiFile) then ()
 			 else writeContext(uiFile, ctxt'))
 		        handle IO.Io _ => writeContext(uiFile, ctxt')
-	    in (sbnds, ctxt')
+	    in (sbnd_entries, ctxt')
 	    end
          | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")
 

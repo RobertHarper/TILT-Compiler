@@ -1,7 +1,8 @@
 
 structure Compiler : COMPILER =
     struct
-	type sbnds = Linknil.Il.sbnds
+	type sbnd = Linknil.Il.sbnd
+	and context_entry = Linknil.Il.context_entry
 	and context = Linknil.Il.context
 
 	val error = fn x => Util.error "Compiler" x
@@ -13,9 +14,10 @@ structure Compiler : COMPILER =
 		else error "assemble. System command as failed"
 	    end
 
-	fun compile (ctxt: context, unitName: string, sbnds: sbnds, ctxt': context) : unit =
+	fun compile (ctxt: context, unitName: string, 
+		     sbnd_entries: (sbnd option * context_entry) list , ctxt': context) : unit =
 	    let val sdecs = LinkIl.IlContext.context_to_sdecs ctxt'
-		val nilmod = Linknil.il_to_nil (ctxt, sbnds, sdecs)
+		val nilmod = Linknil.il_to_nil (unitName, (ctxt, sbnd_entries))
 		val rtlmod = Linkrtl.nil_to_rtl (nilmod,unitName)
 		val _ = Linkalpha.rtl_to_alpha(unitName, rtlmod)    (* creates unitName.s file with main label
 								     * `unitName_doit' *)
