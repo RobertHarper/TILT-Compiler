@@ -112,3 +112,4 @@
 0112 [open]	option exception
 0113 [open]	parsing problem
 0114 [open]	overloading constants
+0115 [open]	withtype scoping wrong
