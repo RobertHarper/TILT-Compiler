@@ -139,8 +139,7 @@ struct
 	    open Prim
 	in  case con
 	    (* for a tyvar, if it's resolved and has an equality function, return that.
-	       if it doesn't have an equality function, try to find one by recursing.
-	       If unresolved, it had better have an equality function available; use that. *)
+	       if it doesn't have an equality function, try to find one by recursing. *)
 	      of CON_TYVAR tyvar => (case (Tyvar.tyvar_deref tyvar, Tyvar.tyvar_eq_hole tyvar)
 				       of (NONE, NONE) => raise ReallyNoEqExp
 					| (NONE, SOME os) => (* hole is empty since tyvar is unset *)
