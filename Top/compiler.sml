@@ -92,11 +92,11 @@ structure Til : COMPILER =
 		val (sFile,_) = rtl_to_asm(unitName, rtlmod)    
 		val _ = if (!uptoAsm) then raise Stop else ()
 
-		val oFile = (String.substring(sFile,0,size sFile - 2)) ^ ".o"
+		val oFile = base2o (String.substring(sFile,0,size sFile - 2))
 		val _ = assemble(sFile, oFile)
 	    in  oFile
 	    end
-	handle Stop => (let val oFile = unitName ^ ".o"
+	handle Stop => (let val oFile = base2o unitName
 			    val os = TextIO.openOut oFile
 			    val _ = TextIO.output(os,"Dummy .o file\n")
 			in  TextIO.closeOut os; oFile
