@@ -28,8 +28,11 @@ val diag = ref true
 val debug = ref false
 val debug_full = ref false
 val debug_full_env = ref false
-val debug_simp = ref false
+val debug_simp = Stats.bool("tortl_base_debug_simp")
+val _ = debug_simp := false
+
 val debug_bound = ref false
+
 
    (* Module-level declarations *)
 
@@ -91,7 +94,7 @@ val debug_bound = ref false
                | VCODE of label          (* I have the value of this code label *)
 
    type var_rep = var_loc option * var_val option * con
-   type convar_rep' = var_loc option * var_val option * (unit -> kind)
+   type convar_rep' = var_loc option * var_val option
    type convar_rep = var_loc option * var_val option * kind
    datatype loc_or_val = VAR_LOC of var_loc
                        | VAR_VAL of var_val
@@ -205,37 +208,28 @@ val debug_bound = ref false
 		       NONE => ()
 		     | SOME _ => error ("convarmap already contains "
 						 ^ (Name.var2string v)))
-	  fun kind() = 
-	      (case (kopt,copt) of
-		   (SOME k,_) => k
-		 | (_, SOME c) => Stats.subtimer("tortl_get_shape0"^str,NilStatic.get_shape env) c
-		 | _ => (case k of (* this would not be needed if the context took shape kinds into account *)
-			     Singleton_k(Var_c v) => 
-				 (case VarMap.find (convarmap,v) of
-				      NONE => error ("convarrep_insert: variable "^(var2string v)^" bad kind")
-				    | SOME (vl,vv,k) => k())
-			   | _ => Stats.subtimer("tortl_make_shape0"^str,NilStatic.make_shape env) k))
-	  val convarmap = VarMap.insert(convarmap,v,(vl,vv,memoize kind))
+	  val convarmap = VarMap.insert(convarmap,v,(vl,vv))
       in  {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
   
-  fun insert_kind(ctxt,v,k,copt : con option) = 
-	  (case (k,copt) of
-	       (_,SOME c) => NilContext.insert_kind_equation(ctxt,v,c,k)
-	     | (Singleton_k c,_) => NilContext.insert_kind_equation(ctxt,v,c,k)
-	     | _ => NilContext.insert_kind(ctxt,v,k))
+  fun insert_kind(ctxt,v,k,kopt,copt : con option) = 
+	  (case (k,kopt,copt) of
+	       (_,NONE,NONE) => NilContext.insert_kind(ctxt,v,k)
+	     | (_,NONE,SOME c) => NilContext.insert_kind_equation(ctxt,v,c,k)
+	     | (_,SOME sh,NONE) => NilContext.insert_kind_shape(ctxt,v,k,sh)
+	     | (_,SOME sh,SOME c) => NilContext.insert_kind_shape_equation(ctxt,v,c,k,sh))
 	       handle e => (print "\nError in tortl_insert_kind with \n"; 
 			    NilContext.print_context ctxt;
 			    print "\n";
 			    raise e)
 
 
-  fun env_insert' ({is_top,env,varmap,convarmap,gcstate} : state) (v,k,copt) : state = 
+  fun env_insert' ({is_top,env,varmap,convarmap,gcstate} : state) (v,k,kopt,copt) : state = 
       let val _ = if (!debug_bound)
 		      then (print "env adding v = ";
 			    Ppnil.pp_var v; print "\n")
 		  else ()
-	  val newenv = insert_kind(env,v,k,copt)
+	  val newenv = insert_kind(env,v,k,kopt,copt)
 	  val newstate = {is_top=is_top,env=newenv,
 			  varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       in  newstate
@@ -243,11 +237,11 @@ val debug_bound = ref false
 
   fun convarmap_insert str state (arg as (v,(vl,vv,k,kshape_opt,copt))) =
       let val state = convarmap_insert' str state arg
-	  val state = env_insert' state (v,k,copt)
+	  val state = env_insert' state (v,k,kshape_opt,copt)
 	  val _ = if (#is_top state)
 	      (* top_rep (vl,vv) *)
 		      then let val gs = convarmap_insert' str (!global_state) arg
-			       val gs = env_insert' gs (v,k,copt)
+			       val gs = env_insert' gs (v,k,kshape_opt,copt)
 			   in  global_state := gs
 			   end
 		  else ()
@@ -269,14 +263,17 @@ val debug_bound = ref false
   fun add_concode str (s,v,kind,kshape_opt,copt,l) = 
       convarmap_insert str s (v,(NONE, SOME(VCODE l),kind, kshape_opt,copt))
 
-   fun getconvarrep ({convarmap=lm,...} : state) v : convar_rep = 
-       (case VarMap.find (lm,v) of
-	   NONE => error ("getconvarrep: variable "^(var2string v)^" not found")
-	 | SOME (vl,vv,k) => (vl,vv,k()))
-   fun getconvarrep' ({convarmap=lm,...} : state) v : convar_rep option = 
-       (case VarMap.find (lm,v) of
+   fun getconvarrep' ({convarmap,env,...} : state) v : convar_rep option = 
+       (case VarMap.find (convarmap,v) of
 	   NONE => NONE
-	 | SOME (vl,vv,k) => SOME(vl,vv,k()))
+	 | SOME (vl,vv) => let val k = NilContext.find_shape(env,v)
+			     in  SOME(vl,vv,k)
+			     end)
+
+   fun getconvarrep state v : convar_rep = 
+       (case getconvarrep' state v of
+	    NONE => error ("getconvarrep: variable "^(var2string v)^" not found")
+	  | SOME result => result)
 
   fun getrep ({varmap=lm,...} : state) v = 
       (case VarMap.find(lm,v) of
@@ -286,75 +283,19 @@ val debug_bound = ref false
     (* given a type returns true and a type in head-normal form
        or false and a type not in head-normal form 
        in either case, the returned type is possibly simpler than the argument type *)
-    fun is_hnf c : bool = 
-	(case c of
-	     Prim_c(pc,clist) => true
-	   | AllArrow_c _ => true
-	   | Var_c _ => false
-	   | Let_c _ => false
-	   | Mu_c _ => true
-	   | Proj_c (Mu_c _,_) => true
-	   | Proj_c _ => false
-	   | App_c _ => false
-	   | Crecord_c _ => true
-	   | Closure_c _ => error "Closure_c not a type"
-	   | Typecase_c _ => false
-	   | Annotate_c (_,c) => is_hnf c)
 
-    fun reduce_until_hnf(env,c) : con = 
-	let fun diagnose n [] = error "reduce_until_hnf: diagnose"
-	      | diagnose n (c::rest) = (print "reduce_until_hnf(";
-					print (Int.toString n);
-					print ") =\n"; Ppnil.pp_con c; print "\n";
-					diagnose (n+1) rest)
-	    
-	    fun loop (n,past) (subst,c) = 
-	    if (n>1000) then diagnose 0 (rev past)
-		else 
-	    if (is_hnf c)
-		then (subst,c )
-	    else let val next = (n+1,c::past)
-		     val (progress,subst,c) = NilStatic.con_reduce_once(env,subst) c
-		 in  if progress then loop next (subst,c) else (subst,c)
-		 end
-	    val (subst,c) = loop (0,[]) (NilStatic.empty_subst,c)
-	in  NilStatic.con_subst(subst,c)
+    fun get_shape ({env,...} : state) c = Normalize.get_shape env c
+    fun make_shape ({env,...} : state) k = Normalize.make_shape env k
+    fun simplify_type ({env,...} : state) con : bool * con = 
+	let val c = Normalize.reduce_hnf(env,con)
+	    val hnf = Normalize.is_hnf c
+	    val _ = if (!debug_simp)
+		    then (print "simplify on\n";  Ppnil.pp_con con;
+			  print "\nreduced to\n"; Ppnil.pp_con c;
+			  print "\n")
+		    else ()
+	in  (hnf,c)
 	end
-
-    fun simplify_type_help env c : bool * con = 
-	(case c of
-	     Prim_c(pc,clist) => 
-		 let val clist' = map (simplify_type_help env) clist
-		 in  (true,Prim_c(pc,map #2 clist'))
-		 end
-	   | Mu_c _ => (true,c)
-	   | _ => let val _ = if (!debug_simp)
-				  then (print "simplify type calling type reducer on:\n";
-					Ppnil.pp_con c;
-					print "\nwith env = \n";
-					NilContext.print_context env;
-					print "\n")
-			      else 
-			       if (!debug)
-				  then (print "simplify type called\n")
-				   else ()
-
-		      val c' = reduce_until_hnf(env,c)
-		      val _ = if (!debug_simp)
-				  then (print "simplify type: reducer on type returned:\n";
-					Ppnil.pp_con c';
-					print "\n")
-			      else if (!debug)
-				  then (print "simplify type returned\n")
-				   else ()
-		  in (is_hnf c',c')
-		  end)
-
-
-    fun get_shape ({env,...} : state) c = NilStatic.get_shape env c
-    fun make_shape ({env,...} : state) k = NilStatic.make_shape env k
-    fun simplify_type ({env,...} : state) c : bool * con = 
-	simplify_type_help env c
 
 
 val simplify_type = fn state => Stats.subtimer("tortl_simplify_type",simplify_type state)
@@ -458,7 +399,7 @@ val simplify_type = fn state => Stats.subtimer("tortl_simplify_type",simplify_ty
 		       in  loop acc con rest
 		       end
 		     | loop acc (Singleton_k c) labs = 
-		       let val k = Stats.subtimer("tortl_get_shape0",NilStatic.get_shape (#env state)) c
+		       let val k = Stats.subtimer("tortl_get_shape0",Normalize.get_shape (#env state)) c
 		       in  loop acc k labs
 		       end
 		     | loop acc _ labs = error "expect record kind"
@@ -1423,7 +1364,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		  then ()
 	      else (add(heapptr(),4 * length tagwords,dest);
 		    add(heapptr(),4 * words_alloced,heapptr()))
-      val _ = add_instr(ICOMMENT ("done allocating an " ^ (Int.toString (length vl)) ^ " record"))
+      val _ = add_instr(ICOMMENT ("done allocating " ^ (Int.toString (length vl)) ^ " record"))
     in  (result, state)
     end
 

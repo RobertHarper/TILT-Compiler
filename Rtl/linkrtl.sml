@@ -1,4 +1,4 @@
-(*$import LINKRTL Linknil TortlBase TortlSum Tortl Util TilWord32 Rtl RtlTags Pprtl *)
+(*$import LINKRTL Linknil TortlBase TortlSum Tortl Util TilWord32 Rtl RtlTags Pprtl TortlVararg *)
 
 structure Linkrtl :> LINKRTL =
 struct
@@ -41,6 +41,17 @@ struct
 			    structure NilUtil = Linknil.NilUtil
 			    structure Ppnil = Linknil.PpNil)
 
+    structure TortlVararg = TortlVararg(val number_flatten = 6
+					structure Nil = Linknil.Nil
+					structure NilContext = Linknil.NilContext
+					structure NilStatic = Linknil.NilStatic
+					structure Rtl = Rtl
+					structure Pprtl = Pprtl
+					structure TortlBase = TortlBase
+					structure Rtltags = Rtltags
+					structure NilUtil = Linknil.NilUtil
+					structure Ppnil = Linknil.PpNil)
+
     structure Tortl = Tortl(structure Nil = Linknil.Nil
 			    structure NilContext = Linknil.NilContext
 			    structure NilStatic = Linknil.NilStatic
@@ -48,6 +59,7 @@ struct
 			    structure Pprtl = Pprtl
 			    structure TortlBase = TortlBase
 			    structure TortlSum = TortlSum
+			    structure TortlVararg = TortlVararg
 			    structure Rtltags = Rtltags
 			    structure NilUtil = Linknil.NilUtil
 			    structure Ppnil = Linknil.PpNil)

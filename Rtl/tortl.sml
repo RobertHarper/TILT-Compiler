@@ -1,4 +1,4 @@
-(*$import TORTL RTL PPRTL TORTLSUM TORTLBASE RTLTAGS NIL NILUTIL PPNIL Stats NORMALIZE *)
+(*$import TORTLVARARG TORTL RTL PPRTL TORTLSUM TORTLBASE RTLTAGS NIL NILUTIL PPNIL Stats *)
 
 (* empty records translate to 256; no allocation *)
 (* to do: strive for VLABEL not VGLOBAL *)
@@ -25,13 +25,14 @@ functor Tortl(structure Rtl : RTL
 	      structure Pprtl : PPRTL
 	      structure TortlBase : TORTL_BASE 
 	      structure TortlSum : TORTL_SUM
+	      structure TortlVararg : TORTL_VARARG
 	      structure Rtltags : RTLTAGS 
 	      structure Nil : NIL
 	      structure NilUtil : NILUTIL
 	      structure Ppnil : PPNIL
 	      sharing Ppnil.Nil = NilUtil.Nil = TortlBase.Nil = Nil
 	      sharing Pprtl.Rtltags = Rtltags
-              sharing TortlSum.TortlBase = TortlBase
+              sharing TortlSum.TortlBase = TortlVararg.TortlBase = TortlBase
 	      sharing Rtl = Pprtl.Rtl = TortlBase.Rtl)
     :> TORTL where Rtl = Rtl 
              where Nil = Nil =
@@ -44,7 +45,9 @@ val do_single_crecord = ref true
 
 val diag = ref true
 val debug = ref false
-val debug_full = ref false
+val debug_full_when = ref 99999
+val curfun = ref 0
+fun debug_full() = !debug_full_when <= !curfun
 val debug_full_env = ref false
 val debug_simp = ref false
 val debug_bound = ref false
@@ -61,6 +64,10 @@ val debug_bound = ref false
     open Rtltags 
     open Pprtl 
     open TortlBase
+
+    val do_vararg = Stats.bool("do_vararg") (* initialized elsewhere *)
+    val show_cbnd = Stats.bool("show_cbnd")
+    val _ = show_cbnd := false
 
     val exncounter_label = ML_EXTERN_LABEL "exncounter"
     val error = fn s => (Util.error "tortl.sml" s)
@@ -113,8 +120,8 @@ val debug_bound = ref false
    
   fun xbnd state (bnd : bnd) : state =
       (case bnd of
-	      Con_b (_,cbnd) => xconbnd state cbnd
-	    | Exp_b (v,_,e) => 
+	      Con_b (phase,cbnd) => xconbnd state (phase,cbnd)
+	    | Exp_b (v,e) => 
 		  let val c = type_of state e
 		      val (loc_or_val,_,state) = xexp(state,v,e,SOME c,NOTID)
 		  in  (case (istoplevel(),loc_or_val) of
@@ -151,7 +158,9 @@ val debug_bound = ref false
 					 con_lv,
 					 exp_lv]
 			      val reps = [NOTRACE_CODE, TRACE, TRACE]
-			      val (lv,state) = make_record_mutable(state,NONE,reps,vls)
+			      val (lv,state) = if is_recur
+						   then make_record_mutable(state,NONE,reps,vls)
+					       else make_record(state,NONE,reps,vls)
 			      val ir = load_ireg_locval(lv,NONE)
 			      val s' = if (istoplevel())
 					   then add_global(state,v,tipe,lv)
@@ -173,9 +182,20 @@ val debug_bound = ref false
 
   
 
-  and xconbnd state (cbnd : conbnd) : state = 
+  and xconbnd state (phase, cbnd : conbnd) : state = 
       (case cbnd of
-	   Con_cb (v,c) => let val (_,lv,k,state) = xcon'(state,v,c,NONE)
+	   Con_cb (v,c) => let 
+			       val (lv,k,state) = 
+				   if (phase = Compiletime)
+				   then (VAR_VAL(VINT 0w1729), Type_k, state)
+				   else
+				       let val _ = if (!show_cbnd)
+						     then (print "Con_cb: "; Ppnil.pp_var v;
+							   print " = "; Ppnil.pp_con c; print "\n")
+						   else ()
+					   val (_,lv,k,state) = xcon'(state,v,c,NONE)
+				       in  (lv,k,state)
+				       end
 			   in  case (istoplevel(),lv) of
 			       (true,_) => add_conglobal "0" (state,v,k,SOME k,SOME c, lv)
 			     | (_,VAR_LOC vl) => add_convar "3" (state,v,k,SOME k, SOME c,SOME vl,NONE)
@@ -249,9 +269,8 @@ val debug_bound = ref false
 		    | general_packager _ = error "did not receive 1 value"
 		      
 
-		  val c = (case c of
-			       Prim_c _ => c
-			     | _ => #2(simplify_type state c))
+		  val c = #2(simplify_type state c)
+
 		  val shift_amount = (case c of
 					  Prim_c(Int_c Prim.W8, []) => 0
 					| Prim_c(Int_c Prim.W32, []) => 2
@@ -314,7 +333,7 @@ val debug_bound = ref false
 	  val _ = if (!debug)
 		      then (print "xexp ";  print (Int.toString (!exp_depth));
 			    print " called";
-			    if (!debug_full)
+			    if (debug_full())
 				then (print " on exp = \n";
 				      Ppnil.pp_exp arg_e)
 			    else ();
@@ -323,7 +342,12 @@ val debug_bound = ref false
 	  val res = xexp''(state,name,arg_e,copt,context)
 	  val _ = if (!debug)
 		      then (print "xexp ";  print (Int.toString (!exp_depth));
-			    print " returned\n")
+			    print " returned \n";
+	                    if (debug_full())
+				then (print"with con = \n";
+				      Ppnil.pp_con (#2 res);
+				      print "\n")
+			    else ())
 		  else ()
 	  val _ = exp_depth := !exp_depth - 1
 	      
@@ -444,32 +468,22 @@ val debug_bound = ref false
 			  val eregs' = eregs'
 			  val efregs = efregs
 			  fun reduce(vklist,clist,rescon) = 
-			      let fun nada _ = NOCHANGE
-				  val table = map2 (fn ((v,_),c) => (v,c)) (vklist,clist)
-				  fun ch (bound,Var_c v) = (case (assoc_eq(eq_var,v,table)) of
-								NONE => NOCHANGE
-							      | SOME c => CHANGE_NORECURSE c)
-				    | ch _ = NOCHANGE
-				  val handlers = (nada,nada,ch,nada,nada)
-			      in  con_rewrite handlers rescon
+			      let val cbnds = map2 (fn ((v,_),c) => Con_cb(v,c)) (vklist,clist)
+			      in  if (null cbnds) then rescon 
+				  else NilUtil.alpha_normalize_con(Let_c(Sequential,cbnds,rescon))
 			      end
 			  val rescon = 
-			      (case (copt,funcon) of
+			      (case (copt,#2(simplify_type state funcon)) of
 				   (SOME c,_) => c
+				 | (NONE,Prim_c(Vararg_c _, [_,rescon])) => reduce([],clist,rescon)
 				 | (NONE,AllArrow_c(_,_,vklist,_,_,rescon)) => reduce(vklist,clist,rescon)
-				 | (_,c) => 
-				       (case #2(simplify_type state c) of
-					    AllArrow_c(_,_,vklist,_,_,rescon) => reduce(vklist,clist,rescon)
-					  | c => (print "cannot compute type of result of call\n";
-						  print "funcon = \n"; Ppnil.pp_con funcon; print "\n";
-						  print "reduced to \n"; Ppnil.pp_con c; print "\n";
-						  error "cannot compute type of result of call")))
+				 | (_,c) => (print "cannot compute type of result of call\n";
+					  print "funcon = \n"; Ppnil.pp_con funcon; print "\n";
+					  print "reduced to \n"; Ppnil.pp_con c; print "\n";
+					  error "cannot compute type of result of call"))
 						     
 		      end
-(*
-		      val iregs = (cregsi @ (map (coercei "call") eregs)
-				   @ cregsi' @ (map (coercei "call") eregs'))
-*)
+
 		      val iregs = (cregsi @ cregsi' @ 
 				   (map (coercei "call") eregs) @
 				   (map (coercei "call") eregs'))
@@ -529,8 +543,7 @@ val debug_bound = ref false
 
 
 		      local
-			  val handler_body' = Let_e(Sequential,[Exp_b(exnvar,Prim_c(Exn_c,[]),
-								      NilUtil.match_exn)],
+			  val handler_body' = Let_e(Sequential,[Exp_b(exnvar,NilUtil.match_exn)],
 						    handler_body)
 			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExp(false, handler_body')
 			  val evar_reps = map (fn v => #1(getrep state v)) free_evars
@@ -880,7 +893,7 @@ val debug_bound = ref false
 							 add_instr(CMPSI(cmp,tag,REG tmp,test))
 						     end;
 						  add_instr(BCNDI(EQ,test,lbl,true)))
-			      val check_ptr_done = ref false
+			      val check_ptr_done = ref (TW32.equal(tagcount,0w0))
 			      val load_tag_done = ref false
 			      fun check_ptr() = 
 				  (if (!check_ptr_done) 
@@ -953,16 +966,12 @@ val debug_bound = ref false
 		     | loop (l1::lrest) (c1::crest) n = if (eq_label(l1,label))
 							    then (n,c1)
 							else loop lrest crest (n+1)
-		   val oldreccon = reccon
-		   val reccon = case reccon of
-		       Prim_c(Record_c _, _) => reccon
-		     | _ => #2(simplify_type state reccon)
 		   val (labels,fieldcons) = 
-		       (case reccon of
+		       (case (#2(simplify_type state reccon)) of
 			    Prim_c(Record_c labels,cons) => (labels,cons)
 			  | c => (print "selecting from exp of type: ";
-				  Ppnil.pp_con oldreccon; print "\nwhich reduces to\n";
-				  Ppnil.pp_con reccon; print "\n";
+				  Ppnil.pp_con reccon; print "\nwhich reduces to\n";
+				  Ppnil.pp_con c; print "\n";
 				  error' "selecting from a non-record"))
 		   val (which,con) = loop labels fieldcons 0
 		   val con = (case copt of 
@@ -1057,8 +1066,28 @@ val debug_bound = ref false
 		       val (lv,state) = make_record(state,NONE,reps,vallocs)
 		   in  (lv, Prim_c(Exn_c,[]),state)
 		   end
-	 | make_vararg _ => raise Util.UNIMP
-	 | make_onearg _ => raise Util.UNIMP
+	 | make_vararg oe => 
+		   let val local_xexp = fn (s,e) => coercei "vararg" (#1(xexp'(s,fresh_var(),e,NONE,NOTID)))
+		       val [c1,c2] = clist
+		       val (argc, _, state) = xcon(state,fresh_var(),c1, NONE)
+		       val (resc, _, state) = xcon(state,fresh_var(),c2, NONE)
+		       val (I function,c,state) = xexp'(state,fresh_var(),hd elist,NONE, NOTID)
+		       val (state,resulti) = TortlVararg.xmake_vararg local_xexp (state,argc,resc,function)
+		   in  (VAR_LOC(VREGISTER(false, I resulti)), 
+			Prim_c(Vararg_c oe, clist), 
+			state)
+		   end
+	 | make_onearg (openness,eff) => 
+		   let val local_xexp = fn (s,e) => coercei "onearg" (#1(xexp'(s,fresh_var(),e,NONE,NOTID)))
+		       val [c1,c2] = clist
+		       val (argc, _, state) = xcon(state,fresh_var(),c1, NONE)
+		       val (resc, _, state) = xcon(state,fresh_var(),c2, NONE)
+		       val (I function,c,state) = xexp'(state,fresh_var(),hd elist,NONE, NOTID)
+		       val (state,resulti) = TortlVararg.xmake_onearg local_xexp (state,argc,resc,function)
+		   in  (VAR_LOC(VREGISTER(false, I resulti)), 
+			AllArrow_c(openness,eff,[],[c1],0w0,c2),
+			state)
+		   end
 	 | peq => error "peq not done")
       end
 
@@ -1697,7 +1726,6 @@ val debug_bound = ref false
       let val dest = alloc_regi NOTRACE_INT
 	  val src = load_ireg_locval(vl,NONE)
 	  val _ = add_instr(LOAD32I(EA(src,~4),dest))
-	  val (_,cc) = (simplify_type state c) 
 	  val state = 
 	      (case (simplify_type state c) of
 		   (true,Prim_c(Float_c Prim.F64,[])) => (add_instr(SRL(dest,IMM real_len_offset,dest)); state)
@@ -2043,7 +2071,7 @@ val debug_bound = ref false
 	  val _ = if (!debug)
 		      then (print "xcon ";  print (Int.toString (!con_depth));
 			    print " called";
-			    if (!debug_full)
+			    if (debug_full())
 				then (print " on con = \n";
 				      Ppnil.pp_con arg_con)
 			    else ();
@@ -2191,7 +2219,7 @@ val debug_bound = ref false
 		   in  (vl,vv,k,state)
 		   end
 	     | Let_c (letsort, cbnds, c) => 
-		   let fun folder (cbnd,s) = xconbnd s cbnd
+		   let fun folder (cbnd,s) = xconbnd s (Runtime,cbnd)
 		       val s' = foldl folder state cbnds
 		   in  xcon'(s',fresh_var(),c, kopt)
 		   end
@@ -2248,7 +2276,8 @@ val debug_bound = ref false
 		   end
 	     | Typecase_c _ => error "typecase_c not implemented"
 	     | App_c (c,clist) => (* pass in env argument first *)
-		   let val (const_fun,lv,k,state) = xcon'(state,fresh_named_var "closure",c,NONE)
+		   let val _ = add_instr(ICOMMENT "start making constructor call")
+		       val (const_fun,lv,k,state) = xcon'(state,fresh_named_var "closure",c,NONE)
 		       val clregi = load_ireg_locval(lv,NONE)
 		       val resk = (case (kopt,k) of
 				       (SOME k, _) => k
@@ -2273,6 +2302,7 @@ val debug_bound = ref false
 					      tailcall=false,
 					      save=SAVE(getLocals())})
 		       val state = new_gcstate state
+		       val _ = add_instr(ICOMMENT "done making constructor call")
 		   in (const,VAR_LOC (VREGISTER (const,I desti)),resk,state)
 		   end
 	     | Annotate_c (_,c) => xcon'(state,name,c,kopt))
@@ -2286,7 +2316,7 @@ val debug_bound = ref false
 	      val _ = reset_state(is_top,name)
 	      val _ = if (!debug)
 			  then (print "-----doconfun on "; Ppnil.pp_var name; 
-				if (!debug_full)
+				if (debug_full())
 				    then (print " with body\n"; Ppnil.pp_con body)
 				else ();
 				print "\n")
@@ -2384,7 +2414,8 @@ val debug_bound = ref false
 	  (case getWork() of
 	       NONE => ()
 	     | SOME (n,FunWork vf) => 
-		   let val temp = "function " ^ (Int.toString n) ^ ": " ^ (Name.var2name (#2 vf))
+		   let val _ = curfun := n
+		       val temp = "function " ^ (Int.toString n) ^ ": " ^ (Name.var2name (#2 vf))
 		       val _ = if (!diag)
 				   then (print "*** Working on "; print temp; print "\n")
 			       else ()
@@ -2395,7 +2426,8 @@ val debug_bound = ref false
 		   in  worklist_loop()
 		   end
 	     | SOME (n,ConFunWork vvkck) => 
-		   let val temp = "confunction " ^ (Int.toString n) ^ ": " ^ (Name.var2name (#2 vvkck))
+		   let val _ = curfun := n
+		       val temp = "confunction " ^ (Int.toString n) ^ ": " ^ (Name.var2name (#2 vvkck))
 		       val _ = if (!diag) 
 				   then (print "*** Working on "; print temp; print "\n")
 			       else ()
@@ -2446,7 +2478,7 @@ val debug_bound = ref false
 	  val outer = 
 	      let 
 		  fun bndhandle (_,Con_b(_,cb)) = NOCHANGE
-		    | bndhandle (_,Exp_b(v,_,_)) = (addtop v; NOCHANGE)
+		    | bndhandle (_,Exp_b(v,_)) = (addtop v; NOCHANGE)
 		    | bndhandle (_,Fixopen_b _) = error "encountered fixopen"
 		    | bndhandle (_,bnd as (Fixcode_b vfseq)) = 
 		      let val _ = numfuns := (!numfuns) + 1
@@ -2558,7 +2590,7 @@ val debug_bound = ref false
               creating a main expression to be translated  *)
 	     local fun mapper (_,ExportValue(l,Var_e v,_)) = NONE
 		     | mapper (_,ExportType(l,Var_c v,_)) = NONE
-		     | mapper ((v,_),ExportValue(l,e,c)) = SOME(Exp_b(v,c,e))
+		     | mapper ((v,_),ExportValue(l,e,c)) = SOME(Exp_b(v,e))
 		     | mapper ((v,_),ExportType(l,c,k)) = SOME(Con_b(Runtime,Con_cb(v,c)))
 		   val local_bnds = 
 		       let val c = Name.fresh_named_var "subscript_type"
@@ -2593,6 +2625,10 @@ val debug_bound = ref false
 		       in  [Fixcode_b (Sequence.fromList [(local_sub,sub_fun)]),
 			    Fixcode_b (Sequence.fromList [(local_update,update_fun)]),
 			    Fixcode_b (Sequence.fromList [(local_array,array_fun)])]
+			   @ (if !do_vararg
+				  then (TortlVararg.xmake_vararg_support()
+					@ (TortlVararg.xmake_onearg_support()))
+			      else [])
 		       end
 		   val export_bnds = List.mapPartial mapper named_exports
 	     in  val exp = Let_e(Sequential,local_bnds,

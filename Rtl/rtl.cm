@@ -16,6 +16,8 @@ tortl-base.sig.sml
 tortl-base.sml
 tortl-sum.sig.sml
 tortl-sum.sml
+tortl-vararg.sig.sml
+tortl-vararg.sml
 tortl.sig.sml
 tortl.sml
 (* tortl_array.sml *)
