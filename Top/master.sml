@@ -340,8 +340,26 @@ struct
     local
 	val workingLocal = ref ([] : (string * Time.time * (unit -> bool)) list)
 	val readySlaves = ref ([] : Comm.channel list)
+	val knownSlaves = ref ([] : Comm.channel list)
 	val workingSlaves = ref ([] : Comm.channel list)
     in
+	fun flushSlave toMaster =
+	    let val toSlave = Comm.reverse toMaster
+		val platform = Target.getTargetPlatform()
+		val flags = Comm.getFlags()
+	    in  Comm.send(toSlave, Comm.FLUSH (platform, flags))
+	    end
+	(* Kill active slave channels to restart and send flush slave's file caches *)
+	fun resetSlaves() = let val _ = workingLocal := []
+				val _ = readySlaves := []
+				val _ = workingSlaves := []
+				val toMaster = Comm.findToMasterChannels()
+				val fromMaster = Comm.findFromMasterChannels()
+				val _ = app Comm.erase toMaster
+				val _ = app Comm.erase fromMaster
+				val _ = knownSlaves := toMaster
+			    in  app flushSlave toMaster
+			    end
 	(* Asynchronously ask for whether there are slaves ready *)
 	fun pollForSlaves (do_ack_interface, do_ack_done, do_ack_local): int * int= 
 	    let
@@ -358,7 +376,15 @@ struct
 			 case Comm.receive ch
 			   of NONE => error ("Ready channel became empty: " ^ 
 					     (Comm.source ch) ^ " to " ^ (Comm.destination ch))
-			    | SOME Comm.READY => ()
+			    | SOME Comm.READY =>
+			       if List.exists (fn ch' => Comm.eq (ch, ch')) (!knownSlaves) then ()
+			       else
+				   let val name = Comm.source ch
+				       val _ = chat ("  [Sending FLUSH to " ^ name ^ "]\n")
+				       val _ = flushSlave ch
+				       val _ = knownSlaves := ch :: (!knownSlaves)
+				   in  ()
+				   end
 			    | SOME (Comm.ACK_INTERFACE unit) => do_ack_interface (Comm.source ch, unit)
 			    | SOME (Comm.ACK_DONE (unit, plan)) =>
 			       (do_ack_done (Comm.source ch, unit, plan);
@@ -393,22 +419,6 @@ struct
 	    in  showSlave (Comm.destination chan); 
 		Comm.send (chan, Comm.REQUEST job)
 	    end
-	(* Kill active slave channels to restart and send flush slave's file caches *)
-	fun resetSlaves() = let val _ = workingLocal := []
-				val _ = readySlaves := []
-				val _ = workingSlaves := []
-				val toMaster = Comm.findToMasterChannels()
-				val fromMaster = Comm.findFromMasterChannels()
-				val _ = app Comm.erase toMaster
-				val _ = app Comm.erase fromMaster
-				fun flush toMaster = 
-				    let val toSlave = Comm.reverse toMaster
-					val platform = Target.getTargetPlatform()
-					val flags = Comm.getFlags()
-				    in  Comm.send(toSlave, Comm.FLUSH (platform, flags))
-				    end
-			    in  app flush toMaster
-			    end
     end
 
     fun statusName WAITING = "waiting"
@@ -613,7 +623,7 @@ struct
 	    val pending = pending @ newPending
 	in  (waiting, pending, working, proceeding, pending', working')
 	end
-    fun waitForSlaves() = 
+    fun waitForSlaves () = 
 	let
 	    fun ack_inter (name, unit) =
 		(markProceeding unit;
@@ -896,10 +906,12 @@ struct
 	in loop initialState
 	end
 
-    fun purge(mapfile : string) =
-	let val _ = setMapping(mapfile, false)
+    fun purge_help (mapfile : string, what : string, unitFiles : (Paths.unit_paths -> string) list) =
+	let
+	    val mapfileFiles = [Paths.mapfileToDot, Paths.mapfileToPs]
+	    val _ = setMapping(mapfile, false)
 	    val units = list_units()
-	    val _ = (print "Purging "; print mapfile; print "\n")
+	    val _ = (print "Purging "; print mapfile; print what; print "\n")
 	    val dirs = Dirs.getDirs()
 	    fun deletable file = not (Dirs.isSystemFile (dirs, file))
 	    fun kill file = if (deletable file andalso
@@ -907,26 +919,27 @@ struct
 				OS.FileSys.access(file, [OS.FileSys.A_READ]))
 				then OS.FileSys.remove file
 			    else ()
-	    fun remove unit = 
+	    fun remove unit =
 		let val paths = get_paths unit
-		    val infoFile = Paths.infoFile paths
-		    val ilFile = Paths.ilFile paths
-		    val ilUnself = Paths.ilToUnself ilFile
-		    val ilBackup = Paths.fileToBackup ilFile
-		    val asmFile = Paths.asmFile paths
-		    val asmzFile = Paths.asmzFile paths
-		    val objFile = Paths.objFile paths
-		    val linkAsmFile = Paths.linkAsmFile paths
-		    val linkAsmzFile = Paths.linkAsmzFile paths
-		    val linkObjFile = Paths.linkObjFile paths
-		    val linkExeFile = Paths.linkExeFile paths
-		in  app kill [infoFile, ilFile, ilUnself, ilBackup, asmFile,
-			      asmzFile, objFile, linkAsmFile, linkAsmzFile, linkObjFile, linkExeFile]
+		    val files = map (fn f => f paths) unitFiles
+		in  app kill files
 		end
-	    val dot = Paths.mapfileToDot mapfile
-	    val ps = Paths.mapfileToPs mapfile
+	    val files' = map (fn f => f mapfile) mapfileFiles
 	in
 	    app remove units;
-	    app kill [dot, ps]
+	    app kill files'
 	end
+    val any = [Paths.infoFile,
+	       Paths.ilFile,
+	       Paths.ilToUnself o Paths.ilFile,
+	       Paths.fileToBackup o Paths.ilFile]
+    val target = [Paths.asmFile,
+		  Paths.asmzFile,
+		  Paths.objFile,
+		  Paths.linkAsmFile,
+		  Paths.linkObjFile,
+		  Paths.linkExeFile]
+    fun purge mapfile = purge_help (mapfile, " (binaries)", target)
+    fun purgeAll mapfile = purge_help (mapfile, " (binaries and interfaces)", any @ target)
+
 end

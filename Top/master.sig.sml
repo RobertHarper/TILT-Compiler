@@ -17,6 +17,7 @@ sig
 			  complete : unit -> unit}
     val run : string -> unit 
     val purge : string -> unit
+    val purgeAll : string -> unit
 
     type collapse = {maxWeight : int, maxParents : int, maxChildren : int}
     val makeGraph     : string * collapse option -> string  (* Creates a .dot file *)

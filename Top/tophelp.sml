@@ -4,16 +4,16 @@ signature HELP =
     sig
 	val chat_ref : bool ref			(* Chat? *)
 	val chatVerbose : bool ref		(* Chat more? *)
-
 	val uptoElaborate : bool ref		(* .il and .info files are generated *)
 	val uptoPhasesplit : bool ref
 	val uptoClosureConvert : bool ref
 	val uptoRtl : bool ref
 	val uptoAsm : bool ref			(* .s and .s.gz files are generated *)
 						(* all false: .o and .exe files are generated *)
-	    
 	val keepAsm : bool ref			(* Keep assembler files. *)
-
+	val statEachFile : bool ref		(* Print and clear statistics after each file. *)
+	val makeBackups : bool ref		(* Write foo.BACKUP before overwriting file foo. *)
+	    
 	structure StringMap : ORD_MAP
 	    where type Key.ord_key = string
 
@@ -48,15 +48,15 @@ struct
 
     val chat_ref           = Stats.tt "ManagerChat"
     val chatVerbose        = Stats.tt "ManagerVerbose"
-	
     val uptoElaborate      = Stats.ff "UptoElaborate"
     val uptoPhasesplit     = Stats.ff "UptoPhasesplit"
     val uptoClosureConvert = Stats.ff "UptoClosureConvert"
     val uptoRtl            = Stats.ff "UptoRtl"
     val uptoAsm            = Stats.ff "UptoAsm"
-	
     val keepAsm            = Stats.tt "keep_asm"
-	    
+    val statEachFile       = Stats.ff "TimeEachFile"
+    val makeBackups        = Stats.ff "makeBackups"
+	
     (* ---- Some diagnostic message helper functions ---- *)
     fun chat s = if !chat_ref then (print s; TextIO.flushOut TextIO.stdOut)
 		 else ()

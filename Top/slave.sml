@@ -15,8 +15,6 @@ structure Slave :> SLAVE =
 struct
     val error = fn s => Util.error "slave.sml" s
 	
-    val statEachFile = Stats.ff "TimeEachFile"
-	
     structure Comm = Comm(val slaveTidOpt = NONE)
 
     datatype result = WORK of string | WAIT | READY
@@ -87,7 +85,7 @@ struct
 					handle e =>
 					    (Comm.send(Comm.toMaster, Comm.ACK_ERROR unit);
 					     raise e))
-			   val _ = if (!Help.chat_ref andalso !statEachFile)
+			   val _ = if (!Help.chat_ref andalso !Help.statEachFile)
 				       then (Stats.print_timers();
 					     Stats.clear_stats())
 				   else ()

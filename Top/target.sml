@@ -5,22 +5,12 @@ struct
 
     (* Platform string depends on a few flags which lead to
      * incompatibilities.  We can support 32 flags.  *)
-
-    (* We calculate the defaults like this because its an easy way to
-     * gaurantee that the flags are defined in Stats prior to our
-     * reading them with Stats.bool below.  *)
     val importantFlags =
-	[("PtrWriteBarrier", !Linkrtl.ptrWriteBarrier),
-	 ("FullWriteBarrier", !Linkrtl.fullWriteBarrier),
-	 ("MirrorGlobal", !Linkrtl.mirrorGlobal),
-	 ("MirrorPtrArray", !Linkrtl.mirrorPtrArray)]
+	[("PtrWriteBarrier", Linkrtl.ptrWriteBarrier, true),
+	 ("FullWriteBarrier", Linkrtl.fullWriteBarrier, true),
+	 ("MirrorGlobal", Linkrtl.mirrorGlobal, true),
+	 ("MirrorPtrArray", Linkrtl.mirrorPtrArray, false)]
 
-    val importantFlags' : (bool ref * bool) list =
-	map (fn (name,default) => (Stats.bool name, default)) importantFlags
-
-    val flagNames : string list =
-	map (#1) importantFlags
-	
     (* flagsString : (bool ref * bool) list -> string *)
     fun flagsString flags =
 	let
@@ -77,6 +67,8 @@ struct
       | platformFromName platform = error ("unknown platform name " ^ platform)
 	
     (* platformString : unit -> string *)
+    val importantFlags' : (bool ref * bool) list =
+	map (fn (_,ref_cell,default) => (ref_cell, default)) importantFlags
     fun platformString () = (platformName (getTargetPlatform()) ^ flagsString importantFlags')
 
     (* native : unit -> bool *)

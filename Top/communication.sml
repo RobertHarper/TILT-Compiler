@@ -1,4 +1,4 @@
-(*$import Stats COMMUNICATION OS List Platform Dirs Delay Listops *)
+(*$import Stats COMMUNICATION OS List Platform Dirs Delay Listops Target TopHelp UpdateHelp Compiler Tools *)
 
 functor Comm(val slaveTidOpt : int option) :> COMMUNICATION =
 struct
@@ -100,19 +100,34 @@ struct
 		 then REQUEST (wordsToReqeust rest)
 	else error ("strange header word " ^ first ^ " - bad msg")
 
-    val flagNames =
-	Target.flagNames @
-	["UptoElaborate","UptoPhasesplit","UptoClosureConvert","UptoRtl","UptoAsm",
-	 "debug_asm","keep_asm","compress_asm"] @
-	["ManagerChat","ManagerVerbose",
-	 "ShowStale","ShowEnable",
-	 "TimeFinal","ResetStats","TimeEachFile",
-	 "doConsistent",
-	 "makeBackups",
-	 "ShowWrittenContext","WriteUnselfContext",
-	 "ShowTools"]
-    fun getFlags () = map (fn flag => (flag, !(Stats.bool flag))) flagNames
+    val flagsForSlave =
+	(map (fn (name, ref_cell, _) => (name, ref_cell)) Target.importantFlags) @
+	[("UptoElaborate", Help.uptoElaborate),
+	 ("UptoPhasesplit", Help.uptoPhasesplit),
+	 ("UptoClosureConvert", Help.uptoClosureConvert),
+	 ("UptoRtl", Help.uptoRtl),
+	 ("UptoAsm", Help.uptoAsm),
+	 ("debug_asm", Tools.debugAsm),
+	 ("keep_asm", Help.keepAsm),
+	 ("compress_asm", UpdateHelp.compressAsm),
+	 ("ManagerChat", Help.chat_ref),
+	 ("ManagerVerbose", Help.chatVerbose),
+	 ("TimeEachFile", Help.statEachFile),
+	 ("makeBackups", Help.makeBackups),
+	 ("ShowWrittenContext", Compiler.showWrittenContext),
+	 ("WriteUnselfContext", Compiler.writeUnselfContext),
+	 ("ShowTools", Tools.showTools)]
 
+    fun getFlags () =
+	let
+	    (* Also verifies that names correspond to correct flags.  *)
+	    fun getFlag (flag_name, flag_ref) =
+		if Stats.bool flag_name = flag_ref then (flag_name, !flag_ref)
+		else error ("the flag name " ^ flag_name ^ " doesn't map to the expected flag ref")
+	in
+	    map getFlag flagsForSlave
+	end
+	
     fun doFlags [] = ()
       | doFlags ((flagName, truthValue)::rest) = 
 	let val _ = (print "Setting "; print flagName; print " to "; print (Bool.toString truthValue); print "\n")

@@ -57,9 +57,7 @@ struct
       end
   fun make mapfile = tilc mapfile
 
-  fun makeNoLink mapfile = tilc mapfile
-
+  fun purgeAll mapfile = Master.purgeAll mapfile
   fun purge mapfile = Master.purge mapfile
-
 end
 

@@ -7,7 +7,6 @@ functor FileCache(type internal
     FILECACHE where type internal = internal =
 struct
 
-  val makeBackups = Stats.ff "makeBackups"
   type internal = internal
   val cache = ref 5  (* Number of ticks before an unused entry is discarded *)
   val error = fn s => Util.error "filecache.sml" s
@@ -140,7 +139,7 @@ struct
       in  if same
 	      then false
 	  else
-	      let val _ = if exists andalso (!makeBackups)
+	      let val _ = if exists andalso (!Help.makeBackups)
 			      then backup file
 			  else ()
 		  val _ = writer(file,result)
