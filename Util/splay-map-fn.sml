@@ -213,29 +213,29 @@ functor LocalSplayMapFn (K : ORD_KEY) : ORD_MAP =
  * at some point.
  *)
     fun unionWith f (m1, m2) = let
-	  fun ins (key, x, m) = (case find(m, key)
+	  fun ins f (key, x, m) = (case find(m, key)
 		 of NONE => insert(m, key, x)
 		  | (SOME x') => insert(m, key, f(x, x'))
 		(* end case *))
 	  in
 	    if (numItems m1 > numItems m2)
-	      then foldli ins m1 m2
-	      else foldli ins m2 m1
+	      then foldli (ins f) m1 m2
+	      else foldli (ins (fn (a, b) => f(b, a))) m2 m1
 	  end
     fun unionWithi f (m1, m2) = let
-	  fun ins (key, x, m) = (case find(m, key)
+	  fun ins f (key, x, m) = (case find(m, key)
 		 of NONE => insert(m, key, x)
 		  | (SOME x') => insert(m, key, f(key, x, x'))
 		(* end case *))
 	  in
 	    if (numItems m1 > numItems m2)
-	      then foldli ins m1 m2
-	      else foldli ins m2 m1
+	      then foldli (ins f) m1 m2
+	      else foldli (ins (fn (k, a, b) => f(k, b, a))) m2 m1
 	  end
 
     fun intersectWith f (m1, m2) = let
 	(* iterate over the elements of m1, checking for membership in m2 *)
-	  fun intersect (m1, m2) = let
+	  fun intersect f (m1, m2) = let
 		fun ins (key, x, m) = (case find(m2, key)
 		       of NONE => m
 			| (SOME x') => insert(m, key, f(x, x'))
@@ -245,13 +245,13 @@ functor LocalSplayMapFn (K : ORD_KEY) : ORD_MAP =
 		end
 	  in
 	    if (numItems m1 > numItems m2)
-	      then intersect (m1, m2)
-	      else intersect (m2, m1)
+	      then intersect f (m1, m2)
+	      else intersect (fn (a, b) => f(b, a)) (m2, m1)
 	  end
 
     fun intersectWithi f (m1, m2) = let
 	(* iterate over the elements of m1, checking for membership in m2 *)
-	  fun intersect (m1, m2) = let
+	  fun intersect f (m1, m2) = let
 		fun ins (key, x, m) = (case find(m2, key)
 		       of NONE => m
 			| (SOME x') => insert(m, key, f(key, x, x'))
@@ -261,8 +261,8 @@ functor LocalSplayMapFn (K : ORD_KEY) : ORD_MAP =
 		end
 	  in
 	    if (numItems m1 > numItems m2)
-	      then intersect (m1, m2)
-	      else intersect (m2, m1)
+	      then intersect f (m1, m2)
+	      else intersect (fn (k, a, b) => f(k, b, a)) (m2, m1)
 	  end
 
   (* this is a generic implementation of mapPartial.  It should

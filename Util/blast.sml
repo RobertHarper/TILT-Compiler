@@ -1,8 +1,9 @@
 signature BLASTER = sig
+(*
   type t
   val blastOut : (string * t) -> unit
   val blastIn  : string -> t
-
+*)
   type 'a blastin = TextIO.instream -> 'a
   type 'a blastout = TextIO.outstream -> 'a -> unit
 
@@ -25,6 +26,7 @@ signature BLASTER = sig
 
 end
 
+(*
 functor mkBlast(type t):BLASTER = struct
   type t = t
 
@@ -42,6 +44,9 @@ functor mkBlast(type t):BLASTER = struct
   in
     (System.Unsafe.blastRead v) : t
   end
+*)
+
+structure Blaster : BLASTER = struct
 
   val error = fn s => Util.error "blast.sml" s
 
@@ -107,4 +112,3 @@ functor mkBlast(type t):BLASTER = struct
 				 end
 end
 
-structure Blaster = mkBlast(type t = int)
