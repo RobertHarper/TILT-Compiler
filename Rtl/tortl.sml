@@ -111,8 +111,8 @@ val debug_bound = ref false
    
   fun xbnd state (bnd : bnd) : state =
       (case bnd of
-	      Con_b (v,k,c) => 
-		  let val (_,lv,k,state) = xcon'(state,v,c,SOME k)
+	      Con_b (v,c) => 
+		  let val (_,lv,k,state) = xcon'(state,v,c,NONE)
 		      val s' =  
 			(if (istoplevel())
 			     then alloc_conglobal (state,v,lv,k,SOME c)
@@ -184,9 +184,10 @@ val debug_bound = ref false
 		  end)
 
   
+
   and xconbnd state (cbnd : conbnd) : state = 
       (case cbnd of
-	   Con_cb (v,k,c) => let val (_,lv,k,state) = xcon'(state,v,c,SOME k)
+	   Con_cb (v,c) => let val (_,lv,k,state) = xcon'(state,v,c,NONE)
 			     in  case lv of
 				 VAR_LOC vl => add_convar state (v,SOME vl,NONE,k,SOME c)
 			       | VAR_VAL vv => add_convar state (v,NONE,SOME vv,k,SOME c)
@@ -502,14 +503,14 @@ val debug_bound = ref false
 		  end
             (* --- We rely on the runtime to unwind the stack so we don't need to save the
 	           free variables of the continuation of this expression. *)
-	    | Handle_e (exp, Function(effect,recur,
-				      [],[(exnvar,exncon)], [], handler_body, hcon)) => 
+	    | Handle_e (exp, exnvar,  handler_body, hcon) => 
 		  let
 		      (* compute free variables that need to be saved for handler *)
 
 
 		      local
-			  val handler_body' = Let_e(Sequential,[Exp_b(exnvar,exncon,NilUtil.match_exn)],
+			  val handler_body' = Let_e(Sequential,[Exp_b(exnvar,Prim_c(Exn_c,[]),
+								      NilUtil.match_exn)],
 						    handler_body)
 			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExp(false, handler_body')
 			  val evar_reps = map (fn v => #1(getrep state v)) free_evars
@@ -600,7 +601,7 @@ val debug_bound = ref false
 		      val xr = alloc_named_regi exnvar TRACE
 		      val _ = add_instr(MV(exnarg,xr))
 		      val hstate = new_gcstate state
-		      val hstate = add_var hstate (exnvar,I xr,exncon)
+		      val hstate = add_var hstate (exnvar,I xr,Prim_c(Exn_c,[]))
 
 
                       (* --- restore exnptr; compute the handler; move result into same register
@@ -618,7 +619,6 @@ val debug_bound = ref false
 		      (* for debugging, should check that arg_c and hcon are the same *)
 		      (VAR_LOC(VREGISTER (false,reg)), arg_c, state)
 		  end
-	    | Handle_e _ => error "ill-formed handler"
 
 (*
 	  val _ = (print "xexp translating: ";
@@ -689,15 +689,14 @@ val debug_bound = ref false
 	  val switchcount = Stats.counter("RTLswitch")()
       in
 	  case sw of
-	      Intsw_e {info, arg, arms, default} => 
+	      Intsw_e {size, arg, result_type, arms, default} => 
 		  let val (r,state) = (case (xexp'(state,fresh_named_var "intsw_arg",arg,
-					   SOME(Prim_c(Int_c info,[])),NOTID)) of
+					   SOME(Prim_c(Int_c size,[])),NOTID)) of
 				   (I ireg,_,state) => (ireg,state)
 				 | (F _,_,_) => error "intsw argument in float register")
 		  in  case (arms,default) of
-		      ([(0w0,z)],SOME e) => zero_one(state, r, arg_c, get_body z, e, context)
-		    | ([(0w0,z),(0w1,one)],NONE) => zero_one(state, r, arg_c, 
-							     get_body z, get_body one, context)
+		      ([(0w0,z)],SOME e) => zero_one(state, r, arg_c, z, e, context)
+		    | ([(0w0,z),(0w1,one)],NONE) => zero_one(state, r, arg_c, z, one, context)
 		    | _ => (* general case *)
 			  let 
 			      val afterl = alloc_code_label "after_intcase"
@@ -709,7 +708,7 @@ val debug_bound = ref false
 					   let val (r,c,newstate) = (xexp'(state,fresh_var(),e,arg_c,context))
 					   in  mv(r,c); newstate::states
 					   end)
-				| scan(states,lab,(i,Function(_,_,_,_,_,body,con))::rest) = 
+				| scan(states,lab,(i,body)::rest) =
 				  let val next = alloc_code_label "intarm"
 				      val test = alloc_regi(NOTRACE_INT)
 				  in  add_instr(ILABEL lab);
@@ -722,7 +721,7 @@ val debug_bound = ref false
 					  end);
 				      add_instr(BCNDI(EQ,test,next,true));
 				      let val (r,c,newstate) = 
-					  xexp'(state,fresh_var(),body,SOME con,context)
+					  xexp'(state,fresh_var(),body,SOME result_type,context)
 				      in  mv(r,c);
 					  add_instr(BR afterl);
 					  scan(newstate::states,next,rest)
@@ -737,7 +736,7 @@ val debug_bound = ref false
 				| _ => error "no arms"
 			  end
 		  end
-	    | Exncase_e {info, arg, arms, default} => 
+	    | Exncase_e {result_type, arg, bound, arms, default} => 
 		  let
 		      val (I exnarg,_,state) = xexp'(state,fresh_named_var "exntsw_arg",arg,NONE,NOTID)
 
@@ -758,27 +757,29 @@ val debug_bound = ref false
 				   let val (r,c,newstate) = xexp'(state,fresh_var(),e,arg_c,context)
 				   in  mv(r,c); newstate :: states
 				   end)
-			| scan(states,lab,(armtag,Function(_,_,_,[(v,c)],_,body,con))::rest) = 
+			| scan(states,lab,(armtag,body)::rest) = 
 			  let 
+			      val _ = add_instr(ILABEL lab)
+			      val (I armtagi,tagcon,state) = xexp'(state,fresh_var(),armtag,
+								   NONE,NOTID)
+			      val (Prim_c(Exntag_c,[c])) = tagcon
 			      val next = alloc_code_label "exnarm"
 			      val test = alloc_regi(NOTRACE_INT)
 			      val carried = alloc_reg state c
 			      val carriedi = (case carried of
 						  I ir => ir
 						| _ => error "carried value is an unboxed float")
-			      val state = add_var state (v,carried,c)
-			      val _ = add_instr(ILABEL lab)
-			      val (I armtagi,_,state) = xexp'(state,fresh_var(),armtag,NONE,NOTID)
+			      val state = add_var state (bound,carried,c)
 			  in  add_instr(CMPSI(EQ,exntag,REG armtagi,test));
 			      add_instr(BCNDI(EQ,test,next,true));
 			      add_instr(LOAD32I(EA(exnarg,4),carriedi));
-			      let val (r,c,state) = xexp'(state,fresh_var(),body,SOME con,context)
+			      let val (r,c,state) = xexp'(state,fresh_var(),body,
+							  SOME result_type,context)
 			      in  mv(r,c);
 				  add_instr(BR afterl);
 				  scan(state::states,next,rest)
 			      end
 			  end
-			| scan(_,_,_) = error "ill-typed exnsw_e Function"
 		      val states = scan([],alloc_code_label "exnarm",arms)
 		      val state = join_states states
 		  in  
@@ -788,17 +789,21 @@ val debug_bound = ref false
 			| _ => error "no arms"
 		  end 
 	    | Typecase_e _ => error "typecase_e not implemented"
-	    | Sumsw_e {info, arg, arms, default} =>
-	      let val (tagcount,cons) = reduce_to_sum "sumsw" state info
+	    | Sumsw_e {sumtype, result_type, arg, bound, arms, default} =>
+	      let val (tagcount,cons) = reduce_to_sum "sumsw" state sumtype
+		  val totalcount = tagcount + TilWord32.fromInt(length cons)
+		  fun spcon i = Prim_c(Sum_c{tagcount=tagcount,
+					     totalcount=totalcount,
+					     known = SOME i}, [con_tuple_inject cons])
 	      in 
 	       (case (tagcount,cons,arms, default) of
-		  (0w2,[], [(0w0,zerofun),(0w1,onefun)], NONE) => 
+		  (0w2,[], [(0w0,zeroexp),(0w1,oneexp)], NONE) => 
 			let val (r,state) = 
 			    (case (xexp'(state,fresh_named_var "intsw_arg",arg,
 					 SOME(Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[])),NOTID)) of
 				 (I ireg,_,state) => (ireg,state)
 			       | (F _,_,_) => error "intsw argument in float register")
-			in  zero_one(state,r, arg_c, get_body zerofun, get_body onefun, context)
+			in  zero_one(state,r, arg_c, zeroexp, oneexp, context)
 			end
 		| _ =>
 		  let val (I r,_,state) = xexp'(state,fresh_named_var "sumsw_arg",arg,NONE,NOTID)
@@ -823,16 +828,14 @@ val debug_bound = ref false
 					 let val (r,c,state) = xexp'(state,fresh_var(),e,arg_c,context)
 					 in  mv(r,c); state::newstates
 					 end))
-			| scan(newstates,lab,(i,Function(_,_,_,elist,_,body,con))::rest) = 
+			| scan(newstates,lab,(i,body)::rest) =
 			  let val next = alloc_code_label "sumarm"
 			      val test = alloc_regi(NOTRACE_INT)
 			      val _ = add_instr(ILABEL lab)
 			      val state =
 				  if (TW32.ult(i,tagcount))
 				      then state
-				  else (case elist of
-					    [(v,spcon)] => add_var state (v,I r,spcon)
-					  | _ => error "bad function for carrier case of sum switch")
+				  else add_var state (bound,I r,spcon i)
 			       (* perform check and branch to next case *)
 			      fun check lbl cmp i tag = (if in_imm_range i
 						     then add_instr(CMPSI(cmp,tag,IMM(w2i i),test))
@@ -865,7 +868,8 @@ val debug_bound = ref false
 						    then ()
 						else (load_tag();
 						     check next EQ (TW32.uminus(i,tagcount)) tag)));
-			      let val (r,c,state) = xexp'(state,fresh_var(),body,SOME con,context)
+			      let val (r,c,state) = xexp'(state,fresh_var(),body,
+							  SOME result_type,context)
 			      in mv(r,c);
 				  add_instr(BR afterl);
 				  scan(state::newstates,next,rest)
@@ -2793,7 +2797,7 @@ val debug_bound = ref false
 	  
 	  val outer = 
 	      let 
-		  fun bndhandle (_,Con_b(v,_,_)) = (addtop v; addglobal v; NOCHANGE)
+		  fun bndhandle (_,Con_b(v,_)) = (addtop v; addglobal v; NOCHANGE)
 		    | bndhandle (_,Exp_b(v,_,_)) = (addtop v; NOCHANGE)
 		    | bndhandle (_,Fixopen_b _) = error "encountered fixopen"
 		    | bndhandle (_,bnd as (Fixcode_b vfset)) = 
@@ -2828,7 +2832,7 @@ val debug_bound = ref false
 						     (sequence2list vcseq);
 						     NOCHANGE)
 		    | chandle _ = NOCHANGE
-		  fun cbhandle (_,Con_cb (v,_,_)) = (addtop v; addglobal v; NOCHANGE)
+		  fun cbhandle (_,Con_cb (v,_)) = (addtop v; addglobal v; NOCHANGE)
 		    | cbhandle (_,Open_cb _) = error "encountered open_cb"
 		    | cbhandle (_,cbnd as (Code_cb (_,vklist,c,k))) = 
 		      let val _ = numconfuns := (!numconfuns) + 1
@@ -2880,7 +2884,7 @@ val debug_bound = ref false
 		     else ()
 
 
-	     val globals = compute_globals(bnds,exports,imports)
+	     val globals = Stats.subtimer("RTL_compute_globals",compute_globals)(bnds,exports,imports)
 
 	     val _ = if (!debug)
 			 then print "tortl - handling exports now\n"
@@ -2907,7 +2911,7 @@ val debug_bound = ref false
 	     local fun mapper (_,ExportValue(l,Var_e v,_)) = NONE
 		     | mapper (_,ExportType(l,Var_c v,_)) = NONE
 		     | mapper ((v,_),ExportValue(l,e,c)) = SOME(Exp_b(v,c,e))
-		     | mapper ((v,_),ExportType(l,c,k)) = SOME(Con_b(v,k,c))
+		     | mapper ((v,_),ExportType(l,c,k)) = SOME(Con_b(v,c))
 		   val local_bnds = 
 		       let val c = Name.fresh_named_var "subscript_type"
 			   val array = Name.fresh_named_var "subscript_array"

@@ -375,6 +375,9 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
     fun simplify_type' ({env,...} : state) c : bool * con = 
 	simplify_type_help' env c
 
+val simplify_type = fn state => Stats.subtimer("tortl_simplify_type",simplify_type state)
+val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_type' state) 
+
     local
 	fun help2 state (tagcount,totalcount,known,carrier) = 
 	    if (TilWord32.equal(totalcount,TilWord32.uplus(tagcount,0w1))) 
@@ -403,6 +406,7 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 	       | SOME (tag,NONE,s) => error (str ^ " got sum reducible to a unknown sum type")
 	       | SOME (tag,SOME k,s) => (tag,k,s))
     end
+
 
 
 
@@ -529,8 +533,7 @@ val insert_kind = Stats.subtimer("tortl_insert_kind",insert_kind)
 	end)
 
 val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
-val simplify_type = fn state => Stats.subtimer("tortl_simplify_type",simplify_type state)
-val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_type' state) 
+
 
    fun varloc2rep varloc =
        (case varloc of
