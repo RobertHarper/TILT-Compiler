@@ -1,0 +1,16 @@
+Number: 0127
+Title:       integer overflow discrepancy
+Keywords:    overflow, exceptions
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     test case reports "wrong" result
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0077
+Owner: 
+Status: open

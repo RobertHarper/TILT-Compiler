@@ -1,0 +1,16 @@
+Number: 0126
+Title:       parsing identifiers incorrectly
+Keywords:    syntax
+Submitter:   rwh
+Date:        08/16/02
+Version:     CVS
+System:      any
+Severity:    minor
+Problem:     we do not parse identifiers properly
+Code:        
+Transcript:  
+Comments:    
+Fix:         
+Test: m0076
+Owner: 
+Status: open
