@@ -28,15 +28,12 @@ is to produce a compiler for SML'97 that takes advantage of types
 throughout compilation in order to produce better code without
 compromising safety or correctness.
 .PP
-.I tilt
-has sparc and alpha back-ends and will only produce executables
+TILT has sparc and alpha back-ends and will only produce executables
 on those platforms.  You can run slaves
 .RB ( -s
 or
 .BR -S )
-on any platform for which
-.I tilt
-has been compiled.
+on any platform for which TILT has been compiled.
 .SH OPTIONS
 .TP
 .RI [ mapfile " .\|.\|.\|]"
@@ -59,9 +56,7 @@ using the current host as master.  Any slaves launched in the current
 directory will contribute to the compilation.
 .TP
 .B -s
-This flag causes
-.I tilt
-to act as a slave for any (future or on-going)
+This flag causes TILT to act as a slave for any (future or on-going)
 parallel make in the current directory.
 .TP
 \fB-S\fP [\fInum\fP/]\fIhost\fP
@@ -77,9 +72,7 @@ to
 .BI "-f " flag
 Set
 .I flag
-to true.  
-.IR tilt 's
-internal flags are primarily used to debug the
+to true.  TILT's internal flags are primarily used to debug the
 compiler and are not documented further.  If you're curious, grep for
 Stats.bool under /afs/cs/local/tilt/src.
 .\" Want to list interesting flags here?
@@ -142,23 +135,20 @@ in a mapfile determines the order in which these top-level
 declarations are processed.
 .PP
 Suppose you have a directory of SML files called twelf.  To get twelf
-to compile with
-.IR tilt ,
-the first thing needed is to create a mapfile in the twelf directory
-called mapfile-twelf.  The basis can be included in mapfile-twelf with
-the line ``#include mapfile-basis''.  Then each of the SML source
-files in the twelf directory must be listed in the mapfile along with
-its assigned logical name.  Then the proper dependencies among the
-modules needs to be inserted by adding import lines to each source
-file.
+to compile with TILT, the first thing needed is to create a mapfile in
+the twelf directory called mapfile-twelf.  The basis can be included
+in mapfile-twelf with the line ``#include mapfile-basis''.  Then each
+of the SML source files in the twelf directory must be listed in the
+mapfile along with its assigned logical name.  Then the proper
+dependencies among the modules needs to be inserted by adding import
+lines to each source file.
 .SH FILES
 .TP
 /usr/local/lib/tilt
 Directory of compiler and library binaries and support scripts.
 .TP
 /afs/cs/local/tilt/src
-Source code for
-.IR tilt .
+Source code for TITL.
 .TP
 /usr/local/lib/sml/sml-mode/sml-site.el
 .BR emacs (1)
@@ -171,8 +161,7 @@ for information on setting this up.
 .BR ml-burg (1),
 .BR make (1).
 .SH BUGS
-This is an alpha release of
-.IR tilt .
-If you think you've found a bug, send mail to the
-.I til-bugs@cs.cmu.edu
+This is an alpha release of TILT.  If you think you've found a bug,
+send mail to the
+.B til-bugs@cs.cmu.edu
 mailing list.
