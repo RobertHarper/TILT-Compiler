@@ -154,3 +154,24 @@ traceability of the record components), if we're in A-normal form at
 the expression level we're guaranteed that tortl can determine the
 tracability of all the components because it will know the tracability
 of all variables.
+
+------------------------------------------------------------------------
+
+February 24, 1999  Chris
+
+Intended changes:
+
+1) Add subtyping on arrows (partial/total) and
+   sums(special/nonspecial).
+    * The only constructors which support depth subtyping
+      are sums, records, and arrows.
+2) Add result type back to 4 NIL switch constructs.
+   (Because of subtyping, now need a supertype for
+   the type of all the arms.)
+3) Change the type of inject to a special sum
+4) Change the phase-splitter to annotate total functions
+   as total, rather than as partial.  (Currently annotates
+   everything as partial because of the lack of subtyping.)
+5) Rename AllArrow_c{body,...} to AllArrow_c{body_type,...}
+   while I'm making changes.
+6) why is ppnil giving nonexhaustive match warnings !?
