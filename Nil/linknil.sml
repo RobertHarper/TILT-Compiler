@@ -448,6 +448,13 @@ struct
 			      PpNil.pp_module nilmod;
 			      print "\n")
 		    else print "Closure-conversion complete\n"
+	    val nilmod = (Stats.timer("Linearization2",Linearize.linearize_mod)) nilmod
+	    val _ = if debug 
+			then (print "\n\n=======================================\n\n";
+			      print "renaming results2:\n";
+			      PpNil.pp_module nilmod;
+			      print "\n")
+		    else print "Renaming complete\n"
 	in  nilmod
 	end
 
