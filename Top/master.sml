@@ -949,9 +949,9 @@ struct
 		    | _ => NONE)
 	    val sc = List.mapPartial mapper desc
 	    val link = I.F.link (project,exe)
+	    val _ = compile()
 	in  if null sc then
-		(compile();
-		 Compiler.link(desc,link))
+		Compiler.link(desc,link)
 	    else
 		(print ("can not link " ^ exe ^
 			" because of unimplemented units: ");
@@ -970,10 +970,10 @@ struct
 		   of I.UDEC (U,I.SRCU _,_) => SOME U
 		    | _ => NONE)
 	    val inferred = List.mapPartial mapper desc
+	    val _ = compile()
 	in
 	    if null inferred then
-		(compile();
-		 Compiler.pack(desc,lib))
+		Compiler.pack(desc,lib)
 	    else
 		(print ("can not pack " ^ lib ^
 			" because of units without interfaces: ");
