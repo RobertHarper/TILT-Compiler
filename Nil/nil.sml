@@ -1,13 +1,11 @@
 functor Nil(structure Annotation : ANNOTATION
-	    structure Name : NAME
 	    structure Prim : PRIM)
 	   : NIL =
 struct	
 
+  open Util Name Listops
   structure Annotation = Annotation
-  structure Name = Name
   structure Prim = Prim
-  open Util
   val error = fn s => error "nil.sml" s
 
   type var = Name.var
@@ -66,7 +64,7 @@ struct
     | Vector_c                                (* vectors *)
     | Ref_c                                   (* references *)
     | Exntag_c                                (* exception tags *)
-    | Sum_c                                   (* sum types *)
+    | Sum_c of int option                     (* sum types *)
     | Record_c of label list                  (* records *)
     | Vararg_c of openness * effect           (* helps classify make_vararg and make_onearg *)
 

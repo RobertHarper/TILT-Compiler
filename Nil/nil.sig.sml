@@ -2,7 +2,6 @@ signature NIL =
 sig
   structure Prim : PRIM
   structure Annotation : ANNOTATION
-  structure Name : NAME
 
   type var = Name.var
   type label = Name.label
@@ -62,7 +61,7 @@ sig
     | Vector_c                                (* vectors *)
     | Ref_c                                   (* references *)
     | Exntag_c                                (* exception tags *)
-    | Sum_c                                   (* sum types *)
+    | Sum_c of int option                     (* sum types *)
     | Record_c of label list                  (* records *)
     | Vararg_c of openness * effect           (* helps classify make_vararg and make_onearg *)
 
@@ -90,7 +89,7 @@ sig
 
   datatype nilprim = 
       record of label list       (* record intro *)
-    | select of label            (* record field selection *)
+    | select of label            (* record field selection; takes the record type *)
     | inject of w32              (* slow; sum intro *)
     | inject_record of w32       (* fast; sum intro where argument is a record
 					  whose components are individually passed in *)
