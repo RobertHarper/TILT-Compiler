@@ -80,7 +80,7 @@ sig
 
   (* in_imm_range: is an integer in a range of immediate values ? *) 
 
-  val in_imm_range : int -> bool
+  val in_imm_range : Word32.word -> bool
 
   datatype cmp = EQ | LE | LT | GE | GT | NE | LBC | LBS
 
@@ -178,7 +178,8 @@ sig
 		and restored
     *)
 
-    | CALL of {func: reg_or_label,
+    | CALL of {extern_call : bool,
+	       func: reg_or_label,
 	       return : regi option,
 	       args : regi list * regf list, 
 	       results : regi list * regf list,

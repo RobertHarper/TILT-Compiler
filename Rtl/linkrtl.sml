@@ -12,7 +12,7 @@ end
 structure Linkrtl : LINKRTL =
 struct
    
-    fun in_imm_range x =  x>=0 andalso x<256 
+    fun in_imm_range x =  TilWord32.ult(x,0w255)
     fun in_ea_disp_range x = x >= ~32768 andalso x<32768
 
     structure Rtl = Rtl(val in_imm_range = in_imm_range

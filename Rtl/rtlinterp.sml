@@ -129,7 +129,8 @@ functor Rtlinterp(structure Pprtl : PPRTL
       end
 
 (* -------------- normal call stack and exn stack ------------------ *)
-    type callblob = {func : reg_or_label, return : regi option, 
+    type callblob = {extern_call : bool,
+		     func : reg_or_label, return : regi option, 
 		     args : regi list * regf list,
 		     results : regi list * regf list,
 		     tailcall : bool,
@@ -588,7 +589,7 @@ fun trap() =
       
 (* we can ignore tail calls for now, they have branches to the right place 
  except the old return address was overwritten so we have to restore it *)
-      | step (CALL (blob as {func,return=local_return,args,
+      | step (CALL (blob as {extern_call, func,return=local_return,args,
 		results,tailcall,save=SAVE save_caller_without})) = 
 	let 
 	  val call_add = (case func of
@@ -730,7 +731,8 @@ then
 	val _ = R.register_restore args callval;
 	local
 	  val badreg : regi = REGI(badvar,NOTRACE_INT);
-	  val badcall = {func=((REG' badreg) : reg_or_label),
+	  val badcall = {extern_call = false,
+			 func=((REG' badreg) : reg_or_label),
 			 return=NONE,
 			 args=(nil,nil),results=(nil,nil),
 			 tailcall=false,save=((SAVE(nil,nil)) : save)} 

@@ -250,10 +250,10 @@ struct
 			  else nil))
               | JMP (r,labels) => Hbox [String ("jmp "^regi2s r),
 					pp_List' (String o local_label2s) labels]
-              | CALL {func,return : regi option,args=(ia,fa),
+              | CALL {extern_call, func,return : regi option,args=(ia,fa),
 			results=(ir,fr),tailcall,save} =>
 		   HOVbox0 1 15 1
-		   [String (extend "call"),	
+		   [String (extend (if extern_call then "ext_call" else  "call")),
 		    String (case func
 				of REG' f => (regi2s f)
 			      | LABEL' l => (label2s l)),

@@ -1,4 +1,4 @@
-functor Rtl (val in_imm_range : int -> bool
+functor Rtl (val in_imm_range : Word32.word -> bool
 	     val in_ea_disp_range : int -> bool) : RTL =
 struct
 
@@ -156,7 +156,8 @@ struct
 
     (* see sig for comments *)
 
-    | CALL of {func: reg_or_label,
+    | CALL of {extern_call : bool,
+	       func: reg_or_label,
 	       return : regi option,
 	       args : regi list * regf list, 
 	       results : regi list * regf list,

@@ -31,7 +31,6 @@ val debug = ref false
     open Pprtl 
     type label = Rtl.label
 
-
     val exncounter_label = ML_EXTERN_LABEL "exncounter"
     val error = fn s => (Util.error "tortl.sml" s)
     structure TW32 = TilWord32
@@ -296,6 +295,7 @@ val debug = ref false
 	 | AllArrow_c (Open,_,_,_,_,_) => error "no open lambdas allowed by this stage"
 	 | AllArrow_c(Closure,_,_,_,_,_) => SOME TRACE
 	 | AllArrow_c(Code,_,_,_,_,_) => SOME NOTRACE_CODE
+	 | AllArrow_c(ExternCode,_,_,_,_,_) => SOME NOTRACE_CODE
 	 | Var_c v => (case (#1(getconvarrep state v)) of
 			   (VREGISTER (I r)) => SOME(COMPUTE(Var_p r))
 			 | (VREGISTER (F _)) => error "constructor in float reg"
@@ -523,13 +523,13 @@ val debug = ref false
 		 i2w((!counter) - 1))
     end
 
-  fun in_imm_range_w (w : Word32.word) = in_imm_range (w2i w)
-  fun in_imm_range_vl (VAR_VAL(VINT w)) = if in_imm_range_w w then SOME (w2i w) else NONE
+  fun in_imm_range_vl (VAR_VAL(VINT w)) = ((if in_imm_range w then SOME (w2i w) else NONE) handle _ => NONE)
     | in_imm_range_vl _ = NONE
   fun in_ea_range scale (VAR_VAL(VINT i)) = 
-      if in_ea_disp_range(w2i i * scale)
-	  then SOME (w2i i * scale)
-      else NONE
+      ((if in_ea_disp_range(w2i i * scale)
+	    then SOME (w2i i * scale)
+	else NONE)
+	    handle _ => NONE)
     | in_ea_range _ _ = NONE
 
 
@@ -792,69 +792,10 @@ val debug = ref false
     fun load_reg_locval(VAR_LOC vl, poss_dest) = load_reg_loc(vl,poss_dest)
       | load_reg_locval(VAR_VAL vv, poss_dest) = load_reg_val(vv,poss_dest)
     fun load_ireg_sv(vl as (VAR_VAL(VINT i))) =
-	if (in_imm_range_w i) then IMM(TW32.toInt i) else REG(load_ireg_locval(vl,NONE))
+	if (in_imm_range i) then IMM(TW32.toInt i) else REG(load_ireg_locval(vl,NONE))
       | load_ireg_sv vl = REG(load_ireg_locval(vl,NONE))
 
-  (*  
-    and load_fvalue (v : U.value, poss_dest : regf option) : regf  =
-      let 
-	fun pickdest(reg) = 
-	  case poss_dest of
-	    NONE => reg
-	  | SOME d => d
-      in
-	      case v of
-		U.Var_e v => load_freg(v, getrep v,poss_dest)
-	     | U.Real_e r => 
-		 let val label = mk_float_data r
-		   val addr = alloc_regi LABEL
-		   val r = pickdest(alloc_regf())
-		 in  add_instr(LADDR(label,0,addr));
-		   add_instr(LOADQF(EA(addr,0),r));
-		   r
-		 end
-	     | U.MLextern_e s => error "load_fvalue: unexpected ML extern"
-	     | U.Cextern_e s => error "load_fvalue: unexpected C extern"
-      end
 
-  in
-    fun load_value_regi    (v : U.value)    =  load_ivalue(v,NONE)
-    fun load_value_to_regi (v : U.value, d) = 
-      if (eqregi(load_ivalue(v,SOME d),d)) 
-	then () else error "load_value_to_regi corrupt"
-    fun load_value_regf    (v : U.value)    =  load_fvalue(v,NONE)
-    fun load_value_to_regf (v : U.value, d) = 
-	  if (eqregf(load_fvalue(v,SOME d),d)) 
-	      then () else error "load_value_to_regf corrupt"
-    fun load_sv (v : U.value) : sv =
-      let fun foo i = 
-	if in_imm_range_w i andalso
-	  i2w(w2i i) = i  (* bug in SML/NJ ! *)
-	  then Rtl.IMM(w2i i)
-	else Rtl.REG(load_value_regi v)
-      in case v
-	of U.Int_e i => foo i
-      | U.Tag_e i => foo i
-      | _ => Rtl.REG (load_value_regi v)
-      end
-    val load_freg = load_freg
-    val load_ireg = load_ireg
-
-    fun get_fn_addr (v : U.value) : reg_or_label =
-	case v
-	    of U.Var_e var => 
-		(case getrep var of
-		     VREGISTER (I r) => REG' r
-		   | VLABEL l => (print "WARNING: should not have code label as label\n"; LABEL' l)
-		   | VCODE l => LABEL' l
-		   | VGLOBAL (l,rep) => REG'(load_ivalue(v))
-		   | _ =>  error ("get_fn_addr/var "^var2string var^"is not an reg or label"))
-	  | U.MLextern_e (s,_) => LABEL'(ML_EXTERN_LABEL s)
-	  | U.Cextern_e (s,_) => LABEL'(C_EXTERN_LABEL s)
-	  | _ => error "get_fn_addr: non-function value in application"
-
-  end
-*)
   (* --------- end of load(sv/int/float) ------------------------------------------ *)
 
 
@@ -885,7 +826,7 @@ val debug = ref false
   
 
   fun add (reg,i : int,dest) =
-    if in_imm_range i then
+    if in_imm_range (i2w i) then
       add_instr(ADD(reg,IMM i,dest))
     else if in_ea_disp_range i then
 	add_instr(LEA(EA(reg,i),dest))
@@ -1264,6 +1205,7 @@ val debug = ref false
 		      local
 			  val _ = add_instr (ICOMMENT ((case openness of
 							   Code => "making a direct call "
+							 | ExternCode => "making a direct extern call "
 							 | Closure => "making a closure call ")
 						       ^ (Int.toString callcount)))
 			  val cregsi = map (fn c => #1(xcon(state,fresh_named_var "call_carg", c))) clist
@@ -1271,17 +1213,19 @@ val debug = ref false
 							    e, NONE, NOTID))) elist
 			  val efregs = map (fn e => #1(xexp'(state,fresh_named_var "call_ef", 
 							     e, NONE, NOTID))) eflist
-			  val (selfcall,fun_reglabel,funcon,cregsi',eregs') = 
+			  val (extern_call,selfcall,fun_reglabel,funcon,cregsi',eregs') = 
 			      (case (openness,f) of
-				   (Code,Var_e expvar) =>
+				   ((ExternCode | Code),Var_e expvar) =>
 				       let 
 					   val (var_loc,_,funcon) = getrep state expvar
-				       in  ((case (getCurrentFun()) of
+				       in  (openness = ExternCode,
+					    (case (getCurrentFun()) of
 						 LOCAL_CODE v => eq_var(expvar,v)
 					       | _ => false),
 					    (case var_loc of
 						 (VREGISTER (I r)) => REG' r
 					       | (VCODE l) => LABEL' l
+					       | (VGLOBAL (l,_)) => LABEL' l
 					       | _ => error "bad VAR_LOC for function"),
 					    funcon, [], [])
 				       end
@@ -1296,11 +1240,12 @@ val debug = ref false
 					   val _ = (add_instr(LOAD32I(EA(clregi,0),funregi));
 						    add_instr(LOAD32I(EA(clregi,4),cregi));
 						    add_instr(LOAD32I(EA(clregi,8),eregi)))
-				       in  (false, REG' funregi, funcon, [cregi], [I eregi])
+				       in  (false, false, REG' funregi, funcon, [cregi], [I eregi])
 				       end
-				 | (Code,_) => error "ill-formed application"
+				 | ((ExternCode | Code),_) => error "ill-formed application"
 				 | (Open,_) => error "no open apps allowed")
 		      in
+			  val extern_call = extern_call
 			  val selfcall = selfcall
 			  val fun_reglabel = fun_reglabel
 			  val cregsi = cregsi
@@ -1330,7 +1275,8 @@ val debug = ref false
 					 F fr => ([],[fr])
 				       | I ir => ([ir],[]))
 		      fun do_call return_opt = 
-			  add_instr(CALL{func=fun_reglabel,
+			  add_instr(CALL{extern_call = extern_call,
+					 func=fun_reglabel,
 					 return=return_opt,
 					 args=(iregs,fregs),
 					 results=results,
@@ -1349,6 +1295,7 @@ val debug = ref false
 				    (VAR_LOC(VREGISTER dest), rescon))
 		      val _ = add_instr (ICOMMENT ((case openness of
 						       Code => "done making a direct call "
+						     | ExternCode => "done making a direct extern call "
 						     | Closure => "done making a closure call ")
 						   ^ (Int.toString callcount)))
 		  in  result
@@ -1372,7 +1319,6 @@ val debug = ref false
 		  let
 		      (* compute free variables that need to be saved for handler *)
 
-		      val _ = print "-------------- tortl: Handle_e point 0\n"
 
 		      local
 			  val handler_body' = Let_e(Sequential,[Exp_b(exnvar,exncon,NilUtil.match_exn)],
@@ -1394,7 +1340,6 @@ val debug = ref false
 		      end
 
 
-		      val _ = print "-------------- tortl: Handle_e point 2\n"
 
 		      val bl = alloc_code_label()
 		      val hl = alloc_named_code_label (fresh_named_var "handler")
@@ -1416,10 +1361,10 @@ val debug = ref false
 		      val _ = (add_instr(LADDR(LOCAL_LABEL hl,0,hlreg));
 			       make_record(SOME exnptr,reps, int_vallocs))
 			  
-		      val _ = print "-------------- tortl: Handle_e point 4\n"
 
                       (* --- compute the body; restore the exnpointer; branch to after handler *)
-		      val (reg,arg_c) = xexp'(state,name,exp,copt,context)
+		      (* NOTID and not context because we have to remove the exnrecord *)
+		      val (reg,arg_c) = xexp'(state,name,exp,copt,NOTID)
 		      val _ = (add_instr(LOAD32I(EA(exnptr,8),exnptr));
 			       add_instr(BR bl));
 
@@ -1431,7 +1376,6 @@ val debug = ref false
 			       add_instr(MV(exnarg,xr)))
 
 
-		      val _ = print "-------------- tortl: Handle_e point 6\n"
 
 		      (* --- restore the int registers --- *)
 		      val _ = let 
@@ -1458,7 +1402,6 @@ val debug = ref false
 			      end
 			  
 
-		      val _ = print "-------------- tortl: Handle_e point 8\n"
 
                       (* --- restore exnptr; compute the handler; move result into same register
                              as result reg of expression; add after label; and fall-through *)
@@ -1470,7 +1413,6 @@ val debug = ref false
 				 | _ => error "hreg/ireg mismatch in handler")
 		      val _ = add_instr(ILABEL bl)
 
-		      val _ = print "-------------- tortl: Handle_e point 10\n"
 
 		  in 
 		      (* for debugging, should check that arg_c and hcon are the same *)
@@ -1543,7 +1485,7 @@ val debug = ref false
 				  let val next = alloc_code_label()
 				      val test = alloc_regi(NOTRACE_INT)
 				  in  add_instr(ILABEL lab);
-				      (if in_imm_range(w2i i) then
+				      (if in_imm_range i then
 					  add_instr(CMPSI(EQ,r,IMM(w2i i),test))
 				      else 
 					  let val tmp = alloc_regi(NOTRACE_INT)
@@ -1645,7 +1587,7 @@ val debug = ref false
 						end
 					  | _ => error "bad function for carrier case of sum switch")
 			       (* perform check and branch to next case *)
-			      fun check cmp i = (if in_imm_range(w2i i) 
+			      fun check cmp i = (if in_imm_range i
 						     then add_instr(CMPSI(cmp,tag,IMM(w2i i),test))
 						 else 
 						     let val tmp = alloc_regi(NOTRACE_INT)
@@ -1724,7 +1666,7 @@ val debug = ref false
 		  val varlocs = 
 		      (case fieldopt of
 			   NONE => varlocs 
-			 | SOME field => let val tagint = TW32.uminus(field,TW32.fromInt nontagcount)
+			 | SOME field => let val tagint = TW32.uminus(field,tagcount)
 					 in  (VAR_VAL(VINT tagint)) :: varlocs
 					 end)
 		  val reps = map valloc2rep varlocs
@@ -1798,6 +1740,7 @@ val debug = ref false
 	 | project_sum_record {tagcount, sumtype, field} => 
 	       let val index = TW32.toInt(TW32.uminus(sumtype, tagcount))
 		   val field' = TW32.toInt field
+		   val single_carrier = (length clist) = 1
 		   val base = (case elist of
 				   [e] => coercei "" (#1(xexp'(state,fresh_var(),e,NONE,NOTID)))
 				 | _ => error' "bad project_sum_record: base")
@@ -1807,7 +1750,8 @@ val debug = ref false
 					Prim_c(Record_c _,cons) => List.nth(cons,field')
 				      | _ => error' "bad project_sum_record: field_con")
 		   val desti = alloc_regi (con2rep state field_con)
-		   val _ = add_instr(LOAD32I(EA(base,4*field'),desti))
+		   val subscript = if single_carrier then field' else field' + 1
+		   val _ = add_instr(LOAD32I(EA(base,4*subscript),desti))
 	       in (VAR_LOC(VREGISTER(I desti)), field_con)
 	       end
 	 | project_sum {tagcount, sumtype} => 
@@ -1911,9 +1855,9 @@ val debug = ref false
 	  let 
 	      val codevar = fresh_var()
 	      val label = C_EXTERN_LABEL str
-	      val tipe = AllArrow_c(Code,Partial,[],arg_types,0w0,ret_type)
+	      val tipe = AllArrow_c(ExternCode,Partial,[],arg_types,0w0,ret_type)
 	      val state' = add_varloc state (codevar,VCODE label, tipe)
-	      val exp = App_e(Code,Var_e codevar,[],elist,[])
+	      val exp = App_e(ExternCode,Var_e codevar,[],elist,[])
 	  in xexp(state',fresh_var(),exp,NONE,context)
 	  end
       in (case prim of
@@ -1947,7 +1891,7 @@ val debug = ref false
 	    | xtt real_tt = REAL_TT
 	    | xtt both_tt = BOTH_TT
 	  fun commute (v1 as (VAR_VAL(VINT i)),v2) = 
-	      if in_imm_range_w i then (v2,v1) else (v1,v2)
+	      if in_imm_range i then (v2,v1) else (v1,v2)
 	    | commute arg = arg
 	  (* ----------- integer comparisons ----------------------- *)
 	  fun flip EQ = EQ
@@ -1959,7 +1903,7 @@ val debug = ref false
 	    | flip LBS = error "flip: LBS shouldn't be here"
 	    | flip LBC = error "flip: LBC shouldn't be here"
 	  fun swap (a,v1 as VAR_VAL(VINT i),v2) = 
-	      if in_imm_range_w i 
+	      if in_imm_range i 
 		  then (flip a,v2,v1)
 	      else (a,v1,v2)
 	    | swap arg = arg
@@ -2071,19 +2015,25 @@ val debug = ref false
 					    val dest = alloc_regi NOTRACE_INT
 					    val _ = add_instr(CVT_REAL2INT(src,dest))
 					in (VAR_LOC(VREGISTER(I dest)), int32)
-					end)
+					end
+			       | _ => error "wrong number of argument to float2int")
+
 	    | int2float => (case vl_list of
 				[vl] => let val src = load_ireg_locval(vl,NONE)
 					    val dest = alloc_regf()
 					    val _ = add_instr(CVT_INT2REAL(src,dest))
 					in (VAR_LOC(VREGISTER(F dest)), float64)
-					end)
+					end
+			       | _ => error "wrong number of argument to int2float")
+
             (* XXX do we want overflow in some cases *)
 	    | int2uint _ => (case vl_list of
-				 [vl] => (vl, int32))
+				 [vl] => (vl, int32)
+			       | _ => error "wrong number of argument to int2uint")
 
 	    | uint2int _ => (case vl_list of
-				 [vl] => (vl, int32))
+				 [vl] => (vl, int32)
+			       | _ => error "wrong number of argument to uint2int")
 
 	    | neg_float fs => op1f FNEGD
 	    | abs_float fs => op1f FABSD
@@ -2182,7 +2132,7 @@ val debug = ref false
 		  (case vl_list of
 		       [vl1,vl2] => xeqarray(state,extract_type(t,clist),vl1,vl2)
 		     | _ => error "array_eq given bad arguments")
-	     | (equal_table (t as ((IntArray _) | (FloatArray _) | WordArray | PtrArray))) => 
+	     | (equal_table (t as ((IntVector _) | (FloatVector _) | WordVector | PtrVector))) => 
 		  (case vl_list of
 		       [vl1,vl2] => xeqvector(state,extract_type(t,clist),vl1,vl2)
 		     | _ => error "array_eq given bad arguments")
@@ -2247,8 +2197,6 @@ val debug = ref false
 
   and xsub(state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con =
       let
-	  val _ = (print "xsub called with c = ";
-		   Ppnil.pp_con c; print "\n")
 	  fun floatcase() = xfloatsub(vl1,vl2)
 	  fun nonfloatcase is = xintptrsub(state,is,c,vl1,vl2)
 	  val r = (case (simplify_type state c) of
@@ -2267,9 +2215,12 @@ val debug = ref false
 						  add_instr(BCNDI(NE,tmp,charl,false)))
 					 val desti = nonfloatcase Prim.W32
 					 val _ = add_instr(BR afterl)
+
 					 val _ = add_instr(ILABEL charl)
 					 val desti8 = nonfloatcase Prim.W8
 					 val _ = add_instr(MV(desti8,desti))
+					 val _ = add_instr(BR afterl)
+
 					 val _ = add_instr(ILABEL floatl)
 					 val destf = floatcase()
 					 val boxi = boxFloat destf
@@ -2398,12 +2349,7 @@ val debug = ref false
       end
 
   and xeqvector(state : state,c, vl1 : loc_or_val, vl2 : loc_or_val) : loc_or_val * con =
-      let val ir1 = load_ireg_locval(vl1,NONE)
-	  val ir2 = load_ireg_locval(vl2,NONE)
-	  val desti = alloc_regi NOTRACE_INT
-	  val _ = add_instr(CMPUI(EQ,ir1,REG ir2,desti))
-      in  (VAR_LOC(VREGISTER (I desti)),NilUtil.bool_con)
-      end
+      error "xeqvector not implemented: should be done at ML source level"
 
   and xlength(state,c, vl : loc_or_val) : loc_or_val * con =
       let val dest = alloc_regi NOTRACE_INT
@@ -2424,12 +2370,12 @@ val debug = ref false
 					 add_instr(BCNDI(NE,tmp,floatl,false));
 					 add_instr(CMPUI(EQ, r, IMM 2, tmp));
 					 add_instr(BCNDI(NE,tmp,intl,false));
-					 add_instr(SRL(tmp,IMM int_len_offset,dest));
+					 add_instr(SRL(dest,IMM int_len_offset,dest));
 					 add_instr(BR afterl);
 					 add_instr(ILABEL floatl);
-					 add_instr(SRL(tmp,IMM real_len_offset,dest));
+					 add_instr(SRL(dest,IMM real_len_offset,dest));
 					 add_instr(ILABEL intl);
-					 add_instr(SRL(tmp,IMM (2+int_len_offset),dest));
+					 add_instr(SRL(dest,IMM (2+int_len_offset),dest));
 					 add_instr(ILABEL afterl))
 				     end)
       in  (VAR_LOC (VREGISTER (I dest)), Prim_c(Int_c Prim.W32, []))
@@ -2690,7 +2636,7 @@ val debug = ref false
 		   | (true,Prim_c(Int_c is,[])) => intcase(dest,is,vl1,vl2)
 		   | (true,Prim_c(BoxFloat_c fs,[])) => floatcase(state,dest,fs,
 								  load_ireg_locval(vl1,NONE),
-								  load_freg_locval(vl2,NONE))
+								  unboxFloat(load_ireg_locval(vl2,NONE)))
 		   | (true,_) => ptrcase(dest,vl1,vl2)
 		   | (false,c') => let val (r,_) = xcon(state,fresh_var(),c')
 				       val tmp = alloc_regi NOTRACE_INT
@@ -2857,7 +2803,8 @@ val debug = ref false
 		       val _ = (add_instr(LOAD32I(EA(clregi,0),coderegi));
 				add_instr(LOAD32I(EA(clregi,4),envregi)))
 		       val desti = alloc_regi TRACE
-		       val _ = add_instr(CALL{func=REG' coderegi,
+		       val _ = add_instr(CALL{extern_call = false,
+					      func=REG' coderegi,
 					      return=NONE,
 					      args=(cregsi @ [envregi],[]),
 					      results=([desti],[]),
