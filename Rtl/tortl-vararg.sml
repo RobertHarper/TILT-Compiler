@@ -194,11 +194,11 @@ val debug_full = ref false
 			let val tempi = alloc_regi TRACE
 			    val _ = add_instr(LOAD32I(EA(argc,4*(2+n)),tempi))
 			in  (n+1,
-			     add_conterm (state,convar,Type_k,NONE,
+			     add_conterm (state,convar,Type_k,
 					  SOME(LOCATION(REGISTER (false,I tempi)))))
 			end
 		    val (_,state) = foldl folder (0,state) convars
-		    val state = add_conterm (state,resconvar,Type_k,NONE,
+		    val state = add_conterm (state,resconvar,Type_k,
 					     SOME(LOCATION(REGISTER (false,I resc))))
 		    val funcon = AllArrow_c{openness=Closure, effect=Partial, isDependent=false,
 					    tFormals=[], 
@@ -253,11 +253,11 @@ val debug_full = ref false
 			let val tempi = alloc_regi TRACE
 			    val _ = add_instr(LOAD32I(EA(argc,4*(2+n)),tempi))
 			in  (n+1,
-			     add_conterm (state,convar,Type_k,NONE,
+			     add_conterm (state,convar,Type_k,
 					  SOME(LOCATION(REGISTER (false,I tempi)))))
 			end
 		    val (_,state) = foldl folder (0,state) convars
-		    val state = add_conterm (state,resconvar,Type_k,NONE,
+		    val state = add_conterm (state,resconvar,Type_k,
 					     SOME(LOCATION(REGISTER (false,I resc))))
 		    val funcon = AllArrow_c{openness=Closure, effect=Partial, isDependent=false,
 					    tFormals=[], 

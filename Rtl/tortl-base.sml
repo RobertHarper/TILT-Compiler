@@ -125,6 +125,9 @@ struct
   fun type_of ({env,...}:state) e = 
       Stats.subtimer("RTL_typeof",Normalize.type_of)(env,e)
 
+  fun std_kind_of ({env,...}:state) c =
+      Stats.subtimer("RTL_kind_of",NilContext.kind_of) (env,c)
+
   val codeAlign = ref (Rtl.OCTA)
   fun do_code_align() = () (* add_instr(IALIGN (!codeAlign)) *)
 
@@ -160,7 +163,7 @@ struct
 	varmap_insert' state arg)
 
   fun convarmap_insert' ({is_top,convarmap,varmap,env,gcstate}:state) 
-                        (v,(vl,vv,k,copt)) : state = 
+                        (v,(vl,vv,k)) : state = 
       let val _ = if (!debug_bound)
 		      then (print "convar adding to v = "; Ppnil.pp_var v; print "\n")
 		  else ()
@@ -172,34 +175,25 @@ struct
       in  {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
   
-  fun insert_kind(ctxt,v,k,copt : con option) = 
-	  (case (k,copt) of
-	       (_,NONE) => NilContext.insert_kind(ctxt,v,k)
-	     | (_,SOME c) => NilContext.insert_kind_equation(ctxt,v,c,k)
-	       handle e => (print "\nError in tortl_insert_kind with \n"; 
-			    NilContext.print_context ctxt;
-			    print "\n";
-			    raise e))
 
-
-  fun env_insert' ({is_top,env,varmap,convarmap,gcstate} : state) (v,k,copt) : state = 
+  fun env_insert' ({is_top,env,varmap,convarmap,gcstate} : state) (v,k) : state = 
       let val _ = if (!debug_bound)
 		      then (print "env adding v = ";
 			    Ppnil.pp_var v; print "\n")
 		  else ()
-	  val newenv = insert_kind(env,v,k,copt)
+	  val newenv = NilContext.insert_kind(env,v,k)
 	  val newstate = {is_top=is_top,env=newenv,
 			  varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       in  newstate
       end
 
-  fun convarmap_insert state (arg as (v,(vl,vv,k,copt))) =
+  fun convarmap_insert state (arg as (v,(vl,vv,k))) =
       let val state = convarmap_insert' state arg
-	  val state = env_insert' state (v,k,copt)
+	  val state = env_insert' state (v,k)
 	  val _ = if (#is_top state)
 	      (* top_rep (vl,vv) *)
 		      then let val gs = convarmap_insert' (!global_state) arg
-			       val gs = env_insert' gs (v,k,copt)
+			       val gs = env_insert' gs (v,k)
 			   in  global_state := gs
 			   end
 		  else ()
@@ -215,18 +209,21 @@ struct
 
 
   (* adding constructor-level variables and functions *)
-  fun add_conterm (s,v,kind,copt,NONE) = convarmap_insert s (v,(NONE, NONE, kind, copt))
-    | add_conterm (s,v,kind,copt,SOME(LOCATION loc)) = convarmap_insert s (v,(SOME loc, NONE, kind, copt))
-    | add_conterm (s,v,kind,copt,SOME(VALUE value)) = convarmap_insert s (v,(NONE, SOME value, kind, copt))
-
-  fun add_concode (s,v,kind,copt,l) = convarmap_insert s (v,(NONE, SOME(CODE l),kind,copt))
+  fun add_conterm (s,v,kind,NONE) = convarmap_insert s (v,(NONE, NONE, kind))
+    | add_conterm (s,v,kind,SOME(LOCATION loc)) = convarmap_insert s (v,(SOME loc, NONE, kind))
+    | add_conterm (s,v,kind,SOME(VALUE value)) = convarmap_insert s (v,(NONE, SOME value, kind))
 
    fun getconvarrep' ({convarmap,env,...} : state) v : convar_rep option = 
        (case VarMap.find (convarmap,v) of
 	   NONE => NONE
-	 | SOME (vl,vv) => let val k = (case NilContext.find_std_kind(env,v)
-					  of SingleType_k _ => Type_k
+	 | SOME (vl,vv) => let  val k = (case NilContext.find_std_kind(env,v) of
+					     SingleType_k _ => Type_k
 					   | kind => kind)
+					handle e =>
+				           (print "tortl-base: error in call to find_std_kind of ";
+					    Ppnil.pp_var v; print "\n\nwith environment\n:";
+					    NilContext.print_context env; print "\n";
+					    raise e)
 	                       (* XXX should be removed when uniqueness invariant is removed *)
 			       val k = NilRename.renameCVarsKind k 
 			     in  SOME(vl,vv,k)
@@ -400,6 +397,7 @@ struct
 	      | _ => (print "niltrace2rep convar = ";
 		      print (var2string v); print "\n";
 		      error "no information on this convar!!"))
+
        in  
 	   (case niltrace of
 		Nil.TraceUnknown => error "TraceUnknown"
@@ -427,38 +425,6 @@ struct
 				       raise Match
 				      ))))
        end
-
-(* XXXXXXXXXXXXXXXXXXXXXXXXx
-   fun con2rep state con : rep =
-       (let fun failure str copt = (print "con2rep failed "; print str; 
-				    print "\noriginal con = \n";
-				    Ppnil.pp_con con; print "\n";
-				    (case copt of
-					 SOME c => (print "reduced con = \n";
-						    Ppnil.pp_con c; print "\n")
-				       | _ => print "no reduced con\n");
-				    error "con2rep failed")
-	    fun reduce c = 
-		 (case c of
-		      Proj_c _ => #2(simplify_type state c)
-		    | Let_c _ => #2(simplify_type state c)
-		    | App_c _ => #2(simplify_type state c)
-		    | Var_c _ => #2(simplify_type state c)
-		    | Typeof_c _ => #2(simplify_type state c)
-		    | _ => c)
-
-	in  (case (con2rep_raw state con) of
-		 NONE => 
-		     let val c = reduce con 
-			         handle e => (failure "during reduce" NONE)
-		     in  (case ((con2rep_raw state c) 
-				handle e => (failure "con2rep_raw" (SOME c))) of
-			      SOME rep => rep
-			    | NONE => (failure "no trace computable\n" (SOME c)))
-		     end
-	       | SOME rep => rep)
-	end)
-*)
 
    fun loc2rep location =
        (case location of
@@ -539,6 +505,9 @@ struct
 		val gcstate = foldl (fn (infos,acc) => foldl folder acc infos) [] gcstates
 	   in   {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
 	   end
+       fun shadow_state	({is_top,env,varmap,convarmap,gcstate=_},{gcstate,...}:state) = 
+	   {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
+
        fun add_instr i = 
 	   (add_instr' i;
 	    case i of
@@ -1034,7 +1003,6 @@ struct
   fun add_conglobal (state : state,
 		     v : var,
 		     kind : kind,
-		     copt : con option,
 		     termOpt : term option) : state = 
     let 
 	val _ = Stats.counter("RTLconglobal") ()
@@ -1056,7 +1024,7 @@ struct
 		 SOME(LOCATION (REGISTER _)) => SOME(LOCATION(GLOBAL(label,TRACE)))
 	       | _ => termOpt)
 
-	val state' = add_conterm (state,v,kind, copt, termOpt)
+	val state' = add_conterm (state, v, kind, termOpt)
 
     in state'
     end

@@ -61,7 +61,7 @@ sig
    val make_state : unit -> state
    val show_state : state -> unit
    val new_gcstate : state -> state
-   val join_states : state list -> state
+   val join_states : state list -> state  (* take the join of the GC states; retain info of first state *)
    val promote_maps : state -> state
 
    val add_code        : (state * var * con * label) -> state
@@ -69,9 +69,8 @@ sig
    val add_term        : (state * var * con * term) -> state
    val add_global      : (state * var * con * term) -> state
 
-   val add_concode     : (state * var * kind * con option * label) -> state
-   val add_conterm     : (state * var * kind * con option * term option) -> state
-   val add_conglobal   : (state * var * kind * con option * term option) -> state
+   val add_conterm     : (state * var * kind * term option) -> state
+   val add_conglobal   : (state * var * kind * term option) -> state
 
    val getrep : state -> var -> var_rep
    val getconvarrep : state -> var -> convar_rep
@@ -87,11 +86,9 @@ sig
    val simplify_type : state -> con -> bool * con
    val reduce_to_sum : string -> state -> con -> TilWord32.word * TilWord32.word option * con list
    val niltrace2rep : state -> Nil.niltrace -> rep
-(* XXX
-   val con2rep : state -> con -> rep
-*)
    val valloc2rep : term -> rep
    val type_of : state -> exp -> con
+   val std_kind_of : state -> con -> kind
 
    (* Routines for loading RTL values *)
    val load_ireg_loc : location * regi option -> regi

@@ -1067,7 +1067,7 @@ struct
 
 
 	   fun vc_mapper (v,tr,c) = 
-	       let val tr = trace_rewrite state (NilSubst.substConInTrace internal_subst tr)
+	       let val tr' = trace_rewrite state (NilSubst.substConInTrace internal_subst tr)
 		   val _ = (print "trace: "; Ppnil.pp_trace tr; print "  -->  ";
 			    Ppnil.pp_trace tr'; print "\n")
 	       in  (v, trace_rewrite state (NilSubst.substConInTrace internal_subst tr),

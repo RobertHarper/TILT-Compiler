@@ -1,9 +1,9 @@
 (*$import TortlVararg Rtl Pprtl TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps NilContext TORTL *)
 
-(* Relies on the layout structure pointed to by the thread pointer - check thread.h *)
-(* empty records translate to 256; no allocation *)
-(* to do: strive for LABEL not GLOBAL *)
-(* xtagsum_dynamic record case is fragile *)
+(* (1) This translation relies on the layout of the thread structure which is
+       pointed to by the thread pointer.  Check Runtime/thread.h for details.
+   (2) Empty records translate to 256, requiring no allocation 
+*)
 
 (* A state contains classification information(type/kind),
                     residence information(register/global label),
@@ -14,11 +14,9 @@
       This is a subset of variables bound at the top-level (outside any lambda).
       It is a subset because we would like unreferenced top-level variables to reside
       in registers, thus reducing a proliferation of global labels. 
-      However, we consider all top-level type variables (say a) to be global even if not
-      apparently used inside a lambda since a type reduction of a type term (b = {l = a})
-      containing another global type variable(b) may yield to this type variable a.
       All imported variables are both top-level and global.  
       The check for global and top-level variables must also consider exports.
+      Currently, we do not make this distinction to avoid a pre-pass.
 *)
    
 
@@ -58,8 +56,10 @@ struct
 
     val con_depth = ref 0
     val exp_depth = ref 0
+    val cbnd_depth = ref 0
     fun resetDepth() = (con_depth := 0;
-			   exp_depth := 0)
+		        exp_depth := 0;
+			cbnd_depth := 0)
 
       
    type translate_params = { HeapProfile : int option, do_write_list : bool, 
@@ -94,7 +94,7 @@ struct
    
   fun xbnd state (bnd : bnd) : state =
       (case bnd of
-	      Con_b (phase,cbnd) => xconbnd state (phase,cbnd)
+	      Con_b (phase,cbnd) => xcbnd state (phase,cbnd)
 	    | Exp_b (v,t,e) => 
 		  let val _ = (msg "working on exp_b "; msg (var2string v); msg "\n")
 		      val c = type_of state e
@@ -130,7 +130,7 @@ struct
 		      fun loadcl ((v,{code,cenv,venv,tipe}),state) = 
 			  let val (code_lv,_,state) = xexp(state,fresh_named_var "codereg",
 							   Var_e code, Nil.TraceUnknown, NOTID)
-			      val (_,con_lv,_,state) = xcon'(state,fresh_named_var "cenv", cenv,NONE)
+			      val (_,con_lv,state) = xcon'(state,fresh_named_var "cenv", cenv)
 			      val (exp_lv,_,state) = 
 				  (case (toplevel,is_recur) of
 				       (true,_) => xexp(state,fresh_named_var "venv",venv,
@@ -166,39 +166,46 @@ struct
 		  end)
 
   
+  and xcbnd state (phase, cbnd) =
+ 	let val _ = cbnd_depth := (!cbnd_depth) + 1
+	    val _ = if (!debug)
+	 	      then (print "xcon_bnd"; print (Int.toString (!cbnd_depth)); print " called";
+			    if (debug_full())
+			      then (print " on cbnd = \n"; Ppnil.pp_conbnd cbnd)
+			      else ();
+			    print "\n")
+		      else ()
+	    val result = xcbnd' state (phase, cbnd)
+	    val _ = cbnd_depth := (!cbnd_depth) - 1
+ 	in  result
+	end
 
-  and xconbnd state (phase, cbnd : conbnd) : state = 
+  and xcbnd' state (phase, cbnd : conbnd) : state = 
       (case cbnd of
 	   Con_cb (v,c) => 
 		let 
-		      val (termOpt,k,state) = 
-			   if (phase = Compiletime)
-			       then (NONE, Type_k, state)
-			   else
-			       let val _ = if (!show_cbnd)
-					     then (print "Con_cb: "; Ppnil.pp_var v;
-						   print " = "; Ppnil.pp_con c; print "\n")
-					   else ()
-				   val (_,term,k,state) = xcon'(state,v,c,NONE)
-			       in  (SOME term,k,state)
-			       end
-		   in  if istoplevel()
-			   then add_conglobal (state,v,k,SOME c,termOpt)
-		       else add_conterm (state,v,k,SOME c,termOpt)
-		   end
+		    val (termOpt,state) = 
+			if (phase = Compiletime)
+			    then (NONE, state)
+			else
+			    let val (_,term,state) = xcon'(state,v,c)
+			    in  (SOME term,state)
+			    end
+		in  if istoplevel()
+			then add_conglobal (state,v,Single_k c,termOpt)
+		    else add_conterm (state,v,Single_k c,termOpt)
+		end
 	 | Code_cb (conwork as (name,vklist,c)) => 
-			     let val funkind = Arrow_k(Code,vklist,Single_k c)
-				 val funcon = Let_c(Sequential,[cbnd],Var_c name)
-				 val l = LOCAL_CODE(Name.var2string name)
-				 val state = add_concode (state,name,funkind, SOME funcon,l)
-				 val _ = if phase = Compiletime
-					     then ()
-					 else addWork (ConFunWork(promote_maps state,name,vklist,c))
-			     in  state
-			     end
-	 | Open_cb _ => (print "open Fun_cb:\n";
-			     Ppnil.pp_conbnd cbnd; print "\n";
-			     error "open Fun_cb"))
+		let val funkind = Arrow_k(Code,vklist,Single_k c)
+		    val funcon = Let_c(Sequential,[cbnd],Var_c name)
+		    val l = LOCAL_CODE(Name.var2string name)
+		    val state = add_conterm (state,name,funkind, SOME(VALUE(CODE l)))
+		    val _ = if phase = Compiletime
+				then ()
+			    else addWork (ConFunWork(promote_maps state,name,vklist,c))
+		in  state
+		end
+	 | Open_cb _ => error "Open_cb encountered")
 
   and xconst (state : state, arg_v : (con,exp) Prim.value) 
       : term * con * state =
@@ -300,8 +307,7 @@ struct
       let 
 	  val _ = exp_depth := !exp_depth + 1
 	  val _ = if (!debug)
-		      then (print "xexp ";  print (Int.toString (!exp_depth));
-			    print " called";
+		      then (print "xexp ";  print (Int.toString (!exp_depth)); print " called";
 			    if (debug_full())
 				then (print " on exp = \n";
 				      Ppnil.pp_exp arg_e)
@@ -366,11 +372,7 @@ struct
 		      val tmp1 = alloc_regi NOTRACE_INT
 		      val tmp2 = alloc_regi NOTRACE_INT
 		      val _ = add_instr (ICOMMENT ("making external call"))
-		      fun cfolder (c,state) =
-			  let val (res,_,state) = xcon(state,fresh_named_var "call_carg", 
-						       c, NONE)
-			  in  (res,state)
-			  end
+		      fun cfolder (c,state) = xcon(state,fresh_named_var "call_carg", c)
 		      fun efolder(e,(eregs,fregs,state)) = 
 			  let val (res,_,state) = xexp'(state,fresh_named_var "call_e", 
 							e, Nil.TraceUnknown, NOTID)
@@ -430,94 +432,79 @@ struct
 						    then "closure polycall"
 						else "closure call ")
 				    ^ (Int.toString callcount))
-		      local
 
-			  val _ = add_instr (ICOMMENT ("making " ^ call_type))
-
-
-			  fun cfolder (c,state) =
-			      let val (res,_,state) = xcon(state,fresh_named_var "call_carg", c, NONE)
-			      in  (res,state)
-			      end
+		      local 
+			  fun cfolder (c,state) = xcon(state,fresh_named_var "call_carg", c)
 			  fun efolder(e,state) = 
 			      let val (res,_,state) = xexp'(state,fresh_named_var "call_e", 
 							    e, Nil.TraceUnknown, NOTID)
 			      in  (res,state)
 			      end
-
+		      in
 			  val (cregsi,state) = foldl_list cfolder state clist
 			  val (eregs, state) = foldl_list efolder state elist
 			  val (efregs, state) = foldl_list efolder state eflist
+		      end
 
-			  fun direct_call expvar = 
-			      let 
-				  val (vlopt,vvopt,funcon) = getrep state expvar
-			      in  (Name.eq_var(#1(getCurrentFun()), expvar), 
-				   (case (vlopt,vvopt) of
-					(NONE,SOME(CODE l)) => LABEL' l
-				      | (SOME(REGISTER (_,I r)),_) => REG' r
-				      | (SOME(GLOBAL (l,_)),_) => 
-					    let val addr = alloc_regi NOTRACE_LABEL
-						val reg = alloc_regi NOTRACE_CODE
-					    in  (add_instr(LADDR(l,0,addr));
-						 add_instr(LOAD32I(EA(addr,0),reg));
-						 REG' reg)
-					    end
-				      | _ => error "bad varloc or varval for function"),
-					funcon, [], [],state)
-			      end
-
-			  val (selfcall,fun_reglabel,funcon,cregsi',eregs',state) = 
-			      (case (openness,f) of
-				   (Code,Var_e expvar) => (direct_call expvar)
-				 | (Code,_) => error "ill-formed application"
-				 | (Open,_) => error "no open apps allowed"
-				 | (Closure,cl) =>
-				       let val (clreg,funcon,state) = xexp'(state,fresh_var(),cl,
-									    Nil.TraceUnknown,NOTID)
-					   val clregi = 
-					       (case clreg of
-						    I ir => ir
-						  | F _ => error "closure compiled to float reg")
-					   val funregi = alloc_named_regi (fresh_named_var "funreg") 
-					       NOTRACE_CODE
-					   val cregi =  alloc_named_regi (fresh_named_var "creg") TRACE
-					   val eregi =  alloc_named_regi (fresh_named_var "ereg") TRACE
-					   val _ = (add_instr(LOAD32I(EA(clregi,0),funregi));
-						    add_instr(LOAD32I(EA(clregi,4),cregi));
-						    add_instr(LOAD32I(EA(clregi,8),eregi)))
-				       in  (false, REG' funregi, funcon, [cregi], [I eregi],state)
-				       end)
-
-
-		      in
-			  val selfcall = selfcall
-			  val fun_reglabel = fun_reglabel
-			  val cregsi = cregsi
-			  val cregsi' = cregsi'
-			  val eregs = eregs 
-			  val eregs' = eregs'
-			  val efregs = efregs
-			  fun reduce(vklist,clist,rescon) = 
-			      let val cbnds = map2 (fn ((v,_),c) => Con_cb(v,c)) (vklist,clist)
-			      in  if (null cbnds) then rescon 
-				  else NilRename.renameCon(Let_c(Sequential,cbnds,rescon))
-			      end
-			  val rescon = 
-			      (case (#2(simplify_type state funcon)) of
+		      val _ = add_instr (ICOMMENT ("making " ^ call_type))
+		      fun direct_call expvar = 
+			  let 
+			      val (vlopt,vvopt,funcon) = getrep state expvar
+			  in  (Name.eq_var(#1(getCurrentFun()), expvar), 
+			       (case (vlopt,vvopt) of
+				    (NONE,SOME(CODE l)) => LABEL' l
+				  | (SOME(REGISTER (_,I r)),_) => REG' r
+				  | (SOME(GLOBAL (l,_)),_) => 
+					let val addr = alloc_regi NOTRACE_LABEL
+					    val reg = alloc_regi NOTRACE_CODE
+					in  (add_instr(LADDR(l,0,addr));
+					     add_instr(LOAD32I(EA(addr,0),reg));
+					     REG' reg)
+					end
+				  | _ => error "bad varloc or varval for function"),
+				    funcon, [], [],state)
+			  end
+		      
+		      val (selfcall,fun_reglabel,funcon,cregsi',eregs',state) = 
+			  (case (openness,f) of
+			       (Code,Var_e expvar) => (direct_call expvar)
+			     | (Code,_) => error "ill-formed application"
+			     | (Open,_) => error "no open apps allowed"
+			     | (Closure,cl) =>
+				   let val (clreg,funcon,state) = xexp'(state,fresh_var(),cl,
+									Nil.TraceUnknown,NOTID)
+				       val clregi = 
+					   (case clreg of
+						I ir => ir
+					      | F _ => error "closure compiled to float reg")
+				       val funregi = alloc_named_regi (fresh_named_var "funreg") 
+					   NOTRACE_CODE
+				       val cregi =  alloc_named_regi (fresh_named_var "creg") TRACE
+				       val eregi =  alloc_named_regi (fresh_named_var "ereg") TRACE
+				       val _ = (add_instr(LOAD32I(EA(clregi,0),funregi));
+						add_instr(LOAD32I(EA(clregi,4),cregi));
+						add_instr(LOAD32I(EA(clregi,8),eregi)))
+				   in  (false, REG' funregi, funcon, [cregi], [I eregi],state)
+				   end)
+			       
+		     fun reduce(vklist,clist,rescon) = 
+			 let val cbnds = map2 (fn ((v,_),c) => Con_cb(v,c)) (vklist,clist)
+			 in  if (null cbnds) then rescon 
+			     else NilRename.renameCon(Let_c(Sequential,cbnds,rescon))
+			 end
+		     val rescon = 
+			 (case (#2(simplify_type state funcon)) of
 				   Prim_c(Vararg_c _, [_,rescon]) => reduce([],clist,rescon)
 				 | AllArrow_c{tFormals,body_type,...} => 
 				       reduce(tFormals,clist,body_type)
 				 | c => (print "cannot compute type of result of call\n";
-					  print "funcon = \n"; Ppnil.pp_con funcon; print "\n";
-					  print "reduced to \n"; Ppnil.pp_con c; print "\n";
-					  error "cannot compute type of result of call"))
-		      end
+					 print "funcon = \n"; Ppnil.pp_con funcon; print "\n";
+					 print "reduced to \n"; Ppnil.pp_con c; print "\n";
+					 error "cannot compute type of result of call"))
 
 		      val args = (map I cregsi) @ 
 			         (map I cregsi') @
 				 eregs @ eregs' @ efregs
-
 		      val (resrep,dest) = alloc_reg_trace state trace
 		      val context = if (#elim_tail_call(!cur_params))
 					then context
@@ -970,6 +957,7 @@ struct
 		   val (lv,state) = make_record(state,NONE,reps,vallocs)
 	       in  (lv, c, state)
 	       end
+         | partialRecord _ => error "partialRecord not implemented"
 	 | select label => 
 	       let 
 		   val [e] = elist 
@@ -1001,11 +989,17 @@ struct
 		in  TortlSum.xsum_nonrecord ((state,known,hd clist),lvopt,trace)
 		end
 	 | inject known => 
-		let val (e_lv,c,state) = xexp(state,fresh_var(),hd elist,
-					      Nil.TraceUnknown,NOTID)
-		    val (_,c_lv,_,state) = xcon'(state,fresh_var(),hd clist,NONE)
-		in  TortlSum.xsum_dynamic ((state,known,hd clist),c_lv,e_lv,trace)
-		end
+		(case elist of
+		    [] => (print "Warning: tortl encountered inject with no argument\n";
+			   print "         COnverting to inject_nonrecord\n";
+			   TortlSum.xsum_nonrecord ((state,known,hd clist),NONE,trace))
+		  | [e] =>
+			let val (e_lv,c,state) = xexp(state,fresh_var(),e,
+						      Nil.TraceUnknown,NOTID)
+			    val (_,c_lv,state) = xcon'(state,fresh_var(),hd clist)
+			in  TortlSum.xsum_dynamic ((state,known,hd clist),c_lv,e_lv,trace)
+			end
+		| _ => error "inject_dynamic with more than one argument")
 	 | project_sum_record (k,field) => 
 	       let val e = hd elist
 		   val (r,econ,state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
@@ -1025,7 +1019,7 @@ struct
 	       let val sumcon = hd clist
 		   val e = hd elist
 		   val (er,ssumcon,state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
-		   val (cr,_,state) = xcon(state,fresh_var(),sumcon,NONE)
+		   val (cr,state) = xcon(state,fresh_var(),sumcon)
 		   val I base = er
 	       in  TortlSum.xproject_sum_dynamic ((state,k,sumcon),cr,base,trace)
 	       end
@@ -1085,8 +1079,8 @@ struct
 			  in  ir
 			  end
 		       val [c1,c2] = clist
-		       val (argc, _, state) = xcon(state,fresh_var(),c1, NONE)
-		       val (resc, _, state) = xcon(state,fresh_var(),c2, NONE)
+		       val (argc, state) = xcon(state,fresh_var(),c1)
+		       val (resc, state) = xcon(state,fresh_var(),c2)
 		       val (I function,c,state) = xexp'(state,fresh_var(),hd elist,
 							Nil.TraceUnknown, NOTID)
 		       val (state,resulti) = TortlVararg.xmake_vararg local_xexp (state,argc,resc,function)
@@ -1100,8 +1094,8 @@ struct
 			  in  ir
 			  end
 		       val [c1,c2] = clist
-		       val (argc, _, state) = xcon(state,fresh_var(),c1, NONE)
-		       val (resc, _, state) = xcon(state,fresh_var(),c2, NONE)
+		       val (argc, state) = xcon(state,fresh_var(),c1)
+		       val (resc, state) = xcon(state,fresh_var(),c2)
 		       val (I function,c,state) = xexp'(state,fresh_var(),hd elist,
 							Nil.TraceUnknown, NOTID)
 		       val (state,resulti) = TortlVararg.xmake_onearg local_xexp (state,argc,resc,function)
@@ -1219,7 +1213,7 @@ struct
 		 | _ => error "need exactly 2 arguments for this primitive")
 	  fun extract_dispatch(t,state,arg,(xfloat,xint,xknown,xdynamic)) = 
 	      let fun dynamic c =
-		     let val (con_ir,_,state) = xcon(state,fresh_var(),c,NONE)
+		     let val (con_ir,state) = xcon(state,fresh_var(),c)
 		     in  xdynamic (state,c,con_ir) arg
 		     end
 	      in  
@@ -1443,16 +1437,15 @@ struct
 
    (* ------------------- translate constructors ------------------------ *)
 
-  and xcon arg : regi * kind * state = 
-      let val (_, term, k, s) = xcon' arg 
-      in  (load_ireg_term(term,NONE), k, s)
+  and xcon arg : regi * state = 
+      let val (_, term, s) = xcon' arg 
+      in  (load_ireg_term(term,NONE), s)
       end
 
   and xcon' (state : state,
 	    name : var, (* Purely for debugging and generation of useful names *)
-	    arg_con : con,     (* The expression being translated *)
-	    kopt : kind option (* Caller may know kind of con being translated *)
-	    ) : bool * term * kind * state = 
+	    arg_con : con     (* The expression being translated *)
+	    ) : bool * term * state = 
       let 
 	  val _ = con_depth := !con_depth + 1
 	  val _ = if (!debug)
@@ -1468,7 +1461,7 @@ struct
 			    else ();
 			    print "\n")
 		  else ()
-	  val res = xcon''(state,name,arg_con,kopt)
+	  val res = xcon''(state,name,arg_con)
 	  val _ = if (!debug)
 		      then (print "xcon ";  print (Int.toString (!con_depth));
 			    print " returned\n")
@@ -1479,31 +1472,26 @@ struct
 
   and xcon'' (state : state,
 	    name : var, (* Purely for debugging and generation of useful names *)
-	    arg_con : con,     (* The expression being translated *)
-	    kopt : kind option (* Caller may know kind of con being translated *)
-	    ) : bool * term * kind * state = 
+	    arg_con : con     (* The expression being translated *)
+	    ) : bool * term * state = 
       let 
-	  fun mk_ptr  i = (true, VALUE (TAG (TW32.fromInt i)), Type_k, state)
-	  fun mk_ptr' i = (true, VALUE (TAG (TW32.fromInt i)), Type_k, state)
-	  fun mk_sum_help (state,kinderopt,indices,cons) = 
+	  fun mk_ptr  i = (true, VALUE (TAG (TW32.fromInt i)), state)
+	  fun mk_ptr' i = (true, VALUE (TAG (TW32.fromInt i)), state)
+	  fun mk_sum_help (state,indices,cons) = 
 	      let val indices' = map (fn i => VALUE(INT (TW32.fromInt i))) indices
 	          fun folder (c,(const,s)) =
-		       let val (const',c,k,s) = xcon'(s,fresh_named_var "xcon_sum",c, NONE)
-		       in ((c,k),(const andalso const', s))
+		       let val (const',c,s) = xcon'(s,fresh_named_var "xcon_sum",c)
+		       in (c,(const andalso const', s))
 		       end
-		  val (con_kinds,(const,state)) = foldl_list folder (true,state) cons
-		  val cons' = map #1 con_kinds
+		  val (cons',(const,state)) = foldl_list folder (true,state) cons
 		  val reps = (map (fn _ => NOTRACE_INT) indices') @ (map (fn _ => TRACE) cons')
-		  val kind = (case kinderopt of
-				  NONE => Type_k
-				| SOME kinder => kinder con_kinds)
 		  val (lv,state) = if const 
 				       then make_record_const(state,NONE,reps, indices' @ cons', NONE)
 				   else make_record(state,NONE,reps, indices' @ cons')
-	      in (const, lv, kind, state)
+	      in (const, lv, state)
 	      end
-	  fun mk_sum' (s,indices,cons) = mk_sum_help(s,NONE,indices,cons)
-	  fun mk_sum (s,index,cons) = mk_sum_help(s,NONE,[index],cons)
+	  fun mk_sum' (s,indices,cons) = mk_sum_help(s,indices,cons)
+	  fun mk_sum (s,index,cons) = mk_sum_help(s,[index],cons)
 	  open Prim
       in
 	  (case arg_con of
@@ -1528,20 +1516,20 @@ struct
 			    TW32.toInt tagcount,
 			    TW32.toInt totalcount],[c])
 	     | Prim_c(Sum_c {known,totalcount,tagcount},_) => error "Sum_c does not have 1 type arg"
-	     | Prim_c(Record_c _,cons) => mk_sum_help(state,NONE,[5,length cons],cons)
+	     | Prim_c(Record_c _,cons) => mk_sum_help(state,[5,length cons],cons)
 	     | Prim_c(Vararg_c _,cons) => mk_sum(state,6,cons)
 	     | Prim_c _ => error "ill-formed primitive type"
 	     | Mu_c (is_recur,vcset) => 
-		   let val (const,lv,k,state) = mk_sum_help(state,NONE,[8],[])
+		   let val (const,lv,state) = mk_sum_help(state,[8],[])
 		       val num_mu = Sequence.length vcset
-		   in  if (num_mu = 1) then (const,lv,k,state)
-		       else let val kind = kind_tuple(Listops.map0count (fn _ => k) num_mu)
-				val reps = Listops.map0count (fn _ => TRACE) num_mu
-				val vl = Listops.map0count (fn _ => lv) num_mu
-				val (lv,state) = if const (* all out mus are degenerate now *)
-						     then make_record_const(state,NONE,reps,vl,NONE)
-						 else make_record_const(state,NONE,reps,vl,NONE)
-			    in  (const,lv,kind,state)
+		   in  if (num_mu = 1) then (const,lv,state)
+		       else let val reps = Listops.map0count (fn _ => TRACE) num_mu
+				val terms = Listops.map0count (fn _ => lv) num_mu
+				val (result,state) = 
+				    if const (* all mus are base-case/degenerate now *)
+					then make_record_const(state,NONE,reps,terms,NONE)
+				    else make_record_const(state,NONE,reps,terms,NONE)
+			    in  (const,result,state)
 			    end
 		   end
 (*
@@ -1565,7 +1553,7 @@ struct
 							    SOME(Word_k Runtime),NONE)
 				       val recstate = foldl folder state (zip vclist clregs)
 				       fun do_write ((clreg,(v,c)),s) = 
-					   let val (r,_,s) = xcon(s,v,c, NONE)
+					   let val (r,s) = xcon(s,v,c)
 					   in  add_instr(MUTATE(EA(clreg,4),r,NONE)); s
 					   end
 				   in  foldl do_write recstate (zip clregs vclist)
@@ -1582,14 +1570,14 @@ struct
 *)
 	     | AllArrow_c {openness=Open,...} => error "open Arrow_c"
 	     | AllArrow_c {openness=Closure,eFormals=clist,fFormals=numfloat,body_type=c,...} => 
-		   mk_sum_help(state,NONE,[9],[])
+		   mk_sum_help(state,[9],[])
 (*		   mk_sum_help(NONE,[9,TW32.toInt numfloat],c::clist) *)
 	     | AllArrow_c {openness=Code,eFormals=clist,fFormals=numfloat,body_type=c,...} => 
-(*		   mk_sum_help(state,NONE,[10,TW32.toInt numfloat],c::clist) *)
-		   mk_sum_help(state,NONE,[10],[])
+		   mk_sum_help(state,[10],[])
+(*		   mk_sum_help(state,[10,TW32.toInt numfloat],c::clist) *)
 	     | ExternArrow_c _ =>
+		   mk_sum_help(state,[11],[])
 (*		   mk_sum_help(NONE,[11,TW32.toInt numfloat],c::clist) *)
-		   mk_sum_help(state,NONE,[11],[])
 	     | Var_c v => 
 		   let val (vl,vv,k) = 
 		       (case (getconvarrep state v) of
@@ -1601,51 +1589,50 @@ struct
 				in  (const, LOCATION vl,k)
 				end
 			  | (NONE,NONE,_) => error ("no info on convar" ^ (Name.var2string v)))
-		   in  (vl,vv,k,state)
+		   in  (vl,vv,state)
 		   end
 	     | Let_c (letsort, cbnds, c) => 
-		   let fun folder (cbnd,s) = xconbnd s (Runtime,cbnd)
-		       val s' = foldl folder state cbnds
-		   in  xcon'(s',fresh_var(),c, kopt)
+		   let fun folder (cbnd,s) = xcbnd s (Runtime,cbnd)
+		       val state' = foldl folder state cbnds
+		       val (vl,vv,state') = xcon'(state',fresh_var(),c)
+		   in  (vl,vv,join_states[state,state'])
 		   end
 	     | Crecord_c lclist => 
-		   let val vars = map (fn (l,_) => fresh_named_var (label2string l)) lclist
-		       fun folder ((v,(l,c)),(const,state)) = 
-			   let val (const',vl,k,state) = xcon'(state,v,c,NONE)
-			   in ((l,v,(vl,k)), (const andalso const', state))
+		   let fun folder ((l,c),(const,state)) = 
+			   let val v = fresh_named_var (label2string l)
+			       val (const',term,state) = xcon'(state,v,c)
+			   in (term, (const andalso const', state))
 			   end
-		       val (lvregikind,(const,state)) = foldl_list folder (true,state) (zip vars lclist)
-		       val lvkList = map (fn (l,v,(_,k)) => ((l,v),k)) lvregikind
-		       val kind = Record_k(Sequence.fromList lvkList)
-		       val lvs = map (fn (_,_,(lv,_)) => lv) lvregikind
-		       val reps = map (fn _ => TRACE) lvs
-		       val (lv,state) = (case (!do_single_crecord,lclist) of
-					     (true,[_]) => (hd lvs, state)
-					   | _ => if const 
-						    then make_record_const(state,NONE,reps,lvs,NONE)
-						  else make_record(state,NONE,reps,lvs))
-		   in  (const,lv,kind,state)
+		       val (terms,(const,state)) = foldl_list folder (true,state) lclist
+		       val (result,state) = 
+			   (case (!do_single_crecord,terms) of
+				(true,[term]) => (term, state)
+			      | _ =>
+				    let val reps = map (fn _ => TRACE) terms
+				    in  if const 
+					    then make_record_const(state,NONE,reps,terms,NONE)
+					else make_record(state,NONE,reps,terms)
+				    end)
+		   in  (const,result,state)
 		   end
 	     | Proj_c (c, l) => 
-		   let val (const,lv,k,state) = xcon'(state,fresh_named_var "proj_c",
-								   c,NONE)
-		       
-		       val Record_k lvk_seq = k
+		   let val (const,lv,state) = xcon'(state,fresh_named_var "proj_c",c)
+		       val Record_k lvk_seq = std_kind_of state c
 		       fun default() = 
 			   let fun loop [] _ = error "ill-formed projection"
 				 | loop (((l',_),k)::vrest) n = if (Name.eq_label(l,l')) 
-							    then (n,k) else loop vrest (n+1)
-		       (* fieldk won't have have dependencies *)			
-			       val (which,fieldk) = loop (Sequence.toList lvk_seq) 0
+								    then n 
+								else loop vrest (n+1)
+			       val which = loop (Sequence.toList lvk_seq) 0
 			       val dest = alloc_regi TRACE
 			       val ir = load_ireg_term(lv,NONE)
 			       val _ = add_instr(ICOMMENT ("Proj_c at label " ^ 
 							   (Name.label2string l)))
 			       val _ = add_instr(LOAD32I(EA(ir,4 * which),dest))
-			   in (const,LOCATION(REGISTER (const,I dest)), fieldk, state)
+			   in (const,LOCATION(REGISTER (const,I dest)), state)
 			   end
 		   in  (case (!do_single_crecord,Sequence.toList lvk_seq) of
-			    (true,[(_,k)]) => (const,lv,k,state)
+			    (true,[(_,k)]) => (const,lv,state)
 			  | _ => default())
 		   end
 	     | Closure_c (c1,c2) => 
@@ -1655,21 +1642,16 @@ struct
 			   in  Arrow_k(Closure,vklist',k)
 			   end
 			 | kinder _ = error "bad Closure_c"
-		   in  mk_sum_help(state,SOME kinder,[],[c1,c2])
+		   in  mk_sum_help(state,[],[c1,c2])
 		   end
 	     | Typecase_c _ => error "typecase_c not implemented"
 	     | App_c (c,clist) => (* pass in env argument first *)
 		   let val _ = add_instr(ICOMMENT "start making constructor call")
-		       val (const_fun,lv,k,state) = xcon'(state,fresh_named_var "closure",c,NONE)
+		       val (const_fun,lv,state) = xcon'(state,fresh_named_var "closure",c)
 		       val clregi = load_ireg_term(lv,NONE)
-		       val resk = (case (kopt,k) of
-				       (SOME k, _) => k
-				     | (_,Arrow_k(_,_,resk)) => resk
-				     | _ => (print "bad kind to App_c\n"; Ppnil.pp_kind k;
-					     error "bad kind to App_c"))
 		       val (cregsi,(const_arg,state)) = 
 			   foldl_list  (fn (c,(const,state)) => 
-				   let val (const',vl,_,state) = xcon'(state,fresh_named_var "clos_arg",c,NONE)
+				   let val (const',vl,state) = xcon'(state,fresh_named_var "clos_arg",c)
 				   in  (load_ireg_term(vl,NONE),(const andalso const', state))
 				   end) (true,state) clist
 		       val const = const_fun andalso const_arg
@@ -1685,9 +1667,9 @@ struct
 					      save = getLocals()})
 		       val state = new_gcstate state
 		       val _ = add_instr(ICOMMENT "done making constructor call")
-		   in (const,LOCATION (REGISTER (const,I desti)),resk,state)
+		   in (const,LOCATION (REGISTER (const,I desti)),state)
 		   end
-	     | Annotate_c (_,c) => xcon'(state,name,c,kopt))
+	     | Annotate_c (_,c) => xcon'(state,name,c))
       end
 
   
@@ -1709,7 +1691,7 @@ struct
 		      else ()
               fun folder ((v,k),s) = 
 			let val r = alloc_named_regi v TRACE
-			    val s' = add_conterm (s,v,k,NONE,SOME(LOCATION(REGISTER (false,I r))))
+			    val s' = add_conterm (s,v,k,SOME(LOCATION(REGISTER (false,I r))))
 			in  (r,s')
                         end
 	      val (cargs,state) = foldl_list folder state vklist
@@ -1717,7 +1699,7 @@ struct
 	      val return = alloc_regi NOTRACE_CODE
 	      val _ = set_args(args, return)
 	      val state = needgc(state,IMM 0)
-	      val (ir,k,state) = xcon(state,fresh_named_var "result",body,NONE)
+	      val (ir,state) = xcon(state,fresh_named_var "result",body)
 	      val result = getResult(fn() => I ir)
 	      val I resulti = result
 	      val _ = (add_instr(MV(ir,resulti));
@@ -1734,13 +1716,10 @@ struct
 			    | SOME [] => error "export has no labels"
 			    | SOME (l::_) => l)
 	      val _ = reset_state(is_top, (vname, name))
-	      val _ = if (!debug)
-			  then (print "-----dofun_help : "; 
-				print (Pprtl.label2s name); print "\n")
-		      else ()
+	      val _ = msg ("-----dofun_help : " ^ (Pprtl.label2s name) ^ "\n")
               fun folder ((v,k),s) = 
 		  let val r = alloc_named_regi v TRACE
-		      val s' = add_conterm (s,v,k,NONE,SOME(LOCATION(REGISTER (false,I r))))
+		      val s' = add_conterm (s,v,k,SOME(LOCATION(REGISTER (false,I r))))
 		  in  (r,s')
 		  end
 	      val (cargs,state) = foldl_list folder state vklist
@@ -1854,7 +1833,7 @@ struct
 		 end
 	       | folder (ImportType(l,v,k),s) = 
 		 let val vl = (GLOBAL(ML_EXTERN_LABEL(Name.label2string l),TRACE))
-		 in  add_conglobal (s,v,k,NONE, SOME(LOCATION vl))
+		 in  add_conglobal (s,v,k, SOME(LOCATION vl))
 		 end
 	     val state = needgc(make_state(),IMM 0)
 	     val state = foldl folder state imports
@@ -1925,6 +1904,4 @@ struct
 		    mutable = []}
          end
 
-
-
-end;
+end
