@@ -50,7 +50,13 @@ struct
 			    then (print str; print "----\n";
 				  print "state map has ";
 				  print (Int.toString (VarMap.numItems m)); print "items\n";
-				  print "state set has ";
+				  VarMap.appi (fn (v,(v',_)) => if (Name.eq_var(v,v'))
+								    then ()
+								else (Ppnil.pp_var v;
+								      print " -> ";
+								      Ppnil.pp_var v';
+								      print "\n")) m;
+				  print "state seen has ";
 				  print (Int.toString (VarSet.numItems (!seen))); print "items\n")
 			else ()
 	    in ()
@@ -113,23 +119,30 @@ struct
        end
 
    fun lbnd state arg_bnd : state * bnd list =
-       let val _ = state_stat "lbnd" state
+       let 
+(*
+	   val _ = (print "\nlinearizing bnd:\n";
+		    Ppnil.pp_bnd arg_bnd;
+		    state_stat "lbnd" state;
+		    print "\n")
+*)
 	   fun add_vars state vx_list = foldl (fn ((v,_),s) => #1(add_var(s,v))) state vx_list
 	   fun pop_vars state vx_list = foldl (fn (_,s) => pop_var s) state vx_list
 	   fun vf_help wrapper vf_set = 
 	       let val vf_list = set2list vf_set
-		   val state = add_vars state vf_list
-		   val state = pop_vars state vf_list
-		   val vf_list = map (fn (v,f) => (find_var(state,v),
-						   lfunction state f)) vf_list
-	       in  (state, [wrapper (list2set vf_list)])
+		   val newstate = add_vars state vf_list
+		   val newstate = pop_vars newstate vf_list
+		   val vf_list = map (fn (v,f) => (find_var(newstate,v),
+						   lfunction newstate f)) vf_list
+	       in  (newstate, [wrapper (list2set vf_list)])
 	       end
-	   fun vcl_help(v,{code,cenv,venv,tipe}) = 
+	   fun vcl_help state (v,{code,cenv,venv,tipe}) = 
 	       let val (bnd_cenv,cenv') = lcon2 state cenv
+		   val (bnd_tipe,tipe') = lcon2 state tipe
 		   val (bnd_venv,venv') = lexp state venv
 		   val code' = find_var(state,code)
-		   val bnd = bnd_cenv @ bnd_venv
-	       in  (bnd,(v,{code=code',cenv=cenv',venv=venv',tipe=tipe}))
+		   val bnd = bnd_cenv @ bnd_tipe @ bnd_venv
+	       in  (bnd,(v,{code=code',cenv=cenv',venv=venv',tipe=tipe'}))
 	       end
 	   fun mapset f s = list2set(map f (set2list s))
 
@@ -153,7 +166,7 @@ struct
 	      | Fixclosure_b vcl_set => let val state = add_vars state vcl_set
 					    val state = pop_vars state vcl_set
 					    val vcl_list = set2list vcl_set
-					    val bnd_vcl = map vcl_help vcl_list
+					    val bnd_vcl = map (vcl_help state) vcl_list
 					    val fixbnd = Fixclosure_b(list2set(map #2 bnd_vcl))
 					    val bnds = flatten (map #1 bnd_vcl)
 					in  (state,bnds @ [fixbnd])
@@ -309,7 +322,13 @@ struct
        end
 
    and lcon state arg_con : conbnd list * con = 
-       (state_stat "lcon" state;
+       (
+(*
+	print "\nlinearizing con:\n";
+	Ppnil.pp_con arg_con;
+	state_stat "lcon" state;
+	print "\n";
+*)
 	case arg_con of
 	    Prim_c (pc,cons) => 
 		let val cbnd_cons = map (lcon state) cons
