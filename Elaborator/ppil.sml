@@ -373,16 +373,18 @@ struct
 		  NONE => String ""
 		| SOME e => HOVbox[String ",", pp_exp e]]
        | CASE {sumtype,bound,arg,arms,tipe,default} =>
-	     pp_region "CASE(" ")"
-	     ((pp_exp arg) :: (String ":") :: (pp_con sumtype) :: (String ",") :: Break ::
-	      (String "result_type = ") :: (pp_con tipe) :: (String ",") :: Break ::
-	      (String "bound = ") :: (pp_var bound) :: (String ",") :: Break ::
-	      (pp_list (fn NONE => String "NONE" 
-	                | SOME e => pp_exp e) arms ("[",", ","]",true)) ::
-	      (String ", ") :: Break ::
-	      (case default of
-		   NONE => [String "NODEFAULT"]
-		 | SOME e => [String "DEFAULT: ", pp_exp e]))
+	     let val rules = (mapcount (fn (n,e) => ((Int.toString n) ^ ": ", e)) arms) @ 
+	                     [("Default: ", default)]
+	     in  pp_region "CASE(" ")"
+		 [String "arg = ", pp_exp arg, String ":", pp_con sumtype, String ",", Break,
+		  String "resultType = ", pp_con tipe, String ",", Break,
+		  String "boundVar = ", pp_var bound, String ",", Break,
+		  (pp_list (fn (str,eopt) => Hbox[String str,
+						  (case eopt of 
+						       NONE => String "---" 
+						     | SOME e => pp_exp e)])
+		   rules ("", ",", "", true))]
+	     end
        | EXN_CASE {arg=earg,arms=elist,default=eopt,tipe} => 
 	     pp_region "EXN_CASE(" ")"
 			  [pp_con tipe,
@@ -396,8 +398,8 @@ struct
 							    String " => ",
 							    pp_exp e2]) elist ("[",", ","]",true)),
 			   (case eopt of
-			       NONE => String "NONE"
-			     | SOME e => HOVbox[String "SOME", pp_exp e])]
+			       NONE => String "---"
+			     | SOME e => pp_exp e)]
        | MODULE_PROJECT (m,l) => HOVbox[pp_mod m, String ".", pp_label l]
        | SEAL    (exp,con) => pp_region "SEAL(" ")" [pp_exp exp, String ",", pp_con con])
       end

@@ -17,6 +17,7 @@ structure Signature :> SIGNATURE =
     fun elab_error s : 'a = Util.error "signature.sml elaborator impossibility" s
 
     val debug = Stats.ff("SignatureDebug")
+    val diag = Stats.ff("SignatureDiag")
     fun msg s = if !debug then print s else ()
 
     fun debugdo t = if (!debug) then (t(); ()) else ()
@@ -1095,10 +1096,12 @@ structure Signature :> SIGNATURE =
 			then (print "turning showing off\n";
 			      Stats.bool("IlstaticShowing") := false)
 		    else ()
-	    val _ = (print "XXX hidden component\n"; 
-		     sig_describe_size sig_actual; print "\n";
-		     print "XXX coerced component\n"; 
-		     sig_describe_size coerced_sig; print "\n")
+	    val _ = if (!diag)
+			then (print "XXX hidden component\n"; 
+			      sig_describe_size sig_actual; print "\n";
+			      print "XXX coerced component\n"; 
+			      sig_describe_size coerced_sig; print "\n")
+		    else ()
 	in
 	    if (coerced)
 	      then let

@@ -20,5 +20,8 @@ signature TOIL =
     val xtybind : Il.context * filepos * Ast.tb list -> decresult option
     val xeq     : Il.context * Il.con -> (Il.exp * Il.con) option
 
+    val expcompile : Il.context * Ast.exp -> Il.exp * Il.con * bool
+    val typecompile : Il.context * Ast.ty -> Il.con 
+    val polyinst : Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list
 
   end;

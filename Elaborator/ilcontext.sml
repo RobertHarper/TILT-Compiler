@@ -299,8 +299,7 @@ struct
 	      | clashFolder (_, _, subst) = subst
 	    val clashSubst = Name.PathMap.foldli clashFolder empty_subst pm2
 	    val subst = subst_add(clashSubst, unresolvedSubst)
-	in  if ((print "XXXXXXX alphaVary NOT short-circuiting!!!!\n"; false)
-		andalso subst_is_empty subst)
+	in  if (subst_is_empty subst)
 		then NONE
 	    else 
 		let val (labelMap,pathMap,ordering) = 

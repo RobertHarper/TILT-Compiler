@@ -50,9 +50,11 @@ struct
 
     val start = ref (NONE : Time.time option)
     val msgs = ref ([] : string list)
-    fun showTime str = 
+    fun showTime (printTime,str) = 
 	let val cur = Time.now()
-	    val curString = Date.toString(Date.fromTimeLocal cur)
+	    val curString = if (printTime)
+				then Date.toString(Date.fromTimeLocal cur)
+			    else ""
 	    val diff = Time.-(cur, (case !start of
 					NONE => error "no start time"
 				      | SOME t => t))
@@ -65,7 +67,7 @@ struct
 		       (Real.toString diff) ^ " seconds since start.\n")
 	in  msgs := msg :: (!msgs); chat msg
 	end
-    fun startTime str = (msgs := []; start := SOME(Time.now()); showTime str)
+    fun startTime str = (msgs := []; start := SOME(Time.now()); showTime (true,str))
     fun reshowTimes() = (chat "\n\n"; app chat (rev (!msgs)); msgs := []; start := NONE)
 end
 
@@ -138,51 +140,53 @@ struct
     fun reverse(from, to) = (to, from)
     val sep = "-to-"
     val sep_length = String.size sep
-    fun channelToName(from, to) = from ^ sep ^ to
+    val tempDir = "TempCommunication"
+    val _ = if ((OS.FileSys.isDir tempDir)
+		handle e => false)
+		then ()
+	    else OS.FileSys.mkDir tempDir
+    fun channelToName(from, to) = tempDir ^ "/" ^ from ^ sep ^ to
+    (* directory has been stripped already *)
     fun nameToChannel name : channel option = 
 	(case Util.substring ("-to-", name) of
 	     NONE => NONE
-	   | SOME pos => if (String.sub(name,0) = #"!" orelse
-			     String.sub(name,0) = #"@")
-			     then NONE
-			 else let val from = String.substring(name,0,pos)
-				  val to = String.substring(name, 
-							    pos+sep_length, 
-							    (size name) - 
-							     (pos+sep_length))
-			      in  SOME(from, to) 
-			      end)
+	   | SOME pos => let val last = String.sub(name, size name - 1)
+			 in  if (last = #"!" orelse last = #"@")
+				 then NONE
+			     else let val from = String.substring(name,0,pos)
+				      val to = String.substring(name, 
+								pos+sep_length, 
+								(size name) - 
+								(pos+sep_length))
+				  in  SOME(from, to) 
+				  end
+			 end)
 
     fun remove (file : string) = 
-	if (OS.FileSys.access(file, []) andalso
-	    OS.FileSys.access(file, [OS.FileSys.A_READ]))
+	(if (OS.FileSys.access(file, [OS.FileSys.A_READ]))
 	    then OS.FileSys.remove file
-	else ()
+	 else ())
+	    handle e => (print "WARNING: remove - file exists but then remove failed\n"; ())
+			 
     fun erase channel = let val file = channelToName channel
 			in  remove file
 			end
+
     fun exists channel = 
 	let val filename = channelToName channel
-	in  OS.FileSys.access(filename, []) andalso
-	    OS.FileSys.access(filename,[OS.FileSys.A_READ]) andalso
-	    (if (OS.FileSys.fileSize filename > 0) then
-	       true
-             else 
-	       (print "XXX exists found existing but empty channel\n"; false))
+	in  (OS.FileSys.access(filename,[OS.FileSys.A_READ]) andalso
+	     (OS.FileSys.fileSize filename > 0))
+	    handle e => (print "WARNING: channel disappeared in the middle of exists\n"; 
+			 exists channel)
 	end
 
     fun send (channel, message) = 
 	let val filename = channelToName channel
-(*
-	    val _ = if (exists channel)
-			then error ("send issued while channel exists: " ^ filename)
-		    else ()
-*)
 	    fun loop [] = ""
 	      | loop [str] = str
 	      | loop (str::rest) = str ^ (String.str delimiter) ^ (loop rest)
 	    val message = loop (messageToWords message)
-	    val temp = "!" ^ filename
+	    val temp = filename ^ "!"
 	    val _ = remove temp
             (* CS: was openAppend, but NT can't do this if file doesn't exist*)
 	    val fd = TextIO.openOut temp 
@@ -195,10 +199,12 @@ struct
     fun receive channel : message option =
 	if (exists channel)
 	    then let val filename = channelToName channel
-		     val temp = "@" ^ filename
+		     val temp = filename ^ "@"
 		     val _ = remove temp
 		     val _ = OS.FileSys.rename{old=filename, new=temp}
+			 handle e => (print "rename failed\n"; raise e)
 		     val fd = TextIO.openIn temp
+			 handle e => (print "open failed\n"; raise e)
 		     fun loop acc = 
 			 let val isDone = 
 			     ((TextIO.endOfStream fd)
@@ -210,9 +216,8 @@ struct
 			 end
 		     val string = loop ""
 		     val _ = TextIO.closeIn fd
+			 handle e => (print "close failed\n"; raise e)
 		     val _ = remove temp
-(*		     val _ = (print "XXX received from "; print (source channel);
-			      print string; print "\n") *)
 		     val words = String.fields (fn c => c = delimiter) string
 		 in  SOME (wordsToMessage words)
 		 end
@@ -220,7 +225,7 @@ struct
 
     fun findChannels pred =
 	let val files = 
-	    let val dirstream = OS.FileSys.openDir "."
+	    let val dirstream = OS.FileSys.openDir tempDir
 		fun loop acc = let val cur = OS.FileSys.readDir dirstream
 			       in  if (cur = "")
 				       then (OS.FileSys.closeDir dirstream; acc)
@@ -286,13 +291,14 @@ struct
   (* This is the underlying uncached function *)
   fun modTimeSize_raw file =
       let val exists = 
-	  ((OS.FileSys.access(file, []) andalso
-	    OS.FileSys.access(file, [OS.FileSys.A_READ]))
+	  ((OS.FileSys.access(file, [OS.FileSys.A_READ]))
 	   handle _ => (print ("Warning: OS.FileSys.access on " ^ 
 			       file ^ " failed \n"); false))
-      in  if exists
+      in  (if exists
 	      then SOME(OS.FileSys.fileSize file, OS.FileSys.modTime file)
-	  else NONE
+	  else NONE)
+	      handle e => (print ("File exists for read access but fileSize of morTime failed on " ^ file ^ "\n");
+			   raise e)
       end
 	
   (* This two functions totally or partially flushes the cache *)
@@ -466,8 +472,7 @@ struct
 		 let val _ = (Help.chat ("  [writing " ^ uiFile);
 			      Cache.write (uiFile, partial_ctxt);
 			      Help.chat "]\n")
-(*		     val reduced_ctxt = Stats.timer("GCContext",LinkIl.IlContext.gc_context) il_module *)
-		    val reduced_ctxt = (print "XXXX NOT REDUCING CONTEXT"; ctxt)
+		     val reduced_ctxt = Stats.timer("GCContext",LinkIl.IlContext.gc_context) il_module 
 		     val il_module = (reduced_ctxt, partial_ctxt, binds)
 		 in il_module
 		 end
@@ -479,8 +484,7 @@ struct
 		let val _ = (Help.chat ("  [writing " ^ uiFile);
 			     Cache.write (uiFile, partial_ctxt);
 			     Help.chat "]\n")
-(*		     val reduced_ctxt = Stats.timer("GCContext",LinkIl.IlContext.gc_context) il_module *)
-		    val reduced_ctxt = (print "XXXX NOT REDUCING CONTEXT"; ctxt)
+		     val reduced_ctxt = Stats.timer("GCContext",LinkIl.IlContext.gc_context) il_module 
 		     val il_module = (reduced_ctxt, partial_ctxt, binds)
 		in il_module
 		end
@@ -533,11 +537,6 @@ struct
 		    val sFile = Til.il_to_asm (unit,base, il_module)
 		    val _ =  Help.chat "]\n"
 			
-		    (* Print some diagnostic information *)
-		    val _ = if (!stat_each_file)
-				then (Stats.print_timers();
-				      Stats.clear_stats())
-			    else ()
 		in  ()
 		end
 	in  (elaborate, generate)
@@ -610,31 +609,35 @@ struct
 					Comm.send (Comm.toMaster, Comm.ACK_OBJECT job))
 			       else
 				   Comm.send (Comm.toMaster, Comm.ACK_ASSEMBLY job)
+
+			   val _ = if (!stat_each_file)
+				       then (Stats.print_timers();
+					     Stats.clear_stats())
+				   else ()
+
 		       in  WORK unit
 		       end
 	   | SOME (Comm.REQUEST _) => error "Slave got a funny request")
 
     fun run() = 
 	let val _ = setup()
-	    val last = ref READY
+	    val lastState = ref READY
+	    val lastTime = ref (Time.now())
 	    fun loop() = 
-		let val prev = !last
-		    val cur = step()
-		    val _ = last := prev
-		in  (case cur of
+		let val prevState = !lastState
+		    val curState = step()
+		    val _ = lastState := curState
+		in  (case curState of
 			 WORK job => chat ("Slave compiled " ^ job ^ "\n")
-		       | WAIT => let val pause = (case prev of
-						      WORK _ => 0.1
-						    | _ => 0.5)
-				 in  chat ("Slave waiting for master to send work.\n");
-				     Platform.sleep pause
-				 end
-		       | READY => let val pause = (case prev of
-						       WORK _ => 0.1
-						     | _ => 0.5)
-				  in  chat ("Slave waiting for master to send work.\n");
-				      Platform.sleep pause
-				  end);
+		       | _ => (* READY or WAIT *)
+			     let val curTime = Time.now()
+				 val diff = Time.toReal(Time.-(curTime, !lastTime))
+				 val _ = if (diff > 10.0)
+					     then (chat ("Slave waiting for master to send work.\n");
+						   lastTime := curTime)
+					 else ()
+			     in	 Platform.sleep 0.1
+			     end);
 		    loop()
 		end
 	in loop()
@@ -919,7 +922,8 @@ struct
 
 
 	fun makeGraph'(mapfile : string, collapseOpt) = 
-	    let val start = Time.now()
+	    let
+		val start = Time.now() 
 		val dot = mapfile ^ ".dot"
 		val out = TextIO.openOut dot
 		val g = !graph
@@ -939,10 +943,11 @@ struct
 							   | WAITING => Dag.White
 							   | READY _ => Dag.White))}
 		val _ = TextIO.closeOut out
+
 		val diff = Time.toReal(Time.-(Time.now(), start))
 		val diff = (Real.realFloor(diff * 100.0)) / 100.0
-		val _ = showTime "CheckPoint"
-		val _ = chat ("Generated " ^ dot ^ " in " ^ (Real.toString diff) ^ " seconds.\n")
+		val _ = chat ("Generated " ^ dot ^ " in " ^ (Real.toString diff) ^ " seconds.\n") 
+
 	    in  dot
 	    end
 
@@ -996,11 +1001,6 @@ struct
 						     (Listops.member_eq(op =, ch, !workingSlaves)))
 						     then acc else ch::acc) 
 					  (!readySlaves) potentialNewSlaves)
-(*
-		val _ = (chat "XXX poll ready slaves = ";
-			 chat_strings 10 (map Comm.destination (!readySlaves));
-			 chatnt "\n")
-*)
 	    in  length (!readySlaves)
 	    end
 	(* Works only if there are slaves available *)
@@ -1112,11 +1112,12 @@ struct
 	in  not fresh
 	end
 
-    (* waiting, ready, pending, assembling, proceeding *)
+    (* waiting, ready, pending, assembling, proceeding - done not included *)
     type state = string list * string list * string list * string list * string list
     datatype result = PROCESSING of Time.time * state  (* All slaves utilized *)
                     | IDLE of Time.time * state * int  (* Some slaves idle and there are ready jobs *)
 	            | COMPLETE of Time.time 
+    fun stateSize ((a,b,c,d,e) : state) = (length a) + (length b) + (length c) + (length d) + (length e)
     fun resultToTime (PROCESSING (t,_)) = t
       | resultToTime (IDLE (t,_,_)) = t
       | resultToTime (COMPLETE t) = t
@@ -1131,7 +1132,7 @@ struct
 	    val units = rev (StringOrderedSet.toList (foldl folder StringOrderedSet.empty srcs))
 	    val _ = (chat "Computed all necessary units: \n";
 		     chat_strings 20 units; print "\n")
-	    val _ = showTime "Start compiling files"
+	    val _ = showTime (true,"Start compiling files")
 	    fun waitForSlaves() = 
 		let fun ack_inter (name,(platform::u::_::_)) = 
 		          (markProceeding u; 
@@ -1231,7 +1232,7 @@ struct
 			end
 		end
 	    fun makeExe(exe, units) = 
-		let val _ = showTime "Start linking" 
+		let val _ = showTime (true,"Start linking" )
 		    val exe = if exe = "" 
 				  then (List.last units) ^ 
 				      (case Til.getTargetPlatform() of
@@ -1286,10 +1287,6 @@ struct
 		  val _ = last := cur
 		  val thisTime = resultToTime cur
 		  val diff = Time.toReal(Time.-(thisTime,!lastGraphTime))
-		  val _ = if (diff  > 10.0)
-			      then (makeGraph'(mapfile,NONE); 
-				    lastGraphTime := (Time.now()))
-			  else ()
 	      in
 		(case cur of
 		    COMPLETE _ => complete()
@@ -1302,11 +1299,18 @@ struct
 						    in  chat ("  [Idled for " ^ (Real.toString diff) ^ 
 							      " seconds.]\n")
 						    end)
-			    val _ =
-			    (case prev of
-				 PROCESSING _ => ()
-			       | _ => chat "  [All processors working!]\n")
-			in  Platform.sleep 0.5;
+			    val _ = (case prev of
+					 PROCESSING _ => ()
+				       | _ => chat "  [All processors working!]\n")
+			    val _ = if (diff > 15.0)
+					then 
+					    let val left = stateSize state
+					    in  (makeGraph'(mapfile,NONE); 
+						 showTime (false, "CheckPoint (" ^ (Int.toString left) ^ " files left)");
+						 lastGraphTime := (Time.now()))
+					    end
+				    else ()
+			in  Platform.sleep 0.1;
 			    loop state
 			end
 		  | IDLE(t, state as (waiting, ready, pending, assembling, proceeding), numIdle) =>
@@ -1329,7 +1333,15 @@ struct
 				    else (chat "\n     Waiting for objects of ";
 					  chat_strings 20 proceeding; chat ".");
 				    chat "]\n";
-				    Platform.sleep 0.5));
+				    if (diff > 15.0)
+					then 
+					    let val left = stateSize state
+					    in  (makeGraph'(mapfile,NONE); 
+						 showTime (false,"CheckPoint (" ^ (Int.toString left) ^ " files left)");
+						 lastGraphTime := (Time.now()))
+					    end
+				    else ();
+				    Platform.sleep 0.1));
 			   loop state))
 	      end
 	in loop initialState
@@ -1387,7 +1399,7 @@ struct
   fun master mapfile = 
       let val _ = startTime "Starting compilation"
 	  val _ = helper Master.run (mapfile, false, NONE, [])
-	  val _ = showTime "Finished compilation" 
+	  val _ = showTime (true,"Finished compilation")
       in  reshowTimes()
       end
   fun pmake (mapfile, slaves) = 
@@ -1396,29 +1408,30 @@ struct
 	      val col = num div 5
 	      val geometry = "120x12+" ^ (Int.toString (col * 300)) ^ "+" ^ (Int.toString (row * 160))
 	      val dir = OS.FileSys.getDir()
+	      val commDir = dir ^ "/" ^ Comm.tempDir
 	      val SOME display = OS.Process.getEnv "DISPLAY"
 	      val SOME user = OS.Process.getEnv "USER"
-	      val out = TextIO.openOut "startSlave1"
+	      val out = TextIO.openOut (commDir ^ "/startSlave1")
 	      val _ = TextIO.output(out, "(set-default-font \"courier7\")\n")
 	      val _ = TextIO.output(out, "(shell)\n")
 	      val _ = TextIO.output(out, "(end-of-buffer)\n")
-	      val _ = TextIO.output(out, "(insert-file \"" ^ dir ^ "/startSlave2\")\n")
+	      val _ = TextIO.output(out, "(insert-file \"" ^ commDir ^ "/startSlave2\")\n")
 	      val _ = TextIO.output(out, "(end-of-buffer)\n")
 	      val _ = TextIO.output(out, "(comint-send-input)\n")
-	      val _ = TextIO.output(out, "(insert-file \"" ^ dir ^ "/startSlave3\")\n")
+	      val _ = TextIO.output(out, "(insert-file \"" ^ commDir ^ "/startSlave3\")\n")
 	      val _ = TextIO.output(out, "(end-of-buffer)\n")
 	      val _ = TextIO.output(out, "(comint-send-input)\n")
 	      val _ = TextIO.closeOut out
-	      val out = TextIO.openOut "startSlave2"
+	      val out = TextIO.openOut (commDir ^ "/startSlave2")
 	      val _ = TextIO.output(out, "cd " ^ dir ^ "; Local/sml-cm\n")
 	      val _ = TextIO.closeOut out
-	      val out = TextIO.openOut "startSlave3"
+	      val out = TextIO.openOut (commDir ^ "/startSlave3")
 	      val _ = TextIO.output(out, "CM.make(); Manager.slave();\n")
 	      val _ = TextIO.closeOut out
 	      val command = 
 		  "setenv DISPLAY " ^ display ^ 
 		  "; xterm -geometry -0 -e kinit " ^ user ^
-		  "; emacs -bg black -fg yellow -geometry " ^ geometry ^ " -l " ^ dir ^ "/startSlave1"
+		  "; emacs -bg black -fg yellow -geometry " ^ geometry ^ " -l " ^ commDir ^ "/startSlave1"
 	  in  (OS.Process.system ("rsh " ^ machine ^ " '" ^ command ^ "'&"); ()) 
 	  end
       in  Listops.mapcount startSlave slaves; 
@@ -1438,7 +1451,7 @@ struct
 	  end
 	  val _ = startTime "Starting compilation"
 	  val _ = helper runner arg
-	  val _ = showTime "Finished compilation"
+	  val _ = showTime (true,"Finished compilation")
       in  reshowTimes()
       end
   fun make mapfile = tilc (mapfile, false, NONE, [])

@@ -180,6 +180,7 @@ void DeleteJob(SysThread_t *sth)
 void check(char *str, SysThread_t *sth)
 {
   int i, j;
+  return;
   for (i=0; i<NumThread; i++) {
     if (Threads[i].status < 0)
       continue;
@@ -187,7 +188,8 @@ void check(char *str, SysThread_t *sth)
       value_t t = Threads[i].thunks[j];
       if (t != 0 && *((value_t *)t) > 1000000) {
 	printf("Proc %d: check at %s failed: Threads[%d].oneThunk = %d mapped to sysThread %d\n",
-	       sth->stid,str,i,*((value_t *)t),Threads[i].sysThread);
+	       (sth == 0) ? -1 : sth->stid,
+	       str,i,*((value_t *)t),Threads[i].sysThread);
 	assert(0);
       }
     }

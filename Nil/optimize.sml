@@ -485,6 +485,8 @@ fun pp_alias UNKNOWN = print "unknown"
 				(e as (Prim_e(PrimOp(Prim.eq_int is),[],
 					      [Var_e v,Const_e (Prim.int(_,w))]))) => e
 			     | _ => arg)
+		     | (Let_e (_, [Exp_b(v, _, e)], Var_e v')) =>
+				if (Name.eq_var(v,v')) then e else arg
 		     | _ => arg)
 	    in
 		(case (arg,arms,default) of
@@ -494,6 +496,8 @@ fun pp_alias UNKNOWN = print "unknown"
 		      NONE) => SOME (is,v,TilWord64.toUnsignedHalf w,zeroexp,oneexp)
 		    | _ => NONE)
 	    end
+	  | is_sumsw_int state (Let_e (_, [Exp_b(v, _, e)], Var_e v')) = 
+	       if (Name.eq_var(v,v')) then is_sumsw_int state e else NONE
 	  | is_sumsw_int state _ = NONE
 
 	fun convert_sumsw state (sum_sw as {result_type,...}) =

@@ -820,10 +820,8 @@ val _ = print "plet0\n"
 		else let val (e,c) = dummy_exp(context,"badseal")
 		     in  error_region();
 			 print "constraint does not match expression type\n";
-			 tab_region();
-			 print "Expression type:\n"; pp_con con;
-			 tab_region();
-			 print "\nConstraint type:\n"; pp_con con';
+			 print "  Expression type: "; pp_con con;
+			 print "\n  Constraint type: "; pp_con con';
 			 print "\n";
 			 (SEAL(e,con'),con',va)
 		     end
@@ -866,14 +864,11 @@ val _ = print "plet0\n"
 	     let 
 		 val (exp',rescon,va) = xexp(context,expr)
 		 val v = fresh_named_var "handle_exn"
-		 val patarg = {context = context,
-			       typecompile = xty,
-			       expcompile = xexp,
-			       polyinst = polyinst}
 		 val arms = map (fn (Ast.Rule{pat,exp})=>(parse_pat context pat,exp)) rules
-		 val (hbe,hbc) = caseCompile{patarg = patarg,
+		 val (hbe,hbc) = caseCompile{context = context,
 					     arms = arms,
-					     arg = (v,CON_ANY)}
+					     arg = (v,CON_ANY),
+					     reraise = true}
 		 val (he,hc) = make_lambda(v,CON_ANY,hbc,hbe)
 	     in if (eq_con(context,rescon,hbc))
 		    then (HANDLE(rescon,exp',he),rescon,va)
@@ -901,14 +896,9 @@ val _ = print "plet0\n"
 	     end
        | Ast.FnExp [] => parse_error "Ast.FnExp with empty list"
        | Ast.FnExp rules => 
-	     let val patarg = {context = context, 
-			       typecompile = xty, 
-			       expcompile = xexp, 
-			       polyinst = polyinst}
-		 val arms = map (fn (Ast.Rule{pat,exp}) => (parse_pats context [pat],exp)) rules
-		 val {arglist,body} = funCompile{patarg = patarg,
-						 rules = arms,
-						 reraise = false}
+	     let val arms = map (fn (Ast.Rule{pat,exp}) => (parse_pats context [pat],exp)) rules
+		 val {arglist,body} = funCompile{context = context,
+						 rules = arms}
 		 fun help ((v,c),(e,resc)) = make_lambda(v,c,resc,e)
 		 val (e,c) = foldr help body arglist
 	     in  (e,c,true)
@@ -923,13 +913,10 @@ val _ = print "plet0\n"
 						      fun wrap e = LET([BND_EXP(v,arge)],e)
 						  in  (add_context_exp'(context,v,argc),wrap,v)
 						  end)
-		 val patarg = {context = context,
-			       typecompile = xty,
-			       expcompile = xexp,
-			       polyinst = polyinst}
-		 val (e,c) = caseCompile{patarg = patarg,
+		 val (e,c) = caseCompile{context = context,
 					 arms = arms,
-					 arg = (v,argc)}
+					 arg = (v,argc),
+					 reraise = false}
 	     in (wrap e,c,false)
 	     end
        | Ast.MarkExp(exp,region) => 
@@ -991,16 +978,9 @@ val _ = print "plet0\n"
 	     val _ = eq_table_push()
 	     val fbnd_con_list = 
 		 (map (fn (_,var',fun_con,body_con,matches) => 
-			let 
-			    val patarg = {context = context'', 
-					  typecompile = xty, 
-					  expcompile = xexp, 
-					  polyinst = polyinst}
-			    val {body = (bodye,bodyc), 
-				 arglist} = funCompile
-					     {patarg = patarg,
-						       rules = matches,
-						       reraise = false}
+			let val {body = (bodye,bodyc), arglist} = 
+			         funCompile {context = context'',
+					     rules = matches}
 			    fun con_folder ((_,c),acc) = CON_ARROW([c],acc,false,oneshot_init PARTIAL)
 			    val func = foldr con_folder bodyc arglist
 			    val _ = if eq_con(context'',body_con,bodyc)
@@ -1171,12 +1151,8 @@ val _ = print "plet0\n"
 		val (e,con,va) = xexp(context',expr)
 		val sbnd_sdec = (SBND(lbl,BND_EXP(v,e)),SDEC(lbl,DEC_EXP(v,con,NONE,false)))
 		val context' = add_context_exp'(context',v,con)
-		val patarg = {context = context', 
-			      typecompile = xty, 
-			      expcompile = xexp, 
-			      polyinst = polyinst}
                 val parsed_pat = parse_pat context pat
-		val bind_sbnd_sdec = (bindCompile{patarg = patarg,
+		val bind_sbnd_sdec = (bindCompile{context = context',
 						  bindpat = parsed_pat,
 						  arg = (v,con)})
 		val sbnd_sdec_list = 
@@ -2375,6 +2351,9 @@ val _ = print "plet0\n"
       in result
       end
 
+
+    val expcompile = xexp
+    val typecompile = xty
 
     val xdec = fn (ctxt,fp,dec) => overload_wrap fp (xdec false) (ctxt,dec)
     val xexp = fn (ctxt,fp,exp) => overload_wrap fp xexp (ctxt,exp)

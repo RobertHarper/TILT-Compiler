@@ -747,8 +747,8 @@ structure IlUtil
 				   in  NONE
 				   end
 			      | CON_FLEXRECORD r => (flexes := r :: (!flexes); NONE)
-			      | CON_ARRAY c => (help true c; SOME c)
-			      | CON_REF c => (help true c; SOME c)
+			      | CON_ARRAY elemc => (help true elemc; SOME c)
+			      | CON_REF elemc => (help true elemc; SOME c)
 			      | _ => NONE)
 		      val handlers = STATE(default_bound,
 					   {sdec_handler = default_sdec_handler,

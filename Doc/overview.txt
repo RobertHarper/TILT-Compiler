@@ -2,9 +2,19 @@
 TILT
 ====
 
-The TILT compiler source is distributed in 8 directories:
-Util, Parser, Elaborator, Nil, Rtl, Backend, Alpha, and Top.
 
+The TILT compiler source is maintained via cvs.
+The CVS root variable should be set to 
+"/afs/cs.cmu.edu/project/fox-1/research/cvsroot".
+TILT can then be checked out with "cvs checkout ml96".
+This will create a directory named "ml96" in
+the current directory.  The TILT source proper lies 
+in 10 directores: Util, Parser, Elaborator, Nil, Rtl, 
+Backend, Alpha, Sparc, Top, Runtime.
+
+===============================
+Description of TILT directories
+===============================
 Util provides a place to store miscellaneous files used by various
 parts of TILT.
 
@@ -57,11 +67,20 @@ The Alpha directory provides a machine description of the DEC ALPHAs.
 Instructions, register sets, calling conventions, a translator
 from RTL to alpha code constitute this directory.
 
-Finally, the overall interfaces to the compiler is in the Top directory.
+Similarly, there is a Sparc directory for the Sparc backend.
+
+The overall interfaces to the compiler is in the Top directory.
 These files allow TILT to be used interactively within NJ or
 at the command line.  There is support for benchmarking, interacting
 with the system assembler and loader, and a compilation manager.
 
+The Runtime directory contains the source for the runtime.
+This is composed of a collection of C source files, Sparc and Alpha
+assembly files, and a makefile.
+
+==========
+Using TILT
+==========
 
 ============
 File listing 

@@ -3,6 +3,9 @@
 structure LinkIl :> LINKIL  = 
     struct
 
+	val _ = Pat.installHelpers {typecompile = Toil.typecompile,
+				    expcompile = Toil.expcompile,
+				    polyinst = Toil.polyinst}
 	structure Ppprim = Ppprim
 	structure Ppil = Ppil
 	structure IlContext = IlContext
@@ -161,12 +164,16 @@ structure LinkIl :> LINKIL  =
 			val new_ctxt = local_add_context_entries (base_ctxt,ctxtents) 
 			val _ = if (!show_hil)
 				    then  (
+(*
 					   print "\nCONTEXT:\n";
 					   Ppil.pp_context base_ctxt;
+*)
 					   print "SBNDS:\n"; Ppil.pp_sbnds sbnds;
+(*
 					   print "\nENTRIES:\n"; 
 					   (app (fn e => (Ppil.pp_context_entry e; 
 							  print "\n")) ctxtents);
+*)
 					   print "\n")
 				else ()
 			val partial_ctxt = IlContext.sub_context(new_ctxt, base_ctxt)

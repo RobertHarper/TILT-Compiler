@@ -38,7 +38,7 @@ structure Linknil :> LINKNIL  =
     val show_flatten = Stats.ff("showFlatten")
     val show_inline = Stats.ff("showInline")
     val show_inline2 = Stats.ff("showInline2")
-    val show_html = Stats.tt("showHTML")
+    val show_html = Stats.ff("showHTML")
 
     val do_typecheck_after_phasesplit = Stats.ff("TypecheckAfterPhasesplit")
     val do_typecheck_before_opt = Stats.ff("TypecheckBeforeOpt")

@@ -27,6 +27,8 @@ sig
     val receive : channel -> message option (* Get a message from a given channel, if it exists. *)
     val findToMasterChannels : unit -> channel list  (* Find all ready channels to master. *)
     val findFromMasterChannels : unit -> channel list  (* Find all ready channels from master. *)
+
+    val tempDir : string                    (* Channel files and other temporary files are here *)
 end
 
 signature HELP = 
@@ -42,7 +44,7 @@ signature HELP =
 	val chat_strings : int -> string list -> int
 	    
 	val startTime : string -> unit
-	val showTime : string -> unit
+	val showTime : bool * string -> unit  (* if false, show only elapsed time since StartTime *)
 	val reshowTimes : unit -> unit
     end
 

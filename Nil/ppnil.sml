@@ -328,7 +328,7 @@ structure Ppnil	:> PPNIL =
 			   pp_exp arg, String ": ",
 			   pp_is' size, String ", ",
 			   Break0 0 5,
-			   (pp_list (fn (w,e) => Hbox[pp_word w, String ": ", pp_exp e])
+			   (pp_list (fn (w,e) => Hbox[pp_word w, String ": ", Break0 0 2, pp_exp e])
 			      arms ("","","", true)),
 			   Break0 0 5,
 			   pp_default default,
@@ -339,8 +339,9 @@ structure Ppnil	:> PPNIL =
 			   pp_con sumtype, String ", ",
 			   Break0 0 5,
 			   pp_var bound, String ", ",  Break0 0 5,
-			   (pp_list (fn (w,tr,e) => Hbox[pp_word w, String ": ", pp_trace tr, Break0 0 2,
-								    String ":: ", pp_exp e])
+			   (pp_list (fn (w,tr,e) => Hbox[pp_word w, String ": ", 
+							 pp_trace tr, String ":: ", Break0 0 2,
+							 pp_exp e])
 			      arms ("","","", true)),
 			   Break0 0 5,
 			   pp_default default,
