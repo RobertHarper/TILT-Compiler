@@ -385,10 +385,11 @@ structure Ppnil	:> PPNIL =
 	      | Fixcode_b fixset => let val fixlist = Sequence.toList fixset
 				    in Vbox(separate (map (pp_fix true) fixlist) Break)
 				    end
-	      | Fixclosure_b (flag,vceset) => 
+	      | Fixclosure_b (recur,vceset) => 
 		    let val vcelist = Sequence.toList vceset
 		    in pp_list (fn (v,{code,cenv,venv,tipe}) => 
-				HOVbox[pp_var v, 
+				HOVbox[if recur then String "& " else String "",
+				       pp_var v, 
 				       HOVbox(if (!elide_bnd) then [] else [String " : ", pp_con tipe]),
 				       String " = ",
 				       String "(",

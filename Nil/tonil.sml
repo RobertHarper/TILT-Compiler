@@ -931,13 +931,6 @@ end (* local defining splitting context *)
 
            val local_name_fun_c = Name.fresh_var ()
 
-	   val cbnds_body_subst = 
-	       let fun folder (cbnd,s) = let val (v,c) = NilUtil.extractCbnd cbnd
-					 in  NilSubst.add s (v, NilSubst.substConInCon s c)
-					 end
-	       in  foldl folder (NilSubst.empty()) cbnds_body
-	       end
-
 	   val con_res' = NilUtil.makeLetC cbnds_body con_res
 
 	   val knd_fun_c_context = Arrow_k(Open, [(var_arg_c, knd_arg_context)], knd_body_c_context)

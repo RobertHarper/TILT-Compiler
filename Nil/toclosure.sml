@@ -1224,6 +1224,7 @@ struct
 				 end
 			 in  map mapper temp
 			 end
+
 	   val is_recur = Listops.orfold 
 	                    (fn v => Listops.orfold (fn ((v',_),_,_,_) => Name.eq_var(v,v')) pc_free) vars
 
@@ -1239,6 +1240,7 @@ struct
 
 	   val num_vkl_free = length vkl_free
 	   val num_pc_free = length pc_free
+	   val is_empty = num_pc_free = 0
 	   val cenv_kind = let fun mapper(p,v,k,l) = ((l,Name.derived_var v),k)
 			       val lvk_list = map mapper vkl_free
 			   in  Record_k(Sequence.fromList lvk_list)
@@ -1321,20 +1323,23 @@ struct
 
    and bnd_rewrite state bnd : bnd list =
        let
-	   fun funthing_helper rewriter var_thing_set =
+	   fun helper var_fun_set =
 	       let 
-		   val var_thing_list = Sequence.toList var_thing_set
-		   val vars = map #1 var_thing_list
-		   val type_pfun_close = map (rewriter vars) var_thing_list
-		   val is_recur = Listops.orfold (fn (x,_,_,_) => x) type_pfun_close
+		   val var_fun_list = Sequence.toList var_fun_set
+		   val vars = map #1 var_fun_list
+		   val type_pfun_close = map (fun_rewrite state vars) var_fun_list
 		   val pfun_type = List.concat(map #2 type_pfun_close)
 		   val pfun_typebnds = map (fn (v,c) => (Con_b(Compiletime,Con_cb(v,c)))) pfun_type
 		   val pfun_list = List.concat(map #3 type_pfun_close)
 		   val pfun_bnd = Fixcode_b (Sequence.fromList pfun_list)
-		   val closure_bnd_list = 
-		       (case (List.concat(map #4 type_pfun_close)) of
-			    [] => []
-			  | close_list => [Fixclosure_b(is_recur,Sequence.fromList close_list)])
+		   fun make_fix (is_recur,[]) = []
+		     | make_fix (is_recur,ls) = [Fixclosure_b(is_recur,Sequence.fromList ls)]
+		   fun closure_loop recur (group,separate) [] = 
+		          (make_fix(false,separate)) @ (make_fix(recur,group))
+		     | closure_loop recur (group,separate) ((r,_,_,cl)::rest) = 
+			  closure_loop (recur orelse r)
+			    (if r then (cl@group,separate) else (group,cl@separate)) rest
+		   val closure_bnd_list = closure_loop false ([],[]) type_pfun_close
 	       in  pfun_typebnds @ (pfun_bnd :: closure_bnd_list)
 	       end
        in (case bnd of
@@ -1345,7 +1350,7 @@ struct
 						e_rewrite state e)]
 	      | (Fixclosure_b _) => error "there can't be closures while closure-converting"
 	      | (Fixcode_b _) => error "there can't be codes while closure-converting"
-	      | (Fixopen_b var_fun_set) => funthing_helper (fun_rewrite state) var_fun_set)
+	      | (Fixopen_b var_fun_set) => helper var_fun_set)
        end
 
    and trace_rewrite state trace : niltrace = 
