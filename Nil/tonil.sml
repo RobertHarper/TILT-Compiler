@@ -12,11 +12,9 @@ struct
    structure VarSet = Name.VarSet
 
    open Nil Listops
-   val debug      = ref false
-   val diag       = ref true
-   val full_debug = ref false
-   val trace      = ref false
-
+   val diag       = Stats.tt("TonilDiag")
+   val debug      = Stats.ff("TonilDebug")
+   val full_debug = Stats.ff("TonilFullDebug")
 
    val do_kill_cpart_of_functor = Stats.tt("do_thin")
    val killDeadImport = Stats.tt("killDeadImport")
@@ -164,30 +162,28 @@ struct
 
    fun rename_sdecs sdecs = 
        let open Il IlUtil
-	   fun folder(SDEC(l,dec),s : (var * exp) list * (var * con) list * (var * mod) list) = 
+	   fun folder(SDEC(l,dec),s : subst) =
 	       case dec of
 		   DEC_EXP(v,c,eopt,i) => 
 		       let val eopt = (case eopt of
 					   NONE => NONE
-					 | SOME e => SOME(exp_subst_expconmodvar(e,#1 s, #2 s, #3 s)))
-			   val c = con_subst_expconmodvar(c,#1 s, #2 s, #3 s)
+					 | SOME e => SOME(exp_subst(e,s)))
+			   val c = con_subst(c,s)
 		       in  (SDEC(l,DEC_EXP(v,c,eopt,i)),s)
 		       end
 		 | DEC_CON(v,k,c,i) => 
 		       let val v' = Name.derived_var v
-			   val k = kind_subst_expconmodvar(k,#1 s, #2 s, #3 s)
 			   val c = (case c of
 					NONE => NONE
-				      | SOME c => SOME(con_subst_expconmodvar(c,#1 s, #2 s, #3 s)))
+				      | SOME c => SOME(con_subst(c,s)))
 		       in  (SDEC(l,DEC_CON(v',k,c,i)),
-			    (#1 s, (v,CON_VAR v'):: (#2 s), #3 s))
+			    subst_add_convar(s,v,CON_VAR v'))
 		       end
 		 | DEC_MOD(v,b,signat) => let val v' = Name.derived_var v
-					    val signat = sig_subst_expconmodvar(signat,
-										#1 s, #2 s, #3 s)
+					    val signat = sig_subst(signat,s)
 					in  (SDEC(l,DEC_MOD(v,b,signat)),s)
 					end
-       in  #1(foldl_acc folder ([],[],[]) sdecs)
+       in  #1(foldl_acc folder IlUtil.empty_subst sdecs)
        end
 
 
@@ -793,7 +789,8 @@ end (* local defining splitting context *)
 		      | SOME _ =>
 			let val _ = print "Duplicate functor var_arg in HIL\n"
 			    val var_arg' = Name.derived_var var_arg
-			    val ilmod_body = IlUtil.mod_subst_convar(ilmod_body,[(var_arg,Il.CON_VAR var_arg')])
+			    val subst = IlUtil.subst_add_convar(IlUtil.empty_subst,var_arg,Il.CON_VAR var_arg')
+			    val ilmod_body = IlUtil.mod_subst(ilmod_body,subst)
 		     	    val ((var_arg_c, var_arg_r), context') = splitVar (var_arg', context')
 			in  (var_arg_c, var_arg_r, context',var_arg',ilmod_body)
 			end)
@@ -1220,9 +1217,9 @@ end (* local defining splitting context *)
 					   Ppnil.pp_var var;
 					   print "\n")
 				  val v = Name.derived_var var
-				  val table = [(var, Il.CON_VAR v)]
+				  val subst = IlUtil.subst_add_convar(IlUtil.empty_subst, var, Il.CON_VAR v)
 				  val Il.MOD_STRUCTURE rest' = 
-				      IlUtil.mod_subst_convar(Il.MOD_STRUCTURE rest_il_sbnds,table)
+				      IlUtil.mod_subst(Il.MOD_STRUCTURE rest_il_sbnds,subst)
 			      in (v,rest')
 			      end)
 
@@ -1260,9 +1257,9 @@ end (* local defining splitting context *)
 				     Ppnil.pp_var var;
 				     print "\n")
 			    val v = Name.derived_var var
-			    val table = [(var, Il.MOD_VAR v)]
+			    val subst = IlUtil.subst_add_modvar(IlUtil.empty_subst, var, Il.MOD_VAR v)
 			    val Il.MOD_STRUCTURE rest' = 
-				IlUtil.mod_subst_modvar(Il.MOD_STRUCTURE rest_il_sbnds,table)
+				IlUtil.mod_subst(Il.MOD_STRUCTURE rest_il_sbnds,subst)
 			in (v,rest')
 			end)
 
@@ -1545,13 +1542,13 @@ end (* local defining splitting context *)
 
 	   fun is_bound v = (case NilContext_find_kind (context, v) of
 				 NONE => false | SOME _ => true)
-	   val Il.CON_FUN(vars, Il.CON_TUPLE_INJECT cons) = 
+(*	   val Il.CON_FUN(vars, Il.CON_TUPLE_INJECT cons) = 
 	       IlUtil.rename_confun(is_bound,vars,Il.CON_TUPLE_INJECT cons)
-
+*)
 	   val context' = update_NILctx_insert_kind_list(context,map (fn v => (v,Type_k)) vars)
 	       
 	   val cons'= map (xcon context') cons
-	   val freevars = Listops.flatten (map IlUtil.con_free_convar cons)
+	   val freevars = Listops.flatten (map (fn c => #2(IlUtil.con_free c)) cons)
 	   val is_recur = Listops.orfold (fn v => Listops.member_eq(Name.eq_var,v,freevars)) vars
 
 	   val con = Mu_c (is_recur,
@@ -1565,12 +1562,12 @@ end (* local defining splitting context *)
        let
 	   fun is_bound v = (case NilContext_find_kind (context, v) of
 				 NONE => false | SOME _ => true)
-	   val Il.CON_FUN([var],con) = IlUtil.rename_confun(is_bound,[var],con)
+(*	   val Il.CON_FUN([var],con) = IlUtil.rename_confun(is_bound,[var],con) *)
 
 	   val context' = update_NILctx_insert_kind(context, var, Type_k)
 	       
 	   val con' = xcon context' con
-	   val freevars = IlUtil.con_free_convar con
+	   val (_,freevars,_) = IlUtil.con_free con
 	   val is_recur = Listops.member_eq(Name.eq_var,var,freevars)
 	   val con = Mu_c (is_recur,Sequence.fromList [(var, con')])
        in
@@ -2067,14 +2064,14 @@ end (* local defining splitting context *)
 			        NONE => error "unbound signature variable"
 			      | SOME s => s)
 
-     |  xsig' context (con0,Il.SIGNAT_OF il_module) = 
+     |  xsig' context (con0,Il.SIGNAT_OF il_path) = 
           let val {cbnd_cat = cbnd_mod_cat, 
 		   ebnd_cat = ebnd_mod_cat,
 		   name_c   = name_mod_c, 
 		   name_r   = name_mod_r,
 		   context  = context,
 (*		   knd_c = knd, *)
-		   ...} = xmod context (il_module, NONE)
+		   ...} = xmod context (IlUtil.path2mod il_path, NONE)
 
 	      val cbnds = flattenCatlist cbnd_mod_cat
 	      val cbnds' = map makeConb cbnds

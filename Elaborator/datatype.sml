@@ -20,8 +20,9 @@ structure Datatype
 
     fun con_fun(args,body) = 
 	let val args' = map Name.derived_var args
-	    val subst = Listops.map2 (fn (v,v') => (v,CON_VAR v')) (args,args')
-	in  CON_FUN(args', con_subst_convar(body,subst))
+	    fun folder ((v,v'),s) = subst_add_convar(s,v,CON_VAR v')
+	    val subst = foldl folder empty_subst (zip args args')
+	in  CON_FUN(args', con_subst(body,subst))
 	end
 
     (* ------------------------------------------------------------------
@@ -129,18 +130,25 @@ structure Datatype
 	 *)
 	local
 	    fun tyvar_type_mapper ty = xty(context',ty)
-	    val subst_tyvar2vdt = zip type_vars (map CON_VAR vardt_list)
-	    fun conapper(CON_VAR tarv,c2) : con option = assoc_eq(eq_var,tarv,subst_tyvar2vdt)
+
+	    fun folder ((v,c),s) = subst_add_convar(s,v,c)
+	    fun vclist2subst vclist = foldl folder empty_subst vclist
+
+	    val list_tyvar2vdt = zip type_vars (map CON_VAR vardt_list)
+	    val subst_tyvar2vdt = vclist2subst list_tyvar2vdt
+	    val subst_tyvar2mproj = vclist2subst (map2 (fn (l,v) => (v, CON_MODULE_PROJECT(MOD_VAR mpoly_var,l)))
+						  (tyvar_labs, tyvar_vars))
+
+	    fun conapper(CON_VAR tarv,c2) : con option = assoc_eq(eq_var,tarv,list_tyvar2vdt)
 	      | conapper _ = NONE
-	    val subst_tyvar2mproj = map2 (fn (l,v) => (v, CON_MODULE_PROJECT(MOD_VAR mpoly_var,l)))
-		                        (tyvar_labs, tyvar_vars)
+
 	in
 	    fun vdt_mapper c = 
 		if is_monomorphic
-		    then con_subst_convar(c,subst_tyvar2vdt)
+		    then con_subst(c,subst_tyvar2vdt)
 		else con_subst_conapps(c,conapper)
 
-	    fun mproj_type_mapper c = con_subst_convar(c,subst_tyvar2mproj)
+	    fun mproj_type_mapper c = con_subst(c,subst_tyvar2mproj)
 	    val constr_tyvar_type = mapmap (Util.mapopt tyvar_type_mapper) constr_tys
 	    val constr_mproj_type = mapmap (Util.mapopt mproj_type_mapper) constr_tyvar_type
 	    val constr_vdt  = mapmap (Util.mapopt vdt_mapper)  constr_tyvar_type
@@ -907,7 +915,7 @@ structure Datatype
 	      | (SOME(_,PHRASE_CLASS_MOD(_,true,s)),SOME(sbnds,_,_)) =>
 		    (case s of
 			 SIGNAT_FUNCTOR(v,argsig,SIGNAT_STRUCTURE(_,[SDEC(_,DEC_EXP(_,_,SOME e,_))]),_) =>
-			     exp_subst_modvar(e,[(v,MOD_STRUCTURE sbnds)])
+			     exp_subst(e,subst_add_modvar(empty_subst, v, MOD_STRUCTURE sbnds))
 		       | _ => error "cannot construct expose_exp - weird signature")
 	      | _ => error "cannot construct expose_exp")
 

@@ -1,4 +1,29 @@
-Group is
+Group 
+
+
+signature LINK_PARSE
+signature NAME
+signature NAMEBLAST
+signature SYMBOL
+signature FIXITY
+signature AST
+signature ASTUTIL
+signature ASTHELP
+signature SOURCE_MAP
+signature TVCLOSE
+
+structure LinkParse
+structure Name
+structure NameBlast
+structure Fixity
+structure Symbol
+structure Ast
+structure AstUtil
+structure AstHelp
+structure SourceMap
+structure TVClose
+
+is
 ../smlnj-lib.cm
 ../Util/util.cm
 

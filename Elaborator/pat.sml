@@ -54,7 +54,7 @@ structure Pat
 				    special = NONE,
 				    carrier = supertype carrier})
 		| _ => NONE)
-	in  con_all_handle(exp_handler,con_handler,mod_handler, fn _ => NONE) arg_con
+	in  con_handle(exp_handler,con_handler,mod_handler, fn _ => NONE) arg_con
 	end
 
     (* ---------- auxilliary types, datatypes, and functions -------------- 
@@ -119,14 +119,14 @@ structure Pat
     fun wrapbnds' ([] : bnds, (e : exp, c : con)) = (e,c)
       | wrapbnds' (bnds, (e,c)) = 
 	let fun folder(BND_EXP(v,e),subst) = 
-	         let val e' = IlUtil.exp_subst_expvar(e,subst)
+	         let val e' = IlUtil.exp_subst(e,subst)
 		     val v' = Name.fresh_named_var (Name.var2string v)
-		 in  (BND_EXP(v',e'),(v,VAR v')::subst)
+		 in  (BND_EXP(v',e'), subst_add_expvar(subst,v,VAR v'))
 		 end
-	      | folder(BND_CON(v,c),subst) = (BND_CON(v,IlUtil.con_subst_expvar(c,subst)),subst)
-	      | folder(BND_MOD(v,b,m),subst) = (BND_MOD(v,b,IlUtil.mod_subst_expvar(m,subst)),subst)
-	    val (bnds,subst) = foldl_acc folder [] bnds
-	    val e = exp_subst_expvar(e,subst)
+	      | folder(BND_CON(v,c),subst) = (BND_CON(v,IlUtil.con_subst(c,subst)),subst)
+	      | folder(BND_MOD(v,b,m),subst) = (BND_MOD(v,b,IlUtil.mod_subst(m,subst)),subst)
+	    val (bnds,subst) = foldl_acc folder empty_subst bnds
+	    val e = exp_subst(e,subst)
 	in  (make_let (bnds, e),c)
 	end
 
@@ -261,8 +261,8 @@ structure Pat
 							    bound_cons,labels)
 				 val (e,c) = 
 				     if (length bound_cons = 1)
-					 then (IlUtil.exp_subst_expvar
-					       (e,[(hd bound_vars,VAR argvar)]),c)
+					 then (IlUtil.exp_subst
+					       (e,subst_add_expvar(empty_subst,hd bound_vars,VAR argvar)),c)
 				     else wrapbnds'(lbnds,(e,c))
 				 val (lambda,funcon) = make_lambda(argvar,argcon,c,e)
 				 val bnd = BND_EXP(funvar,lambda)

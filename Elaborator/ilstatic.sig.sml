@@ -22,6 +22,7 @@ signature ILSTATIC =
     val soft_eq_con        : Il.context * Il.con * Il.con -> bool
     val sub_con            : Il.context * Il.con * Il.con -> bool
     val semi_sub_con       : Il.context * Il.con * Il.con -> bool
+    val con_reduce_once    : Il.context * Il.con -> Il.con option
     val con_head_normalize : Il.context * Il.con -> Il.con
     val con_normalize      : Il.context * Il.con -> Il.con
     val eq_exp             : Il.context * Il.exp * Il.exp -> bool

@@ -3,11 +3,14 @@
 (* ML-Yacc Parser Generator (c) 1989 Andrew W. Appel, David R. Tarditi 
  *
  * $Log$
-# Revision 1.4  98/02/01  01:28:00  pscheng
+# Revision 1.5  99/02/12  22:22:05  pscheng
+# *** empty log message ***
+# 
+# Revision 1.4  1998/02/01  01:28:00  pscheng
 # Changes to facilitate bootstrapping:
 #   Added ascription in various places
 #   Split up files into signature and code
-# 
+#
 # Revision 1.3  1998/01/21  20:40:20  pscheng
 # moved the .sig files to .sig.sml file
 #
@@ -35,14 +38,16 @@
    yielding a value of type unit -> (svalue,pos) token
  *)
 
-functor JoinWithArg(structure Lex : ARG_LEXER
-	     structure ParserData: PARSER_DATA
-	     structure LrParser : LR_PARSER
-	     sharing ParserData.LrTable = LrParser.LrTable
-	     sharing ParserData.Token = LrParser.Token
-	     sharing type Lex.UserDeclarations.svalue = ParserData.svalue
-	     sharing type Lex.UserDeclarations.pos = ParserData.pos
-	     sharing type Lex.UserDeclarations.token = ParserData.Token.token)
+functor JoinWithArg(structure ParserData: PARSER_DATA
+		    structure LrParser : LR_PARSER
+		    structure Lex : ARG_LEXER
+			where type ('a,'b) UserDeclarations.token = ('a,'b) ParserData.Token.token
+
+		    sharing ParserData.LrTable = LrParser.LrTable
+		    sharing ParserData.Token = LrParser.Token
+		    sharing type Lex.UserDeclarations.svalue = ParserData.svalue
+		    sharing type Lex.UserDeclarations.pos = ParserData.pos)
+
 		 :> ARG_PARSER  where Token = ParserData.Token
 				where Stream = LrParser.Stream
 				where type svalue = ParserData.svalue

@@ -53,68 +53,10 @@ structure LinkIl :> LINKIL  =
 	    in List.mapPartial get_sdec entries	    
 	    end
 
-        (* returns its results backwards *)
-        fun export_sdecs subst path sdecs : (sbnd * sdec) list = 
-		let fun label2obj path2obj l = path2obj(join_path_labels(path,[l]))
-		    fun do_sdec (SDEC(l,dec),(acc,(etab,ctab,mtab))) = 
-			let val fv = Name.fresh_var()
-			in  (case dec of
-				 DEC_EXP(v,c,eopt,i) => 
-				     let val c = con_subst_expconmodvar(c,etab,ctab,mtab)
-					 val subst = ((v,VAR fv)::etab,ctab,mtab)
-					 val eopt = 
-					     (case eopt of
-						  NONE => NONE
-						| SOME e => SOME(exp_subst_expconmodvar(e,etab,ctab,mtab)))
-				     in  ((SBND(l,BND_EXP(fv,label2obj path2exp l)),
-					   SDEC(l,DEC_EXP(fv,c,eopt,i)))::acc, subst)
-				     end
-			       | DEC_CON(v,k,copt,i) => 
-				     let val subst = (etab,(v,CON_VAR fv)::ctab,mtab)
-					 val copt = (case copt of
-							 NONE => NONE
-						       | SOME c => SOME(con_subst_expconmodvar(c,etab,ctab,mtab)))
-				     in  ((SBND(l,BND_CON(fv,label2obj path2con l)),
-					   SDEC(l,DEC_CON(fv,k,copt,i)))::acc, subst)
-				     end
-			       | DEC_MOD(v,b,s) => 
-				     let val subst = (etab,ctab,(v,MOD_VAR fv)::mtab)
-					 val s = sig_subst_expconmodvar(s,etab,ctab,mtab)
-					 val first = (SBND(l,BND_MOD(fv,b,label2obj path2mod l)),
-						      SDEC(l,DEC_MOD(fv,b,s)))
-					 val rest = 
-					     (case (IlUtil.is_open l, s) of
-						  (true,SIGNAT_STRUCTURE(_,inner_sdecs)) =>
-						      export_sdecs subst (join_path_labels(path,[l])) inner_sdecs
-						| _ => [])
-				     in  if (IlUtil.is_open l)
-					     then (rest @ acc, subst)
-					 else (first :: acc, subst)
-				     end)
-			end
-		    val (rev_sdecs,_) = foldl do_sdec ([],subst) sdecs
-		in  rev_sdecs
-		end
-
 
 	val xdec = Stats.timer("Elaboration",Toil.xdec)
 	val xspec = Stats.timer("Elaboration",Toil.xspec)
 
-
-	fun has_unset m = 
-	    let val unset = ref false
-		fun ehandle (OVEREXP (_,_,oe)) = ((case Util.oneshot_deref oe of
-						       NONE => unset := true
-						     | _ => ()); NONE)
-		  | ehandle _ = NONE
-		fun chandle (CON_TYVAR tv) = ((case Tyvar.tyvar_deref tv of
-						   NONE => unset := true
-						 | _ => ()); NONE)
-		  | chandle _ = NONE
-		val _ = mod_all_handle(ehandle,chandle,
-				       default_mod_handler,default_sdec_handler)
-	    in  !unset
-	    end
 
 
 	fun check' (context,sbnd_entries) {doprint,docheck} =
@@ -139,7 +81,7 @@ structure LinkIl :> LINKIL  =
 		val ssize = IlUtil.sig_size given_s
 		val _ = (Stats.int "Module Size") := msize
 		val _ = (Stats.int "Signature Size") := ssize
-		val _ = if (has_unset m)
+		val _ = if (IlUtil.mod_resolved m)
 			    then error "module is not fully resolved"
 			else ()
 (*		val _ =
@@ -192,10 +134,7 @@ structure LinkIl :> LINKIL  =
 	    end
 
 
-	val plus_context = IlContext.plus_context(IlUtil.exp_subst_expconmodvar,
-						  IlUtil.con_subst_expconmodvar,
-						  IlUtil.kind_subst_expconmodvar,
-						  IlUtil.sig_subst_expconmodvar)
+	val plus_context = IlContext.plus_context
 
 	structure IlContextEq = IlContextEq
 

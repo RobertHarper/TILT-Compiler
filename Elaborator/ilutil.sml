@@ -73,6 +73,11 @@ structure IlUtil
 	     | _ => false)
     end
 
+    fun canonical_tyvar_label is_equal n = 
+	if (n<0 orelse n>25) then error "canonical_tyvar_label given number out of range"
+	else symbol_label(Symbol.tyvSymbol ((if is_equal then "''" else "'")
+					    ^ (String.str (chr (ord #"a" + n)))))
+
 
     val unit_exp : exp = RECORD[]
     val fail_tag = fresh_named_tag "fail"
@@ -176,6 +181,13 @@ structure IlUtil
 					 | SOME con => con)
       | con_deref c = c
 
+
+      fun find_sdec ([],_) = NONE
+	| find_sdec((sdec as SDEC(l,_))::rest,l') = if (eq_label(l,l')) 
+						      then SOME sdec else find_sdec(rest,l')
+      fun find_sbnd ([],_) = NONE
+	| find_sbnd((sbnd as SBND(l,_))::rest,l') = if (eq_label(l,l')) 
+						      then SOME sbnd else find_sbnd(rest,l')
 
 
     (* -------------------------------------------------------- *)
@@ -380,7 +392,9 @@ structure IlUtil
 	     | NONE =>
 	(case s of
 	     SIGNAT_VAR v => s
-	   | SIGNAT_OF m => SIGNAT_OF(f_mod state m)
+	   | SIGNAT_OF p => (case mod2path (f_mod state (path2mod p)) of
+				 NONE => error "f_signat transformed path to non-path with SIGNAT_OF"
+			       | SOME p => SIGNAT_OF p)
 	   | SIGNAT_STRUCTURE (popt,sdecs) => SIGNAT_STRUCTURE (popt,map (f_sdec state) sdecs)
 	   | SIGNAT_FUNCTOR (v,s1,s2,a) => SIGNAT_FUNCTOR(v, f_signat state s1, 
 							   f_signat state s2, a)))
@@ -430,73 +444,25 @@ structure IlUtil
       fun default_con_handler _ = NONE
       fun default_mod_handler _ = NONE
 
-      fun con_occurs(argcon : con, origtv : tyvar) : bool =
-	let 
-	  val occurs = ref false
-	  fun con_handler (CON_TYVAR tv,_) = (if eq_tyvar(tv,origtv) 
-						  then occurs := true else (); 
-						      NONE)
-	    | con_handler _ = NONE
-	  val handlers = STATE(default_bound,
-			       {
-				sdec_handler = default_sdec_handler,
-				exp_handler = default_exp_handler,
-				con_handler = con_handler,
-				mod_handler = default_mod_handler,
-				sig_handler = default_sig_handler})
-	in (f_con handlers argcon; !occurs)
-	end
+      type handler = (exp -> exp option) * (con -> con option) * 
+	              (mod -> mod option) * (sdec -> sdec option) 
+       local
+	   fun all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) =
+	       STATE(default_bound,
+		     {sdec_handler = fn (_,sd) => sdec_handler sd,
+		      exp_handler = fn (e,_) => exp_handler e,
+		      con_handler = fn (c,_) => con_handler c,
+		      mod_handler = fn (m,_) => mod_handler m,
+		      sig_handler = default_sig_handler})
+       in
+	   fun exp_handle handlers = f_exp (all_handlers handlers)
+	   fun con_handle handlers = f_con (all_handlers handlers)
+	   fun mod_handle handlers = f_mod (all_handlers handlers)
+	   fun sig_handle handlers = f_signat (all_handlers handlers)
+	   fun bnd_handle handlers = f_bnd (all_handlers handlers)
+	   fun dec_handle handlers = f_dec (all_handlers handlers)
+       end
 
-      fun con_free_convar (argcon : con) : var list = 
-	let 
-	  val free = ref []
-	  fun con_handler (CON_VAR v,bound) = (if (member_eq(eq_var,v,bound) orelse
-						      member_eq(eq_var,v,!free))
-						      then ()
-						  else free := (v::(!free));
-						      NONE)
-	    | con_handler _ = NONE
-	  val handlers = STATE(default_bound,
-			       {sdec_handler = default_sdec_handler,
-				exp_handler = default_exp_handler,
-				con_handler = con_handler,
-				mod_handler = default_mod_handler,
-				sig_handler = default_sig_handler})
-	  val _ = f_con handlers argcon
-	in !free
-	end
-
-      fun sig_free_conmodvar (argsig : signat) : var list * var list = 
-	let 
-	  val freecon = ref []
-	  val freemod = ref []
-	  fun con_handler (CON_VAR v,bound) = (if (member_eq(eq_var,v,bound) orelse
-						      member_eq(eq_var,v,!freecon))
-						      then ()
-						  else freecon := (v::(!freecon));
-						      NONE)
-	    | con_handler _ = NONE
-	  fun mod_handler (MOD_VAR v,bound) = (if (member_eq(eq_var,v,bound) orelse
-						      member_eq(eq_var,v,!freemod))
-						      then ()
-						  else freemod := (v::(!freemod));
-						      NONE)
-	    | mod_handler _ = NONE
-	  val handlers = STATE(default_bound,
-			       {sdec_handler = default_sdec_handler,
-				exp_handler = default_exp_handler,
-				con_handler = con_handler,
-				mod_handler = mod_handler,
-				sig_handler = default_sig_handler})
-	  val _ = f_signat handlers argsig
-	in (!freecon, !freemod)
-	end
-
-
-    fun canonical_tyvar_label is_equal n = 
-	if (n<0 orelse n>25) then error "canonical_tyvar_label given number out of range"
-	else symbol_label(Symbol.tyvSymbol ((if is_equal then "''" else "'")
-					    ^ (String.str (chr (ord #"a" + n)))))
 
       fun rebind_free_type_var(tv_stamp : stamp,
 			       argcon : con, context, targetv : var) 
@@ -544,21 +510,7 @@ structure IlUtil
       exception DEPENDENT
       fun remove_modvar_handlers(target_var : var, arg_sdecs : sdecs) : state =
 	let 
-	  fun con_handler (CON_TYVAR tyvar,_) =
-	    (case (tyvar_deref tyvar) of
-	       (SOME _) => NONE
-	     | NONE => NONE
-(*		   let 
-		       val v = tyvar_getvar tyvar
-		       fun loop [] = CON_TYVAR tyvar
-			 | loop ((SDEC(cur_label,DEC_CON(curv,k,SOME c)))::rest) = 
-			   if eq_var(v,curv) then c else loop rest
-			 | loop (_::rest) = loop rest
-		   in SOME(loop arg_sdecs)
-		   end
-*)
-)
-	    | con_handler (CON_MODULE_PROJECT(m,l),_) = con_proj_handler(m,l)
+	  fun con_handler (CON_MODULE_PROJECT(m,l),_) = con_proj_handler(m,l)
 	    | con_handler _ = NONE
 	  and con_proj_handler (m,argl) : con option = 
 	    let 
@@ -607,214 +559,130 @@ structure IlUtil
 	  in f_con handlers c
 	      handle DEPENDENT => error "remove_modvar_type failed"
 	  end
-      fun remove_modvar_signat(s : signat, target_var : var, sdecs : sdecs) : signat = 
-	  let val handlers = remove_modvar_handlers(target_var,sdecs)
-	  in f_signat handlers s
-	      handle DEPENDENT => error "remove_modvar_signat failed"
-	  end
-      fun remove_modvar_sdec(s : sdec, target_var : var, sdecs : sdecs) : sdec = 
-	  let val handlers = remove_modvar_handlers(target_var,sdecs)
-	  in f_sdec handlers s
-	      handle DEPENDENT => error "remove_modvar_sdec failed"
-	  end
-
-      fun add_modvar_handlers(m : mod, sdecs : sdecs) =
-	let 
-	    fun loop (ea,ca,ma) [] = (ea,ca,ma)
-	      | loop (ea,ca,ma) ((cur as (SDEC(l,dec)))::rest) =
-		(case dec of
-		     DEC_EXP (v,c,eopt,_) => loop ((v,MODULE_PROJECT(m,l))::ea,ca,ma) rest
-		   | DEC_CON(v,k,copt,_) => loop (ea,(v,CON_MODULE_PROJECT(m,l))::ca,ma) rest
-		   | DEC_MOD(v,_,s) => loop (ea,ca,(v,MOD_PROJECT(m,l))::ma) rest)
-	    val (exptable,contable,modtable) = loop ([],[],[]) sdecs
-	    fun exp_handler (VAR var,bound) = 
-		(case (assoc_eq(eq_var,var,exptable)) of
-		     SOME e => SOME e
-		   | NONE => NONE)
-	      | exp_handler _ = NONE
-	    fun con_handler (CON_VAR var,bound) = 
-		(case (assoc_eq(eq_var,var,contable)) of
-		     SOME c => SOME c
-		   | NONE => NONE)
-	      | con_handler _ = NONE
-	    fun mod_handler (MOD_VAR modvar,bound) = 
-		(case (assoc_eq(eq_var,modvar,modtable)) of
-		     SOME m => SOME m
-		   | NONE => NONE)
-	      | mod_handler _ = NONE
-	    val handlers = STATE(default_bound,
-				 {sdec_handler = default_sdec_handler,
-				  exp_handler = exp_handler,
-				  con_handler = con_handler,
-				  mod_handler = mod_handler,
-				  sig_handler = default_sig_handler})
-	in handlers
-	end
-
-      fun add_modvar_sig(s : signat, m : mod, sdecs : sdecs) : signat =
-	let val handlers = add_modvar_handlers(m,sdecs)
-	in f_signat handlers s
-	end
-      fun add_modvar_type(c : con, m : mod, sdecs : sdecs) : con = 
-	let val handlers = add_modvar_handlers(m,sdecs)
-	in f_con handlers c
-	end
-
-      fun con_subst_var_withproj(c : con, prev_sdecs : sdec list, m : mod) : con = 
-	let fun strip [] = []
-	      | strip ((SDEC (l, DEC_CON(v,_,_,_)))::rest) = (v,l) :: (strip rest)
-	      | strip (_::rest) = strip rest
-	    val table : (var * label) list= strip prev_sdecs
-	    fun con_handler (CON_VAR var,bound) = 
-	      (case (assoc_eq(eq_var,var,table)) of
-		 SOME l => SOME(CON_MODULE_PROJECT(m,l))
-	       | NONE => NONE)
-	      | con_handler _ = NONE
-	    val handlers = STATE(default_bound,
-				 {sdec_handler = default_sdec_handler,
-				  exp_handler = default_exp_handler,
-				  con_handler = con_handler,
-				  mod_handler = default_mod_handler,
-				  sig_handler = default_sig_handler})
-	in f_con handlers c
-	end
 
 
+      type subst = exp Name.PathMap.map * con Name.PathMap.map * mod Name.PathMap.map
+      val empty_subst = (Name.PathMap.empty, Name.PathMap.empty, Name.PathMap.empty)
+      fun subst_is_empty(e,c,m) = (Name.PathMap.numItems e = 0) andalso
+	                          (Name.PathMap.numItems c = 0) andalso
+				  (Name.PathMap.numItems m = 0)
+
+      fun subst_add_exp((e,c,m), p, exp) = (Name.PathMap.insert(e, p, exp), c, m)
+      fun subst_add_con((e,c,m), p, con) = (e, Name.PathMap.insert(c, p, con), m)
+      fun subst_add_mod((e,c,m), p, module) = (e, c, Name.PathMap.insert(m, p, module))
+
+      fun subst_add_expvar(subst, v, e) = subst_add_exp(subst, (v,[]), e)
+      fun subst_add_convar(subst, v, c) = subst_add_con(subst, (v,[]), c)
+      fun subst_add_modvar(subst, v, m) = subst_add_mod(subst, (v,[]), m)
+
+      fun subst_add_exppath(subst, PATH p, e) = subst_add_exp(subst, p, e)
+      fun subst_add_conpath(subst, PATH p, c) = subst_add_con(subst, p, c)
+      fun subst_add_modpath(subst, PATH p, m) = subst_add_mod(subst, p, m)
+
+    local 
+	fun efolder ((v,e),s) = subst_add_expvar(s,v,e)
+	fun cfolder ((v,c),s) = subst_add_convar(s,v,c)
+	fun mfolder ((v,m),s) = subst_add_modvar(s,v,m)
+    in
+	fun list2subst (velist,vclist,vmlist) = 
+	    let val subst = foldl efolder empty_subst velist
+		val subst = foldl cfolder subst vclist
+		val subst = foldl mfolder subst vmlist
+	    in  subst
+	    end
+    end
 
       local
-	  val assoc_eq = fn count => fn (eq,key,table) => let val res = (assoc_eq(eq,key,table)) 
-							val _ = (case res of
-								     NONE => ()
-								   | SOME _ => (count := !count + 1))
-						    in  res
-						    end
-	  fun exp_handler count table (VAR var,bound) = 
-	       if (member_eq(eq_var,var,bound)) 
-		  then NONE
-	      else assoc_eq count (eq_var,var,table)
-	    | exp_handler _ _ _ = NONE
-	  fun con_handler count table (CON_VAR var,bound) = if (member_eq(eq_var,var,bound)) 
-							  then NONE
-						      else assoc_eq count (eq_var,var,table)
-	    | con_handler _ _ _ = NONE
-	  fun ehandlers count table = STATE(default_bound,
-				     {sdec_handler = default_sdec_handler,
-				      exp_handler = exp_handler count table,
-				      con_handler = default_con_handler,
-				      mod_handler = default_mod_handler,
-				      sig_handler = default_sig_handler})
-	  fun chandlers count table = STATE(default_bound,
-				      {sdec_handler = default_sdec_handler,
-				       exp_handler = default_exp_handler,
-				       con_handler = con_handler count table,
-				       mod_handler = default_mod_handler,
-				       sig_handler = default_sig_handler})
-	  fun mod_handler count table (MOD_VAR var,bound) = if (member_eq(eq_var,var,bound)) 
-					       then NONE
-					   else assoc_eq count (eq_var,var,table)
-	    | mod_handler _ _ _ = NONE
-	  fun sig_handler count handler_thunk table (SIGNAT_STRUCTURE (SOME p,sdecs)) = 
-	      let val PATH(v,_) = p
-		  val popt = (case (assoc_eq count (eq_var,v,table)) of
-				  NONE => SOME p
-				| SOME _ => NONE)
-	      in case (f_signat (handler_thunk()) (SIGNAT_STRUCTURE (NONE,sdecs))) of
-		  (SIGNAT_STRUCTURE (_,sdecs)) => SOME(SIGNAT_STRUCTURE (popt,sdecs))
-		| _ => error "f_signat changed shape"
-	      end
-	    | sig_handler _ _ _ _ = NONE
-	  fun mhandlers count table = 
-	      let val self = fn () => mhandlers count table
-	      in STATE(default_bound,
+	  fun exp_handler count (subst : subst) (e,bound) = 
+	      (case exp2path e of
+		   NONE => NONE
+		 | SOME (PATH(p as (v,_))) => 
+		       if (member_eq(eq_var,v,bound)) 
+			   then NONE
+		       else (case Name.PathMap.find(#1 subst,p) of
+				 NONE => NONE
+			       | SOME e => (count := (!count) + 1; SOME e)))
+	  fun con_handler count (subst : subst) (c,bound) = 
+	      (case con2path c of
+		   NONE => NONE
+		 | SOME (PATH(p as (v,_))) => 
+		       if (member_eq(eq_var,v,bound)) 
+			   then NONE
+		       else (case Name.PathMap.find(#2 subst,p) of
+				 NONE => NONE
+			       | SOME c => (count := (!count) + 1; SOME c)))
+	  fun mod_handler count (subst : subst) (m,bound) = 
+	      (case mod2path m of
+		   NONE => NONE
+		 | SOME (PATH(p as (v,_))) => 
+		       if (member_eq(eq_var,v,bound)) 
+			   then NONE
+		       else (case Name.PathMap.find(#3 subst,p) of
+				 NONE => NONE
+			       | SOME m => (count := (!count) + 1; SOME m)))
+
+	  fun handlers count subst =
+	       STATE(default_bound,
 		       {sdec_handler = default_sdec_handler,
-			exp_handler = default_exp_handler,
-			con_handler = default_con_handler,
-			mod_handler = mod_handler count table,
-			sig_handler = sig_handler count self table})
-	      end
-	  fun cmhandlers count ctable mtable =
-	      let val self = fn () => cmhandlers count ctable mtable
-	      in STATE(default_bound,
-		       {sdec_handler = default_sdec_handler,
-			exp_handler = default_exp_handler,
-			con_handler = con_handler count ctable,
-			mod_handler = mod_handler count mtable,
-			sig_handler = sig_handler count self mtable})
-	      end
-	  fun echandlers count etable ctable =
-	      let val self = fn () => echandlers count etable ctable
-	      in STATE(default_bound,
-		       {sdec_handler = default_sdec_handler,
-			exp_handler = exp_handler count etable,
-			con_handler = con_handler count ctable,
-			mod_handler = default_mod_handler,
+			exp_handler = exp_handler count subst,
+			con_handler = con_handler count subst,
+			mod_handler = mod_handler count subst,
 			sig_handler = default_sig_handler})
-	      end
-	  fun ecmhandlers count etable ctable mtable =
-	      let val self = fn () => echandlers count etable ctable
-	      in STATE(default_bound,
-		       {sdec_handler = default_sdec_handler,
-			exp_handler = exp_handler count etable,
-			con_handler = con_handler count ctable,
-			mod_handler = mod_handler count mtable,
-			sig_handler = sig_handler count self mtable})
-	      end
+	  fun wrap f_obj (obj,subst) = if (subst_is_empty subst)
+					   then obj
+				       else f_obj (handlers (ref 0) subst) obj
       in 
-	  fun exp_subst_expvar(arg,table) = f_exp (ehandlers (ref 0) table) arg
-	  fun con_subst_expvar(arg,table) = f_con (ehandlers (ref 0) table) arg
-	  fun mod_subst_expvar(arg,table) = f_mod (ehandlers (ref 0) table) arg
-	  fun sig_subst_expvar(arg,table) = f_signat (ehandlers (ref 0) table) arg
-	  fun exp_subst_convar(arg,table) = f_exp (chandlers (ref 0) table) arg
-	  fun con_subst_convar(arg,table) = f_con (chandlers (ref 0) table) arg
-	  fun con_subst_convar'(arg,table) = let val r = ref 0 
-					     in (r, f_con (chandlers r table) arg)
-					     end
-	  fun mod_subst_convar(arg,table) = f_mod (chandlers (ref 0) table) arg
-	  fun sig_subst_convar(arg,table) = f_signat (chandlers (ref 0) table) arg
-	  fun exp_subst_modvar(arg,table) = f_exp (mhandlers (ref 0) table) arg
-	  fun con_subst_modvar(arg,table) = f_con (mhandlers (ref 0) table) arg
-	  fun mod_subst_modvar(arg,table) = f_mod (mhandlers (ref 0) table) arg
-	  fun sig_subst_modvar(arg,table) = f_signat (mhandlers (ref 0) table) arg
-	  fun con_subst_conmodvar(arg,ctable,mtable) = f_con (cmhandlers (ref 0) ctable mtable) arg
-	  fun mod_subst_conmodvar(arg,ctable,mtable) = f_mod (cmhandlers (ref 0) ctable mtable) arg
-	  fun exp_subst_expconmodvar(arg,etable,ctable,mtable) = f_exp (ecmhandlers (ref 0) etable ctable mtable) arg
-	  fun con_subst_expconmodvar(arg,etable,ctable,mtable) = f_con (ecmhandlers (ref 0) etable ctable mtable) arg
-	  fun kind_subst_expconmodvar(arg,etable,ctable,mtable) = f_kind (ecmhandlers (ref 0) etable ctable mtable) arg
-	  fun sig_subst_expconmodvar(arg,etable,ctable,mtable) = f_signat (ecmhandlers (ref 0) etable ctable mtable) arg
+	  val exp_subst = wrap f_exp
+	  val con_subst = wrap f_con
+	  val mod_subst = wrap f_mod
+	  val sig_subst = wrap f_signat
+	  fun con_subst' (c,subst) = if (subst_is_empty subst)
+					 then (0,c)
+				     else let val r = ref 0 
+					      val con = f_con (handlers r subst) c
+					  in  (!r, con)
+					  end
       end
 
+
       local
-	  fun mod_handler table (MOD_VAR var,bound) = if (member_eq(eq_var,var,bound)) 
-					       then NONE
-					   else assoc_eq(eq_var,var,table)
-	    | mod_handler _ _ = NONE
-	  fun con_handler table (CON_VAR var,bound) = if (member_eq(eq_var,var,bound)) 
-							  then NONE
-						      else assoc_eq(eq_var,var,table)
+	  fun exp_handler (e,_,_) (VAR v,bound) = 
+	                 if (member_eq(eq_var,v,bound)) 
+			     then NONE
+			 else ((e := v :: (!e)); NONE)
+	    | exp_handler _ _ = NONE
+	  fun con_handler (_,c,_) (CON_VAR v,bound) = 
+	                 if (member_eq(eq_var,v,bound)) 
+			     then NONE
+			 else ((c := v :: (!c)); NONE)
 	    | con_handler _ _ = NONE
-	  fun sig_handler ctable mtable (SIGNAT_STRUCTURE (SOME p,sdecs)) = 
-	      let val PATH(v,_) = p
-		  val popt = (case (assoc_eq(eq_var,v,mtable)) of
-				  NONE => SOME p
-				| SOME _ => NONE)
-	      in case (f_signat (handlers ctable mtable) (SIGNAT_STRUCTURE (NONE,sdecs))) of
-		  (SIGNAT_STRUCTURE (_,sdecs)) => SOME(SIGNAT_STRUCTURE (popt,sdecs))
-		| _ => error "f_signat changed shape"
-	      end
-	    | sig_handler _ _ _ = NONE
-	  and handlers ctable mtable = 
-	      STATE(default_bound,
-		    {sdec_handler = default_sdec_handler,
-		     exp_handler = default_exp_handler,
-		     con_handler = con_handler ctable,
-		     mod_handler = mod_handler mtable,
-		     sig_handler = sig_handler ctable mtable})
+	  fun mod_handler (_,_,m) (MOD_VAR v,bound) = 
+	                 if (member_eq(eq_var,v,bound)) 
+			     then NONE
+			 else ((m := v :: (!m)); NONE)
+	    | mod_handler _ _ = NONE
+
+	  fun handlers free =
+	       STATE(default_bound,
+		       {sdec_handler = default_sdec_handler,
+			exp_handler = exp_handler free,
+			con_handler = con_handler free,
+			mod_handler = mod_handler free,
+			sig_handler = default_sig_handler})
+	  fun wrap f_obj obj = let val free = (ref ([] : var list), 
+					       ref ([] : var list), 
+					       ref ([] : var list))
+				      val _ = f_obj (handlers free) obj
+				      val (e,c,m) = free
+				  in  (!e, !c, !m)
+				  end
       in 
-	  fun exp_subst(arg,ctable,mtable) = f_exp (handlers ctable mtable) arg
-	  fun con_subst(arg,ctable,mtable) = f_con (handlers ctable mtable) arg
-	  fun mod_subst(arg,ctable,mtable) = f_mod (handlers ctable mtable) arg
-	  fun sig_subst(arg,ctable,mtable) = f_signat (handlers ctable mtable) arg
+	  type free = var list * var list * var list
+	  val con_free = wrap f_con
+	  val mod_free = wrap f_mod
+	  val sig_free = wrap f_signat
       end
+
 
       fun con_subst_conapps (argcon, con_app_handler : (con * con -> con option)) : con = 
 	let 
@@ -829,39 +697,6 @@ structure IlUtil
 	in f_con handlers argcon
 	end
 
-      type proj_handler = (mod * label -> exp option) * (mod * label -> con option) * 
-	   (mod * label -> mod option) * (sdec -> sdec option) 
-      fun default_sdec_proj_handler _ = NONE
-      fun default_exp_proj_handler _ = NONE
-      fun default_con_proj_handler _ = NONE
-      fun default_mod_proj_handler _ = NONE
-
-      local
-	  fun allproj_handlers(eproj, cproj, mproj, sdecer) : state =
-	      let 
-		  fun sdec_handler(_,sdec) = sdecer sdec
-		  fun exp_handler (MODULE_PROJECT(m,l),_) = eproj(m,l)
-		    | exp_handler _ = NONE
-		  fun con_handler (CON_MODULE_PROJECT(m,l),_) = cproj(m,l)
-		    | con_handler _ = NONE
-		  fun mod_handler (MOD_PROJECT(m,l),_) = mproj(m,l)
-		    | mod_handler _ = NONE
-		  val handlers = STATE(default_bound,
-				       {sdec_handler = sdec_handler,
-					exp_handler = exp_handler,
-					con_handler = con_handler,
-					mod_handler = mod_handler,
-					sig_handler = default_sig_handler})
-	      in handlers
-	      end
-      in
-	  fun exp_subst_allproj handlers = f_exp (allproj_handlers handlers)
-	  fun con_subst_allproj handlers = f_con (allproj_handlers handlers)
-	  fun mod_subst_allproj handlers = f_mod (allproj_handlers handlers)
-	  fun sig_subst_allproj handlers = f_signat (allproj_handlers handlers)
-	  fun bnd_subst_allproj handlers = f_bnd (allproj_handlers handlers)
-	  fun dec_subst_allproj handlers = f_dec (allproj_handlers handlers)
-      end
 
       fun find_tyvars_flexes con = 
 	  let val tyvars = ref []
@@ -898,21 +733,26 @@ structure IlUtil
 
 
       fun ConApply (reduce_small,c1,c2) = 
-	  let fun help(vars,body,args) = 
-		 let val (ref count,res) = con_subst_convar'(body, zip vars args)
-		 in  if (count <= length vars)
-			 then res
-		     else CON_APP(c1,c2)
-		 end
+	  let 
+	      fun help(vars,body,args) = 
+		  let val subst = foldl (fn ((v,c),s) => subst_add_convar(s,v,c)) empty_subst (zip vars args)
+		  val (count,res) = con_subst'(body, subst)
+	      in  if (count <= length vars)
+		      then res
+		  else CON_APP(c1,c2)
+	      end
 	  in 
 	      (case (reduce_small,c1,c2) of
-		   (true,CON_FUN([var],body),arg as CON_VAR _) => con_subst_convar(body, [(var,arg)])
+		   (true,CON_FUN([var],body),arg as CON_VAR _) => 
+		       con_subst(body, list2subst ([],[(var,arg)],[]))
 		 | (true,CON_FUN([var],body),arg) => help([var],body,[arg])
 		 | (true,CON_FUN(vars,body),CON_TUPLE_INJECT args) => help(vars,body,args)
 		 | (true,_,_) => CON_APP(c1,c2)
-		 | (_,CON_FUN([var],c),CON_TUPLE_INJECT[arg_con]) => con_subst_convar(c, [(var,arg_con)])
-		 | (_,CON_FUN([var],c),arg_con) => con_subst_convar(c, [(var,arg_con)])
-		 | (_,CON_FUN(vars,c),CON_TUPLE_INJECT(arg_cons)) => con_subst_convar(c, zip vars arg_cons)
+		 | (_,CON_FUN([var],c),CON_TUPLE_INJECT[arg_con]) => 
+		       con_subst(c, list2subst ([], [(var,arg_con)],[]))
+		 | (_,CON_FUN([var],c),arg_con) => con_subst(c, list2subst([],[(var,arg_con)],[]))
+		 | (_,CON_FUN(vars,c),CON_TUPLE_INJECT(arg_cons)) => 
+		       con_subst(c, list2subst([],zip vars arg_cons,[]))
 		 | _ => (print "ConApply got bad arguments\nc1 = ";
 			 pp_con c1; print "\nc2 = "; 
 			 pp_con c2; print "\n";
@@ -920,186 +760,60 @@ structure IlUtil
 	  end
 
 
-      fun find_sdec ([],_) = NONE
-	| find_sdec((sdec as SDEC(l,_))::rest,l') = if (eq_label(l,l')) 
-						      then SOME sdec else find_sdec(rest,l')
-      fun find_sbnd ([],_) = NONE
-	| find_sbnd((sbnd as SBND(l,_))::rest,l') = if (eq_label(l,l')) 
-						      then SOME sbnd else find_sbnd(rest,l')
+      local
+	  exception UNRESOLVED
+	  fun make_resolved_handlers () =
+	      let 
+		  fun exp_handler (OVEREXP (_,_,eshot),_) = (case (oneshot_deref eshot) of
+								 SOME _ => NONE
+							       | NONE => raise UNRESOLVED)
+		    | exp_handler _ = NONE
+		  fun con_handler (CON_TYVAR tv,_) = (case (tyvar_deref tv) of
+							  SOME _ => NONE
+							| NONE => raise UNRESOLVED)
+		    | con_handler _ = NONE
+		  val handlers = STATE(default_bound,
+				       {sdec_handler = default_sdec_handler,
+					exp_handler = exp_handler,
+					con_handler = con_handler,
+					mod_handler = default_mod_handler,
+					sig_handler = default_sig_handler})
+	      in handlers
+	      end
+      in
+	  fun mod_resolved m = (f_mod (make_resolved_handlers()) m; true) 
+	      handle UNRESOLVED => false
+		  
+	  fun sig_resolved s = (f_signat (make_resolved_handlers()) s; true) 
+	      handle UNRESOLVED => false
+      end  
 
-      fun mod_free_expvar module : var list = 
-	  let
-	      val free = ref ([] : var list)
-	      fun exp_handler (VAR var,bound) = (if (not (member_eq(eq_var,var,bound))
-						     andalso (not (member_eq(eq_var,var,!free))))
-						     then free := (var :: (!free)) else ();
-							 NONE)
-		| exp_handler _ = NONE
-	      val handlers = STATE(default_bound,
-				   {sdec_handler = default_sdec_handler,
-				    exp_handler = exp_handler,
-				    con_handler = default_con_handler,
-				    mod_handler = default_mod_handler,
-				    sig_handler = default_sig_handler})
-	      val _ = f_mod handlers module
-	  in !free
-	  end
+      local
+	  fun size_handler () =
+	      let 
+		  val count = ref 0
+		  fun inc() = (count := (!count) + 1; NONE)
+		  fun exp_handler _ = inc()
+		  fun con_handler _ = inc()
+		  fun mod_handler _ = inc()
+		  val handlers = STATE(default_bound,
+				       {sdec_handler = default_sdec_handler,
+					exp_handler = exp_handler,
+					con_handler = con_handler,
+					mod_handler = mod_handler,
+					sig_handler = default_sig_handler})
+	      in (count,handlers)
+	      end
+	  fun wrap f_obj obj = let val (count,handlers) = size_handler()
+				   val _ =  f_obj handlers obj
+			       in  !count
+			       end
 
-       fun sig_mod_handler (argsig : signat, mod_handler) : signat =
-	  let
-	      val handlers = STATE(default_bound,
-				   {sdec_handler = default_sdec_handler,
-				    exp_handler = default_exp_handler,
-				    con_handler = default_con_handler,
-				    sig_handler = default_sig_handler,
-				    mod_handler = fn (m,_) => mod_handler m})
-	  in f_signat handlers argsig
-	  end
-
-       type handler = (exp -> exp option) * (con -> con option) * 
-	   (mod -> mod option) * (sdec -> sdec option) 
-       fun empty_handler (_ : 'a) : 'a option = NONE
-
-       fun all_handlers(exp_handler, con_handler, mod_handler, sdec_handler) =
-	  STATE(default_bound,
-		{sdec_handler = fn (_,sd) => sdec_handler sd,
-		 exp_handler = fn (e,_) => exp_handler e,
-		 con_handler = fn (c,_) => con_handler c,
-		 mod_handler = fn (m,_) => mod_handler m,
-		 sig_handler = default_sig_handler})
-
-       fun exp_all_handle handlers = f_exp (all_handlers handlers)
-       fun con_all_handle handlers = f_con (all_handlers handlers)
-       fun mod_all_handle handlers = f_mod (all_handlers handlers)
-       fun sig_all_handle handlers = f_signat (all_handlers handlers)
-       fun bnd_all_handle handlers = f_bnd (all_handlers handlers)
-       fun dec_all_handle handlers = f_dec (all_handlers handlers)
-
-
-    fun con_free_modvar con : var list = 
-	  let
-	      val free = ref ([] : var list)
-	      fun mod_handler (MOD_VAR var,bound) = (print "modvar_handler got var = "; pp_var var;
-						print "\n  and bound = ";
-						pp_list pp_var' bound ("",", ","",false);
-						print "\n";
-						if (member_eq(eq_var,var,bound) orelse
-						    member_eq(eq_var,var,!free))
-						    then () else free := (var :: (!free));
-							NONE)
-		| mod_handler _ = NONE
-	      val handlers = STATE(default_bound,
-				   {sdec_handler = default_sdec_handler,
-				    exp_handler = default_exp_handler,
-				    con_handler = default_con_handler,
-				    mod_handler = mod_handler,
-				    sig_handler = default_sig_handler})
-	      val _ = f_con handlers con
-	      val _ = (print "!free is "; pp_list pp_var' (!free) ("",", ","",false);
-		       print "\n");
-	  in !free
-	  end
-
-      fun subst_var (target_bnd, bnds) =
-	  let 
-	      fun loop [] e c m = (e,c,m)
-		| loop ((BND_EXP(v,e))::rest) ee cc mm = loop rest ((v,e)::ee) cc mm
-		| loop ((BND_CON(v,c))::rest) ee cc mm = loop rest ee ((v,c)::cc) mm
-		| loop ((BND_MOD(v,_,m))::rest) ee cc mm = loop rest ee cc ((v,m)::mm)
-	      val (etable,ctable,mtable) = loop bnds [] [] [] 
-	      fun con_handler (CON_VAR var,bound) = if (member_eq(eq_var,var,bound))
-							then NONE else assoc_eq(eq_var,var,ctable)
-		| con_handler _ = NONE
-	      fun exp_handler (VAR var,bound) = if (member_eq(eq_var,var,bound))
-						then NONE else assoc_eq(eq_var,var,etable)
-		| exp_handler _ = NONE
-	      fun mod_handler (MOD_VAR var,bound) = if (member_eq(eq_var,var,bound))
-						then NONE else assoc_eq(eq_var,var,mtable)
-		| mod_handler _ = NONE
-	      fun sig_handler (SIGNAT_STRUCTURE (SOME p,sdecs)) = 
-		  let val PATH(v,_) = p
-		      val popt = (case (assoc_eq(eq_var,v,mtable)) of
-				      NONE => SOME p
-				    | SOME _ => NONE)
-		  in case (f_signat (handlers()) (SIGNAT_STRUCTURE (NONE,sdecs))) of
-		      (SIGNAT_STRUCTURE (_,sdecs)) => SOME(SIGNAT_STRUCTURE (popt,sdecs))
-		    | _ => error "f_signat changed shape"
-		  end
-		| sig_handler _ = NONE
-	      and handlers () = STATE(default_bound,
-				   {sdec_handler = default_sdec_handler,
-				    exp_handler = exp_handler,
-				    con_handler = con_handler,
-				    mod_handler = mod_handler,
-				    sig_handler = sig_handler})
-	      val handlers = handlers()
-	  in (case target_bnd of
-		  BND_EXP(v,e) => BND_EXP(v,f_exp handlers e)
-		| BND_CON(v,c) => BND_CON(v,f_con handlers c)
-		| BND_MOD(v,b,m) => BND_MOD(v,b,f_mod handlers m))
-	  end
-
-      exception UNRESOLVED
-      fun make_resolved_handlers () =
-	  let 
-	      fun exp_handler (OVEREXP (_,_,eshot),_) = (case (oneshot_deref eshot) of
-							   SOME _ => NONE
-							 | NONE => raise UNRESOLVED)
-		| exp_handler _ = NONE
-	      fun con_handler (CON_TYVAR tv,_) = (case (tyvar_deref tv) of
-						    SOME _ => NONE
-						  | NONE => raise UNRESOLVED)
-		| con_handler _ = NONE
-	      val handlers = STATE(default_bound,
-				   {sdec_handler = default_sdec_handler,
-				    exp_handler = exp_handler,
-				    con_handler = con_handler,
-				    mod_handler = default_mod_handler,
-				    sig_handler = default_sig_handler})
-	  in handlers
-	  end
-
-      fun mod_resolved m = (f_mod (make_resolved_handlers()) m; true) 
-	  handle UNRESOLVED => false
-
-      fun sig_resolved s = (f_signat (make_resolved_handlers()) s; true) 
-	  handle UNRESOLVED => false
-			    
-
-      fun make_size_handlers () =
-	  let 
-	      val count = ref 0
-	      fun inc() = (count := (!count) + 1; NONE)
-	      fun exp_handler _ = inc()
-	      fun con_handler _ = inc()
-	      fun mod_handler _ = inc()
-	      val handlers = STATE(default_bound,
-				   {sdec_handler = default_sdec_handler,
-				    exp_handler = exp_handler,
-				    con_handler = con_handler,
-				    mod_handler = mod_handler,
-				    sig_handler = default_sig_handler})
-	  in (count,handlers)
-	  end
-      
-      fun mod_size m = 
-	let val (count,handlers) = make_size_handlers()
-	    val _=  f_mod handlers m
-	in !count
-	end
-
-
-      fun bnd_size m = 
-	  let val (count,handlers) = make_size_handlers()
-	      val _ = f_bnd handlers m
-	  in !count
-	  end
-    
-      fun sig_size s = 
-	  let val (count,handlers) = make_size_handlers()
-	      val _=  f_signat handlers s
-	  in !count
-	  end
+      in
+	  val mod_size = wrap f_mod
+	  val bnd_size = wrap f_bnd
+	  val sig_size = wrap f_signat
+      end
 
     end   (* local *)
 
@@ -1160,49 +874,6 @@ structure IlUtil
       end
 
 
-
-   fun eq_modval (MOD_VAR v1,MOD_VAR v2) = eq_var(v1,v2)
-     | eq_modval (MOD_PROJECT (m,l), 
-		  MOD_PROJECT(m',l')) = eq_modval(m,m') andalso eq_label(l,l')
-     | eq_modval (MOD_SEAL(m,s),m') = eq_modval(m,m')
-     | eq_modval (m',MOD_SEAL(m,s)) = eq_modval(m,m')
-     | eq_modval (MOD_VAR _, MOD_PROJECT _) = false
-     | eq_modval (MOD_PROJECT _, MOD_VAR _) = false
-     | eq_modval (m1,m2) = (print "eq_modval for a non value\nm1 = \n";
-			   pp_mod m1; print "\nm2 = \n";
-			   pp_mod m2; print "\n";
-			   error "eq_modval for a non value")
-   fun eq_mod (MOD_VAR v1,MOD_VAR v2) = eq_var(v1,v2)
-     | eq_mod (MOD_PROJECT (m,l), 
-		  MOD_PROJECT(m',l')) = eq_mod(m,m') andalso eq_label(l,l')
-     | eq_mod (MOD_SEAL(m,s),m') = eq_mod(m,m')
-     | eq_mod (m',MOD_SEAL(m,s)) = eq_mod(m,m')
-     | eq_mod _ = false
-
-
-   fun rename_confun(is_bound,vars,con) = 
-       	let
-	    fun make_entry v = if (is_bound v)
-				   then SOME(v,CON_VAR(Name.derived_var v))
-			       else NONE
-	    val table = List.mapPartial make_entry vars
-	    val con' = (case table of
-			    [] => con
-			  | _ => con_subst_convar(con,table))
-	    fun find_var v = (case Listops.assoc_eq(eq_var,v,table) of
-				  SOME (CON_VAR v) => v 
-				| SOME _ => error "table has only Var_c's"
-				| NONE => v)
-	    val vars' = map find_var vars
-	in  CON_FUN(vars',con')
-	end
-
-    fun beta_reduce_mod(x : mod, y : mod) : mod option = 
-	(case (x,y) of
-	     (MOD_FUNCTOR(_,v,s,m,_), _) => SOME (MOD_LET(v,y,m))
-	   | _ => NONE)
-
-
     fun beta_reduce(x : exp, y : exp) : exp =
 	let fun red (exp as (OVEREXP (c,_,oe))) = 
 		      (case (oneshot_deref oe) of
@@ -1222,10 +893,11 @@ structure IlUtil
 			 CON_ARROW([_],_,_,_) => ILPRIM(ip,cs,[y])
 			| _ => def)
 	   | (FIX (false,_,[FBND(name,arg,argtype,bodytype,body)]), VAR argvar) => 
-			  exp_subst_expvar(body,[(arg,VAR argvar)])
+			  exp_subst(body, subst_add_expvar(empty_subst, arg, VAR argvar))
 	   | (FIX (false,_,[FBND(name,arg,argtype,bodytype,body)]), y) => 
 			  LET([BND_EXP(arg,y)],body)
 	   | _ => def)
 	end
+
 
   end;

@@ -19,6 +19,7 @@ struct
 
 
 
+
     fun xeq (polyinst_opt : context * sdecs -> 
 			 (sbnd list * sdecs * con list) option,
 	     vector_eq : context -> exp * con)
@@ -235,16 +236,16 @@ struct
 	  val expanded_cons = 
 	      (case confun of
 		   CON_FUN(vdts,CON_TUPLE_INJECT cons) => 
-		       map (fn c => con_subst_convar(c,zip vdts mu_cons)) cons
-		 | CON_FUN([vdt], con) => [con_subst_convar(con,zip [vdt] mu_cons)]
+		       map (fn c => con_subst(c,list2subst([], zip vdts mu_cons,[]))) cons
+		 | CON_FUN([vdt], con) => [con_subst(con,list2subst([], zip [vdt] mu_cons, []))]
 		 | _ => error "xeq_mu given confun which is not CON_FUN")
 	  val vars_eq = map0count (fn i => fresh_named_var ("vars_eq_" ^ (Int.toString i))) arity
 	  val type_lbls = map0count (fn i => fresh_internal_label("lbl" ^ (Int.toString i))) arity
 	  val evars = map0count (fn i => fresh_named_var ("evar" ^ (Int.toString i))) arity
 	  val cvars = map0count (fn i => fresh_named_var ("cvar" ^ (Int.toString i))) arity
 	  val eq_lbls = map to_eq type_lbls
-	  val elist = zip evars (map VAR vars_eq)
-	  val clist = zip cvars mu_cons
+	  val subst = list2subst(zip evars (map VAR vars_eq),
+				 zip cvars mu_cons, [])
 	  fun cfolder ((cvar,cl),ctxt) = 
 	      let val dec = DEC_CON(cvar,KIND_TUPLE 1,NONE,false)
 	      in add_context_sdec(ctxt,SDEC(cl,SelfifyDec ctxt dec))
@@ -271,7 +272,7 @@ struct
 	      let
 		  val var = fresh_named_var "arg_pair"
 		  val var_con = con_tuple[name_con,name_con]
-		  val expv' = exp_subst_expconmodvar(expv,elist,clist,[])
+		  val expv' = exp_subst(expv,subst)
 		  val e1 = RECORD_PROJECT(VAR var,generate_tuple_label 1,var_con)
 		  val e2 = RECORD_PROJECT(VAR var,generate_tuple_label 2,var_con)
 		  val e1' = UNROLL(name_con,expanded_con,e1)

@@ -43,16 +43,35 @@ struct
 				       ^ (Int.toString (a div 2))))
 
 
-    local
-      (* these 3 functions copied from ilutil.sml; no recursive modules... *)
-      fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
-      fun generate_tuple_label (i : int) = symbol_label(generate_tuple_symbol i)
-      fun loop [] _ = true
-	| loop ((l,_)::rest) cur = eq_label(l,generate_tuple_label cur) andalso loop rest (cur+1) 
-    in
-      fun rdecs_is_tuple rdecs = loop rdecs 1
-      fun rbnds_is_tuple rbnds = loop rbnds 1
+    (* -----------  these functions copied from ilutil.sml; no recursive modules... *)
+    local fun loop (MOD_VAR v) acc = SOME(PATH(v,acc))
+	    | loop (MOD_PROJECT (m,l)) acc = loop m (l::acc)
+	    | loop m _ = NONE
+    in    
+	fun mod2path (m : mod) = loop m []
+	fun exp2path (e : exp) = 
+	    (case e of
+		 VAR v => SOME(PATH (v,[]))
+	       | MODULE_PROJECT (m,l) => mod2path (MOD_PROJECT(m,l))
+	       | _ => NONE)
+	fun con2path (c : con) =
+	    (case c of
+		CON_VAR v => SOME(PATH(v,[]))
+	      | CON_MODULE_PROJECT (m,l) => mod2path(MOD_PROJECT(m,l))
+	      | _ => NONE)
     end
+    local
+	fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
+	fun generate_tuple_label (i : int) = symbol_label(generate_tuple_symbol i)
+	fun loop [] _ = true
+	  | loop ((l,_)::rest) cur = eq_label(l,generate_tuple_label cur) andalso loop rest (cur+1) 
+    in
+	fun rdecs_is_tuple rdecs = loop rdecs 1
+	fun rbnds_is_tuple rbnds = loop rbnds 1
+    end
+    (* -----------  the above functions copied from ilutil.sml; no recursive modules... *)
+
+
 
     fun wrapper pp out obj = 
       let 
@@ -183,10 +202,13 @@ struct
 		     String "]"]
        | CON_TUPLE_INJECT conlist => pp_list (pp_con seen) conlist ("(", ",",")",false)
        | CON_TUPLE_PROJECT (i,c) => HOVbox[pp_con seen c, String ("#" ^ (Int.toString i))]
-       | CON_MODULE_PROJECT (module,label) => pp_region "CON_MPROJ(" ")"
-				                 [pp_mod seen module,
-						  String ", ",
-						  pp_label label])
+       | CON_MODULE_PROJECT (module,label) => 
+	      (case con2path arg_con of
+		   NONE => pp_region "CON_MPROJ(" ")"
+		             [pp_mod seen module,
+			      String ", ",
+			      pp_label label]
+		 | SOME path => HOVbox[String "CON_PATH(", pp_path path, String ")"]))
 
 
     and pp_mod seen module =
@@ -393,8 +415,8 @@ struct
     and pp_signat seen signat = 
       (case signat of
 	 SIGNAT_VAR v => pp_var v 
-       | SIGNAT_OF m =>  HOVbox[String "SIGS_OF(",
-				pp_mod seen m,
+       | SIGNAT_OF p =>  HOVbox[String "SIGS_OF(",
+				pp_path p,
 				String ")"]
        | SIGNAT_STRUCTURE (NONE,sdecs) => pp_sdecs seen sdecs
        | SIGNAT_STRUCTURE (SOME p,sdecs) => HOVbox[String "SIGS_NORM(",

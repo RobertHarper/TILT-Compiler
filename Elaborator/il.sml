@@ -106,7 +106,7 @@ structure Il :> IL =
     and   signat = SIGNAT_STRUCTURE of path option * sdec list
                  | SIGNAT_FUNCTOR of var * signat * signat * arrow
 		 | SIGNAT_VAR of var
-	         | SIGNAT_OF of mod
+	         | SIGNAT_OF of path
 
     and     sdec = SDEC of label * dec
     and      dec = DEC_EXP       of var * con * exp option  * bool (* true indicates should inline *)

@@ -73,6 +73,16 @@ structure Signature :> SIGNATURE =
   datatype typeslot = ABSTRACT of label list * kind
 		    | CONCRETE of label list * kind * con
 
+  fun pp_typeslot (ABSTRACT (labels,k)) = (print "ABSTRACT ";
+					   pp_lpath labels;
+					   print "  -->  ";
+					   pp_kind k)
+    |  pp_typeslot (CONCRETE (labels,k,c)) = (print "CONCRETE ";
+					      pp_lpath labels;
+					      print "  -->  ";
+					      pp_kind k;
+					      print "  = ";
+					      pp_con c)
 
   (* this function is staged to reduce repeated selfification *)
   fun follow_labels (pathopt,sdecs,ctxt) =
@@ -167,7 +177,7 @@ structure Signature :> SIGNATURE =
 
     fun rewrite_type_component (ctxt,orig_sdecs,labs,con) = 
 	let
-	    local val fv = con_free_convar con
+	    local val (_,fv,_) = con_free con
 	    in    fun bound v = 
 	            if (member_eq(eq_var,v,fv)) 
 			then (error_region();
@@ -235,11 +245,11 @@ structure Signature :> SIGNATURE =
 		  (case !target of
 		       (SOME s,_) => s
 		     | (NONE, SOME vlpath) => 
-			   let fun loop [] current = SIGNAT_OF(path2mod (vlpath2path current))
+			   let fun loop [] current = SIGNAT_OF(vlpath2path current)
 				 | loop ((v1,l1)::rest1) (all2 as ((v2,l2)::rest2)) = 
 			            if (eq_var(v1,v2))
 					then loop rest1 rest2
-				    else SIGNAT_OF(path2mod (vlpath2path all2))
+				    else SIGNAT_OF(vlpath2path all2)
 				 | loop _ [] = error "empty target path"
 			   in  loop cur_path vlpath
 			   end
@@ -427,9 +437,10 @@ structure Signature :> SIGNATURE =
 	      | find_sig _ _ = NONE
 	in  (case find_sig labs1 (SIGNAT_STRUCTURE(NONE,sdecs)) of
 		 SOME (sig1 as SIGNAT_VAR _) =>
-		     if (IlStatic.Sig_IsSub(context,sig2,sig1))
-			 then xsig_sharing_rewrite_structure(context,sdecs,[labs1],SOME(SIGNAT_OF m2))
-		     else xsig_where_structure_slow(context,sdecs,labs1,m2,sig2)
+		     (case (IlStatic.Sig_IsSub(context,sig2,sig1), mod2path m2) of
+			  (true, SOME p2) =>
+			      xsig_sharing_rewrite_structure(context,sdecs,[labs1],SOME(SIGNAT_OF p2))
+			| _ => xsig_where_structure_slow(context,sdecs,labs1,m2,sig2))
 	       | _ => xsig_where_structure_slow(context,sdecs,labs1,m2,sig2))
 	end
     handle WhereError => sdecs
@@ -562,17 +573,18 @@ structure Signature :> SIGNATURE =
 	    | is_abstract _ _ = false
 	  fun is_concrete c (CONCRETE (_,_,c')) = eq_con(ctxt,c,c')
 	    | is_concrete _ _ = false
+	  fun local_error() = 
+	      (error_region_with "cannot share abstract with concrete type components:\n";
+	       app (fn slot => (pp_typeslot slot; print "\n")) slots;
+	       sdecs)
       in  (case first of
-	       ABSTRACT (lbls,k) => if (Listops.andfold (is_abstract k) rest)
-				    then xsig_sharing_rewrite(ctxt,sdecs)(slots,sdecs)
-				else (error_region(); 
-				      print "cannot share abstract with concrete type components\n";
-				      raise SharingError)
+	       ABSTRACT (lbls,k) => 
+		   if (Listops.andfold (is_abstract k) rest)
+		       then xsig_sharing_rewrite(ctxt,sdecs)(slots,sdecs)
+		   else local_error()
 	     | CONCRETE (lbls,k,c) => if (Listops.andfold (is_concrete c) rest)
 					then sdecs
-				    else (error_region(); 
-					  print "cannot share abstract with concrete type components\n";
-					  raise SharingError))
+				    else local_error())
       end
       handle SharingError => sdecs
 
@@ -592,23 +604,23 @@ structure Signature :> SIGNATURE =
 			 (case (dec_change, dec_name) of
 			      (DEC_EXP(v,c,e,i), DEC_EXP(v',_,_,_)) => 
 				  (SDEC(l,DEC_EXP(v',c,e,i)),
-				   ((v,VAR v')::(#1 subst), #2 subst, #3 subst))
+				   subst_add_expvar(subst,v,VAR v'))
 	                     | (DEC_CON(v,k,c,i), DEC_CON(v',_,_,_)) => 
 				  (SDEC(l,DEC_CON(v',k,c,i)),
-				   (#1 subst, (v,CON_VAR v')::(#2 subst), #3 subst))
+				   subst_add_convar(subst,v,CON_VAR v'))
 	                     | (DEC_MOD(v,s,p), DEC_MOD(v',_,_)) => 
 				  (SDEC(l,DEC_MOD(v',s,p)),
-				   (#1 subst, #2 subst, (v,MOD_VAR v')::(#3 subst)))
+				   subst_add_modvar(subst,v,MOD_VAR v'))
 			     | _ => (sdec_change,subst))
 		   | _ => (sdec_change, subst))
-	    val (sdecs_change,(esubst,csubst,msubst)) = foldl_acc folder ([],[],[]) sdecs_change
+	    val (sdecs_change,subst) = foldl_acc folder empty_subst sdecs_change
 	    val sig_temp = SIGNAT_STRUCTURE(NONE, sdecs_change)
-	    val SIGNAT_STRUCTURE(_,sdecs_result) = sig_subst_expconmodvar(sig_temp,esubst,csubst,msubst)
+	    val SIGNAT_STRUCTURE(_,sdecs_result) = sig_subst(sig_temp,subst)
 	in  sdecs_result
 	end
 
        (* ---- coercion of a poly component to a mono/poly specification --- *)
-       fun polyval_case (ctxt : context, subst as (csubst, msubst), polyinst)
+       fun polyval_case (ctxt : context, subst : subst, polyinst)
 	   {name : var, (* use this name for the final binding *)
 	    path : path, (* this path is to the actual polymorphic component *)
 	    varsig_spec : (var * signat) option, (* spec might me monomorphic *)
@@ -617,13 +629,12 @@ structure Signature :> SIGNATURE =
 	    inline : bool,
 	    sdecs_actual : sdec list,
 	    con_actual : con} (* the signature of the component *)
-		  : bool * (bnd * dec * ((var * con) list * (var * mod) list)) option = 
+		  : bool * (bnd * dec * subst) option = 
 	   let 
-	       val con_spec = con_subst_conmodvar(con_spec,csubst,msubst)
-	       val con_spec = 
-		   (case varsig_spec of
-			NONE => con_spec
-		      | SOME(v,_) => con_subst_modvar(con_spec, [(v, MOD_VAR var_actual)]))
+	       val subst = (case varsig_spec of
+				NONE => subst
+			      | SOME(v,_) => subst_add_modvar(subst, v, MOD_VAR var_actual))
+	       val con_spec = con_subst(con_spec,subst)
 
 	       fun local_error () =
 		   (error_region_with "Coercion of a polymorphic value component to a\n";
@@ -660,14 +671,12 @@ structure Signature :> SIGNATURE =
 	       val (sbnds_poly,sdecs_poly,_) = polyinst(ctxt',sdecs_actual)
 
 	       local
-		   fun folder (SBND(l,BND_CON(v,c)),csubst) =
-			(CON_MODULE_PROJECT(MOD_VAR var_actual, l), c)::csubst
-		     | folder (_,csubst) = csubst
-		   val csubst = foldl folder [] sbnds_poly
-		   fun con_handler c = assoc_eq(eq_cpath,c,csubst)
+		   fun folder (SBND(l,BND_CON(v,c)),subst) =
+		       subst_add_conpath(subst, PATH(var_actual, [l]), c)
+		     | folder (_,subst) = subst
+		   val subst = foldl folder empty_subst sbnds_poly
 	       in
-		   val con_actual_tyvar = con_all_handle(default_exp_handler,con_handler,
-							 default_mod_handler,default_sdec_handler) con_actual
+		   val con_actual_tyvar = con_subst(con_actual,subst)
 	       end
 	       val _ = if (!debug)
 			   then (print "con_actual_tyvar = "; 
@@ -758,7 +767,7 @@ structure Signature :> SIGNATURE =
 						add_context_mod'(context,m4var,
 								       SelfifySig context (p4,s1')),
 						p4,s1',s2')
-		     val m4body = mod_subst_modvar(m4body,[(m4var,m4_arg)])
+		     val m4body = mod_subst(m4body,subst_add_modvar(empty_subst,m4var,m4_arg))
 		     val context' = add_context_mod'(context,v2,(SelfifySig context (p2,s2)))
 		     val s = GetModSig(context',m4body)
 		 in (true,
@@ -819,15 +828,15 @@ structure Signature :> SIGNATURE =
 	  end
 		  
 
-	fun doit (subst as (csubst,msubst)) (lab,spec_dec) 
-	    : (bnd * dec * ((var * con) list * (var * mod) list)) option = 
+	fun doit subst (lab,spec_dec) 
+	    : (bnd * dec * subst) option = 
 
 	    (case (spec_dec, actual_self_lookup lab) of
 
 		 (* --------------- Coercion from monoval to monoval ----------------------- *)
 		 (DEC_EXP(_,con_spec,eopt,_), 
 		  SOME(lbls,PHRASE_CLASS_EXP (e,con_actual,eopt',inline))) => 
-		    let val con_spec = con_subst_conmodvar(con_spec,csubst,msubst)
+		    let val con_spec = con_subst(con_spec,subst)
 		    in  if (sub_con(ctxt,con_actual,con_spec) andalso
 			    (case (eopt,eopt') of
 				 (SOME e, SOME e') => eq_exp(ctxt,e,e')
@@ -868,7 +877,7 @@ structure Signature :> SIGNATURE =
 			   | SOME (var_actual, 
 				   SIGNAT_STRUCTURE(_,sdecs_actual),
 				   con_actual,_,inline) =>
-				 let val con_spec = con_subst_conmodvar(con_spec,csubst,msubst)
+				 let val con_spec = con_subst(con_spec,subst)
 				     val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
 				     val path = join_path_labels(path_actual,lbls)
 				     val (coerced,result) = 
@@ -902,7 +911,7 @@ structure Signature :> SIGNATURE =
 	        (* ----- Coercion from mod/polyval to mod/polyval -------------------------- *)
 	        | (DEC_MOD (v_spec,b,sig_spec),
 	           SOME(lbls, PHRASE_CLASS_MOD (_,_,sig_actual))) => 
-		       let val sig_spec = sig_subst_expconmodvar(sig_spec,[],csubst,msubst)
+		       let val sig_spec = sig_subst(sig_spec,subst)
 		       in
 			   (case (is_polyval_sig sig_spec, is_polyval_sig sig_actual) of
 				(* ----------- Coercion from polyval to polyval ------------------ *)
@@ -931,7 +940,7 @@ structure Signature :> SIGNATURE =
 				    val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
 				    val bnd = BND_MOD(v,b,mbody)
 				    val dec = DEC_MOD(v,b,sig_ret)
-				    val subst = (csubst,(v_spec,path2mod mod_path)::msubst)
+				    val subst = subst_add_modvar(subst,v_spec,path2mod mod_path)
 			       in SOME(bnd,dec,subst)
 			       end
 			    (* ----------- Coercion from mod to poly or polt to mod --------- *)
@@ -958,14 +967,14 @@ structure Signature :> SIGNATURE =
 			    val bnd = BND_CON(v,con_actual)
 			    val dec = DEC_CON(v,k_actual,SOME con_actual,inline)
 			    val con_path = join_path_labels(path_actual, lbls)
-			    val subst = ((v_spec,path2con con_path)::csubst,msubst)
+			    val subst = subst_add_convar(subst, v_spec, path2con con_path)
 			    val res = SOME(bnd,dec,subst)
 			in  if eq_kind(k_spec,k_actual)
 			      then 
 			        (case copt_spec of
 			       	   NONE => res
 				 | SOME con_spec =>
-				     let val con_spec = con_subst_conmodvar(con_spec,csubst,msubst)
+				     let val con_spec = con_subst(con_spec,subst)
 				     in
 					 if sub_con(ctxt,con_actual,con_spec) 
 					     then res
@@ -1013,7 +1022,7 @@ structure Signature :> SIGNATURE =
 		     end
 	       | NONE => loop subst rest)
 	
-        val (sbnds_coerced, sdecs_coerced) = loop ([],[]) sdecs_target
+        val (sbnds_coerced, sdecs_coerced) = loop empty_subst sdecs_target
 
       in if !coerced
 	  then (true, MOD_STRUCTURE sbnds_coerced,

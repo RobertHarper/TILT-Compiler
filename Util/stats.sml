@@ -238,7 +238,7 @@ structure Stats :> STATS =
 	     print "-------------------------------------------\n"
 	 end
 
-      fun print_stats() = (entries := ListMergeSort.sort (fn ((n1,_),(n2,_)) => n1 < n2) (!entries);
+      fun print_stats() = (entries := ListMergeSort.sort (fn ((n1,_),(n2,_)) => String.<(n1,n2)) (!entries);
 			   print "\n\n";
 			   print_counters(); 	
 			   print "\n\n";

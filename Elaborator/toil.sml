@@ -177,7 +177,23 @@ structure Toil
 
 
 
-
+    fun reduce_to_remove (context, c, sbnds) = 
+	let 
+	    val mod_vars_remove = List.mapPartial 
+		                    (fn (SBND(_,BND_MOD(v,_,_))) => SOME v
+			              | _ => NONE) sbnds
+	    fun loop con = 
+		let val (_,_,mod_vars_occur) = con_free con
+		in  if (null (Listops.list_inter_eq(eq_var,mod_vars_remove,mod_vars_occur)))
+			then con
+		    else (case (con_reduce_once(context,con)) of
+			      NONE => error "reduce_to_remove failed to remove"
+			    | SOME con => loop con)
+		end
+	in if (null mod_vars_remove)
+	    then c
+	   else loop c
+	end
 
      fun sbnd_ctxt_list2modsig (sbnd_ctxt_list : (sbnd option * context_entry) list) 
 	 : (mod * signat) = 
@@ -386,18 +402,10 @@ structure Toil
 			     error "remove_modvar failed: called from polyfun_inst")
 	    val exp = (case (eopt,inline) of
 			   (SOME e,inline) =>
-			       let fun table_entry (SBND(l,BND_CON(_,c))) = (l,c)
-				     | table_entry _ = error "bad functor application"
-				   val table = map table_entry signat_poly_sbnds
-				   fun cproj (MOD_VAR v', l) = 
-				       if (eq_var(v,v')) 
-					   then assoc_eq(eq_label,l,table)
-				       else NONE
-				     | cproj _ = NONE
-			       in  exp_subst_allproj(default_exp_proj_handler,
-						     cproj,
-						     default_mod_proj_handler,
-						     default_sdec_proj_handler) e
+			       let fun folder (SBND(l,BND_CON(_,c)),s) = subst_add_conpath(s,PATH(v,[l]),c)
+				     | folder _ = error "bad functor application"
+				   val subst = foldl folder empty_subst signat_poly_sbnds
+			       in  exp_subst(e,subst)
 			       end
 			 | _ => MODULE_PROJECT(MOD_APP(module,mod_poly), it_lab))
 (*
@@ -566,6 +574,7 @@ structure Toil
 				| [_,sdec] => dosdec sdec
 				| _ => unbound())
 			  end
+		    | SOME (_, PHRASE_CLASS_CON _) => unbound()
 		    | NONE => if (length path = 1 andalso (Symbol.eq(hd path,Symbol.varSymbol "=")))
 				  then eqcase true
 			      else if (length path = 1 andalso 
@@ -616,6 +625,7 @@ structure Toil
 	     let val sbnd_ctxt_list = xdec true (context, dec)
 		 val (sbnds,context') = add_context_sbnd_ctxts(context,sbnd_ctxt_list)
 		 val (e,c,va) = xexp(context',expr)
+		 val c = reduce_to_remove(context',c,sbnds)
 		 val bnds = map (fn (SBND(_,bnd)) => bnd) sbnds
 	     in  (LET(bnds,e),c,false) 
 	     end
@@ -2030,12 +2040,12 @@ val _ = print "plet0\n"
 		    | (Ast.VarFct (path,_)) => parse_error "functor signatures not handled"
 		    | (Ast.FctFct {params=[(argnameopt,sigexp)],body,constraint}) =>
 			  let 
+			      val _ = print "FCTFCT 1\n"
 			      val arglabel = (case argnameopt of
 						  NONE => to_open(fresh_internal_label "FunctorArg")
 						| SOME s => symbol_label s)
 			      val funid = symbol_label name
-			      val argvar = fresh_named_var "functor_arg_var"
-			      val _ = print "FCTFCT 1\n"
+			      val argvar = fresh_named_var "funct_arg"
 			      val signat = xsigexp(context,sigexp)
 			      val _ = print "FCTFCT 2\n"
 			      val self_signat = SelfifySig context (PATH (argvar,[]), signat)
@@ -2129,7 +2139,8 @@ val _ = print "plet0\n"
 			      val coerced_sbnd_ce = 
 				  (SOME(SBND(coerced_lbl,BND_MOD(coerced_var,false,sealed))),
 				   CONTEXT_SDEC(SDEC(coerced_lbl,DEC_MOD(coerced_var,false,sig1'))))
-			      val sig2' = sig_subst_modvar(sig2,[(var1,MOD_VAR coerced_var)])
+			      val sig2' = sig_subst(sig2,subst_add_modvar(empty_subst,
+									  var1,MOD_VAR coerced_var))
 			  in (sbnd_ce_list @ [coerced_sbnd_ce],
 			      MOD_APP(m,MOD_VAR coerced_var),
 			      sig2')

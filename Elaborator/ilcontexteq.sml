@@ -677,7 +677,7 @@ struct
 	       | SIGNAT_FUNCTOR(v, s1, s2, arrow) => (blastOutChoice 2; blastOutVar v;
 						      blastOutSig s1; blastOutSig s2; blastOutArrow arrow)
 	       | SIGNAT_VAR v => (blastOutChoice 5; blastOutVar v)
-	       | SIGNAT_OF m => (blastOutChoice 6; blastOutMod m))
+	       | SIGNAT_OF m => (blastOutChoice 6; blastOutPath m))
 
 	and blastInSig () =
 	    (case (blastInChoice()) of
@@ -685,7 +685,7 @@ struct
 	       | 1 => SIGNAT_STRUCTURE (SOME (blastInPath ()), blastInSdecs ())
 	       | 2 => SIGNAT_FUNCTOR(blastInVar (), blastInSig (), blastInSig (), blastInArrow ())
 	       | 5 => SIGNAT_VAR(blastInVar ())
-	       | 6 => SIGNAT_OF(blastInMod ())
+	       | 6 => SIGNAT_OF(blastInPath ())
 	       | _ => error "bad blastInSig")
 				     
 	fun blastOutPC pc = 

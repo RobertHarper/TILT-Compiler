@@ -30,6 +30,12 @@ structure IlStatic
 		      print "in ctxt: \n"; Ppil.pp_context context;
 		      error "reduce_sigvar given unbound SIGVAR"))
 
+   fun sig_subst_modvar(signat,vmlist) = 
+       let fun folder ((v,m),s) = subst_add_modvar(s,v,m)
+	   val subst = foldl folder empty_subst vmlist
+       in  sig_subst(signat,subst)
+       end
+
    datatype phrase = PHRASE_EXP of exp
                     | PHRASE_CON of con
                     | PHRASE_MOD of mod
@@ -53,94 +59,58 @@ structure IlStatic
        
    (* --- remove references to internal variables from signature with given module ---- *)
    local
-       type state = {ctxt : context,
-	             expself : (var * exp) list,
-		     conself : (var * con) list,
-		     modself : (var * mod) list,
-		     expunself : (exp * exp) list,
-		     conunself : (con * con) list,
-		     modunself : (mod * mod) list}
-       fun initial_state ctxt = {ctxt = ctxt,
-			         expunself = [],
-			         conunself  = [],
-			         modunself  = [],
-				 expself  = [],
-				 conself  = [],
-				 modself  = []}
-       fun isempty_state ({expself,conself,modself,expunself,conunself,modunself,...}:state) = 
-	   (null expself) andalso (null conself) andalso (null modself) andalso
-	   (null expunself) andalso (null conunself) andalso (null modunself) 
+       type state = {selfify : bool,
+		     ctxt : context,
+		     self_subst : subst,
+		     unself_subst : subst}
 
-fun show_state ({modunself,...}:state) = 
-    (print "modunself:\n";
-     app (fn (m1,m2) => (pp_mod m1; print " --> "; pp_mod m2; print "\n")) modunself;
-     print "\n")
+       fun initial_state (selfify,ctxt) = {selfify = selfify, 
+					   ctxt = ctxt,
+					   self_subst = empty_subst,
+					   unself_subst = empty_subst}
 
-       fun add_exppath({ctxt,expunself,conunself,modunself,expself,conself,modself} : state,v,p) = 
-	   {ctxt=ctxt,expunself = (path2exp p, VAR v)::expunself,conunself=conunself,modunself=modunself,
-	    expself = (v,path2exp p)::expself,
-	    conself=conself,modself=modself}
-       fun add_conpath({ctxt,expunself,conunself,modunself,expself,conself,modself}:state,v,p) = 
-	   {ctxt=ctxt,conunself = (path2con p, CON_VAR v)::conunself,expunself=expunself,modunself=modunself,
-	    conself = (v,path2con p)::conself,
-	    expself=expself,modself=modself}
-       fun add_modpath({ctxt,expunself,conunself,modunself,expself,conself,modself}:state,v,p) = 
-	   {ctxt=ctxt,modunself = (path2mod p, MOD_VAR v)::modunself,expunself=expunself,conunself=conunself,
-	    modself = (v,path2mod p)::modself,
-	    conself=conself,expself=expself}
-       fun meta_add adder (state,v,NONE) = state
-	 | meta_add adder (state,v,SOME p) = adder(state,v,p)
-       val add_exppath = meta_add add_exppath
-       val add_conpath = meta_add add_conpath
-       val add_modpath = meta_add add_modpath
+       fun isempty_state ({self_subst,unself_subst,...}:state) = 
+	   (subst_is_empty self_subst) andalso (subst_is_empty unself_subst)
 
-       fun ehandler ({expunself,...} : state) (m,l) = assoc_eq(eq_epath, MODULE_PROJECT(m,l), expunself)
-       fun chandler ({conunself,...} : state) (m,l) = 
-	   let val res = assoc_eq(eq_cpath, CON_MODULE_PROJECT(m,l), conunself)
-(*
-	       val _ = (print "(un)-selfify chandler called with\n";
-			pp_con (CON_MODULE_PROJECT(m,l));
-			print "\nand conunself = ";
-			app (fn (c,c') => (pp_con c; print "   -->  "; pp_con c'; print "\n")) conunself;
-			print "\nand returning res = ";
-			case res of 
-			    NONE => print "NONE\n"
-			  | SOME c => (print "SOME "; pp_con c; print "\n"))
-*)
-	   in  res
+       fun add_con (state, _, NONE) = state
+	 | add_con ({ctxt, selfify, self_subst, unself_subst}, v, SOME p) = 
+	   {ctxt = ctxt, selfify = selfify,
+	    self_subst = subst_add_convar(self_subst, v, path2con p),
+	    unself_subst = subst_add_conpath(self_subst, p, CON_VAR v)}
+
+       fun add_mod (state, _, NONE) = state
+	 | add_mod ({ctxt, selfify, self_subst, unself_subst}, v, SOME p) = 
+	   {ctxt = ctxt, selfify = selfify,
+	    self_subst = subst_add_modvar(self_subst, v, path2mod p),
+	    unself_subst = subst_add_modpath(self_subst, p, MOD_VAR v)}
+
+
+       fun selfify_mpath({selfify,self_subst,unself_subst,...}:state,p) = 
+	   let val m = path2mod p
+	       val m = mod_subst(m, if selfify then self_subst else unself_subst)
+	   in  (case mod2path m of
+		    NONE => error "selfify_mpath got non-path result"
+		  | SOME p => p)
 	   end
-       fun mhandler ({modunself,...} : state) (m,l) = assoc_eq(eq_mpath,MOD_PROJECT(m,l), modunself)
+		    
+       fun selfify_exp({selfify, self_subst,unself_subst,...}:state, e) = 
+	   exp_subst(e,if selfify then self_subst else unself_subst)
 
+       fun selfify_con({selfify, self_subst, unself_subst, ...}:state, c) = 
+	   con_subst(c,if selfify then self_subst else unself_subst)
 
-       fun selfify_exp(selfify,state as {expself,conself,modself,...}:state,e) = 
-	   if selfify
-	       then exp_subst_expconmodvar(e,expself,conself,modself)
-	   else exp_subst_allproj (ehandler state, chandler state, 
-				   mhandler state, fn _ => NONE) e
-
-       fun selfify_con(selfify,state as {conself,modself,...}:state,c) = 
-	   if selfify
-	       then con_subst_conmodvar(c,conself,modself)
-	   else  con_subst_allproj (ehandler state, chandler state, 
-				    mhandler state, fn _ => NONE) c
-
-       fun selfify_kind(selfify,state,k : kind) = k
-
-       fun selfify_mod(selfify,state as {conself,modself,...}:state,m) = 
-	   if selfify
-	       then mod_subst_conmodvar(m,conself,modself)
-	   else  mod_subst_allproj(ehandler state, chandler state, 
-				   mhandler state, fn _ => NONE) m
+       fun selfify_mod({selfify, self_subst, unself_subst, ...}:state, m) = 
+	   mod_subst(m,if selfify then self_subst else unself_subst)
 	       
-       fun sdec_folder (popt,selfify) (sdec as (SDEC(l,dec)),(state:state,rev_sdecs)) = 
+       fun sdec_folder popt (sdec as (SDEC(l,dec)),(state as {selfify,...}:state,rev_sdecs)) = 
 	   let val popt = mapopt (fn p => join_path_labels(p,[l])) popt
 	   in 
 	       (case dec of
 		    DEC_EXP(v,c,eopt,inline) => 
-			let val c = selfify_con(selfify,state,c)
+			let val c = selfify_con(state,c)
 			    val eopt = (case eopt of
 					    NONE => NONE
-					  | SOME e => SOME(selfify_exp(selfify,state,e)))
+					  | SOME e => SOME(selfify_exp(state,e)))
 			in  (state,(SDEC(l,DEC_EXP(v,c,eopt,inline))) :: rev_sdecs)
 			end
 
@@ -148,113 +118,54 @@ fun show_state ({modunself,...}:state) =
 		     let 
 			 val this_dec = 
 			 (case copt of  (*  if we do this, Unselfify is hard to write. *)
-			      NONE => DEC_CON(v,selfify_kind(selfify,state,k),
+			      NONE => DEC_CON(v,k,
 					      (case popt of
 						   NONE => NONE
 						 | SOME p => SOME(path2con p)),
 					       inline)
 			    | SOME c => 
-				  let val c' = selfify_con(selfify,state,c)
+				  let val c' = selfify_con(state,c)
 				      val copt' = 
 					  (if (not selfify andalso 
-					       case (c',popt) of
-						   (CON_MODULE_PROJECT _, SOME p) => eq_cpath(c', path2con p)
-(*
-						       (print "l = "; pp_label l; print "\n";
-							print "l' = "; pp_label l'; print "\n";
-							print "m = "; pp_mod m; print "\n";
-							print "p = "; pp_mod (path2mod p); print "\n";
-						       eq_label(l,l') andalso eq_modproj(m,path2mod p))
-*)
-						 | _ => false)
+					       (case popt of
+						    SOME p => eq_cpath(c', path2con p)
+						  | NONE => false))
 					       then NONE
 					   else SOME c')
-				      val k' = selfify_kind(selfify,state,k)
-				  in  DEC_CON(v,k',copt',inline)
+				  in  DEC_CON(v,k,copt',inline)
 				  end)
-			 val state = add_conpath(state,v,popt)
+			 val state = add_con(state,v,popt)
 		     in (state,(SDEC(l,this_dec))::rev_sdecs)
 		     end
 		  | DEC_MOD(v,b,s) => 
-		     let val this_dec = DEC_MOD(v,b,SelfifySig(state,selfify) (popt,s))
-			 val state = add_modpath(state,v,popt)
+		     let val this_dec = DEC_MOD(v,b,SelfifySig state (popt,s))
+			 val state = add_mod(state,v,popt)
 		     in (state,SDEC(l,this_dec)::rev_sdecs)
 		     end)
 	   end
 		    
 
-       and sbnd_folder (popt,selfify) (SBND(l,bnd),(state:state,rev_sbnds)) = 
-	   let val popt = mapopt (fn p => join_path_labels(p,[l])) popt
-	   in  (case bnd of
-		    BND_EXP(v,e) => 
-			let val state = add_exppath(state,v,popt)
-			in (state,(SBND(l,BND_EXP(v,selfify_exp(selfify,state,e))))::rev_sbnds)
-			end
-		  | BND_MOD(v,b,m) => 
-			let val this_bnd = BND_MOD(v,b,SelfifyMod(state,selfify) (popt,m))
-			    val state = add_modpath(state,v,popt)
-			in (state,SBND(l,this_bnd)::rev_sbnds)
-			end
-		  | BND_CON(v,c) =>
-			let val this_bnd = BND_CON(v,selfify_con(selfify,state,c))
-			    val state = add_conpath(state,v,popt)
-			in (state,(SBND(l,this_bnd))::rev_sbnds)
-			end)
-	   end
-
-
-       and do_sdecs (popt,selfify) (state:state,sdecs) = 
-	   let val (_,rev_sdecs') = foldl (sdec_folder (popt,selfify)) (state,[]) sdecs
+       and do_sdecs popt (state:state,sdecs) = 
+	   let val (_,rev_sdecs') = foldl (sdec_folder popt) (state,[]) sdecs
 	   in  rev rev_sdecs'
 	   end
 
-       and do_sbnds (popt,selfify) (state,sbnds) = 
-	   let val (_,rev_sbnds') = foldl (sbnd_folder (popt,selfify)) (state,[]) sbnds
-	   in  rev rev_sbnds'
-	   end
-
-       and SelfifyMod (state:state,selfify) (popt: path option, module : mod) : mod = 
-	   let val x = 5
-	   in (case module of
-		   MOD_FUNCTOR (a,v,s1,m,s2) => 
-		       let val s1' = SelfifySig (state,selfify) (NONE,s1)
-			   val s2' = SelfifySig (state,selfify) (NONE,s2)
-			   val m' = SelfifyMod (state,selfify) (NONE,m)
-		       in  MOD_FUNCTOR(a,v,s1',m',s2')
-		       end
-		 | (MOD_STRUCTURE sbnds) =>
-		       let val sbnds = do_sbnds (popt,selfify) (state, sbnds)
-		       in  MOD_STRUCTURE sbnds
-		       end
-		 | (MOD_PROJECT (m,l)) => 
-		       if selfify
-			   then MOD_PROJECT(SelfifyMod (state,selfify) (NONE,m), l)
-		       else mod_subst_allproj(ehandler state, chandler state, 
-					      mhandler state, fn _ => NONE) module
-		 | (MOD_VAR v) => 
-		       if selfify
-			   then mod_subst_conmodvar(module,#conself state, #modself state)
-		       else mod_subst_allproj(ehandler state, chandler state, 
-					      mhandler state, fn _ => NONE) module
-		 | _ => error "selfify_mod' given a mod which is not a functor or structure")
-	   end
-
-       and SelfifySig (state:state,selfify) (popt: path option, signat : signat) : signat = 
+       and SelfifySig (state as {selfify,...}:state) (popt: path option, signat : signat) : signat = 
 	   (case (selfify,signat) of
 		(_,SIGNAT_FUNCTOR (v,s1,s2,a)) => 
 		    if (selfify andalso isempty_state state)
 			then signat
-		    else let val s1' = SelfifySig (state,selfify) (NONE,s1)
-			     val s2' = SelfifySig (state,selfify) (NONE,s2)
+		    else let val s1' = SelfifySig state (NONE,s1)
+			     val s2' = SelfifySig state (NONE,s2)
 			 in  SIGNAT_FUNCTOR(v,s1',s2',a)
 			 end
 	      | (_,SIGNAT_STRUCTURE (NONE,sdecs)) =>
-			 let val sdecs' = do_sdecs (popt,selfify) (state, sdecs)
+			 let val sdecs' = do_sdecs popt (state, sdecs)
 			     val popt = if selfify then popt else NONE
 			 in  SIGNAT_STRUCTURE(popt,sdecs')
 			 end
 	      | (false,SIGNAT_STRUCTURE (SOME _,sdecs)) =>
-			 let val sdecs' = do_sdecs (popt,selfify) (state, sdecs)
+			 let val sdecs' = do_sdecs popt (state, sdecs)
 			     val popt = if selfify then popt else NONE
 			 in  SIGNAT_STRUCTURE(popt,sdecs')
 			 end
@@ -263,48 +174,20 @@ fun show_state ({modunself,...}:state) =
 			 (case popt of
 			      SOME p' => if (eq_path(p,p'))
 					     then s
-					 else SelfifySig (state,selfify) 
+					 else SelfifySig state
 					     (popt, SIGNAT_STRUCTURE(NONE,sdecs))
 			    | _ => s)
-	      | (_, SIGNAT_VAR v) => SelfifySig (state,selfify) (popt,reduce_sigvar(#ctxt state,v))
-	      | (_, SIGNAT_OF m) => 
-			      let val m' = SelfifyMod(state,selfify) (NONE, m)
-				  val _ = if (not selfify)
-					      then (print "UNSELFIFY SIGNAT_OF: m = ";
-						    pp_mod m; print "\n         m' = ";
-						    pp_mod m'; print "\nstate = \n";
-						    show_state state; print "\n")
-					  else ()
-			      in  SIGNAT_OF m'
-			      end)
+	      | (_, SIGNAT_VAR v) => SelfifySig state (popt,reduce_sigvar(#ctxt state,v))
+	      | (_, SIGNAT_OF p) => SIGNAT_OF (selfify_mpath(state,p)))
 
    in
-       fun SelfifySig' ctxt = SelfifySig (initial_state ctxt, true)
-       fun UnselfifySig' ctxt = SelfifySig (initial_state ctxt, false)
+       fun SelfifySig' ctxt = SelfifySig (initial_state (true, ctxt))
+       fun UnselfifySig' ctxt = SelfifySig (initial_state (false, ctxt))
    end
 
      (* Performs lookup in a structure signature, performing
         normalization as needed with the supplied module argument. *)
     local
-	fun wrap vm NONE = NONE
-	  | wrap vm (SOME pc) = 
-	    SOME(case pc of
-		     PHRASE_CLASS_EXP(e,c,eopt,inline) => 
-			 PHRASE_CLASS_EXP(e,con_subst_modvar(c,[vm]),
-					  (case eopt of
-					       NONE => NONE
-					     | SOME e => SOME(exp_subst_modvar(e,[vm]))),
-					       inline)
-		   | PHRASE_CLASS_CON(c,k,copt,inline) => 
-			 PHRASE_CLASS_CON(c,k,
-					  (case copt of
-					       NONE => NONE
-					     | SOME c => SOME(con_subst_modvar(c,[vm]))),
-					       inline)
-		   | PHRASE_CLASS_MOD(m,b,s) => PHRASE_CLASS_MOD(mod_subst_modvar(m,[vm]),b,
-							         sig_subst_modvar(s,[vm]))
-		   | _ => pc)
-
 	fun local_Sdecs_Project ctxt (mopt, sdecs, l) = 
 	    let
 		fun bad () = (print "local_Sdecs_Project failed on ";
@@ -331,8 +214,8 @@ fun show_state ({modunself,...}:state) =
 		  | mh mt _ = NONE
 		fun externalize (et,ct,mt) dec =
 		    case dec of
-			(DEC_MOD(_,_,s)) => SOME(CLASS_MOD(sig_all_handle(eh et,ch ct,mh mt, fn _ => NONE) s))
-		      | (DEC_EXP(_,c,_,_)) => SOME(CLASS_EXP(con_all_handle(eh et,ch ct,mh mt, fn _ => NONE) c))
+			(DEC_MOD(_,_,s)) => SOME(CLASS_MOD(sig_handle(eh et,ch ct,mh mt, fn _ => NONE) s))
+		      | (DEC_EXP(_,c,_,_)) => SOME(CLASS_EXP(con_handle(eh et,ch ct,mh mt, fn _ => NONE) c))
 		      | (DEC_CON(_,k,_,_)) => SOME(CLASS_CON k)
 		fun extend (et,ct,mt) (l,DEC_MOD(v,_,_)) = (et,ct,(v,l)::mt)
 		  | extend (et,ct,mt) (l,DEC_EXP(v,_,_,_)) = ((v,l)::et,ct,mt)
@@ -683,10 +566,10 @@ fun show_state ({modunself,...}:state) =
 	  | (CON_FLEXRECORD _, CON_FLEXRECORD _) => dorecord()
 	  | (CON_FUN (vs1,c1), CON_FUN(vs2,c2)) => 
 		(length vs1 = length vs2) andalso
-		let fun folder (v,acc) = add_context_con'(acc,v,KIND_TUPLE 1, NONE)
-		    val ctxt' = foldl folder ctxt vs1
-		    val table = map2 (fn (v1,v2) => (v2,CON_VAR v1)) (vs1,vs2)
-		    val c2' = con_subst_convar(c2,table)
+		let fun folder ((v1,v2),(ctxt,subst)) = (add_context_con'(ctxt,v1,KIND_TUPLE 1, NONE),
+							 subst_add_convar(subst,v2,CON_VAR v1))
+		    val (ctxt',subst) = foldl folder (ctxt,empty_subst) (zip vs1 vs2)
+		    val c2' = con_subst(c2,subst)
 		in self(c1,c2',ctxt')
 		end
 	  | (CON_SUM {names=n1,noncarriers=nc1,carrier=c1,special=i1},
@@ -1503,7 +1386,7 @@ fun show_state ({modunself,...}:state) =
 
    (* ------------ Return a module's signature    -------------- *)
    and reduce_signat context (SIGNAT_VAR v) = reduce_signat context (reduce_sigvar(context,v))
-     | reduce_signat context (SIGNAT_OF m ) = reduce_signat context (#2(GetModSig(m,context)))
+     | reduce_signat context (SIGNAT_OF p) = reduce_signat context (#2(GetModSig(path2mod p,context)))
      | reduce_signat context s = s
 
    and GetModSig (module, ctxt : context) : bool * signat =
@@ -1615,6 +1498,15 @@ fun show_state ({modunself,...}:state) =
 	in  (case Reduce(true,con,ctxt) of
 		 NONE => (false, con)
 	       | SOME(c,_) => (true, c))
+	  handle e => (if !trace then msg() else (); raise e)
+	end
+
+    and NormOnce (con,ctxt) : con option =
+	let fun msg() = (print "ReduceOnce called with con =\n";
+			 pp_con con; print "\n")
+	in  (case ReduceOnce(con,ctxt) of
+		 NONE => NONE
+	       | SOME(c,_) => SOME c)
 	  handle e => (if !trace then msg() else (); raise e)
 	end
 
@@ -1770,24 +1662,24 @@ fun show_state ({modunself,...}:state) =
 			      | _ => ReduceAgain c)
 		       end
 		   fun lookup _ [] = NONE
-		     | lookup (tables as (ctable,mtable)) ((SDEC(curl,dec))::rest) = 
+		     | lookup subst ((SDEC(curl,dec))::rest) = 
 		       (case dec of
 			    DEC_CON(v,_,SOME curc, _) =>
 				if eq_label(curl,l)
-				    then let val curc = con_subst_conmodvar(curc,#1 tables,#2 tables)
+				    then let val curc = con_subst(curc,subst)
 					 in break_loop curc
 					 end
 				else 
-				    let val centry = (v,CON_MODULE_PROJECT(m,curl))
-					val tables = (centry::ctable, mtable)	   
-				    in  lookup tables rest
+				    let val cpath = CON_MODULE_PROJECT(m,curl)
+					val subst = subst_add_convar(subst,v,cpath)
+				    in  lookup subst rest
 				    end
 			  | DEC_MOD(v,_,s) => 
-				let val mentry = (v,MOD_PROJECT(m,curl))
-				    val tables = (ctable, mentry::mtable)
-				in lookup tables rest
+				let val mpath = MOD_PROJECT(m,curl)
+				    val subst = subst_add_modvar(subst,v,mpath)
+				in lookup subst rest
 				end
-			  | _ => lookup tables rest)
+			  | _ => lookup subst rest)
 		   fun self_case(p,sdecs) = 
 		       (case Sdecs_Lookup ctxt (path2mod p, sdecs, [l]) of
 			    SOME(_,PHRASE_CLASS_CON(_,_,SOME c,_)) => break_loop c
@@ -1800,7 +1692,180 @@ fun show_state ({modunself,...}:state) =
 				  pp_label l; print "\n and sdecs = ";
 				  pp_sdecs sdecs;
 				  print "\n"));
-			lookup ([],[]) sdecs)
+			lookup empty_subst sdecs)
+	       in (case (reduce_signat ctxt s) of 
+		       SIGNAT_STRUCTURE(NONE,sdecs) => notself_case sdecs
+		     | SIGNAT_STRUCTURE (SOME p,sdecs) => self_case(p,sdecs)
+		     | SIGNAT_FUNCTOR _ => (print "CON_MODULE_PROJECT from a functor = \n";
+					    pp_mod m;
+					    error "CON_MODULE_PROJECT from a functor")
+		     | _ => error "signat_var of signat_of is not reduced")
+	       end))
+       end	
+
+    (* if full is true, then do full normalization; otherwise, just head normalization
+       if NONE, constructor was already (head-)normal
+       is SOME(c,paths), the reduced constructor is returned
+                         with a list of (some) intermediate paths it went through *)
+    and ReduceOnce (argcon,ctxt) : (con * path list) option = 
+       let 
+	    fun ReduceFolder (c,change) =
+		(case ReduceOnce (c,ctxt) of
+		     NONE => (c, change)
+		   | SOME(c,paths) => (c, true))
+	    fun ReduceAgain c =
+		(case ReduceOnce (c,ctxt) of
+		     NONE => SOME(c, [])
+		   | someopt => someopt)
+	    fun ReduceAgainWith (c, p) =
+		(case ReduceOnce (c,ctxt) of
+		     NONE => SOME(c, [p])
+		   | SOME(c,paths) => SOME(c, p :: paths))
+	    fun help constr c = 
+	      (case ReduceOnce(c,ctxt) of
+		   NONE => NONE
+		 | SOME (c,_) => SOME(constr c, []))
+       in
+	   (case argcon of
+	      CON_INT _ => NONE
+	    | CON_UINT _  => NONE
+	    | CON_FLOAT _ => NONE
+	    | CON_ANY => NONE
+	    | CON_REF c => help CON_REF c
+	    | CON_ARRAY c => help CON_ARRAY c
+	    | CON_VECTOR c => help CON_VECTOR c
+	    | CON_TAG c => help CON_TAG c
+	    | CON_SUM{names,carrier,noncarriers,special} =>
+		  let fun constr c = CON_SUM{names=names,
+					     carrier=c,
+					     noncarriers=noncarriers,
+					     special=special}
+		  in  help constr carrier
+		  end
+	    | CON_ARROW (cs1,c2,closed,comp) =>
+		  let val (cs1,change) = foldl_acc ReduceFolder false cs1
+		      val (c2,change) = ReduceFolder (c2,change)
+		  in  if change
+			  then SOME(CON_ARROW (cs1, c2, closed, comp), [])
+		      else NONE
+		  end
+	    | CON_MU c => help CON_MU c
+	    | CON_RECORD rdecs => 
+		  let val (labs,cons) = Listops.unzip rdecs
+		      val (cons,change) = foldl_acc ReduceFolder false cons
+		  in  if change 
+			  then SOME(CON_RECORD (Listops.zip labs cons), [])
+		      else NONE
+		  end
+
+	    | CON_FLEXRECORD (ref (INDIRECT_FLEXINFO rf)) => 
+		  ReduceAgain(CON_FLEXRECORD rf)
+	    | CON_FLEXRECORD (r as ref (FLEXINFO (stamp,flag,rdecs))) => 
+				    let fun f (l,c)= (l,#1(ReduceFolder (c,false)))
+					val _ = r := FLEXINFO(stamp,flag,map f rdecs)
+				    in  NONE
+				    end
+	    | CON_OVAR ocon => let val tv = ocon_deref ocon
+				    in  ReduceAgain(CON_TYVAR tv)
+				    end
+	    | CON_TYVAR tv => (case tyvar_deref tv of
+					NONE => NONE
+				      | SOME c => ReduceAgain c)
+	    | CON_VAR v => 
+		   (case (Context_Lookup'(ctxt,v)) of
+			SOME(_,PHRASE_CLASS_CON (_,_,SOME c,_)) => 
+			    ReduceAgainWith(c,PATH(v,[]))
+		      | SOME(_,PHRASE_CLASS_CON (_,_,NONE,_)) => NONE
+		      | SOME _ => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound to a con")
+		      | NONE => error ("Normalize: CON_VAR " ^ (var2string v) ^ " not bound"))
+	    | CON_TUPLE_INJECT cons => 
+			let val (cons,change) = foldl_acc ReduceFolder false cons
+			in  if change
+				then SOME(CON_TUPLE_INJECT cons, [])
+			    else NONE
+			end
+	    | CON_TUPLE_PROJECT (i,c) => 
+		  (case ReduceOnce(c,ctxt) of
+		       NONE => NONE
+		     | SOME(CON_TUPLE_INJECT cons, _) => 
+			   let val len = length cons
+			       val _ = if (i >= 0 andalso i < len)
+					   then ()
+				       else
+					   error "Reduce: con tuple projection - index wrong"
+			       val c = List.nth(cons,i)
+			   in  ReduceAgain c
+			   end
+		    | SOME(c,_) => SOME(CON_TUPLE_PROJECT(i,c), []))
+	    (* Eta contract functions *)
+	    | CON_FUN([v],CON_APP(f,CON_VAR v')) => 
+		       if (eq_var(v,v'))
+			   then 
+			       ReduceAgain f
+		       else NONE
+	    | CON_FUN(vars,CON_APP(f,CON_TUPLE_INJECT args)) =>
+		let fun match (v,(CON_VAR v')) = eq_var(v,v')
+		      | match _ = false
+		in  if (eq_list(match,vars,args))
+			then ReduceAgain f
+		    else NONE
+		end
+	    | CON_FUN _ => NONE
+	    | CON_APP(c1,c2) => 
+		  let val (c1,change) = ReduceFolder (c1,false)
+		      val (c2,change) = ReduceFolder (c2,change)
+		  in  (case c1 of
+			   (CON_FUN(vars,body)) => ReduceAgain(ConApply(false,c1,c2))
+			 | _ => if change
+				    then SOME(CON_APP(c1,c2),[])
+				else NONE)
+		  end
+	    | CON_MODULE_PROJECT (m,l) =>
+		(let 
+		   val (_,s) = GetModSig(m,ctxt)
+		   fun break_loop c = 
+		       let val argpath = con2path argcon
+			   val path = con2path c
+		       in  (case (argpath,path) of
+				(SOME argpath, SOME path) =>
+				    if (eq_path(argpath,path))
+					then NONE
+				    else ReduceAgainWith(c,argpath)
+			      | (SOME argpath, _) => ReduceAgainWith(c,argpath)
+			      | _ => ReduceAgain c)
+		       end
+		   fun lookup _ [] = NONE
+		     | lookup subst ((SDEC(curl,dec))::rest) = 
+		       (case dec of
+			    DEC_CON(v,_,SOME curc, _) =>
+				if eq_label(curl,l)
+				    then let val curc = con_subst(curc,subst)
+					 in break_loop curc
+					 end
+				else 
+				    let val cpath = CON_MODULE_PROJECT(m,curl)
+					val subst = subst_add_convar(subst,v,cpath)
+				    in  lookup subst rest
+				    end
+			  | DEC_MOD(v,_,s) => 
+				let val mpath = MOD_PROJECT(m,curl)
+				    val subst = subst_add_modvar(subst,v,mpath)
+				in lookup subst rest
+				end
+			  | _ => lookup subst rest)
+		   fun self_case(p,sdecs) = 
+		       (case Sdecs_Lookup ctxt (path2mod p, sdecs, [l]) of
+			    SOME(_,PHRASE_CLASS_CON(_,_,SOME c,_)) => break_loop c
+			  | SOME(_,PHRASE_CLASS_CON(c,_,NONE,_)) => break_loop c
+			  | SOME _ => error "CON_MOD_PROJECT found signature with wrong flavor"
+			  | NONE => NONE)
+		   fun notself_case sdecs = 
+		       (debugdo (fn () => 
+				 (print "Reduce: CON_MODULE_PROJECT case: l = "; 
+				  pp_label l; print "\n and sdecs = ";
+				  pp_sdecs sdecs;
+				  print "\n"));
+			lookup empty_subst sdecs)
 	       in (case (reduce_signat ctxt s) of 
 		       SIGNAT_STRUCTURE(NONE,sdecs) => notself_case sdecs
 		     | SIGNAT_STRUCTURE (SOME p,sdecs) => self_case(p,sdecs)
@@ -1851,7 +1916,7 @@ fun show_state ({modunself,...}:state) =
 	 (Sig_Valid(ctxt,s_arg) andalso 
 	  Sig_Valid(add_context_mod'(ctxt,v,SelfifySig ctxt (PATH(v,[]),s_arg)),s_res))
        | Sig_Valid (ctxt : context, SIGNAT_VAR v) = Sig_Valid(ctxt,reduce_sigvar(ctxt,v))
-       | Sig_Valid (ctxt : context, SIGNAT_OF m) = ((GetModSig(m,ctxt); true) handle _ => false)
+       | Sig_Valid (ctxt : context, SIGNAT_OF p) = ((GetModSig(path2mod p,ctxt); true) handle _ => false)
 
      and Dec_IsSub (ctxt,d1,d2) = Dec_IsSub' true (ctxt,d1,d2) 
      and Dec_IsEqual (ctxt,d1,d2) = Dec_IsSub' false (ctxt,d1,d2) 
@@ -1880,8 +1945,44 @@ fun show_state ({modunself,...}:state) =
 		  andalso inline1=inline2
 	    | _ => false)
 
-     and eq_exp(ctxt,e1,e2) = (print "alpha-equivalence of expression not done\n";
-			       true)
+     and eq_exp(ctxt,exp1,exp2) = 
+	 let fun find subst v = (case Listops.assoc_eq(eq_var,v,subst) of
+				     NONE => v
+				   | SOME v => v)
+	     fun add subst (v1,v2) = (v1,v2)::subst
+	     fun eq (e1,e2,subst) = 
+	     (case (e1,e2) of
+		  (VAR v1, VAR v2) => let val v2 = find subst v2
+				      in  eq_var(v1,v2)
+				      end
+	       | (FIX(b1,a1,fbnds1), FIX(b2,a2,fbnds2)) =>
+		     let fun loop subst [] [] = subst
+			   | loop subst ((FBND(v1,_,_,_,_)) :: rest1)
+			                ((FBND(v2,_,_,_,_)) :: rest2) = loop (add subst (v2,v1)) rest1 rest2
+			   | loop subst _ _ = subst
+			 val subst = loop subst fbnds1 fbnds2
+			 fun eq_fbnd (FBND(_,v1,c1,_,b1),FBND(_,v2,c2,_,b2)) = 
+			     let val subst = add subst (v2,v1)
+			     in  eq(b1,b2,subst) andalso eq_con(ctxt,c1,c2)
+			     end
+		     in  b1 = b2 andalso a1 = a2 andalso eq_list(eq_fbnd,fbnds1,fbnds2)
+		     end
+	       | (UNROLL (c1,d1,e1), UNROLL(c2,d2,e2)) =>
+		     eq_con(ctxt,c1,c2) andalso  eq_con(ctxt,d1,d2) andalso eq(e1,e2,subst)
+	       | (ROLL (c1,e1), ROLL(c2,e2)) =>
+		     eq_con(ctxt,c1,c2) andalso eq(e1,e2,subst)
+	       | (SUM_TAIL (i1,c1,e1), SUM_TAIL (i2,c2,e2)) =>
+		     i1 = i2 andalso eq_con(ctxt,c1,c2) andalso eq(e1,e2,subst)
+	       | (INJ {sumtype=s1,field=f1,inject=e1opt},
+		  INJ {sumtype=s2,field=f2,inject=e2opt}) =>
+		     eq_con(ctxt,s1,s2) andalso f1 = f2 andalso 
+		     Util.eq_opt(fn (e1,e2) => eq(e1,e2,subst), e1opt, e2opt)
+	       | _ => (print "eq_exp failed with \n    exp1 = ";
+		       pp_exp e1; print "\n\nand exp2 = "; 
+		       pp_exp e2; print "\n\n"; 
+		       false))
+	 in  eq(exp1,exp2,[])
+	 end
 
      (* Rules 99 - 100 *)
      and Sdecs_IsSub (ctxt,sdecs1,sdecs2) = Sdecs_IsSub' true (ctxt,sdecs1,sdecs2)
@@ -1890,32 +1991,43 @@ fun show_state ({modunself,...}:state) =
      and Sdecs_IsSub' isSub (ctxt,sdecs1,sdecs2) =
 	 let 
 	     exception NOPE
-	     fun help subster (v1,v2,sdecs) =
-		 (case (subster(SIGNAT_STRUCTURE (NONE,sdecs),[(v1,v2)])) of
-		      SIGNAT_STRUCTURE (_,sdecs') => sdecs'
-		    | _ => error "Sdecs_IsSub subst failed")
-	     fun match_var [] [] = []
-	       | match_var (SDEC(l1,dec1)::rest1) ((sdec2 as (SDEC(l2,dec2)))::rest2) : sdec list = 
+	     fun match_var subst [] [] = []
+	       | match_var subst (SDEC(l1,dec1)::rest1) ((sdec2 as (SDEC(l2,dec2)))::rest2) : sdec list = 
 		 if (eq_label (l1,l2))
-		     then (case (dec1,dec2) of
-			       (DEC_MOD(v1,b1,s1),DEC_MOD(v2,b2,s2)) =>
-				   if (eq_var(v1,v2))
-				       then sdec2::(match_var rest1 rest2)
-				   else SDEC(l2,(DEC_MOD(v1,b1,s2)))::
-				       (match_var rest1 (help sig_subst_modvar (v2,MOD_VAR v1,rest2)))
+		     then 
+		       (case (dec1,dec2) of
+			    (DEC_MOD(v1,b1,s1),DEC_MOD(v2,b2,s2)) =>
+				   let val s2 = sig_subst(s2,subst)
+				       val sdec2 = SDEC(l1,DEC_MOD(v1,b2,s2))
+				       val subst = if (eq_var(v1,v2))
+						       then subst
+						   else subst_add_modvar(subst, v2, MOD_VAR v1)
+				   in  sdec2 :: (match_var subst rest1 rest2)
+				   end
 			     | (DEC_EXP(v1,c1,e1,i1),DEC_EXP(v2,c2,e2,i2)) =>
-				   if (eq_var(v1,v2))
-				       then sdec2::(match_var rest1 rest2)
-				   else SDEC(l2,(DEC_EXP(v1,c2,e2,i2)))
-				       ::(match_var rest1 (help sig_subst_expvar (v2,VAR v1,rest2)))
+				   let val c2 = con_subst(c2,subst)
+				       val e2 = (case e2 of
+						     NONE => NONE
+						   | SOME e2 => SOME(exp_subst(e2,subst)))
+				       val sdec2 = SDEC(l1,DEC_EXP(v1,c2,e2,i2))
+				       val subst = if (eq_var(v1,v2))
+						       then subst
+						   else subst_add_expvar(subst, v2, VAR v1)
+				   in  sdec2 :: (match_var subst rest1 rest2)
+				   end
 			     | (DEC_CON(v1,k1,c1,i1),DEC_CON(v2,k2,c2,i2)) =>
-				   if (eq_var(v1,v2))
-				       then sdec2::(match_var rest1 rest2)
-				   else SDEC(l2,(DEC_CON(v1,k2,c2,i2)))
-				       ::(match_var rest1 (help sig_subst_convar (v2,CON_VAR v1,rest2)))
-			     | _ => SDEC(l2,dec2)::(match_var rest1 rest2))
+				   let val c2 = (case c2 of
+						     NONE => NONE
+						   | SOME c2 => SOME(con_subst(c2,subst)))
+				       val sdec2 = SDEC(l1,DEC_CON(v1,k2,c2,i2))
+				       val subst = if (eq_var(v1,v2))
+						       then subst
+						   else subst_add_convar(subst, v2, CON_VAR v1)
+				   in  sdec2 :: (match_var subst rest1 rest2)
+				   end
+			     | _ => SDEC(l2,dec2)::(match_var subst rest1 rest2))
 		 else raise NOPE
-	       | match_var _ _ = (print "Sdecs_IsSub: length mismatch\n";
+	       | match_var _ _ _ = (print "Sdecs_IsSub: length mismatch\n";
 				  raise NOPE)
 	     fun loop ctxt [] [] = true
 	       | loop ctxt (SDEC(_,dec1)::rest1) (SDEC(_,dec2)::rest2) = 
@@ -1924,7 +2036,7 @@ fun show_state ({modunself,...}:state) =
 		     andalso loop (add_context_dec(ctxt,dec1)) rest1 rest2)
 		 end
 	       | loop ctxt _ _ = false
-	 in (loop ctxt sdecs1 (match_var sdecs1 sdecs2))
+	 in (loop ctxt sdecs1 (match_var empty_subst sdecs1 sdecs2))
 	     handle NOPE => false
 	 end
 
@@ -2021,6 +2133,7 @@ fun show_state ({modunself,...}:state) =
 	    | (SOME (_,pc),_) => LookupHelp(ctxt,labs,PATH(v,[]), pc))
   end
 
+    fun con_reduce_once (context,c) = NormOnce(c,context)
     fun con_normalize (context,c) = #2(Normalize(c,context))
     fun con_head_normalize (context,c) = #2(HeadNormalize(c,context))
 

@@ -209,8 +209,7 @@ struct
 	     | PHRASE_CLASS_OVEREXP _ => sdecs) [] (#1 var_list)
 
       (* faster when first context is larger than second *)
-      fun plus (esubster,csubster,ksubster,ssubster,orig_ctxt, 
-		ctxt2 as CONTEXT{flatlist, fixity_list, label_list, var_list,alias_list=_}) =
+      fun plus (orig_ctxt, ctxt2 as CONTEXT{flatlist, fixity_list, label_list, var_list,alias_list=_}) =
 	  let val ctxt = add_context_fixity(orig_ctxt,fixity_list)
 	      fun varIn (v,ctxt) = (case (Context_Lookup'(ctxt,v)) of
 					NONE => false
@@ -222,19 +221,18 @@ struct
 		  in  if (not in_orig andalso in_current)
 			  then (ctxt,subst) (* inserted already due to open in next context *)
 		      else
-			  let val (v,subst as (esubst,csubst,msubst)) = 
+			  let val (v,subst) = 
 			      if not in_current
 				  then  (v,subst)
 			      else  let val v' = Name.derived_var v
-					val (esubst,csubst,msubst) = subst
-				    in  (v',((v,VAR v')::esubst,
-					     (v,CON_VAR v')::csubst,
-					     (v,MOD_VAR v')::msubst))
+					val subst = subst_add_expvar(subst,v,VAR v')
+					val subst = subst_add_convar(subst,v,CON_VAR v')
+					val subst = subst_add_modvar(subst,v,MOD_VAR v')
+				    in  (v',subst)
 				    end
-			      fun do_e e = esubster(e,esubst,csubst,msubst)
-			      fun do_c c = csubster(c,esubst,csubst,msubst)
-			      fun do_s s = ssubster(s,esubst,csubst,msubst)
-			      fun do_k k = ksubster(k,esubst,csubst,msubst)
+			      fun do_e e = exp_subst(e,subst)
+			      fun do_c c = con_subst(c,subst)
+			      fun do_s s = sig_subst(s,subst)
 			  in (case pc of
 				  PHRASE_CLASS_EXP(_,con,eopt,inline) => 
 				      add_context_sdec(ctxt,SDEC(lab,DEC_EXP(v,do_c con, 
@@ -242,7 +240,7 @@ struct
 									     inline)))
 				| PHRASE_CLASS_CON(_,kind,copt,inline) => 
 				      add_context_sdec(ctxt,
-						       SDEC(lab,DEC_CON(v,do_k kind,
+						       SDEC(lab,DEC_CON(v,kind,
 									Util.mapopt do_c copt,
 									inline)))
 				| PHRASE_CLASS_MOD(m,b,signat) => add_context_sdec(ctxt,SDEC(lab,DEC_MOD(v,b,do_s signat)))
@@ -252,19 +250,11 @@ struct
 			  end
 		  end
               (* cannot fold over #1 var_list since that is unordered *)
-	      val (ctxt,_) = foldl folder (ctxt,([],[],[])) (Context_Varlist ctxt2)
+	      val (ctxt,_) = foldl folder (ctxt,empty_subst) (Context_Varlist ctxt2)
 	  in  ctxt
-	  end  (* MEMO: What about the tag_list ?? - Martin *)
+	  end 
 	  
-      fun plus_context (esubster,csubster,ksubster,ssubster) ctxts =
-	  (case ctxts of
-	       [] => empty_context
-	     | [ctxt] => ctxt
-	     | (ctxt::rest) => foldl (fn (c,acc) => plus(esubster,csubster,ksubster,ssubster,acc,c)) ctxt rest)
-
-
-
-
+      fun plus_context ctxts = foldl plus empty_context ctxts
 
 end
 

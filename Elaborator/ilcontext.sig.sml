@@ -45,11 +45,7 @@ signature ILCONTEXT =
 
 
 	val context_to_sdecs : Il.context -> Il.sdecs
-	val plus_context : ((exp * (var * exp) list * (var * con) list * (var * mod) list) -> exp) *
-	                   ((con * (var * exp) list * (var * con) list * (var * mod) list) -> con) *
-	                   ((kind * (var * exp) list * (var * con) list * (var * mod) list) -> kind) * 
-			   ((signat * (var * exp) list * (var * con) list * (var * mod) list) -> signat) ->
-			   Il.context list -> Il.context
+	val plus_context : Il.context list -> Il.context
 
 	(* ---- none of these lookup functions perform normalization ---- *)		
 	val fixity : context -> fixity_table
