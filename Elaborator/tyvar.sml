@@ -47,7 +47,8 @@ structure Tyvar :> TYVAR =
 							   use_equal = false,
 							   body = ref NONE,
 							   ctxts = [ctxts]})
-    fun fresh_named_tyvar (ctxts,s) = fresh_stamped_tyvar(ctxts,s,inc())
+    val tyvar_counter = ref (Stats.counter "Elab-NumTyvars")
+    fun fresh_named_tyvar (ctxts,s) = ((!tyvar_counter)(); fresh_stamped_tyvar(ctxts,s,inc()))
     fun fresh_tyvar ctxts = fresh_named_tyvar (ctxts,"tv")
     fun tyvar_after stamp (TYVAR(ref {stampref,...})) = stamp < stampref
     fun tyvar_stamp (TYVAR(ref {stampref,...})) = stampref
@@ -123,5 +124,7 @@ structure Tyvar :> TYVAR =
 		       | _ => ())
 	in  length constraints'
 	end
+
+
 
   end

@@ -1,4 +1,4 @@
-(*$import Prim PRIM Annotation Sequence TraceInfo *)
+(*$import Prim Annotation Sequence TraceInfo *)
 
 signature NIL =
 sig
@@ -9,12 +9,15 @@ sig
   type w32 = Word32.word
   type prim = Prim.prim
   type ('a,'b) sequence = ('a,'b) Sequence.sequence
-                          (* conceptually this is a ('a*'b) list that allows
-			     fast access using 'a as a key *)
+                          (* An ('a,'b) sequence is conceptually equivalent to an ('a*'b) list.
+			     Additionally, it has fast access using 'a as a key *)
+
   datatype annotation = datatype Annotation.annotation
 
-  (* In general, we want to distinguish between functions/arrow types that 
-   * are open (possibly having free variables) or those that are closed.
+  (* In general, we want to distinguish between different function-like terms.
+   *   Open - open lambda terms (with free variables)
+   *   Code - closed lambda terms (with no free variables) taking environments
+   *   Closure - closed lambda terms packaged with their environment
    *)
   datatype openness = Open | Code | Closure
 
@@ -27,8 +30,8 @@ sig
 
   (*  A leaf procedure makes no function calls.
    *  A non-recursive function may not directly call itself or functions
-       bound in the same cluster.  This means that the functions bound
-       are not (mutually recursive) and can thus be inlined.
+   *    bound in the same cluster.  This means that the functions bound
+   *    are not (mutually recursive) and can thus be inlined.
    *  An arbitrary function may call itself or other functions.
    *)
   datatype recursive = Leaf | NonRecursive | Arbitrary
@@ -65,6 +68,7 @@ sig
     | Array_c                                 (* arrays *)
     | Vector_c                                (* vectors *)
     | Ref_c                                   (* references *)
+    | Loc_c                                   (* locatives *)
     | Exntag_c                                (* exception tags *)
     | Record_c of label list * var list option  (* records *)
     | Sum_c of {tagcount : w32,
@@ -78,10 +82,13 @@ sig
     | Mu_c of bool * (var,con) sequence           (* Constructors that classify values of
 						    a recursive type; bool indicates if it
 						    is really recursive *)
-    | AllArrow_c of openness * effect *        (* open functions, code functions, and closures *)
-                    (var * kind) list * 
-		    var list option * con list *
-		    w32 * con
+    | AllArrow_c of {openness : openness, (* open functions, code functions, and closures *)
+		     effect : effect,
+		     isDependent : bool,
+		     tFormals : (var * kind) list,
+		     eFormals : (var option * con) list,
+		     fFormals : w32,
+		     body : con}
     | ExternArrow_c of con list * con
     | Var_c of var
     | Let_c of letsort * conbnd list * con        (* Constructor-level bindings *)
@@ -104,6 +111,7 @@ sig
 
   and nilprim = 
       record of label list       (* record intro *)
+    | partialRecord of label list * int (* record with a missing zero-indexed field *)
     | select of label            (* record field selection; takes the record type *)
     | inject of TilWord32.word   (* slow; must be given one type that is
 				    reducible to a sum type *)
@@ -133,7 +141,7 @@ sig
 
 
   and allprim = NilPrimOp of nilprim
-                   | PrimOp of prim
+              | PrimOp of prim
 
   (* Intswitch should be apparent.
    * The con list in the Sumswitch tells us the sum type and the w32
@@ -179,26 +187,23 @@ sig
    * closure-convert recursive functions.
    *)
 
-  and bnd =                                (* Term-level Bindings with optional classifiers *)
-      Con_b of phase * conbnd                (* Binds constructors *)
-    | Exp_b of var * niltrace * exp          (* Binds expressions *)
+  and bnd =                                 (* Term-level Bindings with optional classifiers *)
+      Con_b of phase * conbnd               (* Binds constructors *)
+    | Exp_b of var * niltrace * exp         (* Binds expressions *)
     | Fixopen_b of (var,function) sequence  (* Binds mutually recursive open functions *)
     | Fixcode_b of (var,function) sequence  (* Binds mutually recursive code functions *)
-                                             (* Allows the creation of term and for-all closures;
+                                            (* Allows the creation of term and for-all closures;
                                                 bool indicates if it is really recursive *)
     | Fixclosure_b of bool * (var , {code:var, cenv:con, venv:exp, tipe:con}) sequence
                                              
-
-  (* A function is either open or closed.  It is a "code pointer" if it is closed.
-   * It may or may not be effect-free and may or may not be recursive.
-   * The type and value parameters with their kinds and types are given next.
-   * Finally, the body and the result type is given.
-   * Note that the type of the function can be easily given from these ingredients.
-   *)
-
-  and function = Function of effect * recursive * (var * kind) list * 
-                             bool * (var * con) list * (var list) * exp * con  
-
+  and function = Function of {effect      : effect,
+			      recursive   : recursive,
+			      isDependent : bool,
+			      tFormals    : (var * kind) list,
+			      eFormals    : (var * niltrace * con) list,
+			      fFormals    : (var list),
+			      body        : exp,
+			      body_type   : niltrace * con}
 
   datatype import_entry = ImportValue of label * var * con
                         | ImportType of label * var * kind

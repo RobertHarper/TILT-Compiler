@@ -16,19 +16,16 @@ structure Pat
     type patarg = {context : Il.context,
 		   typecompile : typecompile,
 		   expcompile : expcompile,
-		   polyinst : polyinst,
-		   error_region : unit -> unit,
-		   fresh_con : Il.context -> Il.con}
+		   polyinst : polyinst}
 
 
     open Il IlStatic IlUtil Ppil
-    open Util Listops Name (* IlLookup *) Prim
-    open IlContext
+    open Util Listops Name Prim
+    open IlContext Error
 
     val error = fn s => error "pat.sml" s
     fun printint i = print (Int.toString i)
     fun debugdo t = if (!debug) then (t(); ()) else ()
-    fun nada() = ()
 
     fun compress_expression (exp as (CASE{arms,default,...})) = 
 	let fun do_arms (no_arms,acc,[]) = (no_arms, rev acc)
@@ -183,8 +180,7 @@ structure Pat
      Also returned is a list, one for each match-rule supplied, 
      of the variables and their types bound in each pattern.
     -------------------------------------------------------------- *)
- fun compile ({context=compile_context, typecompile = xty, polyinst, error_region, 
-		fresh_con, expcompile} : patarg,
+ fun compile ({context=compile_context, typecompile = xty, polyinst, expcompile} : patarg,
 	       compile_args : case_exp list, 
 	       compile_arms : arm' list,
 	       compile_default : def,
@@ -967,8 +963,8 @@ structure Pat
 	val args = [CASE_VAR (argvar,argc)] 
 	val context = add_context_dec(context,DEC_EXP(argvar,argc,NONE,false))
 	val patarg = {context = context, typecompile = #typecompile patarg,
-		      expcompile = #expcompile patarg, polyinst = #polyinst patarg,
-		      error_region = #error_region patarg, fresh_con = #fresh_con patarg}
+		      expcompile = #expcompile patarg, polyinst = #polyinst patarg}
+
 	val arms = [([bindpat],[],SOME(Ast.TupleExp(map (fn s => Ast.VarExp [s]) boundsyms)))]
 	val res_con = fresh_con context
 	val def = SOME (fn _ => (Il.RAISE(res_con, bindexn_exp),res_con))
@@ -1043,8 +1039,7 @@ structure Pat
 	val args = [CASE_VAR (argvar,argc)]
 	val context = add_context_dec(context,DEC_EXP(argvar,argc,NONE,false))
 	val patarg = {context = context, typecompile = #typecompile patarg,
-		      expcompile = #expcompile patarg, polyinst = #polyinst patarg,
-		      error_region = #error_region patarg, fresh_con = #fresh_con patarg}
+		      expcompile = #expcompile patarg, polyinst = #polyinst patarg}
 	val arms : arm' list = map (fn (pat,body) => ([pat],[], SOME body)) cases
 	val res_con = fresh_con context
 (*	val def = SOME (Il.RAISE(res_con,matchexn_exp),res_con) *)
@@ -1062,7 +1057,7 @@ structure Pat
 
 
     (* ---- funCompile creates a curried function ----------------------- *)
-    fun funCompile {patarg = patarg as {context, error_region, ...} : patarg,
+    fun funCompile {patarg = patarg as {context, ...} : patarg,
 		    rules = cases : (clause * Ast.exp) list,
 		    reraise}
       : {arglist : (Il.var * Il.con) list, body : Il.exp * Il.con} =
@@ -1094,8 +1089,7 @@ structure Pat
 	val args = map2 (fn (v,c) => CASE_VAR(v,c)) (argvars,argcons)
 	val context = foldl (fn (CASE_VAR(v,c),ctxt) => add_context_dec(ctxt,DEC_EXP(v,c,NONE,false))) context args
 	val patarg = {context = context, typecompile = #typecompile patarg,
-		      expcompile = #expcompile patarg, polyinst = #polyinst patarg,
-		      error_region = #error_region patarg, fresh_con = #fresh_con patarg}
+		      expcompile = #expcompile patarg, polyinst = #polyinst patarg}
 	val result_type_var  = fresh_named_var "result_type"
 	val default = if (reraise) 
 			then let val (v,c) = (hd argvars, hd argcons)

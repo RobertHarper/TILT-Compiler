@@ -60,7 +60,7 @@ struct
       | pp_flag NOTRACE_INT = print "NOTRACE_INT, "
       | pp_flag NOTRACE_CODE = print "NOTRACE_CODE, "
       | pp_flag NOTRACE_REAL = print "NOTRACE_REAL, "
-      | pp_flag LABEL = print "LABEL, "
+      | pp_flag NOTRACE_LABEL = print "NOTRACE_LABEL, "
       | pp_flag LOCATIVE = print "LOCATIVE, "
       | pp_flag (COMPUTE _) = print "COMPUTE, "
 
@@ -86,7 +86,7 @@ struct
 	      | stat_loop (UNSET :: rest) = 
 		error "can't have record with unsets"
 	      | stat_loop (COMPUTE _ :: rest) = 0 + 2 * (stat_loop rest)
-	      | stat_loop (LABEL :: rest)  = 0 + 2 * (stat_loop rest)
+	      | stat_loop (NOTRACE_LABEL :: rest)  = 0 + 2 * (stat_loop rest)
 	      | stat_loop (TRACE :: rest)  = 1 + 2 * (stat_loop rest)
 
 	    fun dyn_loop ([],pos)          = []

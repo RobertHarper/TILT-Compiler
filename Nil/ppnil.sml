@@ -225,28 +225,24 @@ structure Ppnil	:> PPNIL =
 		^ (TilWord32.toDecimalString totalcount) ^ ")")
       | pp_primcon (Vararg_c (oness,e)) = Hbox[String "VARARG[", pp_openness oness, pp_effect e, String "]"]
 
-    and pp_confun (openness,effect,vklist,vlistopt,clist,numfloats,con) = 
+    and pp_confun {openness,effect,isDependent,tFormals,eFormals,fFormals,body} = 
 	pp_region "AllArrow(" ")"
 	[HVbox[pp_openness openness,
 	       String "; ",
 	       (case effect of
 		    Total => String "TOTAL; "
 		  | Partial => String "PARTIAL; "),
-	       (pp_list' (fn (v,k) => Hbox[pp_var v,String " :: ", pp_kind k]) vklist),
+	       (pp_list' (fn (v,k) => Hbox[pp_var v,String " :: ", pp_kind k]) tFormals),
 	       String "; ", Break0 0 5,
-	       (case vlistopt of
-		   SOME vars => 
-		       if (length vars = length clist)
-			   then (pp_list' (fn (v,c) => Hbox[pp_var v,String " :: ", 
-							    pp_con c]) 
-				 (Listops.zip vars clist))
-		       else HOVbox[pp_list pp_var vars ("",",","", false),
-				   String " :LENGTH_MISMATCH: ",
-				   pp_list pp_con clist ("",",","", false)]
-		  | NONE => (pp_list' pp_con clist)),
-	       String "; ", String (TilWord32.toDecimalString numfloats),
+	       (pp_list' (fn (vopt,c) =>
+			  (case vopt of
+			       NONE => pp_con c
+			     | SOME v => if isDependent
+					     then Hbox[pp_var v,String " :: ", pp_con c]
+					 else error "non-dependent but has var")) eFormals),
+	       String "; ", String (TilWord32.toDecimalString fFormals),
 	       String "; ", Break0 0 5,
-	       pp_con con]]
+	       pp_con body]]
 
     and pp_nilprimop (select label) = Hbox[String "select[", pp_label label, String "]"]
       | pp_nilprimop nilprimop = 
@@ -327,21 +323,6 @@ structure Ppnil	:> PPNIL =
 	   | Switch_e sw => pp_switch sw)
 
 	 
-    and pp_function (Function(effect,recursive,vklist,dependent,vclist,vflist,exp,c)) = 
-	HOVbox[String(case recursive of Leaf => "/Leaf\\" | Nonleaf => "/\\"),
-	       String(if dependent then "DEPENDENT" else ""),
-	       (pp_list' (fn (v,k) => Hbox[pp_var v, String ":",pp_kind k])
-		vklist),
-	       (pp_list' (fn (v,c) => Hbox[pp_var v, String ":", pp_con c])
-		vclist),
-	       (pp_list' (fn v => Hbox[pp_var v,String ":Float"])
-		vflist),
-	       String ":",
-	       pp_con c,
-	       String "=",
-	       Break0 0 5,
-	       pp_exp exp]
-
     and pp_switch sw =
 	let fun pp_default NONE = String "NODEFAULT"
 	      | pp_default (SOME e) = Hbox[String "DEFAULT = ", pp_exp e]
@@ -419,14 +400,15 @@ structure Ppnil	:> PPNIL =
 		    end)
 	end
 
-    and pp_fix is_code (v,Function(effect,recursive,vklist,dep,vclist,vflist,e,c)) : format = 
+    and pp_fix is_code (v,(Function{effect,recursive,isDependent,
+				    tFormals, eFormals, fFormals, 
+				    body, body_type})) : format = 
 	let val vkformats = (pp_list_flat (fn (v,k) => HOVbox[pp_var v, String " :: ", Break, pp_kind k]) 
-			     vklist ("",",","",false))
-	    val vcformats = (pp_list_flat (fn (v,c) => HOVbox[pp_var v, String " : ", Break, pp_con c]) 
-			     vclist ("",",","",false))
+			     tFormals ("",",","",false))
+	    val vcformats = (pp_list_flat (fn (v,nt,c) => HOVbox[pp_var v, String " : ", Break, pp_con c]) 
+			     eFormals ("",",","",false))
 	    val vfformats = (pp_list_flat (fn v => HOVbox[pp_var v, String " : Float"])
-			     vflist ("",",","",false))
-	    val temp = (length vclist) + (length vflist)
+			     fFormals ("",",","",false))
 	in
 	    Vbox([String (case (is_code,recursive) of
 			    (false,Arbitrary) => "/\\ "
@@ -435,18 +417,19 @@ structure Ppnil	:> PPNIL =
 			  | (true, Arbitrary) => "/CODE\\"
 			  | (true, NonRecursive) => "/NORECUR-CODE\\"
 			  | (true, Leaf) => "/LEAF-CODE\\"),
-		  if dep then String "DEP" else String "",
+		  if isDependent then String "DEP" else String "",
 		    pp_var v, Break,
 		    pp_region "(" ")"
 		    [HVbox(vkformats @
-		     (if (temp > 0) then [String " ;; ", Break0 0 8] else [String " ;; "]) @
-			  vcformats @ [String " ;; "] @ vfformats)],
+			   (if (null vkformats) then [String " ;; "] else [String " ;; ", Break0 0 8]) @
+			   vcformats @ [String " ;; "] @
+			   vfformats)],
 		    Break0 0 5,
 		    String (case effect of 
 				Total => " -> " 
 			      | Partial => " => "),
-		    pp_con c, String " =", Break,
-		    pp_exp e])
+		    pp_con (#2 body_type), String " =", Break,
+		    pp_exp body])
 	end
 
     fun pp_bnds bnds = pp_list pp_bnd bnds ("[",",","]",true)

@@ -69,8 +69,8 @@ struct
 
 
    fun translateRep rep =
-       case rep
-       of Rtl.TRACE => (NONE, Tracetable.TRACE_YES)
+       case rep of
+	  Rtl.TRACE => (NONE, Tracetable.TRACE_YES)
         | Rtl.LOCATIVE => (NONE, Tracetable.TRACE_IMPOSSIBLE)
         | Rtl.COMPUTE path =>
 	      (case path of
@@ -92,7 +92,7 @@ struct
 	| Rtl.NOTRACE_INT => (NONE,Tracetable.TRACE_NO)
 	| Rtl.NOTRACE_REAL => (NONE,Tracetable.TRACE_NO)
 	| Rtl.NOTRACE_CODE => (NONE,Tracetable.TRACE_NO)
-	| Rtl.LABEL => (NONE,Tracetable.TRACE_NO)
+	| Rtl.NOTRACE_LABEL => (NONE,Tracetable.TRACE_NO)
 
    fun internal_translateRep v Rtl.UNSET = (add_stack (R (Name.var2int v)); 
 					    translateRep Rtl.UNSET)
@@ -944,7 +944,7 @@ struct
 	 let 
 	     fun logwrite() = 
 		 let val writelist_cursor = Rtl.ML_EXTERN_LABEL "writelist_cursor"
-		     val cursor_addr = Rtl.REGI(Name.fresh_var(),Rtl.LABEL)
+		     val cursor_addr = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_LABEL)
 		     val cursor_val = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 		     val store_loc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 		 in  emit (SPECIFIC (INTOP (SUBL, Rhlimit, IMMop 8, Rhlimit)));

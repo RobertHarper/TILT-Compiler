@@ -3,14 +3,15 @@
 signature PPRTL =
 sig
 
-   val regi2s : Rtl.regi -> string
-   val regf2s : Rtl.regf -> string
-   val var2s : Rtl.var -> string
+   val regi2s  : Rtl.regi -> string
+   val regf2s  : Rtl.regf -> string
+   val reg2s   : Rtl.reg -> string
+   val var2s   : Rtl.var -> string
    val label2s : Rtl.label -> string
-   val ea2s : Rtl.ea -> string
-   val sv2s : Rtl.sv -> string
+   val ea2s    : Rtl.ea -> string
+   val sv2s    : Rtl.sv -> string
    val align2s : Rtl.align -> string
-   val rep2s : Rtl.rep -> string
+   val rep2s   : Rtl.rep -> string
 
    val pp_var' : Rtl.var -> Formatter.format
    val pp_Instr' : Rtl.instr -> Formatter.format

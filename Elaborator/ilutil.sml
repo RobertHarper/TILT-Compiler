@@ -24,7 +24,7 @@ structure IlUtil
     (* -------------------------------------------------------- *)
     (* --------------------- Misc helper functions ------------ *)
     fun fresh_named_con (ctxt,s) = CON_TYVAR (fresh_named_tyvar (ctxt,s))
-    fun fresh_con ctxt = fresh_named_con (ctxt,"con")
+    fun fresh_con ctxt = fresh_named_con (ctxt,"metavar")
     local
 	val size = 20
 	fun make i = let val s = Symbol.labSymbol(Int.toString i)

@@ -32,6 +32,7 @@ structure Linknil :> LINKNIL  =
     val show_specialize = Stats.ff("showSpecialize")
     val show_cc = Stats.ff("showCC")
     val show_before_rtl = Stats.ff("showBeforeRtl")
+    val show_typecheck0 = Stats.ff("showTypecheck0")
     val show_typecheck1 = Stats.ff("showTypecheck1")
     val show_typecheck2 = Stats.ff("showTypecheck2")
     val show_typecheck3 = Stats.ff("showTypecheck3")
@@ -40,6 +41,7 @@ structure Linknil :> LINKNIL  =
     val show_inline = Stats.ff("showInline")
     val show_html = Stats.tt("showHTML")
 
+    val typecheck_after_phasesplit = Stats.ff("TypecheckAfterPhasesplit")
     val typecheck_before_opt = Stats.ff("TypecheckBeforeOpt")
     val typecheck_after_opt = Stats.ff("TypecheckAfterOpt")
     val typecheck_after_cc = Stats.ff("TypecheckAfterCC")
@@ -139,12 +141,13 @@ structure Linknil :> LINKNIL  =
 			then raise (Stop nilmod)
 		    else ()
 
-(*
-	    val nilmod = check (ref true,ref false,
+
+	    val nilmod = check (typecheck_after_phasesplit, show_typecheck0,
 				    "Nil_typecheck_post_phase-split",
-				    (Util.curry2 NilStatic.module_valid (NilContext.empty ())) o (NilRename.renameMod),
+				    (Util.curry2 NilStatic.module_valid (NilContext.empty ())) o 
+				    (NilRename.renameMod),
 				    filename, nilmod)
-*)
+
 	    val nilmod = transform(do_rename, show_renamed,
 				 "Renaming1",Linearize.linearize_mod,
 				 filename, nilmod)

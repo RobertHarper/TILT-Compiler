@@ -124,7 +124,7 @@ struct
 
     fun xsum_dynamic_single (info,
 			     con_varloc,
-			     exp_varloc) : loc_or_val * con * state = 
+			     exp_varloc) : term * con * state = 
       let val _ = Stats.counter("RTLxsum_dyn_single") ()
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
@@ -132,8 +132,8 @@ struct
 
 	  val desti = alloc_regi TRACE
 	  val afterl = fresh_code_label "xsum_dyn_after"
-	  val con_ir = load_ireg_locval(con_varloc,NONE)
-	  val exp_ir = load_ireg_locval(exp_varloc,NONE)
+	  val con_ir = load_ireg_term(con_varloc,NONE)
+	  val exp_ir = load_ireg_term(exp_varloc,NONE)
 	  
 	  (* Perform the branching with fall-through to nobox case *)
 	  val (boxl,noboxl) = needs_boxing_dynamic "xsum_dyn_single" con_ir
@@ -145,18 +145,18 @@ struct
 	  (* box case *)
 	  val _ = add_instr(ILABEL boxl)
 	  val (lv,state) = make_record(state,NONE,[valloc2rep exp_varloc],[exp_varloc])
-	  val rec_ir = load_ireg_locval(lv,NONE)
+	  val rec_ir = load_ireg_term(lv,NONE)
 	  val _ = add_instr(MV(rec_ir,desti))
 
 	  (* afterwards *)
 	  val _ = add_instr(ILABEL afterl)
 	      
-      in  (VAR_LOC(VREGISTER(false, I desti)),sumcon,state)
+      in  (LOCATION(REGISTER(false, I desti)),sumcon,state)
       end
 
     fun xsum_dynamic_multi (info,
 			    con_varloc,
-			    exp_varloc) : loc_or_val * con * state = 
+			    exp_varloc) : term * con * state = 
 	let val _ = Stats.counter("RTLxsum_dyn_multi") ()
 	    
 	  val  (state,known,sumcon,
@@ -182,7 +182,7 @@ struct
 	  val loopl = fresh_code_label "dyntagsum_loop"
 	  val recordl = fresh_code_label "dyntagsum_record"
 	      
-	  val con_ir = load_ireg_locval(con_varloc,NONE)
+	  val con_ir = load_ireg_term(con_varloc,NONE)
 	  (* the 5 fields of the sum are: tag, known, tagcount, total, type args *)
 	  val summand_con_ir = alloc_regi TRACE
 	  val _ = add_instr(LOAD32I(EA(con_ir,4*4),summand_con_ir))
@@ -195,15 +195,15 @@ struct
 	      
 	  (* easier non-record case *)
 	  val _ = add_instr(ILABEL nonrecordl) 
-	  val vls = [VAR_VAL(VINT field_sub),exp_varloc]
+	  val vls = [VALUE(INT field_sub),exp_varloc]
 	  val (lv,state) = make_record(state,NONE,map valloc2rep vls,vls)
-	  val ir = load_ireg_locval(lv,NONE)
+	  val ir = load_ireg_term(lv,NONE)
 	  val _ = add_instr(MV(ir,desti))
 	  val _ = add_instr(BR afterl)
 	      
 	  (* difficult record case - XXX breaks for multi-record *)
 	  val _ = add_instr(ILABEL recordl) 
-	  val vl_ir = load_ireg_locval(exp_varloc,NONE)
+	  val vl_ir = load_ireg_term(exp_varloc,NONE)
 	  val _ = add_instr(LOAD32I(EA(vl_ir,~4),rectagi));  (* load record tag *)
 	  val _ = add_instr(SRL(rectagi,IMM rec_len_offset,numfields))
 	  val _ = add_instr(ANDB(numfields,IMM 31,numfields))       (* numfields = orig # of fields *)
@@ -241,12 +241,12 @@ struct
 	  (* result is in desti at this point *)
 	  val _ = add_instr(ILABEL afterl) 
 	      
-      in  (VAR_LOC(VREGISTER(false, I desti)),sumcon,state)
+      in  (LOCATION(REGISTER(false, I desti)),sumcon,state)
       end
 
     fun xsum_dynamic (info,
 		      con_varloc,
-		      exp_varloc) : loc_or_val * con * state = 
+		      exp_varloc) : term * con * state = 
 	let
 	    val  (state,known,sumcon,
 		  tagcount,nontagcount,single_carrier,is_tag,
@@ -257,7 +257,7 @@ struct
 	end
     
   fun xsum_nonrecord (info,
-		      varloc_opt) : loc_or_val * con * state = 
+		      varloc_opt) : term * con * state = 
       let
 	  open Prim
 	  val  (state,known,sumcon,
@@ -281,31 +281,31 @@ struct
 
 	  fun multi () =
 	      let val SOME varloc = varloc_opt
-		  val varlocs = [VAR_VAL(VINT field_sub), varloc]
+		  val varlocs = [VALUE(INT field_sub), varloc]
 		  val reps = map valloc2rep varlocs
 		  val (vl,state) = make_record(state,NONE,reps,varlocs)
 	      in  (vl,sumcon,state)
 	      end
 	  
       in  if is_tag
-	      then (VAR_VAL(VTAG known), sumcon,state)
+	      then (VALUE(TAG known), sumcon,state)
 	  else (if single_carrier
 		    then single() else multi())
       end
 
   fun xsum_record (info,
-		   varlocs) : loc_or_val * con * state = 
+		   varlocs) : term * con * state = 
       let
 	  open Prim
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
 		sumtypes,field_sub) = help info
       in  if is_tag
-	      then (VAR_VAL(VTAG known), sumcon,state)
+	      then (VALUE(TAG known), sumcon,state)
 	  else
 	      let val varlocs = if single_carrier
 				    then varlocs
-				else (VAR_VAL(VINT field_sub)) :: varlocs
+				else (VALUE(INT field_sub)) :: varlocs
 		  val reps = map valloc2rep varlocs
 		  val (vl,state) = make_record(state,NONE,reps,varlocs)
 	      in  (vl,sumcon,state)
@@ -315,7 +315,7 @@ struct
 
   fun xproject_sum_dynamic 
 			(info, con_ir, exp_ir, traceinfo)
-			: loc_or_val * con * state = 
+			: term * con * state = 
      let val _ = Stats.counter("RTLprojsum") ()
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
@@ -411,13 +411,13 @@ struct
 	      end
 	  val state = if single_carrier then single_case() 
 			   else multi_case()
-	  val lv = VAR_LOC(VREGISTER (false, dest))
+	  val lv = LOCATION(REGISTER (false, dest))
       in  (lv,summand_type,state)
       end
 
 
 
-  fun xproject_sum_record(info, field, clist, base, niltrace) : loc_or_val * con * state = 
+  fun xproject_sum_record(info, field, clist, base, niltrace) : term * con * state = 
       let val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
 		sumtypes,field_sub) = help info
@@ -440,11 +440,11 @@ struct
 	  val (_,I desti) = alloc_reg_trace state niltrace
 	  val subscript = if single_carrier then recfield_index else recfield_index + 1
 	  val _ = add_instr(LOAD32I(EA(base,4*subscript),desti))
-      in (VAR_LOC(VREGISTER(false, I desti)), recfield_con, state)
+      in (LOCATION(REGISTER(false, I desti)), recfield_con, state)
       end
 
-  fun xproject_sum_nonrecord (info, base, ssumcon, niltrace) : loc_or_val * con * state = 
-      let val lv = VAR_LOC(VREGISTER(false, I base))
+  fun xproject_sum_nonrecord (info, base, ssumcon, niltrace) : term * con * state = 
+      let val lv = LOCATION(REGISTER(false, I base))
 	  val v = fresh_named_var "named_project_sumee"
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
@@ -456,10 +456,10 @@ struct
 	  val need_unbox = single_carrier andalso (needs_boxing state summand_type)
 
 	  fun unbox offset =
-	      let val ir = load_ireg_locval(lv,NONE)
+	      let val ir = load_ireg_term(lv,NONE)
 		  val (_,I desti) = alloc_reg_trace state niltrace
 		  val _ = add_instr(LOAD32I(EA(ir,offset), desti))
-	      in  (VAR_LOC(VREGISTER(false, I desti)), summand_type,state)
+	      in  (LOCATION(REGISTER(false, I desti)), summand_type,state)
 	      end
       in  (case (single_carrier,need_unbox) of
 	       (true,false) => (lv,ssumcon,state)

@@ -11,10 +11,16 @@ structure NilPrimUtilParam
 	type exp = exp
 	type ('con,'exp) value = ('con,'exp) Prim.value
 
-	fun partial_arrow (cons,c2) = AllArrow_c(Code,Partial,[],NONE,
-						 cons, 0w0,c2)
-	fun total_arrow (cons,c2) = AllArrow_c(Code,Total,[],NONE,
-					       cons, 0w0,c2)
+	fun simple_arrow (effect,cons,c2) = AllArrow_c{openness = Code,
+						       effect = effect,
+						       isDependent = false,
+						       tFormals = [],
+						       eFormals = map (fn c => (NONE,c)) cons,
+						       fFormals = 0w0,
+						       body = c2}
+	fun partial_arrow (cons,c2) = simple_arrow(Partial,cons,c2)
+	fun total_arrow (cons,c2) =  simple_arrow(Total,cons,c2)
+
 	fun con_int is = Prim_c(Int_c is,[])
 	fun con_uint is = Prim_c(Int_c is,[])
 	fun con_float fs = Prim_c(Float_c fs,[])

@@ -26,12 +26,6 @@ structure Toil
     fun debugdo' t = (t(); ())
     fun nada() = ()
 
-    val tyvar_counter = ref (Stats.counter "Elaborator Tyvars")
-    fun reset_counters() = (tyvar_counter := Stats.counter "toil.fresh_tyvar")
-    val fresh_con = fn ctxt => ((!tyvar_counter)(); fresh_con ctxt)
-    val fresh_tyvar = fn ctxt => ((!tyvar_counter)(); fresh_tyvar ctxt)
-    val fresh_named_tyvar = fn arg => ((!tyvar_counter)(); fresh_named_tyvar arg)
-
 
     type tyvar = (context,con) Tyvar.tyvar
     type ocon = (context,con) Tyvar.ocon
@@ -62,7 +56,6 @@ structure Toil
 	fun reset_eq() = (eq_table := []; eq_stack := [])
 	fun reset_elaboration fp = (Error.reset fp;
 				    reset_eq();
-				    reset_counters();
 				    tyvar_table := [];
 				    overload_table := [];
 				    flex_table := [])
@@ -863,9 +856,7 @@ val _ = print "plet0\n"
 		 val patarg = {context = context,
 			       typecompile = xty,
 			       expcompile = xexp,
-			       polyinst = polyinst,
-			       error_region = error_region,
-			       fresh_con = fresh_con}
+			       polyinst = polyinst}
 		 val arms = map (fn (Ast.Rule{pat,exp})=>(parse_pat context pat,exp)) rules
 		 val (hbe,hbc) = caseCompile{patarg = patarg,
 					     arms = arms,
@@ -896,9 +887,7 @@ val _ = print "plet0\n"
 	     let val patarg = {context = context, 
 			       typecompile = xty, 
 			       expcompile = xexp, 
-			       polyinst = polyinst,
-			       error_region = error_region,
-			       fresh_con = fresh_con}
+			       polyinst = polyinst}
 		 val arms = map (fn (Ast.Rule{pat,exp}) => (parse_pats context [pat],exp)) rules
 		 val {arglist,body} = funCompile{patarg = patarg,
 						 rules = arms,
@@ -920,9 +909,7 @@ val _ = print "plet0\n"
 		 val patarg = {context = context,
 			       typecompile = xty,
 			       expcompile = xexp,
-			       polyinst = polyinst,
-			       error_region = error_region,
-			       fresh_con = fresh_con}
+			       polyinst = polyinst}
 		 val (e,c) = caseCompile{patarg = patarg,
 					 arms = arms,
 					 arg = (v,argc)}
@@ -970,19 +957,13 @@ val _ = print "plet0\n"
 	At some future point when the syntax includes explicit scoping, 
 	  we must include those too *)
 		 
-
 	     val fun_ids = map #1 dec_list
-	     val fun_cons = map (#1 o #2) dec_list
-	     val body_cons = map (#2 o #2) dec_list
-	     val matches_list = map #3 dec_list
-	     val fun_labs = map (fn l => internal_label (label2string l)) fun_ids
-	     val fun_vars = map (fn l => fresh_named_var (label2string l)) fun_ids
+	     val fun_vars = map #2 dec_list
 		 
 	     (* --- create the context with all the fun_ids typed --- *)
 	     val context_fun_ids = 
-		 let fun help ((id,var',funcon),ctxt) = 
-		     add_context_exp(ctxt,id,var',funcon)
-		 in foldl help context (zip3 fun_ids fun_vars fun_cons)
+		 let fun help ((l,v,c,_,_),ctxt) = add_context_exp(ctxt,l,v,c)
+		 in  foldl help context dec_list
 		 end
 	     
 	     val context'' = add_context_mod(context_fun_ids,open_lbl,var_poly,
@@ -992,16 +973,15 @@ val _ = print "plet0\n"
 		 
 	     val _ = eq_table_push()
 	     val fbnd_con_list = 
-		 (map4 (fn (matches,fun_con,body_con,var') => 
+		 (map (fn (_,var',fun_con,body_con,matches) => 
 			let 
 			    val patarg = {context = context'', 
 					  typecompile = xty, 
 					  expcompile = xexp, 
-					  polyinst = polyinst,
-					  error_region = error_region,
-					  fresh_con = fresh_con}
+					  polyinst = polyinst}
 			    val {body = (bodye,bodyc), 
-				 arglist} = funCompile{patarg = patarg,
+				 arglist} = funCompile
+					     {patarg = patarg,
 						       rules = matches,
 						       reraise = false}
 			    fun con_folder ((_,c),acc) = CON_ARROW([c],acc,false,oneshot_init PARTIAL)
@@ -1021,12 +1001,12 @@ val _ = print "plet0\n"
 			    local 
 				fun help ((v,c),(e,resc)) = make_lambda(v,c,resc,e)
 			    in 
-				val (var1,con1) = hd arglist
+				val (var1,con1)::_ = arglist
 				val (bigbodyc,bigbodye) = foldr help (bodye,bodyc) (tl arglist)
 			    end 
 			in (FBND(var',var1,con1,bigbodye,bigbodyc),func)
 			end)
-		  (matches_list, fun_cons, body_cons, fun_vars))
+		 dec_list)
 		 
 		 
 	     val fbnds = map #1 fbnd_con_list
@@ -1040,10 +1020,6 @@ val _ = print "plet0\n"
 		 
 	     local 
 		 val (_,top_con) = top_exp_con
-		 val _ = debugdo (fn () => (print "about to call rebind_free_type_var:";
-					    print "var_poly = ";
-					    pp_var var_poly; print "\nand c = \n";
-					    pp_con top_con; print"\n\n"))
 		 val tyvar_lbls'_useeq = 
 		     rebind_free_type_var(tyvar_stamp,top_con,
 					  context_fun_ids,var_poly)
@@ -1174,9 +1150,7 @@ val _ = print "plet0\n"
 		val patarg = {context = context', 
 			      typecompile = xty, 
 			      expcompile = xexp, 
-			      polyinst = polyinst,
-			      error_region = error_region,
-			      fresh_con = fresh_con}
+			      polyinst = polyinst}
                 val parsed_pat = parse_pat context pat
 		val bind_sbnd_sdec = (bindCompile{patarg = patarg,
 						  bindpat = parsed_pat,
@@ -1303,10 +1277,11 @@ val _ = print "plet0\n"
 			(case exp of 
 			     Ast.FnExp rules => map help rules
 			   | _ => parse_error "val rec requires an fn expression")
-		in  (symbol_label var, (fun_con, body_con), matches)
+		    val fun_lab = symbol_label var
+		    val fun_var = fresh_named_var (label2string fun_lab)
+		in  (fun_lab, fun_var, fun_con, body_con, matches)
 		end
-		val dec_list : (label * 
-				(con * con) *
+		val dec_list : (label * var * con * con *
 				(Ast.pat list * Ast.exp) list) list =
 		    map (rvb_help o rvb_strip) rvblist
 	    in  xfundec islocal (context,dec_list,tyvar_stamp,sdecs1,var_poly,open_lbl)
@@ -1367,13 +1342,13 @@ val _ = print "plet0\n"
 			    in  ((p,e), SOME name)
 			    end
 			val (matches, SOME id) = foldl_acc help NONE clause_list
-		    in (id, (fun_con,body_con), matches)
+			val fun_var = fresh_named_var (label2string id)
+		    in (id, fun_var, fun_con, body_con, matches)
 		    end
-		val dec_list : (label * 
-				(con * con) *
+		val dec_list : (label * var * con * con *
 				(Ast.pat list * Ast.exp) list) list =
 		    map (fb_help o fb_strip) fblist
-	    in  xfundec islocal (context,dec_list,tyvar_stamp,sdecs1,var_poly,open_lbl)
+	    in  xfundec islocal	(context,dec_list,tyvar_stamp,sdecs1,var_poly,open_lbl)
 	    end
 
 
@@ -2305,7 +2280,8 @@ val _ = print "plet0\n"
 	val _ = reset_elaboration (Error.nofilepos)
       in result
       end
-    
+
+
     val xdec = fn (ctxt,fp,dec) => overload_wrap fp (xdec false) (ctxt,dec)
     val xexp = fn (ctxt,fp,exp) => overload_wrap fp xexp (ctxt,exp)
     val xstrexp = fn (ctxt,fp,strexp,sigc) => overload_wrap fp xstrexp (ctxt,strexp,sigc)

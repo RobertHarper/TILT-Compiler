@@ -67,9 +67,12 @@ struct
   val int_con = Prim_c(Int_c Prim.W32,[])
   val char_con = Prim_c(Int_c Prim.W8,[])
   val exn_con = Prim_c(Exn_c, [])
-  fun function_type openness (Function(effect,recur,vklist,dep,vclist,vflist,_,c)) = 
-      AllArrow_c(openness,effect,vklist, if dep then SOME (map #1 vclist) else NONE,
-		 map #2 vclist,TilWord32.fromInt(length vflist),c)
+  fun function_type openness (Function{effect,recursive,isDependent,
+				       tFormals,eFormals,fFormals, body=_, body_type=(_,con)}) =
+       AllArrow_c{openness=openness, effect = effect, isDependent = isDependent,
+		  tFormals = tFormals, 
+		  eFormals = map (fn (v,_,c) => (if isDependent then SOME v else NONE, c)) eFormals,
+		  fFormals = TilWord32.fromInt(length fFormals), body = con}
 
   fun effect (Var_e _) = false
     | effect (Const_e _) = false
@@ -183,8 +186,8 @@ struct
   end
 
   fun get_arrow_return con = 
-    case strip_arrow con
-      of SOME (_,_,_,_,_,_,body_c) => SOME body_c
+    case strip_arrow con of
+	SOME {body,...} => SOME body
        | NONE => NONE
   (* Local rebindings from imported structures *)
 
@@ -459,18 +462,26 @@ end
 	  | NOCHANGE => docon con
     end
 
-  and f_arrow (state : state) (openness, effect, vklist, vlist, clist, numfloat, result) =
+  and f_arrow (state : state) {openness, effect, isDependent,
+			       tFormals, eFormals, fFormals, body} = 
     let
-      val (vklist,state) = f_vklist state vklist
-      val (vlist,clist,state) = 
-	  case vlist of
-	      SOME vars => let val (vclist,state) = f_vclist state (Listops.zip vars clist)
-			   in  (SOME (map #1 vclist), map #2 vclist, state)
-			   end
-	    | NONE => (NONE, map (f_con state) clist, state)
-      val result = f_con state result
-    in
-	(openness, effect, vklist, vlist, clist, numfloat, result)
+      val (tFormals,state) = f_vklist state tFormals
+      fun folder ((vopt,c),state) = 
+	  (case vopt of
+	      SOME v => let val c' = f_con state c
+			    val state' = add_var(state,v)
+			in  ((vopt, c'), state')
+			end
+	    | NONE => ((NONE, f_con state c), state))
+      val (eFormals,state) = foldl_acc folder state eFormals
+      val body = f_con state body
+    in   {openness = openness,
+	  effect =  effect, 
+	  isDependent = isDependent,
+	  tFormals = tFormals, 
+	  eFormals = eFormals, 
+	  fFormals = fFormals, 
+	  body = body}
     end
 
   and f_kind (state : state) (arg_kind : kind) = 
@@ -523,17 +534,17 @@ end
 	foldl_acc fold_one state vklist
     end
 
-  and f_vclist state vclist =
+  and f_vtclist state vtclist =
     let
-	fun fold_one ((var,con),state) = 
+	fun fold_one ((var,trace,con),state) = 
 	    let
 		val con' = f_con state con
 		val state' = add_var (state, var)
 	    in
-		((var,con'),state')
+		((var,trace,con'),state')
 	    end
     in
-	foldl_acc fold_one state vclist
+	foldl_acc fold_one state vtclist
     end
 
   and f_arrow_kind state (args, result) =
@@ -545,15 +556,17 @@ end
     end
 
 
-  and dofun (state : state) (Function(effect,recur,
-				      vklist,dep,vclist,vflist,body,con)) = 
+  and dofun (state : state) (Function{effect,recursive,isDependent,
+				      tFormals,eFormals,fFormals,body,body_type}) = 
       let 
-	  val (vklist', state) = f_vklist state vklist
-	  val (vclist', state) = f_vclist state vclist
+	  val (tFormals', state) = f_vklist state tFormals
+	  val (eFormals', state) = f_vtclist state eFormals
+	  val (trace,con) = body_type
+	  val con' = f_con state con
       in
-	  Function(effect,recur,vklist', dep, vclist',
-		   vflist, f_exp state body,
-		   f_con state con)
+	  Function{effect=effect, recursive=recursive, isDependent=isDependent,
+		   tFormals = tFormals', eFormals = eFormals', fFormals = fFormals,
+		   body = body, body_type = (trace,con')}
       end
 
   and f_bnd (state : state) (bnd : bnd) : bnd list * state = 
@@ -979,20 +992,20 @@ end
 	     alpha_equiv_con_list context' (con_list1,con_list2)
 	   end
              (*XXX need to fix this! *)
-	  | (AllArrow_c (openness1,effect1,tformals1,NONE,formals1,flength1,return1),
-	     AllArrow_c (openness2,effect2,tformals2,NONE,formals2,flength2,return2)) =>
+	  | (AllArrow_c {openness = o1, effect = eff1, isDependent = i1,
+			 tFormals = t1, eFormals = e1, fFormals = f1, body = b1},
+	     AllArrow_c {openness = o2, effect = eff2, isDependent = i2,
+			 tFormals = t2, eFormals = e2, fFormals = f2, body = b2}) =>
 	   let
 	     val conref = ref context
 	     fun tformal_equiv ((var1,kind1),(var2,kind2)) = 
 	       (alpha_equiv_kind' (!conref) (kind1,kind2))
 	       before (conref :=  alpha_equate_pair (!conref,(var1,var2)))
 	   in
-	     same_openness(openness1,openness2) andalso
-	     (flength1 = flength2) andalso
-	     eq_len (tformals1,tformals2) andalso 
-	     ListPair.all tformal_equiv (tformals1,tformals2) andalso 
-	     alpha_equiv_con_list (!conref) (formals1,formals2) andalso
-	     alpha_equiv_con' (!conref) (return1,return2)
+	     same_openness(o1,o2) andalso (f1 = f2) andalso
+	     Listops.eq_list(tformal_equiv, t1, t2) andalso
+	     alpha_equiv_con_list (!conref) (map #2 e1, map #2 e2) andalso
+	     alpha_equiv_con' (!conref) (b1,b2)
 	   end 
 
 
@@ -1169,12 +1182,12 @@ end
 
 
 
-   fun createBindings (vklist, con_args, vclist, exp_args, fplist, fp_args) =
+   fun createBindings (vklist, con_args, vtclist, exp_args, fplist, fp_args) =
        let
 	   val con_bnds = map (fn((cvar, knd), con) => Con_b (Runtime, Con_cb(cvar, con)))
                               (Listops.zip vklist con_args)
-           val exp_bnds = map (fn((evar, con), exp) => Exp_b (evar, TraceUnknown, exp))
-	                      (Listops.zip vclist exp_args)
+           val exp_bnds = map (fn((evar, trace, con), exp) => Exp_b (evar, trace, exp))
+	                      (Listops.zip vtclist exp_args)
 	   val float_type = Prim_c (Float_c Prim.F64, [])
            val fp_bnds = map (fn (evar, exp) => Exp_b (evar, TraceUnknown, exp))
 	                     (Listops.zip fplist fp_args)
@@ -1211,14 +1224,16 @@ end
 	    App_e(_,Var_e evar, con_args, exp_args, fp_args))=>
 	       (case (Sequence.toList fset) of
 		    [(evar', 
-		      Function(_,Leaf,vklist,dep,vclist,fplist,fnbody,body_t))] => 
+		      Function{recursive = Leaf, 
+			       tFormals = vklist, eFormals = vclist, fFormals = fplist,
+			       body,...})] => 
  		       if (Name.eq_var(evar',evar)) then
 			   makeLetE Sequential 
 			   ((List.rev rest) @ 
 			    (createBindings(vklist, con_args,
 					    vclist, exp_args,
 					    fplist, fp_args)))
-			   fnbody
+			   body
 		       else
 			   Let_e(Sequential, ebnds, body)
 		    | _ => Let_e(Sequential, ebnds, body))

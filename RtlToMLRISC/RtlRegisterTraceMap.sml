@@ -105,7 +105,7 @@ functor RtlRegisterTraceMap(
       | traceRepresent _       Rtl.NOTRACE_INT	 = traceNo
       | traceRepresent _       Rtl.NOTRACE_REAL	 = traceNo
       | traceRepresent _       Rtl.NOTRACE_CODE	 = traceNo
-      | traceRepresent _       Rtl.LABEL	 = traceNo
+      | traceRepresent _       Rtl.NOTRACE_LABEL = traceNo
   end
 
   (*

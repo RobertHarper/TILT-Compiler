@@ -217,35 +217,35 @@ structure NilRewrite :> NILREWRITE =
 		     in  if !changed then SOME (Mu_c (flag,defs)) else NONE
 		     end
 		   
-		    | (AllArrow_c (openness, effect, tformals, vars_opt, cons, numfloat, result)) =>
+		    | (AllArrow_c {openness, effect, isDependent, tFormals, eFormals, fFormals, body}) =>
 		     let
 		       val changed = ref false
 
-		       val (tformals,state) = tformals_helper changed state tformals
-		       val (vars_opt,cons,state) = 
-			 (case vars_opt
-			    of SOME vars => 
-			      let
-				val changed_cons = ref false
-				val changed_vars = ref false
-				fun vcfolder(v,c,s) = 
-				  let 
-				    val c = recur_c changed_cons state c
-				    val (s,v) = bind_e changed_vars (s,v,c) 
-				  in  (v,c,s)
-				  end
-				val (newvars,newcons,state) = foldl_acc2 vcfolder state (vars,cons)
-				val vars_opt = if !changed_vars then SOME newvars else vars_opt
-				val cons = if !changed_cons then newcons else cons
-				val _ = changed := (!changed orelse !changed_vars orelse !changed_cons)
-			      in
-				(vars_opt,cons,state)
-			      end
-			     | NONE => (vars_opt,map_f recur_c changed state cons,state))
-		       val result = recur_c changed state result
+		       val (tFormals,state) = tformals_helper changed state tFormals
+		       val (eFormals,state) = 
+			   let
+			       fun efolder((vopt,c),s) = 
+				   let 
+				       val c = recur_c changed state c
+				       val (vopt,s) = 
+					   (case vopt of
+						NONE => (vopt, s)
+					      | SOME v => let val (s,v) = bind_e changed (s,v,c) 
+							  in  (SOME v, s)
+							  end)
+				   in  ((vopt,c),s)
+				   end
+			       val (new_eFormals,state) = foldl_acc efolder state eFormals
+			       val eFormals = if !changed then new_eFormals else eFormals
+			   in  (eFormals, state)
+			   end
+
+		       val body = recur_c changed state body
 		     in
 		       if !changed
-			 then SOME (AllArrow_c(openness, effect, tformals, vars_opt, cons, numfloat, result))
+			 then SOME (AllArrow_c{openness = openness, effect = effect, isDependent = isDependent,
+					       tFormals = tFormals, eFormals = eFormals, 
+					       fFormals = fFormals, body = body})
 		       else NONE
 		     end
 		     
@@ -396,34 +396,55 @@ structure NilRewrite :> NILREWRITE =
 	  in (vklist,state)
 	  end
 
-	and fun_helper (state : 'state) (Function(effect,recur,vklist,dependent,vclist,vflist,body,con) : function) : function option = 
+	and fun_helper (state : 'state) (Function{effect, recursive, isDependent,
+						  tFormals, eFormals, fFormals,
+						  body, body_type}) : function option = 
 	  let 
 	    val changed = ref false
-	    val (vklist,state1) = tformals_helper changed state vklist
+	    val (tFormals,state1) = tformals_helper changed state tFormals
 	    local
-	      fun vcfolder changed ((v,c),s) = 
+	      fun vcfolder changed ((v,trace,c),s) = 
 		let 
 		  val c' = recur_c changed s c
+		  val trace = recur_trace changed state trace
 		  val (s,v) = bind_e changed (s,v,c') 
-		in  ((v,c'),s)
+		in  ((v,trace,c'),s)
 		end
 	    in
-	      val (vclist, state2) = foldl_acc_f vcfolder changed state1 vclist
+	      val (eFormals, state2) = foldl_acc_f vcfolder changed state1 eFormals
 	    end
 	    val ftype = Prim_c (Float_c Prim.F64,[])
 	    fun folder changed (v,s) = let val (s,v) = bind_e changed (s,v,ftype) in (v,s) end
-	    val (vflist,state2) = foldl_acc_f folder changed state2 vflist
-	    val con = if dependent 
+	    val (fFormals,state2) = foldl_acc_f folder changed state2 fFormals
+	    val (trace,con) = body_type
+	    val trace = recur_trace changed state trace
+	    val con = if isDependent 
 			then recur_c changed state2 con
 		      else recur_c changed state1 con
+	    val body_type = (trace,con)
 	    val body = recur_e changed state2 body
 	  in
 	    if !changed then
-	      SOME (Function(effect,recur,vklist,dependent,vclist,
-			     vflist, body,
-			     con))
+	      SOME (Function({effect = effect , recursive = recursive, isDependent = isDependent,
+			      tFormals = tFormals, eFormals = eFormals, fFormals = fFormals,
+			      body = body, body_type = body_type}))
 	    else NONE
 	  end
+
+	and recur_trace changed state trace = 
+	    (case trace of
+		     TraceCompute var => 
+			 (case recur_c changed state (Var_c var)
+			      of Var_c var => TraceCompute var
+			    | _ => (lprintl "Warning - rewrite forgetting trace info";
+				    TraceUnknown))
+		   | TraceKnown (TraceInfo.Compute (var,labels)) => 
+			      (case recur_c changed state (Var_c var)
+				   of Var_c var => TraceKnown (TraceInfo.Compute (var,labels))
+				 | _ => (lprintl "Warning - rewrite forgetting trace info";
+					 TraceUnknown))
+		   | _ => trace)
+
 	and rewrite_bnd (state : 'state) (bnd : bnd) : (bnd list option * 'state) = 
 	  let 
 	    fun do_fix (recur,maker,vfset) = 
@@ -454,6 +475,7 @@ structure NilRewrite :> NILREWRITE =
 	      in  
 		(if !changed then SOME [maker vfset] else NONE,s)
 	      end
+	  
 	    fun do_bnd recur (bnd,state) : bnd list option * 'state = 
 	      (case bnd 
 		 of Con_b(p,cb) => 
@@ -467,19 +489,7 @@ structure NilRewrite :> NILREWRITE =
 		   let
 		     val changed = ref false
 		     val e = if recur then recur_e changed state e else e
-		     val trace = 
-		       (case trace 
-			  of TraceCompute var => 
-			    (case recur_c changed state (Var_c var)
-			       of Var_c var => TraceCompute var
-				| _ => (lprintl "Warning - rewrite forgetting trace info";
-					TraceUnknown))
-			   | TraceKnown (TraceInfo.Compute (var,labels)) => 
-			       (case recur_c changed state (Var_c var)
-				  of Var_c var => TraceKnown (TraceInfo.Compute (var,labels))
-				   | _ => (lprintl "Warning - rewrite forgetting trace info";
-					   TraceUnknown))
-			   | _ => trace)
+		     val trace = recur_trace changed state trace 
 		     val (state,v) = define_e changed (state,v,e)
 		   in
 		     (if !changed then SOME [Exp_b(v,trace,e)] else NONE, state)

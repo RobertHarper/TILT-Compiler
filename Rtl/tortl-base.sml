@@ -48,26 +48,33 @@ struct
   	   Perform a lookup to determine if the subcomponents are constants or not.
    *)
 
-   datatype var_loc = VREGISTER of bool * reg 
-		    | VGLOBAL of label * rep  (* I am located at this label: closure, data, ... *)
-   and var_val = VINT of TW32.word
-               | VTAG of TW32.word
-               | VREAL of label           (* I am a real located at this label *)
-               | VRECORD of label * var_val list (* I have the value of this label *)
-               | VVOID of rep
-               | VLABEL of label         (* I have the value of this label *)
-               | VCODE of label          (* I have the value of this code label *)
 
-   type var_rep = var_loc option * var_val option * con
-   type convar_rep' = var_loc option * var_val option
-   type convar_rep = var_loc option * var_val option * kind
-   datatype loc_or_val = VAR_LOC of var_loc
-                       | VAR_VAL of var_val
+    datatype location =
+	REGISTER of bool * reg   (* flag indicates whether value is constant *)
+      | GLOBAL   of label * rep  (* value resides at this label: includes unboxed real *)
+
+    datatype value =
+	VOID of rep             (* an undefined values *)
+      | INT of TilWord32.word   (* an integer *)
+      | TAG of TilWord32.word   (* a traceable small pointer value *)
+      | REAL of label           (* an unboxed real at given label *)
+      | RECORD of label * value list (* a record whose components are at the given label *)
+      | LABEL of label          (* the value of this label: e.g. boxed real *)
+      | CODE of label           (* code that residing at this label *)
+	
+   datatype term = LOCATION of location
+                 | VALUE of value
+
+
+   type var_rep     = location option * value option * con
+   type convar_rep' = location option * value option
+   type convar_rep  = location option * value option * kind
+
    type varmap = var_rep VarMap.map
    type convarmap = convar_rep' VarMap.map
    val uninit_val = 0w258 : TilWord32.word
-   val unitval = VTAG 0w256
-   val unit_vvc = (VAR_VAL unitval, Prim_c(Record_c ([],NONE),[]))
+   val unitval = TAG 0w256
+   val unit_vvc = (VALUE unitval, Prim_c(Record_c ([],NONE),[]))
 
    datatype gcinfo = GC_IMM of instr ref | GC_INF
    type gcstate = gcinfo list
@@ -124,9 +131,9 @@ struct
 
   (* ---- Looking up and adding new variables --------------- *)
 
-  fun top_rep (vl : var_loc option, vv : var_val option) =
+  fun top_rep (vl : location option, vv : value option) =
       (case (vl,vv) of
- 	   (SOME(VGLOBAL _),_) => true 
+ 	   (SOME(GLOBAL _),_) => true 
 	 | (_, SOME _) => true
 	 | _ => false)
 (*	 | _ => (VarSet.member(!globals,v))) *)
@@ -152,7 +159,7 @@ struct
        else ();
 	varmap_insert' state arg)
 
-  fun convarmap_insert' str ({is_top,convarmap,varmap,env,gcstate}:state) 
+  fun convarmap_insert' ({is_top,convarmap,varmap,env,gcstate}:state) 
                         (v,(vl,vv,k,copt)) : state = 
       let val _ = if (!debug_bound)
 		      then (print "convar adding to v = "; Ppnil.pp_var v; print "\n")
@@ -186,12 +193,12 @@ struct
       in  newstate
       end
 
-  fun convarmap_insert str state (arg as (v,(vl,vv,k,copt))) =
-      let val state = convarmap_insert' str state arg
+  fun convarmap_insert state (arg as (v,(vl,vv,k,copt))) =
+      let val state = convarmap_insert' state arg
 	  val state = env_insert' state (v,k,copt)
 	  val _ = if (#is_top state)
 	      (* top_rep (vl,vv) *)
-		      then let val gs = convarmap_insert' str (!global_state) arg
+		      then let val gs = convarmap_insert' (!global_state) arg
 			       val gs = env_insert' gs (v,k,copt)
 			   in  global_state := gs
 			   end
@@ -200,19 +207,19 @@ struct
       end
 
   
-  fun add_var (s,v,con,vlopt,vvopt) =  varmap_insert s (v,(vlopt,vvopt,con))
-  fun add_reg (s,v,con,reg)         =  add_var (s,v,con,SOME(VREGISTER(false,reg)), NONE)
-  fun add_code (s,v,con,l)          =  add_var (s,v,con,NONE, SOME(VCODE l))
+  fun add_term (s,v,con,LOCATION loc) = varmap_insert s (v,(SOME loc,NONE,con))
+    | add_term (s,v,con,VALUE value) = varmap_insert s (v,(NONE, SOME value,con))
+  fun add_reg (s,v,con,reg)         =  add_term (s,v,con,LOCATION(REGISTER(false,reg)))
+  fun add_code (s,v,con,l)          =  add_term (s,v,con,VALUE(CODE l))
 
 
 
   (* adding constructor-level variables and functions *)
-  fun add_convar str (s,v,kind,copt,vlopt,vvopt) = 
-      let val result = convarmap_insert str s (v,(vlopt, vvopt, kind,copt))
-      in  result
-      end
-  fun add_concode str (s,v,kind,copt,l) = 
-      convarmap_insert str s (v,(NONE, SOME(VCODE l),kind,copt))
+  fun add_conterm (s,v,kind,copt,NONE) = convarmap_insert s (v,(NONE, NONE, kind, copt))
+    | add_conterm (s,v,kind,copt,SOME(LOCATION loc)) = convarmap_insert s (v,(SOME loc, NONE, kind, copt))
+    | add_conterm (s,v,kind,copt,SOME(VALUE value)) = convarmap_insert s (v,(NONE, SOME value, kind, copt))
+
+  fun add_concode (s,v,kind,copt,l) = convarmap_insert s (v,(NONE, SOME(CODE l),kind,copt))
 
    fun getconvarrep' ({convarmap,env,...} : state) v : convar_rep option = 
        (case VarMap.find (convarmap,v) of
@@ -297,9 +304,9 @@ struct
 	     | (Vector_c , _) => SOME TRACE
 	     | (Ref_c , _) => SOME TRACE
 	     | (Exntag_c , _) => SOME NOTRACE_INT
-	     | ((Sum_c _) , _) => SOME TRACE
-	     | ((Record_c _) , _) => SOME TRACE
-	     | ((Vararg_c _), _) => SOME TRACE
+	     | (Sum_c _, _) => SOME TRACE
+	     | (Record_c _, _) => SOME TRACE
+	     | (Vararg_c _, _) => SOME TRACE
 
        in case con of
 	   Prim_c(pcon,clist) => primcon2rep(pcon,clist)
@@ -310,21 +317,17 @@ struct
 	 | Var_c v => 
 	       (case (getconvarrep' state v) of
 
-		    SOME(_,SOME(VRECORD (l,_)),_) => SOME(COMPUTE(Projlabel_p (l,[])))
-		  | SOME(_,SOME(VLABEL l),_) => SOME(COMPUTE(Projlabel_p (l,[])))
-		  | SOME(_,SOME(VVOID _),_) => error "constructor is void"
-		  | SOME(_,SOME(VREAL _),_) => error "constructor represented as  a float"
-		  | SOME(_,SOME(VCODE _),_) => error "constructor function cannot be a type"
+		    SOME(_,SOME(RECORD (l,_)),_) => SOME(COMPUTE(Projlabel_p (l,[])))
+		  | SOME(_,SOME(LABEL l),_) => SOME(COMPUTE(Projlabel_p (l,[])))
+		  | SOME(_,SOME(TAG _),_) => SOME TRACE
+		  | SOME(_,SOME(INT _),_) => (print "Var_c "; print (var2string v); print "\n";
+					      error "constructor value is INT")
+		  | SOME(_,SOME _,_) => error "constructor value: not RECORD, LABEL, or TAG"
 
-			(* WRONG just an experiment *)
-		  (* we could actually return an answer but this depends on xcon *)
-		  | SOME(_,SOME(VINT _),_) => SOME TRACE
-		  | SOME(_,SOME(VTAG _),_) => SOME TRACE
-
-		  | SOME(SOME(VREGISTER (_,I r)),_,_) => SOME(COMPUTE(Projvar_p (r,[])))
-		  | SOME(SOME(VREGISTER (_,F _)),_,_) => error "constructor in float reg"
-		  | SOME(SOME(VGLOBAL (l,_)),_,_) => SOME(COMPUTE(Projlabel_p(l,[0])))
-		  | SOME(NONE,NONE,_) => error "no information on this convar!!"
+		  | SOME(SOME(REGISTER (_,I r)),_,_) => SOME(COMPUTE(Projvar_p (r,[])))
+		  | SOME(SOME(REGISTER (_,F _)),_,_) => error "constructor in float reg"
+		  | SOME(SOME(GLOBAL (l,_)),_,_) => SOME(COMPUTE(Projlabel_p(l,[0])))
+		  | SOME(NONE,NONE,_) => NONE
 		  | NONE => NONE)
 	 | Mu_c (is_recur,vc_seq) => SOME TRACE
 	 | Proj_c(Mu_c _,_) => SOME TRACE
@@ -339,21 +342,20 @@ struct
 						then NONE else SOME(wrap temp)
 					   end
 	       in  (case (getconvarrep' state v) of
-		       SOME(_,SOME(VINT _),_) => error "expect constr record: got int"
-		     | SOME(_,SOME(VTAG _),_) => error "expect constr record: got tag"
-		     | SOME(_,SOME(VREAL _),_) => error "expect constr record: got real"
-		     | SOME(_,SOME(VRECORD _),_) => error "expect constr record: got term record"
-		     | SOME(_,SOME(VVOID _),_) => error "expect constr record: got void"
-		     | SOME(_,SOME(VLABEL l),kind) => indices(fn inds => COMPUTE(Projlabel_p(l,inds))) kind
-		     | SOME(_,SOME(VCODE _),_) => error "expect constr record: got code"
-		     | SOME(SOME(VREGISTER (_,I ir)),_,kind) => 
+		       SOME(_,SOME(INT _),_) => error "expect constr record: got int"
+		     | SOME(_,SOME(TAG _),_) => error "expect constr record: got tag"
+		     | SOME(_,SOME(REAL _),_) => error "expect constr record: got real"
+		     | SOME(_,SOME(RECORD _),_) => error "expect constr record: got term record"
+		     | SOME(_,SOME(VOID _),_) => error "expect constr record: got void"
+		     | SOME(_,SOME(LABEL l),kind) => indices(fn inds => COMPUTE(Projlabel_p(l,inds))) kind
+		     | SOME(_,SOME(CODE _),_) => error "expect constr record: got code"
+		     | SOME(SOME(REGISTER (_,I ir)),_,kind) => 
 			   indices (fn inds => COMPUTE(Projvar_p(ir,inds))) kind
-		     | SOME(SOME(VREGISTER (_,F _)),_,_) => error "constructor in float reg"
-		     | SOME(SOME(VGLOBAL (l,_)),_,kind) => indices 
+		     | SOME(SOME(REGISTER (_,F _)),_,_) => error "constructor in float reg"
+		     | SOME(SOME(GLOBAL (l,_)),_,kind) => indices 
 			   (fn inds => COMPUTE(Projlabel_p(l,0::inds))) kind
-		     | SOME(NONE,NONE,_) => error "no info on convar"
-		     | NONE => NONE) 
-	       end handle e => NONE)
+		     | _ => NONE)
+	       end)
 	 | (Let_c _) => NONE
 	 | (App_c _) => NONE
 	 | (Typecase_c _) => NONE
@@ -366,16 +368,17 @@ struct
    fun niltrace2rep (state : state) niltrace : rep =
        let fun pathcase (v,labs) = 
 	   (case getconvarrep' state v of
-		SOME(_,SOME(VRECORD (l,_)),_) => (COMPUTE(Projlabel_p (l,labs)))
-	      | SOME(_,SOME(VLABEL l),_) => (COMPUTE(Projlabel_p (l,labs)))
-	      | SOME(_,SOME(VVOID _),_) => error "constructor is void"
-	      | SOME(_,SOME(VREAL _),_) => error "constructor represented as  a float"
-	      | SOME(_,SOME(VCODE _),_) => error "constructor function cannot be a type"
-	      | SOME(SOME(VREGISTER (_,I r)),_,_) => (COMPUTE(Projvar_p (r,labs)))
-	      | SOME(SOME(VREGISTER (_,F _)),_,_) => error "constructor in float reg"
-	      | SOME(SOME(VGLOBAL (l,_)),_,_) => (COMPUTE(Projlabel_p(l,0::labs)))
-	      | SOME(NONE,NONE,_) => error "no information on this convar!!"
-	      | NONE => error "no information on this convar!!")
+		SOME(_,SOME(RECORD (l,_)),_) => (COMPUTE(Projlabel_p (l,labs)))
+	      | SOME(_,SOME(LABEL l),_) => (COMPUTE(Projlabel_p (l,labs)))
+	      | SOME(_,SOME(VOID _),_) => error "constructor is void"
+	      | SOME(_,SOME(REAL _),_) => error "constructor represented as  a float"
+	      | SOME(_,SOME(CODE _),_) => error "constructor function cannot be a type"
+	      | SOME(SOME(REGISTER (_,I r)),_,_) => (COMPUTE(Projvar_p (r,labs)))
+	      | SOME(SOME(REGISTER (_,F _)),_,_) => error "constructor in float reg"
+	      | SOME(SOME(GLOBAL (l,_)),_,_) => (COMPUTE(Projlabel_p(l,0::labs)))
+	      | _ => (print "niltrace2rep convar = ";
+		      print (var2string v); print "\n";
+		      error "no information on this convar!!"))
        in  
 	   (case niltrace of
 		Nil.TraceUnknown => error "TraceUnknown"
@@ -387,7 +390,7 @@ struct
 		       | TraceInfo.Notrace_Int => NOTRACE_INT
 		       | TraceInfo.Notrace_Code => NOTRACE_CODE
 		       | TraceInfo.Notrace_Real => NOTRACE_REAL
-		       | TraceInfo.Label => LABEL
+		       | TraceInfo.Label => NOTRACE_LABEL
 		       | TraceInfo.Locative => LOCATIVE
 		       | TraceInfo.Compute (v,labs) => 
 			     let val SOME(_,_,k) = getconvarrep' state v
@@ -435,27 +438,27 @@ struct
 val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 *)
 
-   fun varloc2rep varloc =
-       (case varloc of
-	    VREGISTER (_,reg) =>
+   fun loc2rep location =
+       (case location of
+	    REGISTER (_,reg) =>
 		(case reg of
 		     F (REGF(_,frep)) => frep
 		   | I (REGI(_,irep)) => irep
 		   | I (SREGI _) => error "tracetable_value on SREG")
-	  | VGLOBAL (_,rep) => rep)
+	  | GLOBAL (_,rep) => rep)
 	    
-  fun varval2rep varval =
-      (case varval of
-	   VINT _ => NOTRACE_INT
-	 | VTAG _ => TRACE
-	 | VREAL _ => NOTRACE_REAL
-	 | VRECORD _ => TRACE
-	 | VLABEL _ => TRACE (* LABEL the whole idea of varval2rep is suspect *)
-	 | VCODE _ => NOTRACE_CODE
-	 | VVOID r => r)
+  fun val2rep value =
+      (case value of
+	   INT _ => NOTRACE_INT
+	 | TAG _ => TRACE
+	 | REAL _ => NOTRACE_REAL
+	 | RECORD _ => TRACE
+	 | LABEL _ => TRACE (* LABEL the whole idea of varval2rep is suspect *)
+	 | CODE _ => NOTRACE_CODE
+	 | VOID r => r)
 
-  fun valloc2rep (VAR_VAL varval) = varval2rep varval
-    | valloc2rep (VAR_LOC varloc) = varloc2rep varloc
+  fun valloc2rep (VALUE value) = val2rep value
+    | valloc2rep (LOCATION location) = loc2rep location
 
 
 
@@ -665,15 +668,15 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		 i2w((!counter) - 1))
     end
 
-  fun in_imm_range_vl (VAR_VAL(VINT w)) = ((if in_imm_range w then SOME (w2i w) else NONE) handle _ => NONE)
-   | in_imm_range_vl (VAR_VAL(VTAG w)) = ((if in_imm_range w then SOME (w2i w) else NONE) handle _ => NONE)
+  fun in_imm_range_vl (VALUE(INT w)) = ((if in_imm_range w then SOME (w2i w) else NONE) handle _ => NONE)
+   | in_imm_range_vl (VALUE(TAG w)) = ((if in_imm_range w then SOME (w2i w) else NONE) handle _ => NONE)
     | in_imm_range_vl _ = NONE
-  fun in_ea_range scale (VAR_VAL(VINT i)) = 
+  fun in_ea_range scale (VALUE(INT i)) = 
       ((if in_ea_disp_range(w2i i * scale)
 	    then SOME (w2i i * scale)
 	else NONE)
 	    handle _ => NONE)
-    | in_ea_range scale (VAR_VAL(VTAG i)) = 
+    | in_ea_range scale (VALUE(TAG i)) = 
       ((if in_ea_disp_range(w2i i * scale)
 	    then SOME (w2i i * scale)
 	else NONE)
@@ -766,64 +769,42 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
    the following are functions that load integer registers or float registers
    or load an sv; for int/float regs, one can optionally specify a dest register *)
 
-    (* --- given the RTL representation of a variable, load the
-           variable into the optional register i *)
-    fun load_ireg_loc (loc : var_loc, poss_dest : regi option) =
-      let 
-	  fun pickdest rep = (case poss_dest of
-				  NONE => alloc_regi rep
-				| SOME d => d)
-      in case loc of
-	   VGLOBAL(l,NOTRACE_REAL) => error "load_ireg called with (VGLOBAL real)"
-	 | VGLOBAL(label,rep) =>
-	       let val addr = alloc_regi(LABEL)
-		   val reg = pickdest rep
-	       in  add_instr(LADDR(label,0,addr));
-		   add_instr(LOAD32I(EA(addr,0),reg));
-		   reg
-	       end
-	 | VREGISTER (_,I r) => (case poss_dest of
-				   NONE => r
-				 | SOME d => (add_instr(MV(r,d)); d))
-	 | VREGISTER (_,F r) => error "moving from float to int register"
-      end
+    (* --- load an RTL location into an integer register --- *)
+    fun load_ireg_loc (loc : location, destOpt : regi option) =
+	(case loc of
+	     GLOBAL(l,NOTRACE_REAL) => error "load_ireg called with (GLOBAL real)"
+	   | GLOBAL(label,rep) =>
+		 let val addr = alloc_regi NOTRACE_LABEL
+		     val reg = (case destOpt of
+				    NONE => alloc_regi rep
+				  | SOME d => d)
+		 in  add_instr(LADDR(label,0,addr));
+		     add_instr(LOAD32I(EA(addr,0),reg));
+		     reg
+		 end
+	   | REGISTER (_,I ir) => (case destOpt of
+					NONE => ir
+				      | SOME d => (add_instr(MV(ir,d)); d))
+	   | REGISTER (_,F _) => error "load_ireg called with (REGISTER (_, F _))")
+
     
-    fun load_ireg_val (value : var_val, poss_dest : regi option) : regi =
+    fun load_ireg_val (value : value, destOpt : regi option) : regi =
       let 
-	  fun pickdest rep = (case poss_dest of
-				  NONE => alloc_regi rep
-				| SOME d => d)
+	  fun help(rep,mk_instr) = (case destOpt of
+				    NONE => let val r = alloc_regi rep
+						val _ = add_instr(mk_instr r)
+					    in  r
+					    end
+				  | SOME d => (add_instr(mk_instr d); d))
       in case value of
-	  VVOID rep => let val r = pickdest rep
-		       in  add_instr (LI(0w0,r)); (* zero is a safe bit-pattern for values of any rep *)
-			   r
-		       end
-	| VINT i => let val r = pickdest NOTRACE_INT
-			in  add_instr (LI(i,r));
-			    r
-			end
-	| VTAG i => let val r = pickdest TRACE
-			in  add_instr (LI(i,r));
-			    r
-			end
-	| VREAL l => error ("load_ireg: VREAL")
-
-	| VRECORD(label,_) => 
-			let val reg = pickdest TRACE
-			in  add_instr(LADDR(label,0,reg));
-			    reg
-			end
-	| (VLABEL l) => 
-	       let val reg = pickdest LABEL
-	       in  add_instr(LADDR(l,0,reg));
-		   reg
-	       end
-	| (VCODE l) => 
-	       let val reg = pickdest NOTRACE_CODE
-	       in  add_instr(LADDR(l,0,reg));
-		   reg
-	       end
-
+	  (* zero is a safe bit-pattern for values of any rep *)
+	  VOID rep => help(rep, fn r => LI(0w0,r))
+	| INT i => help (NOTRACE_INT, fn r => LI(i,r))
+	| TAG i => help (TRACE, fn r => LI(i,r))
+	| REAL _ => error "load_ireg: REAL"
+	| RECORD(label,_) => help (TRACE, fn r => LADDR(label,0,r))
+	| LABEL label => help (NOTRACE_LABEL, fn r => LADDR(label,0,r))
+	| CODE label => help (NOTRACE_CODE, fn r => LADDR(label,0,r))
       end
 
 
@@ -839,52 +820,47 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	in label
 	end
   
-    fun load_freg_loc (rep : var_loc, poss_dest : regf option) : regf =
+    fun load_freg_loc (rep : location, destOpt : regf option) : regf =
       let 
-	  fun pickdest ()  = (case poss_dest of
-				  NONE => alloc_regf()
-				| SOME d => d)
+	  val dest = (case destOpt of
+			  NONE => alloc_regf()
+			| SOME d => d)
       in case rep of
-	  (VREGISTER (_,F r)) => (case poss_dest of
+	  (REGISTER (_,F r)) => (case destOpt of
 				      NONE => r
-				    | SOME d => (add_instr(FMV(r,d)); d))
-	| (VREGISTER (_,I r)) => error "moving from integer register to float register"
-	| (VGLOBAL (l,NOTRACE_REAL)) =>
-	      let val addr = alloc_regi(LABEL)
-		  val dest = pickdest()
+				    | _ => (add_instr(FMV(r,dest)); dest))
+	| (REGISTER (_,I r)) => error "load_freg_loc called on REGISTER (_, I _)"
+	| (GLOBAL (l,NOTRACE_REAL)) =>
+	      let val addr = alloc_regi NOTRACE_LABEL
 	      in  add_instr(LADDR(l,0,addr));
 		  add_instr(LOADQF(EA(addr,0),dest));
 		  dest
 	      end
-	(* this depends on globals being quadword aligned *)
-	| (VGLOBAL (l,NOTRACE_INT)) => error "moving from global integer to float register"
-	| (VGLOBAL (l,_)) => error "load_freg: got VGLOBAL(_,non-int and non-float)"
+	| (GLOBAL _) => error "load_freg_loc: got GLOBAL(_, non-NOTRACE_REAL)"
       end
 
-    fun load_freg_val (rep : var_val, poss_dest : regf option) : regf =
-      let 
-	  fun doit label  = let val addr = alloc_regi LABEL
-				val r = (case poss_dest of
-					     NONE => alloc_regf()
-					   | SOME d => d)
-			    in  add_instr(LADDR(label,0,addr));
-				add_instr(LOADQF(EA(addr,0),r));
-				r
-			    end
-      in case rep of
-	  (VINT i) => error "load_freg: got VINT"
-	| (VTAG i) => error "load_freg: got VTAG"
-	| (VVOID rep) => alloc_regf()
-	| (VREAL l) => doit l
-	| (VRECORD _) => error "load_freg: got VRECORD"
-	| (VLABEL _) => error "load_freg: got VLABEL"
-	| (VCODE _) => error "load_freg: got VCODE"
-      end
+    fun load_freg_val (rep : value, destOpt : regf option) : regf =
+	(case rep of
+	     VOID rep => (print "WARNING: load_freg on VOID\n"; alloc_regf())
+	   | REAL label => 
+		 let val addr = alloc_regi TRACE
+		     val r = (case destOpt of
+				  NONE => alloc_regf()
+				| SOME d => d)
+		 in  add_instr(LADDR(label,0,addr));
+		     add_instr(LOADQF(EA(addr,0),r));
+		     r
+		 end
+	   | INT _ => error "load_freg_val: got INT"
+	   | TAG _ => error "load_freg_val: got TAG"
+	   | RECORD _ => error "load_freg_val: got RECORD"
+	   | LABEL _ => error "load_freg_val: got LABEL"
+	   | CODE _ => error "load_freg_val: got CODE")
 
-    fun load_reg_loc (rep : var_loc, destopt : reg option) : reg = 
+    fun load_reg_loc (rep : location, destopt : reg option) : reg = 
 	let val rep_is_float = (case rep of
-				    VREGISTER (_, F _) => true
-				  | VGLOBAL (_, NOTRACE_REAL) => true
+				    REGISTER (_, F _) => true
+				  | GLOBAL (_, NOTRACE_REAL) => true
 				  | _ => false)
 	in  if (rep_is_float)
 	    then
@@ -898,31 +874,33 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		    | SOME (I ir) => I(load_ireg_loc(rep, SOME ir)))
 	end
 
-    fun load_reg_val (rep : var_val, destopt : reg option) : reg = 
-	(case rep of
-	     VREAL _ => 
+    fun load_reg_val (value : value, destopt : reg option) : reg = 
+	(case value of
+	     REAL _ => 
 		 (case destopt of
-		      NONE => F(load_freg_val(rep, NONE))
+		      NONE => F(load_freg_val(value, NONE))
 		    | SOME (I ir) => error "load_reg_val on a FLOAT rep and a SOME(I _)"
-		    | SOME (F fr) => F(load_freg_val(rep, SOME fr)))
+		    | SOME (F fr) => F(load_freg_val(value, SOME fr)))
 	   | _ =>
 		 (case destopt of
-		      NONE => I(load_ireg_val(rep, NONE))
+		      NONE => I(load_ireg_val(value, NONE))
 		    | SOME (F fr) => error "load_freg_val on a FLOAT rep and a SOME(F _)"
-		    | SOME (I ir) => I(load_ireg_val(rep, SOME ir))))
+		    | SOME (I ir) => I(load_ireg_val(value, SOME ir))))
 
+    fun load_reg_term (LOCATION loc, destOpt) = load_reg_loc(loc,destOpt)
+      | load_reg_term (VALUE value, destOpt) = load_reg_val(value,destOpt)
 
-    fun load_ireg_locval(VAR_LOC vl, poss_dest) = load_ireg_loc(vl,poss_dest)
-      | load_ireg_locval(VAR_VAL vv, poss_dest) = load_ireg_val(vv,poss_dest)
-    fun load_freg_locval(VAR_LOC vl, poss_dest) = load_freg_loc(vl,poss_dest)
-      | load_freg_locval(VAR_VAL vv, poss_dest) = load_freg_val(vv,poss_dest)
-    fun load_reg_locval(VAR_LOC vl, poss_dest) = load_reg_loc(vl,poss_dest)
-      | load_reg_locval(VAR_VAL vv, poss_dest) = load_reg_val(vv,poss_dest)
-    fun load_ireg_sv(vl as (VAR_VAL(VINT i))) =
-	if (in_imm_range i) then IMM(TW32.toInt i) else REG(load_ireg_locval(vl,NONE))
-      | load_ireg_sv(vl as (VAR_VAL(VTAG i))) =
-	    if (in_imm_range i) then IMM(TW32.toInt i) else REG(load_ireg_locval(vl,NONE))
-      | load_ireg_sv vl = REG(load_ireg_locval(vl,NONE))
+    fun load_ireg_term(LOCATION vl, poss_dest) = load_ireg_loc(vl,poss_dest)
+      | load_ireg_term(VALUE vv, poss_dest) = load_ireg_val(vv,poss_dest)
+    fun load_freg_term(LOCATION vl, poss_dest) = load_freg_loc(vl,poss_dest)
+      | load_freg_term(VALUE vv, poss_dest) = load_freg_val(vv,poss_dest)
+    fun load_reg_term(LOCATION vl, poss_dest) = load_reg_loc(vl,poss_dest)
+      | load_reg_term(VALUE vv, poss_dest) = load_reg_val(vv,poss_dest)
+    fun load_ireg_sv(vl as (VALUE(INT i))) =
+	if (in_imm_range i) then IMM(TW32.toInt i) else REG(load_ireg_term(vl,NONE))
+      | load_ireg_sv(vl as (VALUE(TAG i))) =
+	    if (in_imm_range i) then IMM(TW32.toInt i) else REG(load_ireg_term(vl,NONE))
+      | load_ireg_sv vl = REG(load_ireg_term(vl,NONE))
 
 
   (* --------- end of load(sv/int/float) ------------------------------------------ *)
@@ -972,24 +950,24 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 			      | COMPUTE _ => true
 			      | _ => false)
 	  val _ = (case lv of
-		       VAR_VAL (VREAL _) => add_data(ALIGN (QUAD))
+		       VALUE (REAL _) => add_data(ALIGN (QUAD))
 		     | _ => ())
 	  val _ = app (fn l => add_data(DLABEL l)) labels
 	  val _ = add_data(DLABEL (label));
-	  val addr = alloc_regi LABEL
-	  val loc = alloc_regi LABEL
+	  val addr = alloc_regi NOTRACE_LABEL
+	  val loc = alloc_regi NOTRACE_LABEL
       in  (case lv of
-	     VAR_LOC varloc =>
+	     LOCATION varloc =>
 		(add_mutable(label,rtl_rep);
 		 case varloc of
-		     VREGISTER (_,reg) => 
+		     REGISTER (_,reg) => 
 			 (add_instr(LADDR(label,0,addr));
 			  (case reg of
 			       I r => (add_data(INT32 uninit_val);
 				       add_instr(STORE32I(EA(addr,0),r)))
 			     | F r => (add_data(FLOAT "0.0");
 				       add_instr(STOREQF(EA(addr,0),r)))))
-		   | VGLOBAL (l,rep) => 
+		   | GLOBAL (l,rep) => 
 			 let val value = alloc_regi rep
 			 in  (add_data(INT32 uninit_val);
 			      add_instr(LADDR(label,0,addr));
@@ -997,18 +975,24 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 			      add_instr(LOAD32I(EA(loc,0),value));
 			      add_instr(STORE32I(EA(addr,0),value)))
 			 end)
-	     | VAR_VAL (VVOID _) => error "alloc_global got nvoid"
-	     | VAR_VAL (VINT w32) => add_data(INT32 w32)
-	     | VAR_VAL (VTAG w32) => add_data(INT32 w32)
-	     | VAR_VAL (VREAL l) => add_data(DATA l)
-	     | VAR_VAL (VRECORD (l,_)) => add_data(DATA l)
-	     | VAR_VAL (VLABEL l) => add_data(DATA l)
-	     | VAR_VAL (VCODE l) => add_data(DATA l))
+	     | VALUE (VOID _) => error "alloc_global got nvoid"
+	     | VALUE (INT w32) => add_data(INT32 w32)
+	     | VALUE (TAG w32) => add_data(INT32 w32)
+	     | VALUE (REAL l) => let val fr = alloc_regf()
+				 in  add_data(FLOAT "0.0");
+				     add_instr(LADDR(l,0,addr));
+				     add_instr(LOADQF(EA(addr,0), fr));
+				     add_instr(LADDR(label,0,addr));
+				     add_instr(STOREQF(EA(addr,0), fr))
+				 end
+	     | VALUE (RECORD (l,_)) => add_data(DATA l)
+	     | VALUE (LABEL l) => add_data(DATA l)
+	     | VALUE (CODE l) => add_data(DATA l))
       end
 
   fun add_global (state,v : var,
-		    con : con,
-		    lv : loc_or_val) : state =
+		  con : con,
+		  term : term) : state =
     let 
 	val _ = Stats.counter("RTLglobal") ()
 	val (exported,label,labels) = (case (Name.VarMap.find(!exports,v)) of
@@ -1016,42 +1000,54 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 					 | SOME [] => error "no labels in export entry"
 					 | NONE => (false,LOCAL_DATA (Name.var2string v),[]))
 	val rtl_rep = con2rep state con
-	val (is_reg,vl_opt,vv_opt) = 
-	    (case lv of
-		 VAR_VAL vv => (false,NONE,SOME vv)
-	       | VAR_LOC vl => (case vl of
-				    VGLOBAL _ => (false,SOME vl, NONE)
-				  | _ => (true,SOME(VGLOBAL(label,rtl_rep)), NONE)))
-	val state' = add_var (state,v,con,vl_opt, vv_opt)
 
-	val _ = if (exported orelse is_reg)
-		    then allocate_global(label,labels,rtl_rep,lv)
+	val isReg =
+	    (case term of
+		 LOCATION (REGISTER _) => true
+	       | _ => false)
+		 
+	val _ = if (exported orelse isReg)
+		    then allocate_global(label,labels,rtl_rep,term)
 		else ()
+
+	val term = 
+	    (case term of
+		 LOCATION (REGISTER _) => LOCATION(GLOBAL(label,rtl_rep))
+	       | _ => term)
+		 
+	val state' = add_term (state,v,con,term)
+
+
     in  state'
     end
 	
-  fun add_conglobal str (state : state,
+  fun add_conglobal (state : state,
 		     v : var,
 		     kind : kind,
 		     copt : con option,
-		     lv : loc_or_val) : state = 
+		     termOpt : term option) : state = 
     let 
 	val _ = Stats.counter("RTLconglobal") ()
 	val (exported,label,labels) = (case (Name.VarMap.find(!exports,v)) of
 					   SOME (lab::rest) => (true,lab,rest)
 					 | SOME [] => error "no labels in export entry"
 					 | NONE => (false,LOCAL_DATA (Name.var2string v),[]))
-	val (is_reg,vl_opt,vv_opt) = 
-	    (case lv of
-		 VAR_VAL vv => (true,NONE,SOME vv)
-	       | VAR_LOC vl => (case vl of
-				    VGLOBAL _ => (false,SOME vl, NONE)
-				  | _ => (true,SOME(VGLOBAL(label,TRACE)), NONE)))
-	val state' = add_convar str (state,v,kind, copt, vl_opt, vv_opt)
+	val is_reg = 
+	    (case termOpt of
+		 SOME(LOCATION(REGISTER _)) => true
+	       | _ => false)
 
-	val _ = if (exported orelse is_reg)
-		    then allocate_global(label,labels,TRACE,lv)
-		else ()
+	val _ = (case (termOpt, exported orelse is_reg) of
+		     (SOME term, true) => allocate_global(label,labels,TRACE,term)
+		   | _ => ())
+
+	val termOpt = 
+	    (case termOpt of
+		 SOME(LOCATION (REGISTER _)) => SOME(LOCATION(GLOBAL(label,TRACE)))
+	       | _ => termOpt)
+
+	val state' = add_conterm (state,v,kind, copt, termOpt)
+
     in state'
     end
 
@@ -1083,30 +1079,25 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
       in  (dest,state)
       end
 
-  fun boxFloat_vl (state,lv) : loc_or_val * state = 
+  fun boxFloat_vl (state,lv) : term * state = 
       (case lv of
-	  VAR_LOC(VREGISTER (_,F fr)) => let val (ir,state) = boxFloat(state,fr)
-				       in  (VAR_LOC(VREGISTER (false,I ir)), state)
+	  LOCATION(REGISTER (_,F fr)) => let val (ir,state) = boxFloat(state,fr)
+				       in  (LOCATION(REGISTER (false,I ir)), state)
 				       end
-	| VAR_LOC(VREGISTER (_,I _)) => error "float in int reg"
-	| VAR_LOC(VGLOBAL (l,_)) => (VAR_VAL(VLABEL l), state)
-	| VAR_VAL(VINT _) => error "can't boxfloat an int"
-	| VAR_VAL(VTAG _) => error "can't boxfloat an tag"
-	| VAR_VAL(VREAL l) => (VAR_VAL(VLABEL l), state)
-	| VAR_VAL(VRECORD _) => error "can't boxfloat a record"
-	| VAR_VAL(VVOID _) => error "can't boxfloat a void"
-	| VAR_VAL(VLABEL _) => error "can't boxfloat a label; labels can't be floats"
-	| VAR_VAL(VCODE _) => error "can't boxfloat a code")
+	| LOCATION(REGISTER (_,I _)) => error "can't box an int reg"
+	| LOCATION(GLOBAL (l,_)) => (VALUE(LABEL l), state)
+	| VALUE(REAL l) => (VALUE(LABEL l), state)
+	| VALUE _ => error "can't box a non-REAL value")
 
- (* code for allocating an fp array at run-time given a list of var_locs: return an ireg *)
+ (* code for allocating an fp array at run-time given a list of LOCATIONs: return an ireg *)
        
- fun fparray (state, val_locs : loc_or_val list) : regi * state = 
+ fun fparray (state, val_locs : term list) : regi * state = 
     let 
       val res = alloc_regi TRACE
       val len = length val_locs
       fun scan (nil,_) = ()
 	| scan (h::t,offset) =
-	  let val src = load_freg_locval (h, NONE)
+	  let val src = load_freg_term (h, NONE)
 	  in  add_instr(STOREQF(EA(res,offset),src));
 	      scan(t,offset+8)
 	  end
@@ -1205,8 +1196,8 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
    and the rest of the fields, which are values *)
 
 
-  fun make_record_help (const, state, destopt, _ , [], _) : loc_or_val * state = (VAR_VAL unitval, state)
-    | make_record_help (const, state, destopt, reps : rep list, vl : loc_or_val list, labopt) = 
+  fun make_record_help (const, state, destopt, _ , [], _) : term * state = (VALUE unitval, state)
+    | make_record_help (const, state, destopt, reps : rep list, vl : term list, labopt) = 
     let 
 
 	val _ = add_instr(ICOMMENT ("allocating " ^ (Int.toString (length vl)) ^ "-record"))
@@ -1250,7 +1241,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 		 TRACE => add_instr(INIT(EA(base,offset),r,NONE))
 	       | NOTRACE_INT => add_instr(STORE32I(EA(base,offset),r))
 	       | NOTRACE_CODE => add_instr(STORE32I(EA(base,offset),r))
-	       | LABEL => add_instr(STORE32I(EA(base,offset),r))
+	       | NOTRACE_LABEL => add_instr(STORE32I(EA(base,offset),r))
 	       | COMPUTE path => let val tipe = loadpath path
 				     val tmp = alloc_regi NOTRACE_INT
 				 in  add_instr(CMPUI(GE,tipe,IMM 3, tmp));
@@ -1262,18 +1253,18 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 	  | scan_vals (offset,[],vl::vls) = error "not enough reps"
 	  | scan_vals (offset,rep::reps,vl::vls) =
 	    ((case (const,vl) of
-		  (true, VAR_VAL (VINT w32)) => add_data(INT32 w32)
-		| (true, VAR_VAL (VTAG w32)) => add_data(INT32 w32)
-		| (true, VAR_VAL (VRECORD (l,_))) => add_data(DATA l)
-		| (true, VAR_VAL (VLABEL l)) => add_data(DATA l)
-		| (true, VAR_VAL (VCODE l)) => add_data(DATA l)
-		| (true, VAR_VAL (VREAL l)) => add_data(DATA l)
-		| (true, VAR_VAL (VVOID _)) => error "make_record given VVOID"
-		| _ => let val r = load_ireg_locval(vl,NONE)
+		  (true, VALUE (INT w32)) => add_data(INT32 w32)
+		| (true, VALUE (TAG w32)) => add_data(INT32 w32)
+		| (true, VALUE (RECORD (l,_))) => add_data(DATA l)
+		| (true, VALUE (LABEL l)) => add_data(DATA l)
+		| (true, VALUE (CODE l)) => add_data(DATA l)
+		| (true, VALUE (REAL l)) => error "make_record given REAL"
+		| (true, VALUE (VOID _)) => error "make_record given VOID"
+		| _ => let val r = load_ireg_term(vl,NONE)
 		       in  if const 
 			       then 
-				   let val fieldl = fresh_data_label "var_loc"
-				       val addr = alloc_regi LABEL
+				   let val fieldl = fresh_data_label "location"
+				       val addr = alloc_regi NOTRACE_LABEL
 				   in  (add_data(DLABEL fieldl);
 					add_mutable (fieldl, rep);
 					add_data(INT32 uninit_val);
@@ -1320,9 +1311,9 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 					SOME lab => lab
 				      | NONE => fresh_data_label "record")
 		   in  (add_data(DLABEL label);
-			(VAR_VAL(VLABEL label), SOME label))
+			(VALUE(LABEL label), SOME label))
 		   end
-	  else (VAR_LOC (VREGISTER (false,I dest)), NONE)
+	  else (LOCATION (REGISTER (false,I dest)), NONE)
 
       val offset = scan_vals (offset, reps, vl)
       val _ = if const
@@ -1335,7 +1326,7 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
 
   (* These are the interface functions: determines static allocation *)
   fun make_record (state, destopt, reps, vl) = 
-      let fun is_varval (VAR_VAL vv) = true 
+      let fun is_varval (VALUE vv) = true 
 	    | is_varval _ = false
 	  val const = (!do_constant_records andalso (andfold is_varval vl))
       in  make_record_help(const,state,destopt,reps,vl,NONE)
@@ -1345,8 +1336,8 @@ val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
       let val res as (lv,_) = make_record_help(!do_forced_constant_records,state, 
 					       destopt, reps, vl, labopt)
 	  val labopt2 = (case lv of
-			     VAR_VAL(VRECORD(lab,_)) => SOME lab
-			   | VAR_VAL(VLABEL lab) => SOME lab
+			     VALUE(RECORD(lab,_)) => SOME lab
+			   | VALUE(LABEL lab) => SOME lab
 			   | _ => NONE)
 	  val _ = (case (labopt,labopt2) of
 		       (NONE,_) => ()

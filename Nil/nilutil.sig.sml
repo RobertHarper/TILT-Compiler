@@ -91,9 +91,12 @@ signature NILUTIL =
     val strip_float : Nil.con -> Prim.floatsize option
     val strip_int : Nil.con -> Prim.intsize option
     val strip_sum : Nil.con -> (Nil.w32 * Nil.w32 * Nil.w32 option * Nil.con) option
-    val strip_arrow : Nil.con -> 
-      (Nil.openness*Nil.effect*(Nil.var*Nil.kind) list*
-       (Nil.var list option) * Nil.con list*Nil.w32*Nil.con) option
+    val strip_arrow : Nil.con -> {openness : Nil.openness, effect : Nil.effect,
+				  isDependent : bool,
+				  tFormals : (Nil.var*Nil.kind) list,
+				  eFormals : (Nil.var option * Nil.con) list,
+				  fFormals : Nil.w32,
+				  body : Nil.con} option
     val strip_externarrow : Nil.con -> (Nil.con list * Nil.con) option
     val strip_record : Nil.con -> (Nil.label list * Nil.var list option * Nil.con list) option
     val strip_crecord : Nil.con -> (Nil.label*Nil.con) list option

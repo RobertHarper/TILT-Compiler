@@ -59,6 +59,7 @@ struct
     | Array_c                                 (* arrays *)
     | Vector_c                                (* vectors *)
     | Ref_c                                   (* references *)
+    | Loc_c                                   (* locatives *)
     | Exntag_c                                (* exception tags *)
     | Record_c of label list * var list option  (* records *)
     | Sum_c of {tagcount : w32,
@@ -71,10 +72,13 @@ struct
                                                        of primitive types *)
     | Mu_c of bool * (var,con) sequence           (* Constructors that classify values of
 						       a recursive type *)
-    | AllArrow_c of openness * effect *        (* open functions, code functions, and closures *)
-                    (var * kind) list * 
-		    var list option * con list *
-		    w32 * con
+    | AllArrow_c of {openness : openness, (* open functions, code functions, and closures *)
+		     effect : effect,
+		     isDependent : bool,
+		     tFormals : (var * kind) list,
+		     eFormals : (var option * con) list,
+		     fFormals : w32,
+		     body : con}
     | ExternArrow_c of con list * con
     | Var_c of var
     | Let_c of letsort * conbnd list * con        (* Constructor-level bindings *)
@@ -98,6 +102,7 @@ struct
 
   and nilprim = 
       record of label list       (* record intro *)
+    | partialRecord of label list * int (* record with a missing zero-indexed field *)
     | select of label            (* record field selection *)
     | inject of TilWord32.word
     | inject_nonrecord of TilWord32.word
@@ -116,7 +121,7 @@ struct
 
 
   and allprim = NilPrimOp of nilprim
-                   | PrimOp of prim
+              | PrimOp of prim
 
   (* Intswitch should be apparent.
    * The con list in the Sumswitch tells us the sum type and the w32
@@ -178,8 +183,14 @@ struct
    * Note that the type of the function can be easily given from these ingredients.
    *)
 
-  and function = Function of effect * recursive * (var * kind) list * 
-                             bool * (var * con) list * (var list) * exp * con  
+  and function = Function of {effect      : effect,
+			      recursive   : recursive,
+			      isDependent : bool,
+			      tFormals    : (var * kind) list,
+			      eFormals    : (var * niltrace * con) list,
+			      fFormals    : (var list),
+			      body        : exp,
+			      body_type   : niltrace * con}
 
   datatype import_entry = ImportValue of label * var * con
                         | ImportType of label * var * kind

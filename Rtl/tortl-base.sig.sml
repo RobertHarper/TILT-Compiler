@@ -20,36 +20,30 @@ sig
     type sv = Rtl.sv
     type reg = Rtl.reg
 
-    (* local notion of register *)
 
+    (* A location contains a value.  Local values are in registers while those
+       bound at top level reside at global labels *)
+    datatype location =
+	REGISTER of bool * reg   (* flag indicates whether value is constant *)
+      | GLOBAL   of label * rep  (* value resides at this label: includes unboxed real *)
 
-    (* RTL values can be located somewhere or the value is known *)
-    datatype var_loc = 
-	VREGISTER of bool * reg   (* flag indicates constant-ness *)
-      | VGLOBAL of label * rep  (* I am located at this label: closure, data, ... *)
-
-    (* The distinction between VINT and VTAG is important since they 
-         have different representations.  This is important at join points. *)
-    and var_val = 
-	VINT of TilWord32.word   (* an integer *)
-      | VTAG of TilWord32.word   (* a traceable small pointer value *)
-      | VREAL of label           (* a real located at this label *)
-      | VRECORD of label * var_val list (* I have the value of this label *)
-      | VVOID of rep
-      | VLABEL of label         (* I have the value of this label *)
-      | VCODE of label          (* I have the value of this code label *)
+    (* Sometimes the value is known at compile-time.
+       It is important to maintain a type distinction.  (e.g. between ints and tags) *)
+    datatype value =
+	VOID of rep             (* an undefined values *)
+      | INT of TilWord32.word   (* an integer *)
+      | TAG of TilWord32.word   (* a traceable small pointer value *)
+      | REAL of label           (* an unboxed real stored at given label *)
+      | RECORD of label * value list (* a record whose components are at the given label *)
+      | LABEL of label          (* the value of this label: e.g. boxed real, array, vector, ... *)
+      | CODE of label           (* code that residing at this label *)
 	
-   datatype loc_or_val = VAR_LOC of var_loc
-                       | VAR_VAL of var_val
+   datatype term = LOCATION of location
+                 | VALUE of value
 
-
-   type var_rep = var_loc option * var_val option * con
-   type convar_rep = var_loc option * var_val option * kind
+   type var_rep = location option * value option * con
+   type convar_rep = location option * value option * kind
    val uninit_val : TilWord32.word
-(*
-   type varmap = var_rep VarMap.map
-   type convarmap = convar_rep VarMap.map
-*)
 
    (* (global) RTL translation state *)
    val reset_global_state : (var * label) list * Name.VarSet.set -> unit
@@ -72,12 +66,12 @@ sig
 
    val add_code        : (state * var * con * label) -> state
    val add_reg         : (state * var * con * reg) -> state
-   val add_var         : (state * var * con * var_loc option * var_val option) -> state
-   val add_global      : (state * var * con * loc_or_val) -> state
+   val add_term        : (state * var * con * term) -> state
+   val add_global      : (state * var * con * term) -> state
 
-   val add_concode     : string -> (state * var * kind * con option * label) -> state
-   val add_convar      : string -> (state * var * kind * con option * var_loc option * var_val option) -> state
-   val add_conglobal   : string -> (state * var * kind * con option * loc_or_val) -> state
+   val add_concode     : (state * var * kind * con option * label) -> state
+   val add_conterm     : (state * var * kind * con option * term option) -> state
+   val add_conglobal   : (state * var * kind * con option * term option) -> state
 
    val getrep : state -> var -> var_rep
    val getconvarrep : state -> var -> convar_rep
@@ -94,17 +88,18 @@ sig
    val reduce_to_sum : string -> state -> con -> TilWord32.word * TilWord32.word option * con list
    val niltrace2rep : state -> Nil.niltrace -> rep
    val con2rep : state -> con -> rep
-   val valloc2rep : loc_or_val -> rep
+   val valloc2rep : term -> rep
    val type_of : state -> exp -> con
 
    (* Routines for loading RTL values *)
-   val load_ireg_loc : var_loc * regi option -> regi
-   val load_ireg_val : var_val * regi option -> regi
-   val load_ireg_sv : loc_or_val -> sv
-   val load_ireg_locval : loc_or_val * regi option -> regi
-   val load_freg_locval : loc_or_val * regf option -> regf
-   val load_reg_loc : var_loc * reg option -> reg
-   val load_reg_val : var_val * reg option -> reg
+   val load_ireg_loc : location * regi option -> regi
+   val load_ireg_val : value * regi option -> regi
+   val load_ireg_sv : term -> sv
+   val load_ireg_term : term * regi option -> regi
+   val load_freg_term : term * regf option -> regf
+   val load_reg_loc : location * reg option -> reg
+   val load_reg_val : value * reg option -> reg
+   val load_reg_term : term * reg option -> reg
 
    (* Routines for allocating registers and labels *)
    val alloc_regi : rep -> regi
@@ -130,12 +125,12 @@ sig
    val stackptr : regi
    val exnptr : regi
    val exnarg : regi
-   val unitval : var_val
-   val unit_vvc : loc_or_val * con
+   val unitval : value
+   val unit_vvc : term * con
 
    (* Helper routines *)
-   val in_ea_range : int -> loc_or_val -> int option
-   val in_imm_range_vl : loc_or_val -> int option
+   val in_ea_range : int -> term -> int option
+   val in_imm_range_vl : term -> int option
    val coercei : string -> reg -> regi
    val coercef : reg -> regf
    val shuffle_iregs : regi list * regi list -> unit
@@ -143,16 +138,16 @@ sig
    val shuffle_regs  : reg  list * reg  list -> unit
    val mv : reg * reg -> instr (* src -> dest *)
    val boxFloat : state * regf -> regi * state
-   val boxFloat_vl : state * loc_or_val -> loc_or_val * state
+   val boxFloat_vl : state * term -> term * state
    val unboxFloat : regi -> regf
-   val fparray : state * loc_or_val list -> regi * state
+   val fparray : state * term list -> regi * state
 
-   (* make_record statically allocates if all the arguments are var_vals
+   (* make_record statically allocates if all the arguments are values
      make_record_const will always statically allocate
      make_record_mutable will never statically allocate *)
-   val make_record : state * regi option * rep list * loc_or_val list -> loc_or_val * state
-   val make_record_const : state * regi option * rep list * loc_or_val list * label option -> loc_or_val * state
-   val make_record_mutable : state * regi option * rep list * loc_or_val list -> loc_or_val * state
+   val make_record : state * regi option * rep list * term list -> term * state
+   val make_record_const : state * regi option * rep list * term list * label option -> term * state
+   val make_record_mutable : state * regi option * rep list * term list -> term * state
 
 
    (* Tag-related Operations *)

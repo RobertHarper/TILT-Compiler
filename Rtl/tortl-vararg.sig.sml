@@ -5,13 +5,9 @@ sig
 
   type state = TortlBase.state
   type var = Name.var
-  type con = Nil.con
   type exp = Nil.exp
   type bnd = Nil.bnd
-  type kind = Nil.kind
   type regi = Rtl.regi
-  type loc_or_val = TortlBase.loc_or_val
-  type var_loc = TortlBase.var_loc
 
   (* argc, resc, term function of type argc -> resc *)
   val xmake_vararg_support : unit -> bnd list

@@ -26,17 +26,14 @@ struct
                | Notneeded_p
 
   and rep = TRACE
-          | UNSET         (* a locative address that is not yet set; needs to be set once *)
           | NOTRACE_INT
           | NOTRACE_CODE
           | NOTRACE_REAL
-            (* global label --- outside the heap, so it shouldn't
-	       be traced *)
-         | LABEL 
-	    (* LOCATIVE: pointer into middle of array/record. 
-	       This must NEVER be live across a GC point *)
-         | LOCATIVE
-         | COMPUTE of rep_path
+          | NOTRACE_LABEL (* global labels outside the heap -- should not be traced *)
+          | LOCATIVE      (* pointer into middle of array/record: must not be live across GC *)
+          | UNSET         (* an uninitialized locative address: will be set once, may persist across GC *)
+          | COMPUTE of rep_path (* trace is not statically known *)
+
 
   datatype regf = REGF of var * rep
   datatype reg = I of regi | F of regf

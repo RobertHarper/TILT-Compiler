@@ -169,17 +169,17 @@ val debug_full = ref false
 			let val tempi = alloc_regi TRACE
 			    val _ = add_instr(LOAD32I(EA(argc,4*(2+n)),tempi))
 			in  (n+1,
-			     add_convar "vararg" (state,convar,Type_k,NONE,
-						  SOME((VREGISTER (false,I tempi))), NONE))
+			     add_conterm (state,convar,Type_k,NONE,
+					  SOME(LOCATION(REGISTER (false,I tempi)))))
 			end
 		    val (_,state) = foldl folder (0,state) convars
-		    val state = add_convar "vararg" (state,resconvar,Type_k,NONE,
-						     SOME((VREGISTER (false,I resc))), NONE)
+		    val state = add_conterm (state,resconvar,Type_k,NONE,
+					     SOME(LOCATION(REGISTER (false,I resc))))
 		    val funcon = AllArrow_c(Closure,Partial,[],
 					    NONE,[con_tuple(map Var_c convars)],
 					    0w0,Var_c resconvar)
-		    val state = add_var  (state,funvar,funcon,
-					  SOME((VREGISTER (false,I function))), NONE)
+		    val state = add_term  (state,funvar,funcon,
+					   LOCATION(REGISTER (false,I function)))
 		    val e = App_e(Code,Var_e supportvar,(map Var_c convars) @ [Var_c resconvar],
 				  [Var_e funvar],[])
 		    val resulti = xexp(state,e)
@@ -228,17 +228,17 @@ val debug_full = ref false
 			let val tempi = alloc_regi TRACE
 			    val _ = add_instr(LOAD32I(EA(argc,4*(2+n)),tempi))
 			in  (n+1,
-			     add_convar "onearg" (state,convar,Type_k,NONE,
-						  SOME((VREGISTER (false,I tempi))), NONE))
+			     add_conterm (state,convar,Type_k,NONE,
+					  SOME(LOCATION(REGISTER (false,I tempi)))))
 			end
 		    val (_,state) = foldl folder (0,state) convars
-		    val state = add_convar "onearg" (state,resconvar,Type_k,NONE,
-						     SOME((VREGISTER (false,I resc))), NONE)
+		    val state = add_conterm (state,resconvar,Type_k,NONE,
+					     SOME(LOCATION(REGISTER (false,I resc))))
 		    val funcon = AllArrow_c(Closure,Partial,[],
 					    NONE,[con_tuple(map Var_c convars)],
 					    0w0,Var_c resconvar)
-		    val state = add_var  (state,funvar,funcon,
-					  SOME((VREGISTER (false,I function))), NONE)
+		    val state = add_term  (state,funvar,funcon,
+					  LOCATION(REGISTER (false,I function)))
 		    val e = App_e(Code,Var_e supportvar,(map Var_c convars) @ [Var_c resconvar],
 				  [Var_e funvar],[])
 		    val resulti = xexp(state,e)

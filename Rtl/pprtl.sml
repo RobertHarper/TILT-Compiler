@@ -58,7 +58,7 @@ struct
     | rep2s NOTRACE_INT = "(NOTRACE_INT)"
     | rep2s NOTRACE_CODE = "(NOTRACE_CODE)"
     | rep2s NOTRACE_REAL = "(NOTRACE_REAL)"
-    | rep2s LABEL = "(LABEL)"
+    | rep2s NOTRACE_LABEL = "(NOTRACE_LABEL)"
     | rep2s LOCATIVE = "(LOCATIVE)"
     | rep2s (COMPUTE p) = "(COMPUTE "^reppath2s p^")"
 
@@ -316,8 +316,8 @@ struct
   fun pp_code' code = 
       let fun pp_Instr'' x =
 	        let val s = pp_Instr' x
-		in case x
-		   of ILABEL _ => s
+		in case x of
+		      ILABEL _ => s
 		    | _ => Hbox[String "     ", s]
 		end
       in  pp_Array' pp_Instr'' code
