@@ -1,6 +1,8 @@
 #!/bin/sh
 
 # search keywords.
+# use like this:
+# ./search equality
 
 grep "^Keywords:.*$1.*$" `find . -name description`
 

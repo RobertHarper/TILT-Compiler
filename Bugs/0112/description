@@ -10,7 +10,7 @@ Problem:     tilt: Option
 Code:        
 Transcript:  
 Comments:    
-Fix:         
+Fix: Fixed by unifying the tyvar with unit. - tom7
 Test: m0038
 Owner: rwh
-Status: open
+Status: closed
