@@ -80,13 +80,13 @@ n4      pass	syntax error (exp in local bottom)
 n5      pass	syntax error (exp in let top)
 n6      fail	unresolved flex pattern
 n7      pass	arrow not an equality type
-n8      fail	exn not an equality type
-n9      fail	arrow not an equality type
-n10     fail	distinct namespaces of types and values
+n8      pass	exn not an equality type
+n9      pass	arrow not an equality type
+n10     pass	distinct namespaces of types and values
 n11     pass	ref constraint (obsolete imperative tyvar test)
 n12     pass	ref constraint (obsolete imperative tyvar test)
-n13     fail	record type mismatch
-n14     fail	records aren't ints
+n13     pass	record type mismatch
+n14     pass	records aren't ints
 n15     pass	scoping
 n16     fail	type shadowing
 n17     pass	records aren't lists
@@ -99,14 +99,14 @@ n23     pass	exception handler typing
 n24     pass	exception raise typing
 n25     pass	multi-arm fn typing
 n26     pass	multi-arm fn typing
-n27     fail	equality typing
-n28     fail	type inference with refs
+n27     pass	equality typing
+n28     pass	type inference with refs
 n29     pass	type inference with refs
-n30     fail	type inference with refs
+n30     pass	type inference with refs
 n31     pass	type inference with refs
 n32     pass	distinct type variables don't unify
 n33     pass	scope of explicit type variables
-n34     fail	non-equality datatype
+n34     pass	non-equality datatype
 n35     fail	abstypes are not equality types
 n36     pass	scoping of abstype
 n37     fail	exception constructor in pattern match
