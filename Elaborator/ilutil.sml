@@ -464,7 +464,7 @@ structure IlUtil
        end
 
 
-      fun rebind_free_type_var(tv_stamp : stamp,
+      fun rebind_free_type_var(skip : int, tv_stamp : stamp,
 			       argcon : con, context, targetv : var) 
 	  : ((context,con)Tyvar.tyvar * label * bool) list = 
 	let 
@@ -499,7 +499,7 @@ structure IlUtil
 	  val free_tyvar = rev(!free_tyvar)
 	  fun mapper (n,tv) = 
 	      let val is_equal = tyvar_is_use_equal tv
-		  val lbl = canonical_tyvar_label is_equal n
+		  val lbl = canonical_tyvar_label is_equal (n + skip)
 		  val proj = CON_MODULE_PROJECT(MOD_VAR targetv, lbl)
 		  val _ = tyvar_set(tv,proj)
 	      in  (tv, lbl, is_equal)

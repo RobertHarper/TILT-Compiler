@@ -1021,7 +1021,8 @@ val _ = print "plet0\n"
 	     local 
 		 val (_,top_con) = top_exp_con
 		 val tyvar_lbls'_useeq = 
-		     rebind_free_type_var(tyvar_stamp,top_con,
+		     rebind_free_type_var(length sdecs1,
+					  tyvar_stamp,top_con,
 					  context_fun_ids,var_poly)
 		 fun help(_,tlab,iseq) = (tlab,iseq)
 		 val temp = map help tyvar_lbls'_useeq
@@ -1176,8 +1177,9 @@ val _ = print "plet0\n"
 						   pp_con con; print"\n\n"))
 			    
 			    
-			val tyvar_lbls_useeq = rebind_free_type_var(tyvar_stamp,con,
-								     context,var_poly)
+			val tyvar_lbls_useeq = rebind_free_type_var(length tyvars,
+								    tyvar_stamp,con,
+								    context,var_poly)
 			val lbls_useeq = (map (fn (_,l,f) => (l,f)) tyvar_lbls_useeq)
 			val _ = debugdo (fn () => (print "done calling rebind_free_type_var:  var_poly = ";
 						   pp_var var_poly; print "\nand con = \n";

@@ -205,11 +205,12 @@ signature ILUTIL =
 			not considered newly generated.
                     Finally, also return the the list of the newly generated labels
                     and a bool indicating whether the type variable is an eqtype 
+		The initial int indicates how many tyvar names to skip.
 			       *)
 
     val con_subst_conapps : (con * (con * con -> con option)) -> con
     val remove_modvar_type : con * var * Il.sdecs -> con
-    val rebind_free_type_var : Tyvar.stamp * con * context * var -> 
+    val rebind_free_type_var : int * Tyvar.stamp * con * context * var -> 
 	                          (tyvar * label * bool) list
 
     (* Determine whether all overloaded expressions and type metavariables are resolved *)
