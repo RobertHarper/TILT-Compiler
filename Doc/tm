@@ -85,10 +85,8 @@ compiling (usrc : I).
 
 The fifth form of uexp is a compiled unit.  The invariants are that
 the parameters of object are a subset of units and
-that the object has interface I.
-
-The sixth form of uexp is used to manage effects: Units must be linked
-in to any executable containing uexp.
+that the object has interface I.  Units' must be linked in to any executable
+containing uexp.
 
 
 Definitions
