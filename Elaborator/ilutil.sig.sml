@@ -68,6 +68,7 @@ signature ILUTIL =
     val expose_lab : label
     val to_eq_lab : label -> label (* takes any internal label and 
 				      generate the unique eq internal label *)
+    val is_eq_lab : label -> bool
     val functor_arg_lab : label
     val con_unit : con
     val con_string : con

@@ -207,8 +207,7 @@ functor Basis(structure Il : IL
 			       val arg_var = fresh_named_var "not_arg"
 			       val not_body = make_ifthenelse(VAR arg_var,false_exp,true_exp,con_bool)
 			   in  #1(make_lambda(arg_var, con_bool, con_bool, not_body))
-			   end),
-		   ("size", ETAPRIM(length1 false,[CON_UINT W8]))]
+			   end)]
 
 	      val baseprimvalue_list = 
 		  [("/", (mul_float F64)),
@@ -275,32 +274,32 @@ functor Basis(structure Il : IL
 						 val x = RECORD_PROJECT(VAR v,generate_tuple_label 1,argc)
 						 val y = RECORD_PROJECT(VAR v,generate_tuple_label 2,argc)
 					     in #1(make_lambda(v,argc,CON_ARRAY c,
-							       PRIM(array1 true,[c],[x,y])))
+							       PRIM(create_table WordArray,[c],[x,y])))
 					    end)),
 		  ("unsafe_array2vector",(fn c => let val v = fresh_var()
 						  in #1(make_lambda(v,CON_ARRAY c, CON_VECTOR c,
-								    PRIM(array2vector,[c],[VAR v])))
+								    PRIM(array2vector WordArray,[c],[VAR v])))
 						  end)),
 		  ("unsafe_sub",(fn c => let val v = fresh_var()
 					     val argc = con_tuple[CON_ARRAY c, uint32]
 					     val x = RECORD_PROJECT(VAR v,generate_tuple_label 1,argc)
 					     val y = RECORD_PROJECT(VAR v,generate_tuple_label 2,argc)
 					 in #1(make_total_lambda(v,argc,c,
-								 PRIM(sub1 true,[c],[x,y])))
+								 PRIM(sub WordArray,[c],[x,y])))
 					 end)),
 		  ("unsafe_vector",(fn c => let val v = fresh_var()
 						 val argc = con_tuple[uint32, c]
 						 val x = RECORD_PROJECT(VAR v,generate_tuple_label 1,argc)
 						 val y = RECORD_PROJECT(VAR v,generate_tuple_label 2,argc)
 					     in #1(make_lambda(v,argc,CON_VECTOR c,
-							       PRIM(array1 false, [c],[x,y])))
+							       PRIM(create_table WordVector, [c],[x,y])))
 					    end)),
 		  ("unsafe_vsub",(fn c => let val v = fresh_var()
 					     val argc = con_tuple[CON_VECTOR c, uint32]
 					     val x = RECORD_PROJECT(VAR v,generate_tuple_label 1,argc)
 					     val y = RECORD_PROJECT(VAR v,generate_tuple_label 2,argc)
 					 in #1(make_total_lambda(v,argc,c,
-								 PRIM(sub1 false,[c],[x,y])))
+								 PRIM(sub WordVector,[c],[x,y])))
 					 end)),
 		  ("unsafe_update",(fn c => let val v = fresh_var()
 						val argc = con_tuple[CON_ARRAY c, uint32, c]
@@ -308,15 +307,15 @@ functor Basis(structure Il : IL
 						val y = RECORD_PROJECT(VAR v,generate_tuple_label 2,argc)
 						val z = RECORD_PROJECT(VAR v,generate_tuple_label 3,argc)
 					    in #1(make_total_lambda(v,argc,con_unit,
-								    PRIM(update1,[c],[x,y,z])))
+								    PRIM(update WordArray,[c],[x,y,z])))
 					    end)),
 		  ("array_length",(fn c => let val v = fresh_var()
 					   in #1(make_total_lambda(v,CON_ARRAY c,uint32,
-								   PRIM(length1 true,[c],[VAR v])))
+								   PRIM(length_table WordArray,[c],[VAR v])))
 					   end)),
 		  ("vector_length",(fn c => let val v = fresh_var()
 					   in #1(make_total_lambda(v,CON_VECTOR c,uint32,
-								   PRIM(length1 false,[c],[VAR v])))
+								   PRIM(length_table WordVector,[c],[VAR v])))
 					   end)),
 		  ("ref", (fn c => let val v = fresh_var()
 				    in #1(make_total_lambda(v,c,CON_REF c,
@@ -341,8 +340,9 @@ functor Basis(structure Il : IL
 	  local
 	      open Ast 
 	      open Symbol
-	      val booldb = [Db{def=[(varSymbol "true",NONE),
-				    (varSymbol "false",NONE)],
+	      (* we want false to be 0 and true to be 1 *)
+	      val booldb = [Db{def=[(varSymbol "false",NONE),
+				    (varSymbol "true",NONE)],
 			       tyc=tycSymbol "bool",tyvars=[]}]
 	      val listdb = [Db{def=[(varSymbol "nil",NONE),
 				    (varSymbol "::",
@@ -424,7 +424,8 @@ functor Basis(structure Il : IL
 	      val _ = sbnds_result := datatype_sbnds
 	      val datatype_sdecs = datatype_sdecs
 	  end
-      in  (!result, !sbnds_result, datatype_sdecs, add_context_sdecs(!result,datatype_self_sdecs))
+      in  (!result, !sbnds_result, 
+	   datatype_sdecs, add_context_sdecs(!result,datatype_self_sdecs))
       end
   
   end

@@ -16,14 +16,14 @@ signature PAT =
         when the pattern is applied to the expression (Il.exp/Il.con). *)
     val bindCompile  : {patarg : patarg,
 			bindpat :  Ast.pat,
-			arg : (Il.exp * Il.con)} -> (Il.sbnd * Il.sdec) list
+			arg : (Il.var * Il.con)} -> (Il.sbnd * Il.sdec) list
 
 
     (* CaseCompile corresponds to a case statement. The second argument
         is a list of the arms.  The third argument is the argument of the
 	 case statement. *)
     val caseCompile  : {patarg : patarg,
-			arg : (Il.exp * Il.con),
+			arg : (Il.var * Il.con),
 			arms : (Ast.pat * Ast.exp) list} -> Il.exp * Il.con
 
 

@@ -16,6 +16,16 @@ functor Prim()
 
     datatype traptype = int_tt | real_tt | both_tt
 
+    datatype table = 
+	IntArray of intsize 
+      | IntVector of intsize
+      | FloatArray of floatsize
+      | FloatVector of floatsize
+      | PtrArray 
+      | PtrVector 
+      | WordArray 
+      | WordVector
+		      
     datatype prim = 
 
 	(* trap instructions *)
@@ -88,21 +98,13 @@ functor Prim()
       | rshift_int of intsize       (* right shift arithmetic *)
       | rshift_uint of intsize      (* right shift logical *)
 
-      (* array and vector ops - bool = true indicates writeable *)
-      | array2vector
-      | sub1 of bool 
-      | array1 of bool
-      | update1 
-      | length1 of bool
-      | array_eq of bool (* pointer equality for true and element-wise equality for false *)
-
-      (* array and vector ops - bool = true indicates writeable *)
-      | intsub1 of bool 
-      | intupdate1 
-      | floatsub1 of bool 
-      | floatupdate1 
-      | ptrsub1 of bool 
-      | ptrupdate1 
+      (* array and vectors *)
+      | array2vector of table
+      | create_table of table
+      | sub of table
+      | update of table
+      | length_table of table
+      | equal_table of table (* pointer equality for array and element-wise equality for vector *)
 
       (* IO stuff *)
       | open_in

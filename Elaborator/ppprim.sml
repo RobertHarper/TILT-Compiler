@@ -87,8 +87,7 @@ functor Ppprim(structure Prim : PRIM)
 	   | CAR => String "car"
 	   | CDR  => String "cdr"
 *)
-	   | length1 true => String "length1"
-	   | length1 false => String "vlength1"
+
 (*	   | LENGTH2 => String "length2" *)
 
 
@@ -158,24 +157,63 @@ functor Ppprim(structure Prim : PRIM)
 	  | output => String "output"
 	  | end_of_stream => String "end_of_stream"
 
-	  | array1 true => String "array1"
-	  | sub1   true  => String "sub1"
-	  | array2vector => String "array2vector"
-	  | update1 => String "update1"
-	  | array_eq true => String "array_eq"
-	  | array1 false => String "vector1"
-	  | sub1   false  => String "vsub1"
-	  | array_eq false => String "vector_eq"
 
-	  | intsub1 true => String "intsub1"
-	  | floatsub1 true => String "floatsub1"
-	  | ptrsub1 true => String "ptrsub1"
-	  | intsub1 false => String "vintsub1"
-	  | floatsub1 false => String "vfloatsub1"
-	  | ptrsub1 false => String "vptrsub1"
-	  | intupdate1 => String "intudpate"
-	  | floatupdate1 => String "floatudpate"
-	  | ptrupdate1 => String "ptrudpate"
+
+	  | array2vector WordArray => String "wordarray2vector"
+	  | array2vector (IntArray _) => String "intarray2vector"
+	  | array2vector (FloatArray _) => String "(FloatArray _)2vector"
+	  | array2vector PtrArray => String "ptrarray2vector"
+
+	  | array2vector WordVector => error "can't have array2vector *vector"
+	  | array2vector (IntVector _) => error "can't have array2vector *vector"
+	  | array2vector (FloatVector _) => error "can't have array2vector *vector"
+	  | array2vector PtrVector => error "can't have array2vector *vector"
+
+	  | create_table WordArray => String "array1"
+	  | create_table WordVector => String "vector1"
+	  | create_table (IntArray _) => String "intarray_create"
+	  | create_table (IntVector _) => String "(IntVector _)1"
+	  | create_table (FloatArray _) => String "floatarray_create"
+	  | create_table (FloatVector _) => String "(FloatVector _)1"
+	  | create_table PtrArray => String "ptrarray1"
+	  | create_table PtrVector => String "ptrvector1"
+
+	  | sub WordArray => String "sub1"
+	  | sub WordVector => String "vsub1"
+	  | sub (IntArray _) => String "intsub1"
+	  | sub (IntVector _) => String "intvsub1"
+	  | sub (FloatArray _) => String "floatsub1"
+	  | sub (FloatVector _) => String "floatvsub1"
+	  | sub PtrArray => String "ptrsub1"
+	  | sub PtrVector => String "ptrvsub"
+
+	  | update WordArray => String "update1"
+	  | update WordVector => String "vupdate1"
+	  | update (IntArray _) => String "intupdate1"
+	  | update (IntVector _) => String "intvupdate1"
+	  | update (FloatArray _) => String "floatupdate1"
+	  | update (FloatVector _) => String "floatvupdate1"
+	  | update PtrArray => String "ptrupdate1"
+	  | update PtrVector => String "ptrvupdate"
+
+	  | length_table WordArray => String "length1"
+	  | length_table WordVector => String "vlength1"
+	  | length_table (IntArray _) => String "intlength1"
+	  | length_table (IntVector _) => String "intvlength1"
+	  | length_table (FloatArray _) => String "floatlength1"
+	  | length_table (FloatVector _) => String "floatvlength1"
+	  | length_table PtrArray => String "ptrlength1"
+	  | length_table PtrVector => String "ptrvlength"
+
+	  | equal_table WordArray => String "array_eq"
+	  | equal_table WordVector => String "vector_eq"
+	  | equal_table (IntArray _) => String "intarray_eq"
+	  | equal_table (IntVector _) => String "(IntVector _)_eq"
+	  | equal_table (FloatArray _) => String "(FloatVector _)_eq"
+	  | equal_table (FloatVector _) => String "(FloatVector _)_eq"
+	  | equal_table PtrArray => String "ptrarray_eq"
+	  | equal_table PtrVector => String "ptrvector_eq"
+
 
 (*	   | ARRAY2  {instance} => String "array2"
 	   | SUB2    {instance} => String "sub2" *)

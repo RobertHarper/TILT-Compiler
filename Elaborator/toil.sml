@@ -90,11 +90,9 @@ functor Toil(structure Il : IL
 				      in f1 ^ ":" ^ 
 					  ((Int.toString r1) ^ "." ^ (Int.toString c1)) ^ "-" ^ 
 					  ((Int.toString r2) ^ "." ^ (Int.toString c2))
-				      end
+				      end handle _ => "unknown"
 	fun error_region() = (error_level := error_max(!error_level,Error);
 			      print "Error at "; print (peek_region()); print ", ")
-	fun error_region() = (error_level := error_max(!error_level,Error);
-			      print "Error at "; print ", ")
 	fun warn_region() = (error_level := error_max(!error_level,Warn);
 			     print "Warning at "; print (peek_region()); print ", ")
 	    
@@ -110,10 +108,13 @@ functor Toil(structure Il : IL
 					  flex_table := (l,rc,fc,e)::(!flex_table))
 	    
 	fun get_eq_table () = !eq_table
-	fun add_eq_entry (ctxt,tyvar,expos) = 
+	fun add_eq_entry (tyvar,expos) = 
 	    (case (!eq_stack) of
 		 [] => elab_error "cannot add entry: empty eq_stack"
-	       | (first::rest) => let val first' = ([],ctxt,tyvar,expos)::first
+	       | (first::rest) => let val ctxt = (case (tyvar_getctxts tyvar) of
+						      [] => elab_error "tyvar must have some context"
+						    | a::_ => a)
+				      val first' = ([],ctxt,tyvar,expos)::first
 				  in (eq_stack := first'::rest)
 				  end)
 	fun eq_table_push() = (debugdo (fn () => (print "EQ_PUSING depth = "; 
@@ -142,9 +143,14 @@ functor Toil(structure Il : IL
 	    end
     end
 
-    fun tyvar_getctxt tyvar = (case (tyvar_getctxts tyvar) of
-				  [] => elab_error "XXX tyvar must have some context"
-				| a::_ => a)
+    val fresh_tyvar' = fresh_tyvar
+    fun fresh_tyvar ctxt = let val tv = fresh_tyvar' ctxt
+				val _ = add_tyvar_table tv
+			    in  tv
+			    end
+    fun fresh_con ctxt = CON_TYVAR(fresh_tyvar ctxt)
+
+
 
      (* ----------------- overload_resolver ----------------------- *)
     fun overload_help warn ocon =
@@ -249,10 +255,6 @@ functor Toil(structure Il : IL
 	       | loop context (obj::rest) =
 		 let 
 		     val boolsbnd_ctxt_list = xobj(context,obj)
-		     val (lbl1,lbl2) = (fresh_open_internal_label "lbl1", 
-					fresh_open_internal_label "lbl2")
-		     val var1 = fresh_var()
-		     val var2 = fresh_var()
 		     val (_,context') = add_context_boolsbnd_ctxts(context,boolsbnd_ctxt_list)
 		     val boolsbnd_ctxt_restlist = loop context' rest
 		 in boolsbnd_ctxt_list @ boolsbnd_ctxt_restlist
@@ -315,7 +317,7 @@ functor Toil(structure Il : IL
 						 val eq_con = CON_ARROW(con_tuple[con,con],
 									con_bool,
 									oneshot_init PARTIAL)
-						 val _ = add_eq_entry(tyvar_getctxt tyvar,tyvar,exp_os)
+						 val _ = add_eq_entry(tyvar,exp_os)
 						 val e2 = OVEREXP(eq_con,true,exp_os)
 					     in (con,eq_con,e2)
 					     end
@@ -377,9 +379,7 @@ functor Toil(structure Il : IL
 					 Ppil.pp_signat s;
 					 print "\n\n"))
 	    local 
-		fun dotype l v = let 
-				     val tv = fresh_tyvar context
-			  	     val _ = add_tyvar_table tv
+		fun dotype l v = let val tv = fresh_tyvar context
 				     val c = CON_TYVAR tv
 				 in (tv,(SBND(l,BND_CON(v,c)),
 					 SDEC(l,DEC_CON(v,KIND_TUPLE 1, SOME c)))
@@ -397,7 +397,7 @@ functor Toil(structure Il : IL
 			val con = CON_TYVAR tyvar
 			val eq_con = CON_ARROW(con_tuple[con,con],con_bool,oneshot_init PARTIAL)
 			val exp_os = oneshot()
-			val _ = add_eq_entry(tyvar_getctxt tyvar,tyvar,exp_os)
+			val _ = add_eq_entry(tyvar,exp_os)
 			val eqexp = OVEREXP(eq_con,true,exp_os)
 			val sbnd2 = SBND(l2,BND_EXP(v2,eqexp))
 			val sdec2 = SDEC(l2,DEC_EXP(v2,c2))
@@ -526,7 +526,10 @@ functor Toil(structure Il : IL
 	     end
        | Ast.VarExp path => 
 	     let fun unbound() = 
-		 let val _ = (error_region(); print "unbound variable or constructor: ???\n")
+		 let val _ = (error_region(); 
+			      print "unbound variable or constructor: ";
+			      AstHelp.pp_path path;
+			      print "\n")
 		 in dummy_exp(context,"unbound_var")
 		 end
 	     in
@@ -536,7 +539,7 @@ functor Toil(structure Il : IL
 			      val _ = tyvar_use_equal tyvar
 			      val con = CON_TYVAR tyvar
 			      val eq_con = CON_ARROW(con_tuple[con,con],con_bool,oneshot_init PARTIAL)
-			      val _ = add_eq_entry(context,tyvar,exp_os)
+			      val _ = add_eq_entry(tyvar,exp_os)
 			  in (OVEREXP(eq_con,true,exp_os),eq_con)
 			  end
 		 else 
@@ -618,21 +621,12 @@ functor Toil(structure Il : IL
 	     let val (e1',con1) = xexp(context,function)
 		 val (e2',con2) = xexp(context,argument)
 		 val spec_rescon = fresh_con context
-		 val spec_funcon = CON_ARROW(con2,spec_rescon, oneshot())
-		 fun reduce(ETAPRIM(p,cs),RECORD rbnds) = 
-		      PRIM(p,cs,map #2 rbnds)
-		   | reduce(ETAILPRIM(ip,cs),RECORD rbnds) = ILPRIM(ip,cs,map #2 rbnds)
-		   | reduce(x as ETAPRIM(p,cs),y) = 
-		     (case (IlStatic.PrimUtil.get_type p cs) of
-			  CON_ARROW(CON_RECORD _,_,_) => APP(x,y)
-			| CON_ARROW(_,_,_) => PRIM(p,cs,[y])
-			| _ => APP(x,y))
-		   | reduce(x as ETAILPRIM(ip,cs),y) = 
-		     (case (IlStatic.PrimUtil.get_iltype ip cs) of
-			  CON_ARROW(CON_RECORD _,_,_) => APP(x,y)
-			| CON_ARROW(_,_,_) => ILPRIM(ip,cs,[y])
-			| _ => APP(x,y))
-		   | reduce(x,y) = APP(x,y)
+		 val arrow_oe = oneshot()
+		 val spec_funcon = CON_ARROW(con2,spec_rescon, arrow_oe)
+		 fun reduce(x,y) = 
+		     (case (IlUtil.beta_reduce(x,y)) of
+			 NONE => APP(x,y)
+		       | SOME e => e)
 		 fun red (exp as (OVEREXP (c,_,oe))) = 
 		     ((case c of 
 			   CON_OVAR ocon => overload_help false ocon
@@ -643,7 +637,10 @@ functor Toil(structure Il : IL
 		   | red exp = exp
 	     in
 		 if (eq_con(context,con1,spec_funcon))
-		     then (reduce(red e1',red e2'),con_deref spec_rescon)
+		     then ((case oneshot_deref arrow_oe of
+			       NONE => oneshot_set(arrow_oe,PARTIAL)
+			     | SOME _ => ());
+			   (reduce(red e1',red e2'),con_deref spec_rescon))
 		 else
 		     case con1 of
 			 CON_ARROW(argcon,rescon,_) => 
@@ -711,7 +708,7 @@ functor Toil(structure Il : IL
        | Ast.HandleExp {expr,rules} => (* almost same as CaseExp except need to wrap with HANDLE *)
 	     let 
 		 val (exp',rescon) = xexp(context,expr)
-		 val v = fresh_var()
+		 val v = fresh_named_var "handle_exn"
 		 val patarg = {context = context,
 			       typecompile = xty,
 			       expcompile = xexp,
@@ -720,7 +717,7 @@ functor Toil(structure Il : IL
 		 val arms = map (fn (Ast.Rule{pat,exp})=>(pat,exp)) rules
 		 val (hbe,hbc) = caseCompile{patarg = patarg,
 					     arms = arms,
-					     arg = (VAR v,CON_ANY)}
+					     arg = (v,CON_ANY)}
 		 val (he,hc) = make_lambda(v,CON_ANY,hbc,hbe)
 	     in if (eq_con(context,rescon,hbc))
 		    then (HANDLE(exp',he),rescon)
@@ -758,6 +755,12 @@ functor Toil(structure Il : IL
 	     let fun getarm (Ast.Rule{pat,exp}) = (pat,exp)
 		 val arms = map getarm rules
 		 val (arge,argc) = xexp(context,expr)
+		 val (context,wrap,v) = (case arge of 
+					     VAR v => (context,fn e => e, v)
+					   | _ => let val v = fresh_named_var "casearg"
+						      fun wrap e = LET([BND_EXP(v,arge)],e)
+						  in  (add_context_exp'(context,v,argc),wrap,v)
+						  end)
 		 val patarg = {context = context,
 			       typecompile = xty,
 			       expcompile = xexp,
@@ -765,8 +768,8 @@ functor Toil(structure Il : IL
 			       error_region = error_region}
 		 val (e,c) = caseCompile{patarg = patarg,
 					 arms = arms,
-					 arg = (arge,argc)}
-	     in (e,c)
+					 arg = (v,argc)}
+	     in (wrap e,c)
 	     end
        | Ast.MarkExp(exp,region) => 
 	     let val _ = push_region region
@@ -846,15 +849,14 @@ functor Toil(structure Il : IL
 		end
 		val tyvars = map tyvar_strip tyvars
 		val tyvar_stamp = get_stamp()
-		val lbl = fresh_open_internal_label "lbl"
-		val lbl' = fresh_internal_label "lbl'"
-		val var_poly = fresh_var()
-		val var' = fresh_var()
-		val var_poly = fresh_named_var "var_poly"
+		val lbl = fresh_open_internal_label "varpoly"
+		val var_poly = fresh_named_var "varpoly"
+		val lbl' = fresh_internal_label "valbind"
+		val var' = fresh_named_var "valbind"
 		val cons1 = map (fn _ => fresh_con context) tyvars
 		local
 		    val labs1 = map (fn s => symbol_label s) tyvars
-		    val vars1 = map (fn _ => fresh_named_var "user_gen") tyvars
+		    val vars1 = map (fn s => gen_var_from_symbol s) tyvars
 		in val temp_sdecs = (map3 (fn (v,l,c) => SDEC(l,DEC_CON(v,KIND_TUPLE 1,SOME c))) 
 				     (vars1,labs1,cons1))
 		end
@@ -862,17 +864,21 @@ functor Toil(structure Il : IL
 						  SelfifySig(SIMPLE_PATH var_poly,
 							     SIGNAT_STRUCTURE (NONE,temp_sdecs)))
 		val _ = eq_table_push()
+		val lbl = fresh_internal_label "bindarg"
+		val v = fresh_named_var "bindarg"
 		val (e,con) = xexp(context',expr)
+		val sbnd_sdec = (SBND(lbl,BND_EXP(v,e)),SDEC(lbl,DEC_EXP(v,con)))
+		val context' = add_context_exp'(context',v,con)
 		val patarg = {context = context', 
 			      typecompile = xty, 
 			      expcompile = xexp, 
 			      polyinst = poly_inst,
-			       error_region = error_region}
-		val sbnd_sdec_list = bindCompile{patarg = patarg,
-						 bindpat = pat,
-						 arg = (e,con)}
+			      error_region = error_region}
+		val sbnd_sdec_list = sbnd_sdec::(bindCompile{patarg = patarg,
+							     bindpat = pat,
+							     arg = (v,con)})
 		val is_irrefutable = Sbnds_IsValuable(context', map #1 sbnd_sdec_list)
-		fun refutable_case () = (* XXXX *) irrefutable_case()
+		fun refutable_case () = map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) sbnd_sdec_list
 		and irrefutable_case () = 
 		    let
 			val _ = debugdo (fn () => (print "about to call rebind_free_type_var:  var_poly = ";
@@ -902,8 +908,8 @@ functor Toil(structure Il : IL
 				     val cons = map (fn SDEC(l,DEC_EXP(_,c)) => c | _ => elab_error "Rule 237") sdecs
 				     fun mod_sig_help (l,c) =
 					 let val modapp = MOD_APP(MOD_VAR var',MOD_VAR var_poly)
-					     val inner_var = fresh_var()
-					     val outer_var = fresh_var()
+					     val inner_var = fresh_named_var "inner_valbind"
+					     val outer_var = fresh_named_var "outer_valbind"
 						 
 					     val temp_mod = MOD_STRUCTURE[SBND(it_lab,
 									       BND_EXP(inner_var,
@@ -934,7 +940,7 @@ functor Toil(structure Il : IL
 	       else refutable_case()
 	    end
 	| binddec as ((Ast.ValrecDec (_,ref tyvars)) | 
-		      (Ast.FunDec (_,ref tyvars))) => (* recursive value declarations: i.e. functions *)
+		      (Ast.FunDec (_,ref tyvars))) => (* recursive value dec: i.e. functions *)
 	      let
                   (* We must discover all the variables to generalize over.  For the user-level variables,
 		     we must also compile in a context with these user-level variables bound.  As a first
@@ -1044,7 +1050,7 @@ functor Toil(structure Il : IL
 		  val body_cons = map (#2 o #2) dec_list
 		  val matches_list = map #3 dec_list
 		  val fun_labs = map (fn l => internal_label (label2string l)) fun_ids
-		  val fun_vars = map (fn _ => fresh_var()) fun_ids
+		  val fun_vars = map (fn l => fresh_named_var (label2string l)) fun_ids
 
                   (* --- create the context with all the fun_ids typed --- *)
 		  val context_fun_ids = 
@@ -1091,8 +1097,8 @@ functor Toil(structure Il : IL
 
 		  val fbnds = map #1 fbnd_con_list
 		  val fbnd_cons : con list = map #2 fbnd_con_list
-		  val top_label = fresh_internal_label "top_label"
-		  val top_var = fresh_named_var "top_var"
+		  val top_label = fresh_internal_label "polyfuns"
+		  val top_var = fresh_named_var "polyfuns"
 		  val top_exp_con = (FIX(PARTIAL,fbnds),
 				     case fbnd_cons of
 					 [c] => c
@@ -1150,9 +1156,9 @@ functor Toil(structure Il : IL
 
 
 		  fun modsig_helper nameopt (id,(exp,con)) = 
-		      let val v1 = fresh_named_var "unused1"
+		      let val v1 = fresh_named_var "fixexp"
 			  val v2 = (case nameopt of
-					NONE => fresh_named_var "unused2"
+					NONE => fresh_named_var "polyfixexp"
 				      | SOME v => v)
 			  fun poly_case () = 
 			      let 
@@ -1218,10 +1224,10 @@ functor Toil(structure Il : IL
 	| Ast.ExceptionDec [Ast.EbGen {exn,etype}] =>
 		let 
 		  val id_bar = symbol_label exn
-		  val var = fresh_var()
+		  val var = fresh_named_var "exn_stamp"
 		  val mkvar = fresh_named_var "mk"
 		  val exnmodvar = fresh_named_var "exnmod"
-		  val v = fresh_var()
+		  val v = fresh_named_var "injectee"
 		  val con = (case etype of
 			       NONE => con_unit
 			     | SOME ty => xty(context,ty))
@@ -1247,9 +1253,9 @@ functor Toil(structure Il : IL
 			   val path_it_exp = MODULE_PROJECT(m,it_lab)
 			   val path_mk_con = GetExpCon(context,path_mk_exp)
 			   val path_it_con = GetExpCon(context,path_it_exp)
-			   val itvar = fresh_var()
-			   val mkvar = fresh_var()
-			   val modvar = fresh_var()
+			   val itvar = fresh_named_var "exn_tag"
+			   val mkvar = fresh_named_var "exn_injector"
+			   val modvar = fresh_named_var "exn_structure"
 			   val inner_mod = MOD_STRUCTURE[SBND(mk_lab, BND_EXP(mkvar,path_mk_exp)),
 							 SBND(it_lab, BND_EXP(itvar,path_it_exp))]
 			   val inner_sig = SIGNAT_STRUCTURE(NONE,
@@ -1391,8 +1397,9 @@ functor Toil(structure Il : IL
 	 fun doer tb = 
 	   let 
 	     val (tyc,tyvars,def) = tb_strip tb
-	     val vars = map (fn _ => fresh_var()) tyvars
-	     val tyvars_bar = map (fn s => symbol_label (tyvar_strip s)) tyvars
+	     val tyvars = map tyvar_strip tyvars
+	     val vars = map (fn s => gen_var_from_symbol s) tyvars
+	     val tyvars_bar = map (fn s => symbol_label s) tyvars
 	     val context' = (foldl (fn ((v,tv),c) => 
 				    add_context_con(c,tv,v,KIND_TUPLE 1,NONE))
 			     context (zip vars tyvars_bar))
@@ -1401,7 +1408,7 @@ functor Toil(structure Il : IL
 	     val (con,kind) = (case tyvars of
 				 [] => (con',KIND_TUPLE 1)
 			       | _ => (CON_FUN(vars,con'),KIND_ARROW(n,1)))
-	     val var = fresh_var()
+	     val var = gen_var_from_symbol tyc
 	     val tyc_bar = symbol_label tyc
 	   in (SOME(SBND(tyc_bar,BND_CON(var,con))),
 	       CONTEXT_SDEC(SDEC(tyc_bar,DEC_CON(var,kind,SOME con))))
@@ -1418,9 +1425,9 @@ functor Toil(structure Il : IL
 	     | loop ((sym,tyvars : Ast.tyvar list, tyopt)::rest) =
 		   let 
 		       val type_label = symbol_label sym
-		       val type_var = fresh_var()
+		       val type_var = gen_var_from_symbol sym
 		       val eq_label = to_eq_lab type_label
-		       val eq_var = fresh_var()
+		       val eq_var = fresh_named_var (label2string eq_label)
 		       val kind = 
 			   (case tyvars of
 				[] => KIND_TUPLE 1
@@ -1515,8 +1522,8 @@ functor Toil(structure Il : IL
 	       let 
 		 fun doer (sym,ty) = 
 		   (case (free_tyvar_ty(ty,fn _ => false)) of
-		      [] => SDEC(symbol_label sym, 
-				 DEC_EXP(fresh_var(),xty(context,ty)))
+			[] => SDEC(symbol_label sym, 
+				   DEC_EXP(gen_var_from_symbol sym,xty(context,ty)))
 		    | ftv_sym => 
 			let 
 			    val varpoly = fresh_named_var "var_poly"
@@ -1789,7 +1796,9 @@ functor Toil(structure Il : IL
 			 (case Context_Lookup(context,map symbol_label path) of
 			      SOME (path,PHRASE_CLASS_MOD(m,s as (SIGNAT_STRUCTURE _))) => ([],m,s)
 			    | _ => (error_region();
-				    print "unbound structure: ???\n";
+				    print "unbound structure: ";
+(*				    AstUtil.pp_exp
+				    print "\n"; *)
 				    ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE(NONE,[]))))
 	   | Ast.AppStr (_,[]) => parse_error "AppStr with no arguments"
 	   | Ast.AppStr (f,[(Ast.MarkStr (se,r),flag)]) =>
@@ -2350,15 +2359,15 @@ functor Toil(structure Il : IL
 		end
 	  | CON_SUM {carriers,noncarriers,special} =>
 		let 
-		    val v = fresh_var()
-		    val v1 = fresh_var()
-		    val v2 = fresh_var()
+		    val v = fresh_named_var "eqargpair"
+		    val v1 = fresh_named_var "eqarg1"
+		    val v2 = fresh_named_var "eqarg2"
 		    val paircon = con_tuple[con',con']
 		    val e1 = RECORD_PROJECT(VAR v,generate_tuple_label 1,paircon)
 		    val e2 = RECORD_PROJECT(VAR v,generate_tuple_label 2,paircon)
 		    val totalcount = (noncarriers + length carriers)
-		    fun help i = let val var' = fresh_var()
-				     val var'' = fresh_var()
+		    fun help i = let val var' = fresh_named_var "eqarg1"
+				     val var'' = fresh_named_var "eqarg2"
 				     val is_carrier = i >= noncarriers
 				     val sumc = CON_SUM{carriers=carriers,
 							noncarriers=noncarriers,
@@ -2402,8 +2411,8 @@ functor Toil(structure Il : IL
 		in #1(make_lambda(v,paircon,con_bool,
 				  make_let([(v1,e1),(v2,e2)],body)))
 		end
-	  | CON_ARRAY c => ETAPRIM(array_eq true,[c])
-	  | CON_VECTOR c => APP(ETAPRIM(array_eq false,[c]),self c)
+	  | CON_ARRAY c => ETAPRIM(equal_table WordArray,[c])
+	  | CON_VECTOR c => APP(ETAPRIM(equal_table WordVector,[c]),self c)
 	  | CON_REF c => ETAPRIM(eq_ref,[c])
 	  | CON_MODULE_PROJECT(m,l) => 
 		let val e = MODULE_PROJECT(m,to_eq_lab l)

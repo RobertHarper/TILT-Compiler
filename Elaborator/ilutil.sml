@@ -1047,6 +1047,16 @@ functor IlUtil(structure Ppil : PPIL
     val error_mod = fn m => fn s => error_obj pp_mod  "module" m s
     val error_sig = fn sg => fn s => error_obj pp_signat "signature" sg s
 
+    fun is_eq_lab lab = 
+	let val str = label2string lab
+	    val all = explode "_eq"
+	    fun match [] _ = true
+	      | match (a::arest) (b::brest) = 
+		(((a = b) andalso (match arest brest)) orelse (match all brest))
+	      | match _ _ = false
+	in  is_label_internal lab andalso (match all (explode str))
+	end
+
     fun to_eq_lab type_lab =
 	  let
 	      val type_str = label2string type_lab

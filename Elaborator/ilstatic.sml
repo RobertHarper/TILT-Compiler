@@ -864,7 +864,7 @@ functor IlStatic(structure Il : IL
 	  if (special<noncarriers)
 	      then (true,CON_SUM{noncarriers=noncarriers,
 				 carriers=map (fn c => Normalize(c,ctxt)) carriers,
-				 special=SOME special})
+				 special=NONE})
 	  else (error "INJ: bad injection")
     | (INJ {noncarriers,carriers,inject=SOME e,special}) =>
 	  if (special<noncarriers)
@@ -875,7 +875,7 @@ functor IlStatic(structure Il : IL
 		   val n = length clist
 	       in if (i < n andalso 
 		      (eq_con_from_get_exp7(econ, List.nth(clist,i), ctxt)))
-		      then (va,CON_SUM{noncarriers=noncarriers,carriers=clist,special=SOME special})
+		      then (va,CON_SUM{noncarriers=noncarriers,carriers=clist,special=NONE})
 		  else (error "INJ: injection field out of range")
 	       end
      | (EXN_CASE (arg,arms,eopt)) =>

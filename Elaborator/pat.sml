@@ -189,11 +189,12 @@ functor Pat(structure Il : IL
 		    then ()
 		else (error_region();
 		      print "ref pattern used on a non-ref argument\n")
-	val newargs = (CASE_NONVAR(fresh_var(),
-				   PRIM(deref,[elemcon],[VAR var]),
-				   elemcon))::args
+	val v = fresh_var()
+	val bnd' = BND_EXP(v,PRIM(deref,[elemcon],[VAR var]))
+	val newargs = (CASE_VAR(v,elemcon))::args
 	val newarms = map (fn (p,(c,b,eopt)) => (p::c,b,eopt)) acc
-    in match(newargs,newarms,def)
+	val (vc_ll, ec) = match(newargs,newarms,def)
+    in  (vc_ll, wrapbnd(SOME bnd',wrapbnd(bnd,ec)))
     end
 
   and var_case(arg1,
@@ -526,6 +527,7 @@ functor Pat(structure Il : IL
 	       fun var_dispatch() = 
 		 let 
 		   fun varpred (Ast.VarPat [v]) = if (is_constr [v]) then NONE else SOME v
+		     | varpred (Ast.WildPat) = SOME (Symbol.varSymbol "_")
 		     | varpred (Ast.VarPat _) = error "A variable pattern that is a path is illegal"
 		     | varpred _ = NONE
 		   val (accs,vc_ll2,def) = find_maxseq varpred arms
@@ -663,13 +665,6 @@ functor Pat(structure Il : IL
 		   in (vc_ll1 @ vc_ll2,ec)
 		   end
 
-		 fun wild_dispatch () = 
-		   let fun wildpred(Ast.WildPat) = SOME ()
-			 | wildpred _ = NONE
-		       val (accs,vc_ll2,def) = find_maxseq wildpred arms
-		       val (vc_ll,ec) = match(argrest,map #2 accs,def)
-		   in (vc_ll @ vc_ll2, ec)
-		   end
 
 	       in
 		 (case headpat1 of
@@ -692,7 +687,7 @@ functor Pat(structure Il : IL
 			let fun equaler v = 
 			    let val len = size ss
 				val lenbool = ILPRIM(eq_uint W32,[],
-						   [PRIM(length1 false,[CON_UINT W8],[VAR v]),
+						   [PRIM(length_table (IntVector W8),[],[VAR v]),
 						    SCON(uint (W32, TilWord64.fromInt len))])
 				val z = chr 0
 				val v' = fresh_var()
@@ -706,7 +701,7 @@ functor Pat(structure Il : IL
 					val e = TilWord64.orb(TilWord64.orb(a,b),TilWord64.orb(c,d))
 					val match = ILPRIM(eq_uint W32,[],
 							 [SCON(uint (W32, TilWord64.fromInt len)),
-							  PRIM(sub1 false, [CON_UINT W32], 
+							  PRIM(sub (IntVector W32),[],
 							       [VAR v', 
 								SCON(uint (W32, TilWord64.fromInt n))])])
 				    in  (case rest of
@@ -728,7 +723,7 @@ functor Pat(structure Il : IL
 		      in  constant_dispatch(CON_UINT W8,equaler)
 		      end
 		  | (Ast.RecordPat _ | Ast.TuplePat _) => tuple_record_dispatch()
-		  | (Ast.WildPat) => wild_dispatch()
+		  | (Ast.WildPat) => var_dispatch()
 		  | (Ast.VarPat p) => (if (is_constr p) then constructor_dispatch() 
 				      else if (is_exn p) then exn_dispatch() 
 					   else var_dispatch())
@@ -770,24 +765,70 @@ functor Pat(structure Il : IL
 						      | _ => error "parse_pat got pats")
 
 
+    fun get_bound (pat : Ast.pat) : Ast.symbol list = 
+	let open Ast
+	in  (case pat of
+	    WildPat => []
+          | VarPat [s] => [s]
+          | VarPat _ => []
+          | IntPat _ => []
+          | WordPat _ => []
+          | StringPat _ => []
+          | CharPat _ => []
+          | RecordPat {def:(symbol * pat) list, flexibility:bool} => Listops.flatten(map (fn (_,p) => get_bound p) def)
+          | ListPat p => Listops.flatten(map get_bound p)
+          | TuplePat p => Listops.flatten(map get_bound p)
+	  | FlatAppPat patfixes => Listops.flatten (map (fn ({item,...} : pat fixitem) => get_bound item) patfixes)
+          | AppPat {constr:pat,argument:pat} => (get_bound constr) @ (get_bound argument)
+          | ConstraintPat {pattern:pat,constraint:ty} => get_bound pattern
+          | LayeredPat {varPat:pat,expPat:pat} => (get_bound varPat) @ (get_bound expPat)
+          | VectorPat p => Listops.flatten(map get_bound p)
+          | MarkPat (p,r) => get_bound p
+          | OrPat _ => error "orpat not handler"
+          | DelayPat _ => error "delaypat not handled")
+	end
 
     (* ============ client interfaces =========================== *)
     (* ---- bindCompile creates bindings ----------------------- *)
     fun bindCompile {patarg = patarg as ({context,...} : patarg),
 		     bindpat : Ast.pat, 
-		     arg = (arge : exp, argc : con)}
+		     arg = (argvar : var, argc : con)}
                     : (sbnd * sdec) list =
       let 
 	val pat = parse_pat(patarg,bindpat)
-	val args = [CASE_NONVAR (fresh_named_var "bindComp",arge,argc)]
-	val arms = [([pat],[],NONE)]
+	val boundsyms = get_bound pat
+	val args = [CASE_VAR (argvar,argc)] 
+	val arms = [([pat],[],SOME(Ast.TupleExp(map (fn s => Ast.VarExp [s]) boundsyms)))]
 	val res_con = fresh_con context
 	val def = SOME (Il.RAISE(res_con,bindexn_exp),res_con)
-	val (e,c,bindings_list) = compile(patarg,args,arms,def)
+	val (binde,bindc,_) = compile(patarg,args,arms,def)
+	val _ = (print "bindcompile returned from compile.\nGot e = ";
+		 Ppil.pp_exp binde; print "\n\nand Got c = ";
+		 Ppil.pp_con bindc; print "\n\n")
+	fun default_case() : (sbnd * sdec) list = 
+	    let val l = fresh_internal_label "bind"
+		val v = fresh_named_var "bind"
+		val sbnd_sdec = (SBND(l,(BND_EXP(v,binde))),
+				 SDEC(l,(DEC_EXP(v,bindc))))
+		fun mapper(n,s) = 
+		    let val l = symbol_label s
+			val v = gen_var_from_symbol s
+			val c = (case bindc of
+				     CON_RECORD lc_list => #2(List.nth(lc_list,n))
+				   | _ => error "bindc not a tuple")
+			val e = RECORD_PROJECT(VAR v,generate_tuple_label (n+1) ,bindc)
+		    in   (SBND(l,(BND_EXP(v,e))),
+			  SDEC(l,(DEC_EXP(v,c))))
+		    end
+		val sbnd_sdec_proj = Listops.mapcount mapper boundsyms
+	    in  sbnd_sdec :: sbnd_sdec_proj
+	    end
+(*
 	val sc_list = (case bindings_list of
 			   [sc_list] => sc_list
 			 | [] => error "bindCompile: compile returned no bindings"
 			 | _ => error "bindCompile: compile returned more than one bindings")
+
 	fun default_case() = 
 	    (case bindings_list of
 		 (* if vc_list is of length 1, result was not tupled up *)
@@ -817,29 +858,35 @@ functor Pat(structure Il : IL
 	      end
 	  | [] => error "bindCompile: compile returned no bindings"
 	  | _ => error "bindCompile: compile returned more than one bindings")
+*)
 
 	  local
 	    exception CannotFlatten
 	    fun getvar(_,VAR v) = v
 	      | getvar _ = raise CannotFlatten
 	    fun flatten acc (RECORD le_list) = (acc,(map getvar le_list))
-	      | flatten acc (VAR v) = (acc,[v])
 	      | flatten acc (LET (bnds, rest)) = flatten (acc @ bnds) rest
 	      | flatten _ _ = raise CannotFlatten
 	    fun irrefutable_case (bnds,vlist) = 
-		let val table = Listops.zip vlist sc_list
+		let (* val table = Listops.zip vlist boundsyms *)
+		    fun mapper(v,s) = SBND(symbol_label s, BND_EXP(gen_var_from_symbol s, VAR v))
+		    val sbnds_second = map2 mapper (vlist,boundsyms)
+(*
 		    fun namer v = (case (assoc_eq(Name.eq_var, v, table)) of
-				       SOME (s,_) => symbol_label s
+				       SOME s => symbol_label s
 				     | _ => internal_label "lblx")
 		    fun make_sbnd(BND_EXP(v,e)) = SBND(namer v, BND_EXP(v,e))
 		      | make_sbnd(BND_MOD(v,m)) = SBND(namer v, BND_MOD(v,m))
 		      | make_sbnd(BND_CON(v,c)) = SBND(namer v, BND_CON(v,c))
-		    val sbnds = map make_sbnd bnds
+*)
+		    val sbnds_first = map (fn b => SBND(internal_label "lblx", b)) bnds
+		    val sbnds = sbnds_first @ sbnds_second
 		    val sdecs = IlStatic.GetSbndsSdecs(context,sbnds)
 		in  Listops.zip sbnds sdecs
 		end
-	in  val sbnd_sdecs = ((irrefutable_case (flatten [] e)) 
-			       handle CannotFlatten => default_case())
+	in  val sbnd_sdecs = (* default_case() *)
+	     ((irrefutable_case (flatten [] binde)) 
+			       handle CannotFlatten => default_case()) 
 	end
 	val _ = debugdo (fn () => (print "bindCompile returning sbnds_sdecs = \n";
 				   (pp_list (fn (sbnd,sdec) => Formatter.HOVbox[pp_sbnd' sbnd,
@@ -852,10 +899,10 @@ functor Pat(structure Il : IL
     (* ---- caseCompile compiles a case expression in to an Il.exp/Il.con --- *)
     fun caseCompile {patarg = patarg as ({context,...} : patarg),
 		     arms = cases : (Ast.pat * Ast.exp) list, 
-		     arg = (arge : Il.exp, argc : Il.con)}
+		     arg = (argvar : Il.var, argc : Il.con)}
       : Il.exp * Il.con = 
       let 
-	val args = [CASE_NONVAR (fresh_named_var "caseComp", arge,argc)]
+	val args = [CASE_VAR (argvar,argc)]
 	val arms : arm list = map (fn (pat,body) => ([parse_pat(patarg,pat)],[], SOME body)) cases
 	val res_con = fresh_con context
 	val def = SOME (Il.RAISE(res_con,matchexn_exp),res_con)

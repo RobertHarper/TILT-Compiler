@@ -113,31 +113,53 @@ struct
 	       lesseq_uint is | greatereq_uint is),[]) => help'([con_uint is, con_uint is], con_bool)
 (*	  | cons {instance} => help'([instance,con_list instance],con_list instance) *)
 
-	  | (array1 true, [instance]) => thelp'([con_uint W32, instance], con_array instance)
-	  | (length1 true, [instance]) => thelp(con_array instance, con_uint W32)
-	  | (array2vector, [instance]) => thelp(con_array instance, con_vector instance)
-	  | (sub1 true, [instance]) => thelp'([con_array instance, con_uint W32], instance)
-	  | (array_eq true, [instance]) => help'([con_array instance, con_array instance],con_bool)
+	     | (((array2vector aggregate) | (create_table aggregate) | 
+		 (length_table aggregate) | (sub aggregate) | (update aggregate) | 
+		 (equal_table aggregate)), cons) =>
+	     let fun create_array instance = thelp'([con_uint W32, instance], con_array instance)
+		 fun create_vector instance = thelp'([con_uint W32, instance], con_vector instance)
+		 fun len_array instance = thelp(con_array instance, con_uint W32)
+		 fun len_vector instance = thelp(con_vector instance, con_uint W32)
+		 fun sub_array instance = thelp'([con_array instance, con_uint W32], instance)
+		 fun sub_vector instance = thelp'([con_vector instance, con_uint W32], instance)
+		 fun update_array instance =  thelp'([con_array instance, con_uint W32, instance], con_unit)
+		 fun update_vector instance =  thelp'([con_vector instance, con_uint W32, instance], con_unit)
+		 fun eq_array instance = help'([con_array instance, con_array instance],con_bool)
+		 fun eq_vector instance = help(help'([instance, instance],con_bool),
+					       help'([con_vector instance, 
+						      con_vector instance],con_bool))
+		 fun array2vector_array instance = thelp(con_array instance, con_vector instance)
+		 fun do_array instance = 
+		     (case prim of
+			  create_table _ => create_array instance
+			| length_table _ => len_array instance
+			| sub _ => sub_array instance
+			| update _ => update_array instance
+			| equal_table _ => eq_array instance
+			| array2vector _ => array2vector_array instance
+			| _ => error "pattern impossibility")
+		 fun do_vector instance = 
+		     (case prim of
+			  create_table _ => create_vector instance
+			| length_table _ => len_vector instance
+			| sub _ => sub_vector instance
+			| update _ => update_vector instance
+			| equal_table _ => eq_vector instance
+			| array2vector _ => error "no you're not turning a vector back to an array"
+			| _ => error "pattern impossibility")
 
-	  | (array1 false, [instance]) => help'([con_uint W32, instance], con_vector instance)
-	  | (length1 false, [instance]) => thelp(con_vector instance, con_uint W32)
-	  | (sub1 false, [instance]) => thelp'([con_vector instance, con_uint W32], instance)
-	  | (array_eq false, [instance]) => help(help'([instance, instance],con_bool),
-					    help'([con_vector instance, 
-						   con_vector instance],con_bool))
-		
-(*	  | output => help'([con_int, con_string], con_unit) *)
-	      
-	  | (update1, [instance]) => thelp'([con_array instance, con_uint W32, instance], con_unit)
-	  | (intsub1 true, []) => thelp'([con_array (con_uint W32), con_uint W32], con_int W32)
-	  | (floatsub1 true, []) => thelp'([con_array (con_float F64), con_uint W32], con_float F64)
-	  | (ptrsub1 true, [instance]) => thelp'([con_array instance, con_uint W32], instance)
-	  | (intsub1 false, []) => thelp'([con_vector (con_uint W32), con_uint W32], con_int W32)
-	  | (floatsub1 false, []) => thelp'([con_vector (con_float F64), con_uint W32], con_float F64)
-	  | (ptrsub1 false, [instance]) => thelp'([con_vector instance, con_uint W32], instance)
-	  | (intupdate1, []) => thelp'([con_array (con_uint W32), con_uint W32, con_int W32], con_unit)
-	  | (floatupdate1, []) => thelp'([con_array (con_float F64), con_uint W32, con_float F64], con_unit)
-	  | (ptrupdate1, [instance]) => thelp'([con_array instance, con_uint W32, instance], con_unit)
+	     in  (case (aggregate,cons) of
+		      (WordArray, [instance]) => do_array instance
+		    | (WordVector, [instance]) => do_vector instance
+		    | (PtrArray, [instance]) => do_array instance
+		    | (PtrVector, [instance]) => do_vector instance
+		    | (IntArray is, []) => do_array (con_uint is)
+		    | (IntVector is, []) => do_vector (con_uint is)
+		    | (FloatArray fs, []) => do_array (con_float fs)
+		    | (FloatVector fs, []) => do_vector (con_float fs)
+		    | _ => error "ill-formed table primitive")
+	     end
+
 
 	  | _ => (Ppprim.pp_prim prim;
 		  error "can't get type")
@@ -302,11 +324,11 @@ struct
 	  | (lesseq_uint is, [], _) => ipred is (TilWord64.ulte)
 	  | (greatereq_uint is, [], _) => ipred is (TilWord64.ugte)
 					
-	  | (length1 _, [instance], _) => raise UNIMP
-	  | (sub1 _,_,_)  => raise UNIMP
-	  | (array1 _,_,_)  => raise UNIMP
-	  | (update1, _, _) => raise UNIMP
-	  | (array_eq _,_,_)  => raise UNIMP
+	  | (length_table _, [instance], _) => raise UNIMP
+	  | (sub _,_,_)  => raise UNIMP
+	  | (create_table _,_,_)  => raise UNIMP
+	  | (update _, _, _) => raise UNIMP
+	  | (equal_table _, _,_)  => raise UNIMP
 
 	  | (output,_,[e]) => 
 		(case (exp2value e) of

@@ -16,7 +16,7 @@ signature LINKIL =
       val setdepth : int -> unit (* printing depth *)
   end
 
-structure LinkIl : LINKIL =
+structure LinkIl (* : LINKIL *) = 
     struct
 	structure Tyvar = Tyvar();
 	structure Prim = Prim();
