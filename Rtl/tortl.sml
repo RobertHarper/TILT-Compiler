@@ -2201,6 +2201,7 @@ val debug = ref false
 	  fun nonfloatcase is = xintptrsub(state,is,c,vl1,vl2)
 	  val r = (case (simplify_type state c) of
 		       (true,Prim_c(Float_c Prim.F64,[])) => I(boxFloat (floatcase()))
+		     | (true,Prim_c(BoxFloat_c Prim.F64,[])) => I(boxFloat (floatcase()))
 		     | (true,Prim_c(Int_c Prim.W8,[])) => I(nonfloatcase Prim.W8)
 		     | (true,_) => I(nonfloatcase Prim.W32)
 		     | (false,c') => let val (r,_) = xcon(state,fresh_var(),c')
@@ -2210,6 +2211,8 @@ val debug = ref false
 					 val floatl = alloc_code_label()
 					 val charl = alloc_code_label()
 					 val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
+						  add_instr(BCNDI(NE,tmp,floatl,false));
+						  add_instr(CMPUI(EQ, r, IMM 7, tmp));
 						  add_instr(BCNDI(NE,tmp,floatl,false));
 						  add_instr(CMPUI(EQ, r, IMM 0, tmp));
 						  add_instr(BCNDI(NE,tmp,charl,false)))
@@ -2308,6 +2311,7 @@ val debug = ref false
       let
 	  val r = (case (simplify_type state c) of
 		       (true,Prim_c(Float_c Prim.F64,[])) => (xfloatupdate(vl1,vl2,vl3); ())
+		     | (true,Prim_c(BoxFloat_c Prim.F64,[])) => (xfloatupdate(vl1,vl2,vl3); ())
 		     | (true,Prim_c(Float_c Prim.F32,[])) => error "32-bit floats not done"
 		     | (true,Prim_c(Int_c is,[])) => (xintupdate(is,vl1,vl2,vl3); ())
 		     | (true,_) => (xptrupdate(c,vl1,vl2,vl3); ())
@@ -2318,10 +2322,12 @@ val debug = ref false
 					 val intl = alloc_code_label()
 					 val charl = alloc_code_label()
 					 val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
-						  add_instr(BCNDI(NE,tmp,floatl,false)))
-					 val _ = (add_instr(CMPUI(EQ, r, IMM 2, tmp));
-						  add_instr(BCNDI(NE,tmp,intl,false)))
-					 val _ = (add_instr(CMPUI(EQ, r, IMM 0, tmp));
+						  add_instr(BCNDI(NE,tmp,floatl,false));
+						  add_instr(CMPUI(EQ, r, IMM 7, tmp));
+						  add_instr(BCNDI(NE,tmp,floatl,false));
+						  add_instr(CMPUI(EQ, r, IMM 2, tmp));
+						  add_instr(BCNDI(NE,tmp,intl,false));
+						  add_instr(CMPUI(EQ, r, IMM 0, tmp));
 						  add_instr(BCNDI(NE,tmp,charl,false)))
 					 val _ = xptrupdate(c,vl1,vl2,vl3)
 					 val _ = add_instr(BR afterl)
@@ -2357,6 +2363,7 @@ val debug = ref false
 	  val _ = add_instr(LOAD32I(EA(src,~4),dest))
 	  val _ = (case (simplify_type state c) of
 		       (true,Prim_c(Float_c Prim.F64,[])) => add_instr(SRL(dest,IMM real_len_offset,dest))
+		     | (true,Prim_c(BoxFloat_c Prim.F64,[])) => add_instr(SRL(dest,IMM real_len_offset,dest))
 		     | (true,Prim_c(Int_c Prim.W8,[])) => add_instr(SRL(dest,IMM int_len_offset,dest))
 		     | (true,Prim_c(Int_c Prim.W16,[])) => add_instr(SRL(dest,IMM (1 + int_len_offset),dest))
 		     | (true,Prim_c(Int_c Prim.W32,[])) => add_instr(SRL(dest,IMM (2 + int_len_offset),dest))
@@ -2367,6 +2374,8 @@ val debug = ref false
 					 val floatl = alloc_code_label()
 					 val intl = alloc_code_label()
 				     in (add_instr(CMPUI(EQ, r, IMM 11, tmp));
+					 add_instr(BCNDI(NE,tmp,floatl,false));
+					 add_instr(CMPUI(EQ, r, IMM 7, tmp));
 					 add_instr(BCNDI(NE,tmp,floatl,false));
 					 add_instr(CMPUI(EQ, r, IMM 2, tmp));
 					 add_instr(BCNDI(NE,tmp,intl,false));
@@ -2645,10 +2654,12 @@ val debug = ref false
 				       val intl = alloc_code_label()
 				       val charl = alloc_code_label()
 				       val _ = (add_instr(CMPUI(EQ, r, IMM 11, tmp));
-						add_instr(BCNDI(NE,tmp,floatl,false)))
-				       val _ = (add_instr(CMPUI(EQ, r, IMM 2, tmp));
-						add_instr(BCNDI(NE,tmp,intl,false)))
-				       val _ = (add_instr(CMPUI(EQ, r, IMM 0, tmp));
+						add_instr(BCNDI(NE,tmp,floatl,false));
+						add_instr(CMPUI(EQ, r, IMM 7, tmp));
+						add_instr(BCNDI(NE,tmp,floatl,false));
+						add_instr(CMPUI(EQ, r, IMM 2, tmp));
+						add_instr(BCNDI(NE,tmp,intl,false));
+						add_instr(CMPUI(EQ, r, IMM 0, tmp));
 						add_instr(BCNDI(NE,tmp,charl,false)))
 				       val _ = ptrcase(dest,vl1,vl2)
 				       val _ = add_instr(BR afterl)
