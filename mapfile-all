@@ -58,6 +58,8 @@ Linksparc     Sparc/linksparc
 // ----------------- Top directory -----------------
 DELAY Top/delay.sig
 Delay Top/delay
+POPEN Top/popen.sig
+Popen Top/popen
 DIRS Top/dirs.sig
 Dirs Top/dirs
 COMPILER Top/compiler.sig

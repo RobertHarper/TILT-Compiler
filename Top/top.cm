@@ -15,6 +15,10 @@ Group is
 ../Ppc/ppc.cm
 ../C/c.cm
 *)
+delay.sig.sml
+delay.sml
+popen.sig.sml
+popen.sml
 dirs.sig.sml
 dirs.sml
 (*
@@ -24,8 +28,6 @@ measure.sig.sml
 measure.sml
 distribute.sml
 *)
-delay.sig.sml
-delay.sml
 compiler.sig.sml
 compiler.sml
 manager.sig.sml

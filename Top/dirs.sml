@@ -1,6 +1,6 @@
 (*$import TopLevel DIRS Delay Util *)
 
-structure Dirs =
+structure Dirs :> DIRS =
 struct
 
     (* error : string -> 'a *)
@@ -128,10 +128,5 @@ struct
     fun getRuntimeDir (DIRS {runtimeDir,...}) = runtimeDir
     fun getBinDir     (DIRS {binDir,...})     = binDir
     fun getCommDir    (DIRS {commDir,...})    = commDir
-
-    (* runtime, bin, lib : dirs * string -> string *)
-    fun runtime (dirs, name) = relative (getRuntimeDir dirs, name)
-    fun bin (dirs, name) = relative (getBinDir dirs, name)
-    fun lib (dirs, name) = relative (getLibDir dirs, name)
 
 end

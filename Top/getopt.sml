@@ -1,6 +1,6 @@
 (*$import GETOPT TopLevel *)
 
-structure Getopt : GETOPT =
+structure Getopt :> GETOPT =
 struct
 
     datatype 'a opt =

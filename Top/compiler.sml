@@ -35,6 +35,10 @@ structure Til :> COMPILER =
 	   | (TIL_SPARC, Platform.SOLARIS) => true
 	   | (TIL_SPARC, _) => false
 	   | _ => error "MLRISC not supported")
+	     
+    (* checkNative : unit -> unit *)
+    fun checkNative () = if native() then ()
+			 else error "No backend exists for this platform."
 
     type sbnd = Il.sbnd
     type context_entry = Il.context_entry

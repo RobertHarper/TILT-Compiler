@@ -1504,10 +1504,6 @@ struct
 
   val error = fn s => Util.error "manager.sml" s
 
-  (* checkNative : unit -> unit *)
-  fun checkNative () = if Til.native() then ()
-		       else error "No backend exists for this platform."
-			   
   open Help
 
   val slave = Slave.run
@@ -1522,7 +1518,7 @@ struct
 	end
 
   fun master mapfile = 
-      let val _ = checkNative()
+      let val _ = Til.checkNative()
 	  val _ = startTime "Starting compilation"
 	  val _ = helper Master.run (mapfile, false, NONE, [])
 	  val _ = showTime (true,"Finished compilation")
@@ -1531,7 +1527,7 @@ struct
   fun slaves (slaveList : (int * string) list) =
       let val dirs = Dirs.getDirs()
 	  val commDir = Dirs.getCommDir dirs
-	  val script = Dirs.bin (dirs, "til_slave")
+	  val script = Dirs.relative (Dirs.getBinDir dirs, "til_slave")
 	  fun cmdline (num, count, machine) =
 	      String.concat [script, " ", Int.toString num, " ", Int.toString count, " ",
 			     machine, " ", commDir, "&"]
@@ -1544,7 +1540,7 @@ struct
       end
 
   fun tilc arg =
-      let val _ = checkNative()
+      let val _ = Til.checkNative()
 	  fun runner args = 
 	  let val {setup,step,complete} = Master.once args
 	      val _ = Slave.setup()
@@ -1565,7 +1561,7 @@ struct
   fun purge mapfile = Master.purge mapfile
 
   fun buildRuntime rebuild = 
-      let val _ = checkNative()
+      let val _ = Til.checkNative()
 	  val command = if rebuild then "cd Runtime; gmake purge; gmake runtime"
 			else "cd Runtime; gmake runtime"
       in  if Util.system command then () else error "Error in building runtime"

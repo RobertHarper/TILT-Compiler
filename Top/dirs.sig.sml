@@ -31,9 +31,5 @@ sig
     val getBinDir     : dirs -> string
     val getCommDir    : dirs -> string
 
-    val runtime : dirs * string -> string
-    val bin     : dirs * string -> string
-    val lib     : dirs * string -> string
-
 end
 

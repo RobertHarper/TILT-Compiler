@@ -1,54 +1,68 @@
-(*$import LINKER Compiler Util Crc Listops OS Name Linkalpha Linksparc Dirs *)
+(*$import LINKER Compiler Util Crc Listops OS Name Linkalpha Linksparc Dirs Popen *)
 structure Linker :> LINKER =
   struct
 
     val debug_asm = Stats.bool("debug_asm")
-
-    val as_path = "as"
-    fun preld() = 
-	let val alpha = "ld -r " 
-	    val solaris = "ld -r "
-	in   case (Til.getTargetPlatform()) of
-	       Til.MLRISC_ALPHA => alpha
-	     | Til.TIL_ALPHA => alpha
-	     | Til.TIL_SPARC => solaris
-	     | Til.MLRISC_SPARC => solaris
-	end
-    fun ld() = 
-	let val alpha = 
-	    if (!debug_asm) then
-		"ld -D a000000 -T 8000000 -g" 
-	    else
-		"ld -D a000000 -T 8000000"
-	    val solaris = "ld"
-	in   case (Til.getTargetPlatform()) of
-	       Til.MLRISC_ALPHA => alpha
-	     | Til.TIL_ALPHA => alpha
-	     | Til.TIL_SPARC => solaris
-	     | Til.MLRISC_SPARC => solaris
-	end
-    fun crt dirs = 
-	let val alpha = "/usr/lib/cmplrs/cc/crt0.o "
-	    val solaris = Dirs.runtime (dirs, "obj_solaris/firstdata.o") ^ " /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crt1.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crti.o /usr/ccs/lib/values-Xa.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtbegin.o  -L/usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2 -L/usr/ccs/bin -L/usr/ccs/lib -L/usr/local/lib"
-	in   case (Til.getTargetPlatform()) of
-	       Til.MLRISC_ALPHA => alpha
-	     | Til.TIL_ALPHA => alpha
-	     | Til.TIL_SPARC => solaris
-	     | Til.MLRISC_SPARC => solaris
-	end
-    fun ld_libs dirs = 
-	let val alpha = Dirs.runtime (dirs, "runtime.alpha_osf.a") ^ " -call_shared -lpthread -lmach -lexc -lm -lc"
-	    val solaris = Dirs.runtime (dirs, "runtime.solaris.a") ^ " -lpthread -lposix4 -lm -lc -lgcc /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtend.o /usr/local/lib/gcc-lib/sparc-sun-solaris2.4/2.7.2/crtn.o"
-	in  case (Til.getTargetPlatform()) of
-	       Til.MLRISC_ALPHA => alpha
-	     | Til.TIL_ALPHA => alpha
-	     | Til.TIL_SPARC => solaris
-	     | Til.MLRISC_SPARC => solaris
-	end
     val error = fn x => Util.error "Linker" x
 
-    structure Crc = Crc
+    type config = {assembler : string list,
+		   linker : string list,
+		   ldpre : string list,
+		   ldpost : string list}
 
+    (* runtimeFile : string -> string *)
+    fun runtimeFile path = Dirs.relative (Dirs.getRuntimeDir (Dirs.getDirs()), path)
+	
+    val gccPath : string Delay.value =
+	Delay.delay (fn () =>
+		     let val gcc = "gcc"
+			 val path = ["/usr/local/bin", "/usr/bin"]
+			 val which = Dirs.accessPath (path, [OS.FileSys.A_EXEC])
+		     in
+			 case which gcc
+			   of NONE => gcc
+			    | SOME gcc' => gcc'
+		     end)
+
+    (* chop : string -> string *)
+    fun chop "" = ""
+      | chop s = String.extract (s, 0, SOME (size s - 1))
+
+    (* gccFile : string -> string *)
+    fun gccFile file = chop (Popen.outputOf (Delay.force gccPath ^ " --print-file-name=" ^ file))
+
+    val sparcConfig : config Delay.value =
+	Delay.delay (fn () =>
+		     let
+			 val _ = Til.checkNative()	(* gccFile only works native *)
+		     in
+			 {assembler = ["/usr/ccs/bin/as"],
+			  linker    = ["/usr/ccs/bin/ld"], (* -L/usr/local/lib ? *)
+			  ldpre     = [runtimeFile "obj_solaris/firstdata.o", gccFile "crt1.o", gccFile "crti.o",
+				       "/usr/ccs/lib/values-Xa.o", gccFile "crtbegin.o"],
+			  ldpost    = [runtimeFile "runtime.solaris.a", "-lpthread","-lposix4", "-lm", "-lc",
+				       gccFile "libgcc.a", gccFile "crtend.o", gccFile "crtn.o"]}
+		     end)
+    val alphaConfig : config Delay.value =
+	Delay.delay (fn() =>
+		     let
+			 val debug = if (!debug_asm) then ["-g"] else nil
+		     in
+			 {assembler = ["/usr/bin/as"],
+			  linker    = ["/usr/bin/ld", "-call_shared", "-D", "a000000", "-T", "8000000"] @ debug,
+			  ldpre     = ["/usr/lib/cmplrs/cc/crt0.o"],
+			  ldpost    = [runtimeFile "runtime.alpha_osf.a", "-lpthread", "-lmach", "-lexc", "-lm", "-lc"]}
+		     end)
+
+    (* targetConfig : unit -> config *)
+    fun targetConfig () =
+	Delay.force (case Til.getTargetPlatform()
+		       of Til.MLRISC_ALPHA => alphaConfig
+			| Til.TIL_ALPHA => alphaConfig
+			| Til.TIL_SPARC => sparcConfig
+			| Til.MLRISC_SPARC => sparcConfig)
+    
+    structure Crc = Crc
 
     (* -------------------------------------------------------
      * Unit Environments:  A unit environment UE is a mapping
@@ -150,7 +164,7 @@ structure Linker :> LINKER =
 	let val file = String.extract (code, 1, NONE)
 	in
 	    case String.sub (code, 0)
-	      of #"L" => Dirs.lib (dirs, file)
+	      of #"L" => Dirs.relative (Dirs.getLibDir dirs, file)
 	       | #"U" => file
 	end
 
@@ -257,52 +271,56 @@ structure Linker :> LINKER =
       in  (imports, o_files)
       end
 
+    (* run' : string list -> unit *)
+    fun run' nil = ()
+      | run' (cmd :: args) =
+	let
+	    val command = List.foldr (fn (a,b) => a ^ " " ^ b) "" (cmd::args)
+	    val _ = (print "Running: "; print command; print "\n")
+	in
+	    if Util.system command then ()
+	    else error (cmd ^ " failed")
+	end
+    (* run : string list list -> unit *)
+    val run = run' o List.concat
+    
     (* mk_exe: Make an executable from a uo-file and check 
      * that the sequence of imports is empty. *)
     fun mk_exe {units : package list,
 		exe_result : string} : unit =
       let val (imports, o_files) = check units
-      in case imports of
-	  nil => (* everything has been resolved *)
-	      let val link = "link_" ^ exe_result
-		  val unitnames = map #unit units
-		  val local_labels = map (fn un => Rtl.ML_EXTERN_LABEL
-					  (un ^ "_unit")) unitnames
-		  val link_s = (case (Til.getTargetPlatform()) of
-				Til.TIL_ALPHA => Linkalpha.link
-			      |	Til.TIL_SPARC => Linksparc.link
-    (*			      | Til.MLRISC_ALPHA => AlphaLink.link 
-			      | Til.MLRISC_SPARC => SparcLink.link*))
-		      (link, local_labels)
-		  val link_o = (String.substring(link_s,0,size link_s - 2)) ^ ".o"
-		  val success = Util.system (as_path ^ " -o " ^ link_o ^ " " ^ link_s)
-		   val _ = if success then ()
-			   else error "mk_exe - as failed"
-
-		   val o_files_str = foldl (fn (a,b) => a ^ " " ^ b) "" o_files
-		   val dirs = Dirs.getDirs()
-		   val command = (ld() ^ " -o " ^
-				  exe_result ^ " " ^ (crt dirs) ^ " " ^ 
-				     o_files_str ^ " " ^ link_o ^ " " ^ ld_libs dirs)
-		   val _ = (print "Running: "; print command; print "\n")
-		   val success = Util.system command
-		   val _ = if success then ()
-			   else (print "load failed: "; print command; print "\n";
-				 error "mk_exe - ld failed")
-		   val rmcommand = "rm " ^ link_s ^ "; rm " ^ link_o ^ "\n"
-		   val _ = if !(Stats.bool("keep_asm"))
-			       then () else (Util.system rmcommand; ())
-	       in ()
-	       end
-	    | _ => let val units = map #1 imports
-	               fun pr_units [] = error "pr_units"
-			 | pr_units [a] = a
-			 | pr_units (a::rest) = (a ^ ", " ^ pr_units rest)
-		   in print ("\nError! The units : [" ^ pr_units units ^ 
-			     "] have not been resolved. I cannot generate\n" ^
-			     "an executable for you.\n"); error "mk_exe"
-		   end
+      in
+	  case imports
+	    of nil => (* everything has been resolved *)
+		let
+		    val {assembler, linker, ldpre, ldpost} = targetConfig()
+		    val link = "link_" ^ exe_result
+		    val unitnames = map #unit units
+		    val local_labels = map (fn un => Rtl.ML_EXTERN_LABEL
+					    (un ^ "_unit")) unitnames
+		    val link_s = (case (Til.getTargetPlatform()) of
+				      Til.TIL_ALPHA => Linkalpha.link
+				    |	Til.TIL_SPARC => Linksparc.link
+				  (*| Til.MLRISC_ALPHA => AlphaLink.link 
+			            | Til.MLRISC_SPARC => SparcLink.link*)) (link, local_labels)
+		    val link_o = (String.substring(link_s,0,size link_s - 2)) ^ ".o"
+			
+		    val _ = run [assembler, ["-o", link_o, link_s]]
+		    val _ = run [linker, ["-o", exe_result], ldpre, o_files, [link_o], ldpost]
+		    val _ = if !(Stats.bool("keep_asm"))
+				then List.app OS.FileSys.remove [link_s, link_o]
+			    else ()
+		in
+		    ()
+		end
+	     | _ => let val units = map #1 imports
+			fun pr_units [] = error "pr_units"
+			  | pr_units [a] = a
+			  | pr_units (a::rest) = (a ^ ", " ^ pr_units rest)
+		    in print ("\nError! The units : [" ^ pr_units units ^ 
+			      "] have not been resolved. I cannot generate\n" ^
+			      "an executable for you.\n"); error "mk_exe"
+		    end
       end
-
   end
 

@@ -26,6 +26,7 @@ signature COMPILER =
     * label for `initialization' with name `unitName_doit'. 
     *)
    val native : unit -> bool                              (* can we invoke assembler *)
+   val checkNative : unit -> unit
    val il_to_asm : string * string * Il.module -> string  (* unitName, fileBase -> .s *)
    val assemble  : string -> string                       (* fileBase -> .o, if platform matches *)
    val assemble_start : string -> string                  (* fileBase -> .o, if platform matches *)
