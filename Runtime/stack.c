@@ -33,7 +33,6 @@ long TotalStackDepth = 0;
 long TotalNewStackDepth = 0;
 long TotalStackSize  = 0;
 
-extern mem_t start_client_retadd_val;
 
 #define GET_ENTRYSIZE(x)      ((x)         & 65535)
 #define GET_FRAMESIZE(x)      (((x) >> 16) & 65535)
