@@ -65,6 +65,7 @@ NilOpts/squish.sml
 NilOpts/exptable.sig.sml
 NilOpts/exptable.sml
 NilOpts/pass.sig.sml
+NilOpts/rename.sml
 NilOpts/anormalize-cse.sml
 NilOpts/reduce.sml
 NilOpts/flattenargs.sml

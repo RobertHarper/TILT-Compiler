@@ -362,9 +362,9 @@ struct
 	  | (Let_c _, _) =>  GREATER 
 	  | (_, Let_c _) =>  LESS
 
-	  | (Typecase_c rec1, Typecase_c rec2) => raise UNIMP
-	  | (Typecase_c _, _) =>  raise UNIMP (* GREATER *)
-	  | (_, Typecase_c _) =>  raise UNIMP (* LESS*)
+	  | (Typecase_c rec1, Typecase_c rec2) => EQUAL
+	  | (Typecase_c _, _) =>  GREATER 
+	  | (_, Typecase_c _) =>  LESS
 
 
 
@@ -387,7 +387,7 @@ struct
 	  | ( AllArrow_c _, _) => GREATER
 	  | ( _, AllArrow_c _ ) => LESS
 
-	  | (Annotate_c _, Annotate_c _) => raise UNIMP 
+	  | (Annotate_c _, Annotate_c _) => EQUAL
 
     and cmp_allprim ((NilPrimOp p1), (NilPrimOp p2))= 
 	( case (p1, p2) of 

@@ -98,6 +98,8 @@ functor Anormalize (structure Normalize : NORMALIZE
 struct 
 
     structure Nil = Nil
+    structure Rename = Rename(structure Nil=Nil);
+
     open Nil Name Util Nil.Prim
 
     type context = NilContext.context  
@@ -124,7 +126,8 @@ struct
 
 	
     val do_cse = NilOpts.do_cse
-    val agressive_cse = ref true
+    val agressive_cse = ref true (* cse con-funs, mu's, arrows etc *)
+    val really_agressive_cse = ref true (* cse all cons regardless of cost *)
 
     val cse_exp_click = (NilOpts.make_click "CSE expressions")
     val cse_con_click = (NilOpts.make_click "CSE constructors")
@@ -142,12 +145,61 @@ struct
     val fntable = Name.mk_var_hash_table (200, FnNotFound):
 	(var, bool) HashTable.hash_table
 	
+
+    (* What kind of cse is going on for constructors ... let's find out! *)
+    exception NotFound 
+    fun stringHash str = 
+	Word.fromInt (foldl (fn (c, sum) => sum + (Char.ord c)) 0 (String.explode str))
+    fun stringEq (str1, str2) = 
+	str1 = str2
+
+    val csetable = HashTable.mkTable (stringHash, stringEq) (20, NotFound) :  (string, int ref) HashTable.hash_table
+    fun cse_record_con con = 
+	let val inc = fn str =>   
+	    let val x = (( HashTable.lookup csetable str) handle NotFound => (HashTable.insert csetable (str, ref 0); HashTable.lookup csetable str))
+	    in 
+		x := !x + 1
+	    end 
+	in 
+	    case con of 
+		Prim_c _ => inc "Prim_c"
+	      | Mu_c _ => inc "Mu_c"
+	      | AllArrow_c _ => inc "Arrow_c"
+	      | Var_c _  => inc "Var_c"
+	      | Let_c (_, [Open_cb _], _) => inc "Fun_c"
+	      | Let_c _ => inc "Let_c"
+	      | Crecord_c _ => inc "Record_c"
+	      | Proj_c _ => inc "Proj_c"
+	      | App_c _ => inc "App_c"
+	      | Typecase_c _ => inc "Typecase_c"
+	      | Closure_c _ => inc "Closure_c"
+	      | Annotate_c _ => inc "Annotate_c"
+	end 
+
+    fun cse_record_exp exp = 
+	let val inc = fn str =>   
+	    let val x = (( HashTable.lookup csetable str) handle NotFound => (HashTable.insert csetable (str, ref 0); HashTable.lookup csetable str))
+	    in 
+		x := !x + 1
+	    end 
+	in 
+	    case exp of 
+		Var_e _ => inc "Var_e"
+	      | Const_e _ => inc "Const_e"
+	      | Let_e _ => inc "Let_e"
+	      | Prim_e _ => inc "Prim_e"
+	      | Switch_e _ => inc "Switch_e"
+	      | App_e _ => inc "App_e"
+	      | Raise_e _ => inc "Raise_e"
+	      | Handle_e _ => inc "Handle_e"
+	end
+
     (* Does this primitive cause any side effects? Now as I see it
      there are several ways to do this. Right now I implement (b) as 
      it is the simplest.
      a. eliminate references and array subscripts, and clear out the
      available expressions after function calls.
-     b. don't eliminate refs, but keep all avail expressions around.
+     b. don't eliminate derefs and subs, but keep all avail expressions around.
      c. do both (only clear out available derefs and subs after
      function calls)
      *)
@@ -185,7 +237,7 @@ struct
 	      ( case Expmap.find (ae, exp) of 
 		    SOME (var, tau) => 
 			if NilStatic.con_equiv (D, sigma, tau) then 
-			    ( inc_click cse_exp_click ; Var_e var )
+			    ( inc_click cse_exp_click ; cse_record_exp exp; Var_e var )
 			else exp
 		  | NONE => exp)
 	  else exp)
@@ -203,7 +255,8 @@ struct
 	    ( Prim_c _ | Crecord_c _ | Proj_c _ | App_c _ ) => true
 	  | ( AllArrow_c _ | Mu_c _ ) => !agressive_cse
 	  |  Let_c (s1, [Open_cb f1], Var_c v1) => !agressive_cse      
-	  | _ => false)
+	  | _ => !really_agressive_cse)
+	  
 
     (* Should really check the kinds here as well to see if they match *)
     fun cse_con con ac D =
@@ -211,7 +264,9 @@ struct
 	 if (is_elim_con con) then  
 	      ( case Conmap.find (ac, con) of 
 		    SOME (var) => 
-			( inc_click cse_con_click ; Var_c var )
+			( inc_click cse_con_click ; 
+			 cse_record_con con ; 
+			 Var_c var )
 		  | NONE => con)
 	  else con)
 
@@ -330,7 +385,10 @@ struct
 *)
 	let val con = Normalize.con_normalize D con
 	    val kind = Normalize.get_shape D con
-	in ( if !debug then ( print "Kinding " ; Ppnil.pp_con con ; print " to be " ; Ppnil.pp_kind kind ; print "\n" ) else (); kind )
+	    val kind = Rename.rename_kind VarMap.empty kind
+	    val _ =  if !debug then ( print "Kinding " ; Ppnil.pp_con con ; print " to be " ; Ppnil.pp_kind kind ; print "\n" ) else ()
+	in 
+	    kind 
 	end 
     (* --------- Code to get the type of expressions -----------*)
 
@@ -367,7 +425,6 @@ struct
 		strip ( extend_con_bnds D conbnds, exp)	    
 	  | _ => con
 
-    (* Actually, should probably alpha-convert the output of this or something....*)
     fun nil_prim_type (D, prim, cons, exps) = 
 	( case (prim, cons, exps) of
 	      (record labels,cons,exps) =>
@@ -375,13 +432,7 @@ struct
 	    | (select label,_,[exp]) =>
 		  let val con = exp_type (D, exp)
 		      val _ = (if !debug then (print "records con is " ; Ppnil.pp_con con ; print "\n" ) else ())
-		      (* Now this is a real hack. I want to alpha convert, but all we can do is alpha-normalize! *)
 		      val con = (strip_record (con,label))
-
-(* This alpha_normalize can go into an infinite loop. See leroy1.sml.
-		      val temp = Let_c ( Sequential, [ Con_cb(Name.fresh_var(), Type_k Runtime, con)], con) 
-		      val Let_c (Sequential, bnds, return) = NilUtil.alpha_normalize_con (temp) 
-*)		      
 		  in con
 		  end 
 	    | (inject {tagcount,sumtype},cons,exps as ([] | [_])) => 
@@ -400,7 +451,7 @@ struct
 		  in con
 		  end 
 	    | (box_float floatsize,[],[exp]) => 
-	      Prim_c (BoxFloat_c floatsize,[])
+		  Prim_c (BoxFloat_c floatsize,[])
 	    | (unbox_float floatsize,[],[exp]) => 
 		  Prim_c (Float_c floatsize,[])
 	    | (roll,[argcon],[exp]) => argcon      
@@ -411,17 +462,12 @@ struct
 		      val cmap = Subst.fromList (map (fn (v,c) => (v,Mu_c (bool,set,v))) def_list)
 		      val con' = Subst.substConInCon cmap con'
 		  in con'
-		  end       
-
+		  end      
+	      
 	    | (make_exntag,[argcon],[]) => Prim_c (Exntag_c,[argcon])
 	    | (inj_exn name,[],[exp1,exp2]) => Prim_c (Exn_c,[])
-(* 	    | (make_vararg (openness,effect),cons,exps) =>
-		  (error "make_vararg unimplemented....punting" handle e => raise e)
-	    | (make_onearg (openness,effect),cons,exps) =>  
-		  (error "make_onearg unimplemented....punting" handle e => raise e)
-	    | (peq,cons,exps) => 
-		  (error "Polymorphic equality should not appear at this level" handle e => raise e) ) *)
-	  )
+		  )
+
      and value_type (D, value) = 
 	 case value of 
 	     (int (intsize,word) |
@@ -445,25 +491,33 @@ struct
 *)
     and exp_type (D, exp:exp) =
 	(if !debug then (print "Typing" ; Ppnil.pp_exp exp ; print "\n") else ();
- 	 case exp of 
-	     Var_e v => ( case find_con (D, v) of 
-			 SOME c => c 
-		       | NONE => raise BUG)
-	   | Const_e v => value_type (D, v)
-	   | Let_e (sort, bnds, exp ) => 
-		  exp_type( (extend_bnds D bnds), exp)
-	   | Prim_e ( NilPrimOp prim, clist, elist) =>
-		 nil_prim_type (D, prim, clist, elist)
-	   | Prim_e ( PrimOp prim, cons,   exps) =>
-		 let val (total,arg_types,return_type) = PrimUtil.get_type prim cons
-		 in return_type end 
-		     
-	   | Switch_e sw => switch_type (D,sw)
-	   | App_e (_, Var_e f, cons, _, _) =>
-		 let val SOME con =  find_con(D, f)
-		 in 
-		     strip_arrow (con, cons)
-		 end )
+	     let val con =  ( case exp of 
+		 Var_e v => ( case find_con (D, v) of 
+			     SOME c => c 
+			   | NONE => raise BUG)
+	       | Const_e v => value_type (D, v)
+	       | Let_e (sort, bnds, exp ) => 
+		     exp_type( (extend_bnds D bnds), exp)
+	       | Prim_e ( NilPrimOp prim, clist, elist) =>
+		     nil_prim_type (D, prim, clist, elist)
+	       | Prim_e ( PrimOp prim, cons,   exps) =>
+		     let val (total,arg_types,return_type) = PrimUtil.get_type prim cons
+		     in return_type end 
+		 
+	       | Switch_e sw => switch_type (D,sw)
+	       | App_e (_, Var_e f, cons, _, _) =>
+		     let val SOME con =  find_con(D, f)
+		     in 
+			 strip_arrow (con, cons)
+		     end)
+				    
+		 val _ = if !debug then (print "Renaming : "; Ppnil.pp_con con)  else ();
+		 val con =	Rename.rename_con VarMap.empty con
+		 val _ = if !debug then (print " to be "; Ppnil.pp_con con; print "\n---------------------------------\n") else ();
+	     in con 
+	     end
+	 )
+
 	
      and switch_type (D, sw) =
 	 case sw of 
@@ -538,16 +592,25 @@ struct
 	  | Record_k lvkseq =>
 		let val lvklist = Util.sequence2list lvkseq
 		    val (lvs, kinds) = Listops.unzip lvklist
-		    val kinds =  normalize_kinds kinds D avail
+		    val vklist = Listops.zip (map #2 lvs) kinds
+		    val newD = insert_kind_list (D, vklist)
+		    val kinds =  normalize_kinds kinds newD avail
 		in
 			Record_k (Util.list2sequence (Listops.zip lvs kinds))
 		end
 
 	    
 	  | Arrow_k (openn, vklist, knd) => 
-		let val knd = normalize_kind knd D avail 
+		let 
 		    val (vs, ks) = Listops.unzip vklist
-		    val ks = normalize_kinds ks D avail 
+		    val ks = normalize_kinds ks D avail
+
+		    (* As the type variables can occur in the return kind, 
+		     we have to extend the context with them *)
+		    val resultD = insert_kind_list (D, vklist)
+
+		    val knd = normalize_kind knd resultD avail 
+			
 		in 
 		    Arrow_k (openn, Listops.zip vs ks, knd)
 		end)
@@ -673,8 +736,10 @@ struct
 	      else 
 		  let 
 		      val _ = HashTable.insert env (t,con)
+		      val _ = if !debug then (print "Kinding "; Ppnil.pp_con con ) else ();
 		      val kind =  contype (D, con) 
 		      val kind =  normalize_kind kind D (ae,ac)
+		      val _ = if !debug then (print " with kind "; Ppnil.pp_kind kind ; print "\n") else ();
 		      val _ = NilOpts.inc_click normalize_click
 		  in
 		       bind (t, kind, con, (k ((Var_c t), insert_kind (D, t, kind), (ae,ac) )))
@@ -720,13 +785,14 @@ struct
 
       | Open_cb (v, vklist, con, kind) => 
 	    let val vklist = map (fn (v,k) => (v, normalize_kind k D avail)) vklist
-		val kind = normalize_kind kind D avail 
+	
 		val newD = insert_kind_list (D, vklist)
+		val kind = normalize_kind kind newD avail 
 		val returnD = insert_kind (D, v, Arrow_k (Open, vklist, kind))
 		val CON body = normalize_con con newD avail (TOCON, CONk)
 	    in 
 		   case Conmap.find (ac, Let_c (Sequential, [bnd], Var_c v)) of 
-		       SOME var => ( inc_click cse_con_click; 
+		       SOME var => ( inc_click cse_con_click; cse_record_con (Let_c (Sequential, [bnd], Var_c v) );   
 				     k ( [Con_cb (v, Arrow_k (Open, vklist, kind), Var_c var)], returnD, avail))
 		     | _ => 
 			   k ( [Open_cb (v,vklist, body, kind) ] , returnD, 
@@ -1010,7 +1076,8 @@ struct
 	     fun clearTable table = 
 		 HashTable.appi ( fn (key, item) => ignore (HashTable.remove  table key)) table
 	     val _ = clearTable env
-	     
+	     val _ = clearTable csetable
+
 	     val baseDFn = (fn D => 
 			( foldl ( fn (entry, D) => 
 			    case entry of 
@@ -1041,7 +1108,9 @@ struct
 				) exports
 		     end
 	     val _ = (print "Anormalization clicks\n***********************\n" ; 
-		      NilOpts.print_round_clicks clicks)
+		      NilOpts.print_round_clicks clicks;
+		      print "Types of cse's:\n";
+		      HashTable.appi ( fn (key, item) => (print "\t"; print key; print ":\t"; print (Int.toString (!item)); print "\n")) csetable)
 	 in 
 	     MODULE { bnds = bnds,
 		     imports = imports,

@@ -49,13 +49,14 @@ struct
 
     exception FnNotFound
     exception BUG
-    val error = fn s => Util.error "flattenedargs" s	
+    val error = fn s => Util.error "inline" s	
     
     val float_con = Prim_c (Float_c Prim.F32, [])
     val inline_click = NilOpts.make_click "Functions inlined: (general fcns)"
     val inc_click  = NilOpts.inc_click
 
     val max_size = 100  (* This should be part of our main fcn... *)
+
 
 	(* I'm thinking that maybe we don't need this...  for one
 	 recursive function, it will only get bound after the body is
@@ -193,6 +194,7 @@ struct
     
 	fun doModule  debug (MODULE{bnds=bnds, imports=imports, exports=exports}) = 
 	    let 
+		val _ = HashTable.appi ( fn (key, item) => ignore (HashTable.remove S key)) S
 		val dummy = Const_e(Prim.int(Prim.W32,TilWord64.fromInt 0))	 
 		val temp =  Let_e(Sequential,bnds, dummy)
 		val (exp, size) = (xexp temp)
