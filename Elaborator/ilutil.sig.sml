@@ -162,6 +162,10 @@ signature ILUTIL =
     val sbnd_free : sbnd -> Name.VarSet.set
     val entry_free : Il.context_entry -> Name.VarSet.set
 
+    val findPathsInMod : mod    -> Name.PathSet.set
+    val findPathsInSig : signat -> Name.PathSet.set
+    val findPathsInCon : con    -> Name.PathSet.set
+
     (* ----------- Functions that compute object sizes ----------- *)
     val mod_size : mod -> int
     val bnd_size : bnd -> int

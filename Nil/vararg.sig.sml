@@ -1,13 +1,9 @@
+(*$import Nil *)
+
 signature VARARG = 
   sig
-
-
       val optimize : Nil.module -> Nil.module
-
-(*
-      val vararg : int -> Nil.function
-      val onearg : int -> Nil.function
-*)
-
-
+      val generate : unit -> {vararg : Nil.label * Nil.var * Nil.niltrace * Nil.con,
+			      onearg : Nil.label * Nil.var * Nil.niltrace * Nil.con,
+			      bnds : Nil.bnd list}
   end

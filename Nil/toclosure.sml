@@ -62,14 +62,6 @@ struct
     fun join_free args : frees = #2(join_free' args)
 
 
-(*
-    fun show_path (v,labs) = (Ppnil.pp_var v;
-			      app (fn l => (print "."; Ppnil.pp_label l)) labs)
-    fun eq_vpath((v1,l1),(v2,l2)) = 
-	eq_var(v1,v2) andalso Listops.eq_list(Name.eq_label,l1,l2)
-*)
-
-
     fun show_free({free_evars, free_cvars} : frees) =
 	(print "free_evars are: "; 
 	 VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print "; ")) free_evars; print "\n";
@@ -77,35 +69,12 @@ struct
 	 VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print "; ")) free_cvars; print "\n")
 
 
-    (* labels are passed backwards *)
-    fun projecte (base, labs) = 
-	let fun loop [] = base
-	      | loop (l::rest) = Prim_e(NilPrimOp(select l),[],[loop rest])
-	in  loop labs 
-	end
-
-    (* labels are returned backwards *)
-    fun extract_path e = 
-	let fun loop acc (Prim_e(NilPrimOp(select l), _, [e])) = loop (l::acc) e
-	      | loop acc e = (e,rev acc)
-	in loop [] e
-	end
-
-    fun path2exp(var,labs) = projecte(Var_e var, labs)
-
-
-    fun projectc (base, labs) = 
-	let fun loop [] = base
-	      | loop (l::rest) = Proj_c(loop rest,l)
-	in  loop labs 
-	end
+    (* c.l1.l2.l3 -> (c, [l1,l2,l3]) *)
     fun extract_cpath c = 
 	let fun loop acc (Proj_c(c,l)) = loop (l::acc) c
 	      | loop acc c = (c,rev acc)
 	in loop [] c
 	end
-
-    fun path2con(var,labs) = projectc(Var_c var, labs)
 
 
     (* -------- code to perform the initial free-variable computation ---------------- *)
@@ -607,7 +576,16 @@ struct
 					end) frees arms 
 		 in  frees
 		 end
-	   | Typecase_e _ => error "typecase not handled")
+	   | Typecase_e {arg,arms,default,result_type} =>
+		 let val frees = t_find_fv(state,frees) result_type
+		     val frees = c_find_fv(state,frees) arg
+		     val frees = e_find_fv(state,frees) default
+		     fun folder ((pc,vklist,e),frees) = 
+			 let val (frees,state) = vklist_find_fv (vklist, (frees,state))
+			 in  e_find_fv (state,frees) e
+			 end
+		 in  foldl folder frees arms
+		 end)
 
     and e_find_fv' (state : state, frees : frees) exp : frees =
 	(if (!debug)
@@ -1010,8 +988,7 @@ struct
 	       end
 
 
-	   fun vk_mapper (v,k) = (v, k_rewrite state k)
- 	   val vklist_cl = map vk_mapper tFormals
+ 	   val vklist_cl = vklist_rewrite state tFormals
 	   val vclist_cl = map (fn (v,_,c) => 
 				(if isDependent then SOME v else NONE, c_rewrite state c)) eFormals 
 	   val codebody_tipe = c_rewrite state body_type
@@ -1105,7 +1082,7 @@ struct
 	  else (false,[],[(code_var,code_fun)],[])
        end
 
-
+   and vklist_rewrite state vklist = map (fn (v,k) => (v,k_rewrite state k)) vklist
 
    and bnd_rewrite state bnd : bnd list =
        (case bnd of
@@ -1148,7 +1125,7 @@ struct
 	   end
        in (case trace of
 	       TraceUnknown => trace
-	     | TraceKnown (TraceInfo.Compute(v,labs)) => help(path2con(v,rev labs))
+	     | TraceKnown (TraceInfo.Compute(v,labs)) => help(path2con(v,labs))
 	     | TraceKnown _ => trace
 	     | TraceCompute v => help(Var_c v))
        end
@@ -1202,7 +1179,12 @@ struct
 				   arms=map (fn (e,tr,f) => (e_rewrite e,trace_rewrite state tr,e_rewrite f)) arms,
 				   default=Util.mapopt e_rewrite default,
 				   result_type=c_rewrite result_type}
-		   | Typecase_e _ => error "typecase not handled")
+		   | Typecase_e {arg,arms,default,result_type} =>
+			     Typecase_e{arg=c_rewrite arg,
+					default=e_rewrite default,
+					result_type=c_rewrite result_type,
+					arms=map (fn (pc,vklist,e) =>
+						  (pc, vklist_rewrite state vklist, e_rewrite e)) arms})
 			 
 	  | Let_e(letsort,bnds,e) => let val bnds_list = map (bnd_rewrite state) bnds
 				     in Let_e(letsort, List.concat bnds_list, e_rewrite e)
@@ -1275,7 +1257,7 @@ struct
 			[], [], NilSubst.C.empty())
 
 
-	     val vklist = map (fn (v,k) => (v,k_rewrite state k)) vklist
+	     val vklist = vklist_rewrite state vklist
 	     val vkl_free = map (fn (v,k,l) => (v,k_rewrite state k,l)) vkl_free
 	     val vkl_free_kind = Record_k(Sequence.fromList(map
 							    (fn (v,k,l) => ((l, derived_var v), k))

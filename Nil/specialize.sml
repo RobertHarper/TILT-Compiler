@@ -1,4 +1,4 @@
-(*$import Nil NilUtil Ppnil LibBase SPECIALIZE *)
+(*$import Nil NilUtil Ppnil LibBase SPECIALIZE NilContext *)
 
 (* A two-pass optimizer to remove unnecesssarily polymorphic code:
      Essentially, convert
@@ -15,7 +15,7 @@
 structure Specialize :> SPECIALIZE =
 struct
 
-	open Util Nil NilUtil Listops
+	open Util Nil NilContext NilUtil Listops Ppnil
  	val error = fn s => Util.error "specialize.sml" s
 
 	val debug = ref false
@@ -23,175 +23,164 @@ struct
 	val do_dead = ref true
 	val do_proj = ref true
 
-	(* In the first pass, we locate all term-level functions 
-	   that take only constructor arguments.  At the same time,
-	   we find calls to these functions and check whether the
-         constructor args are the same at each call site. If not, 
-	  the function is not specializable and removed as a candidate.
-	  Also, the constructor argument must be well-formed at the function
-	  definition.  If we assume unique naming, we need to only check that
-	  the variables in the arguments are bound.
+	(* In the first pass, we locate all candidate functions.
+	   Cadidatate functions are term-level functions which
+	   (0) have valuable bodies and are non-recursive
+	   (1) Can take constructor arguments.
+	       Cannot take floating point arguments.
+	       Can only take term arugments of unit type.
+	   (2) Cannot escape.  That is, they can appear only
+	       in application position.
+	   (3) are given the same arguments at each application site.
+	       (1) The terms arguments must be valuable.
+	           They are already equal since they are of type unit.
+	       (2) The type arguments must all be equivalent to a type
+	           which is well-formed at the context where the 
+		   candidate function was defined. 
 
-	  A state consists of constructor (optional) bindings.
+	  In the second pass, we rewrite candidate functions and
+	     their applications.
+	  (1) We rewrite the function by removing its formals
+	      and wrapping the body with a let of the formals
+	      bound to the type arguments as determined by step
+	      3.2 of pass 1 and the term arguments to unit.
+	  (2) Replace each application of the candidate function
+              with the variable which is now bound to the binding.
 
-	  A global data structure will hold candidate functions,
-	    a corresponding state(defining which variables are bounded),
-	    and the constructor arguments applied.
+	 There is a global state mapping each candidate function
+	     to its relevant information.  As the program is 
+	     traversed in the first pass, candidate functions 
+	     are added and removed.  Any remaining functions 
+	     after pass 1 are candidates.
 
        *)
 
-	local
-	  datatype state = STATE of {bound : (con option) Name.VarMap.map}
-	in
-	    exception Unbound
-	  type state = state
-	  fun new_state() = STATE {bound = Name.VarMap.empty}
-	  fun add_vars(STATE{bound},conbinds) = 
-		let val bound = foldl (fn ((v,c),m) => Name.VarMap.insert(m,v,c)) bound conbinds
-		in  STATE{bound=bound}
-		end
-	  fun add_var(state,v,copt) = add_vars(state,[(v,copt)])
-	  fun lookup (STATE {bound}) v = (case Name.VarMap.find(bound,v) of
-				    NONE => raise Unbound
-				  | SOME copt => copt)
-	  fun show_state (STATE{bound}) = 
-	      let fun show(v,copt) = 
-		  (Ppnil.pp_var v; print "  -->  ";
-		   case copt of
-		       NONE => ()
-		     | SOME c => Ppnil.pp_con c;
-			   print "\n")
-	      in  Name.VarMap.appi show bound
-	      end
-	end
-
-
-	fun cons_reduce state clist = map (con_reduce state) clist
-	and con_reduce (state : state) c =
-	    let val self = con_reduce state
-	    in  (case c of
-		     (Crecord_c lclist) => Crecord_c(map (fn (l,c) => (l,self c)) lclist)
-		   | (Prim_c (pc,clist)) => Prim_c(pc,cons_reduce state clist)
-		   | (Var_c v) => 
-			      (case (lookup state v) of
-				   NONE => c
-				 | SOME c => self c)
-		   | Annotate_c (_, c) => self c
-		   | _ => c)
-	    end
-
-	fun cons_equal state (clist1,clist2) = Listops.eq_list(con_equal state,clist1,clist2)
-	and con_equal (state : state)  (c1,c2) = 
-	    let val self = con_equal state
-	    in  (case (c1,c2) of
-		     (Crecord_c lclist1, Crecord_c lclist2) =>
-			 cons_equal state (map #2 lclist1, map #2 lclist2)
-		       | (Prim_c (pc1,clist1), Prim_c (pc2,clist2)) => 
-			 (NilUtil.primequiv(pc1,pc2)) andalso cons_equal state(clist1,clist2)
-		       | (Var_c v1, Var_c v2) => 
-			 Name.eq_var(v1,v2) orelse
-			 (case (lookup state v1, lookup state v2) of
-			      (NONE, NONE) => false
-			    | (SOME c1, NONE) => con_equal state (c1,c2)
-			    | (NONE, SOME c2) => con_equal state (c1,c2)
-			    | (SOME c1, SOME c2) => con_equal state (c1,c2))
-		       | (Var_c v1, _) => 
-			      (case (lookup state v1) of
-				   NONE => false
-				 | SOME c1 => con_equal state (c1,c2))
-		       | (_, Var_c v2) => 
-				   (case (lookup state v2) of
-			       NONE => false
-			     | SOME c2 => con_equal state (c1,c2))
-		       | (Annotate_c (_, c1), _) => con_equal state (c1,c2)
-		       | (_, Annotate_c (_, c2)) => con_equal state (c1,c2)
-		       | _ => false)
-	    end
-
-	fun cons_bound (state : state) clist = Listops.andfold (fn c => con_bound state c) clist
-	and con_bound state c = 
-	    let val self = con_bound state
-(*
-		val _ = (print "con_bound called on ";
-			 Ppnil.pp_con c; print "  with state\n";
-			 show_state state; print "\n")
-*)
-	    in
-		(case c of
-		     Annotate_c(_, c) => self c
-		   | Var_c v => ((lookup state v; true) handle Unbound => false)
-		   | Prim_c (pc, clist) => cons_bound state clist
-		   | Crecord_c lclist => cons_bound state (map #2 lclist)
-		   | Proj_c(c,_) => self c
-		   | _ => false)
-	    end
 
 	local
-	    val cand = ref (Name.VarMap.empty : (state * var * con list option) Name.VarMap.map)
+	    datatype entry = 
+		Candidate of {context : context,
+			      tFormals : var list, 
+			      eFormals : var list,
+			      tActuals : (con * kind) list option ref,
+			      body : exp,
+			      replace : var}
+	      | Impure
+	      | Escaping
+	      | Polymorphic
+	    val mapping = ref (Name.VarMap.empty : entry Name.VarMap.map)
 	in
-	    fun reset_candidate() = cand := Name.VarMap.empty
-	    fun add_candidate(state,v,inner) = 
-		let 
-(*
-		    val _ = (print "ADDING CANDIDATE: ";
-			     Ppnil.pp_var v; print "\n")
-*)
-		    val c = Name.VarMap.insert(!cand,v,(state,inner,NONE))
-		in  cand := c
+
+	    fun resetCandidates() = mapping := Name.VarMap.empty
+	    fun showCandidates() = 
+		let fun folder(v,entry,(c,i,e,p)) = 
+		    (case entry of
+			 Candidate {tActuals,...} => (c+1,i,e,p)
+		       | Impure => (c,i+1,e,p)
+		       | Escaping => (c,i,e+1,p)
+		       | Polymorphic => (c,i,e,p+1))
+		    val (c,i,e,p) = Name.VarMap.foldli folder (0,0,0,0) (!mapping)
+		in  print ("  " ^ (Int.toString c) ^ " optimizable candidates.\n");
+		    print ("  " ^ (Int.toString i) ^ " impure.\n");
+		    print ("  " ^ (Int.toString e) ^ " escaping.\n");
+		    print ("  " ^ (Int.toString p) ^ " used polymorphically.\n")
 		end
-	    fun remove_candidate str v = 
-		let 
-(*
-		    val _ = (print "REMOVING CANDIDATE("; 
-			     print str; print "): ";
-			     Ppnil.pp_var v; print "\n")
-*)
-		    val c = (#1(Name.VarMap.remove(!cand,v))
-			     handle LibBase.NotFound => !cand)
-		in  cand := c
+	    fun editEntry (v,entry) = 
+		(case Name.VarMap.find(!mapping,v) of
+		     NONE => ()
+		   | SOME _ => mapping := Name.VarMap.insert(#1(Name.VarMap.remove(!mapping,v)),
+							     v, entry))
+							     
+	    fun addEntry (v,entry) = mapping := Name.VarMap.insert(!mapping,v,entry)
+	    fun escapeCandidate v = editEntry (v,Escaping)
+	    fun polyCandidate v = editEntry (v,Polymorphic)
+	    fun addCandidate (context, v : var, Function {recursive, tFormals, eFormals, fFormals, body, ...}) = 
+		let val nonRecur = (case recursive of
+					Arbitrary => false
+				      | _ => true)
+		    val entry = 
+			(case fFormals of
+			     [] => if (nonRecur andalso not (NilUtil.effect body))
+				       then Candidate{body = body,
+						      context = context,
+						      tFormals = map #1 tFormals,
+						      eFormals = map #1 eFormals,
+						      tActuals = ref NONE,
+						      replace = Name.derived_var v}
+				   else Impure
+			   | _ => Impure)
+		in  addEntry (v,entry)
 		end
-	    fun update_candidate(v,clist) = 
-		let val SOME(state,inner,_) = Name.VarMap.find(!cand,v)
-		    val _ = remove_candidate "UPDATE" v
-		    val c = Name.VarMap.insert(!cand,v,(state,inner,SOME clist))
-		in  cand := c
+	    fun reduceTo (targetCtxt, currentCtxt) (c : con) : (con * kind) option = 
+		let fun wellFormed c = 
+		    let val fvs = freeConVarInCon (true,0,c)
+		    in  Name.VarSet.foldl (fn (v,ok) => ok andalso bound_con(targetCtxt,v)) true fvs
+		    end
+		    val copt = 
+			if (wellFormed c)
+			    then SOME c
+			else let val (_,c) = Normalize.reduce_hnf(currentCtxt, c)
+			     in  if (wellFormed c)
+				     then SOME c
+				 else let val c = Normalize.con_normalize currentCtxt c
+				      in  if (wellFormed c)
+					      then SOME c
+					  else NONE
+				      end
+			     end
+		in   (case copt of
+			  NONE => NONE
+			| SOME c => SOME(c, NilContext.kind_of(targetCtxt, c)))
+		end
+	    fun checkCandidate (v, callContext, tArgs, eArgs) = 
+		let fun isUnit e = 
+		       (not (NilUtil.effect e)) andalso 
+		       (case (Normalize.reduce_hnf(callContext,Normalize.type_of (callContext,e))) of
+			    (_,Prim_c(Record_c ([],_), _)) => true
+			  | _ => false)
+		    fun matches defContext tActuals =
+			(case !tActuals of
+			     NONE => 
+				 let val reduced = List.mapPartial (reduceTo (defContext, callContext)) tArgs
+				 in   if (length reduced = length tArgs)
+					  then (tActuals := SOME reduced; true) else false
+				 end
+			   | SOME tAct =>
+				 let fun equal((c1,k),c2) = 
+				     let val c1 = Normalize.con_normalize callContext c1
+					 val c2 = Normalize.con_normalize callContext c2
+					 val eq = NilUtil.alpha_equiv_con(c1,c2)					     
+				     in  eq
+				     end
+				     val isEqual = Listops.andfold equal (Listops.zip tAct tArgs)
+				 in  isEqual
+				 end)
+		in  (case Name.VarMap.find(!mapping, v) of
+			 SOME(Candidate{context, tFormals, eFormals, tActuals, body, ...}) =>
+			      if ((Listops.andfold isUnit eArgs) andalso
+				  matches context tActuals)
+				 then ()
+			     else polyCandidate v
+		       | _ => ())
 		end
 
-	    fun is_candidate v = 
-		(case (Name.VarMap.find(!cand,v)) of
-		     NONE => NONE
-		   | SOME (_,inner,SOME clist) => SOME (inner,clist)
+	    fun rewriteApplication (v : var) =
+		(case Name.VarMap.find(!mapping,v) of
+		     SOME (Candidate{replace,...}) => SOME replace
+		   | _ => NONE)
+	    fun rewriteFunction v = 
+		(case Name.VarMap.find(!mapping,v) of
+		     (* If tActuals is NONE, then the function is dead *)
+		     SOME (Candidate{replace,body,tActuals=ref(SOME tActs),tFormals,eFormals,...}) =>
+			 let val bnds1 = Listops.map2 (fn (v,(c,_)) => (Con_b(Runtime,Con_cb(v,c)))) 
+			                (tFormals, tActs)
+
+			     val bnds2 = map (fn v => Exp_b(v,TraceUnknown,unit_exp)) eFormals
+			 in  SOME(replace, bnds1 @ bnds2, body)
+			 end
+		   | SOME (Candidate _) => (print "Warning: dead function "; pp_var v; print "\n"; NONE)
 		   | _ => NONE)
 
-	    fun use_candidate(s : state, v, clist) = 
-		case (Name.VarMap.find(!cand,v)) of
-		    NONE => ()
-		  | SOME(fs : state, _, NONE) => 
-			let val clist = cons_reduce s clist
-			in  if (cons_bound fs clist)
-				then update_candidate(v,clist)
-			    else remove_candidate "USE1" v
-			end
-		  | SOME(_,_,SOME clist') => if cons_equal s (clist,clist')
-					       then ()
-					   else remove_candidate "USE2" v
-
-
-	    fun show_candidate() = 
-		let fun show(v,(state,inner,clist_opt)) = 
-		    (Ppnil.pp_var v; print "  -->  ";
-		     Ppnil.pp_var inner; print "  :  ";
-		     case clist_opt of
-			 NONE => ()
-		       | SOME clist => (app (fn c => (Ppnil.pp_con c; print "\n")) clist);
-		     print "\n")
-		in  (print "\nCANDIDATES:\n";
-		     Name.VarMap.appi show (!cand);
-		     print "\n")
-		end
-		
 	end
-
 
         (* This first set of functions collects functions that are candidates
 	   for specialization.  In the second pass, we eliminate all
@@ -199,104 +188,102 @@ struct
 	   function by wrapping the constructor arguments around the function. *)
 
         (* ----------------------------- PASS ONE -------------------- *)
-	fun scan_exp (state : state) (exp : exp) : unit = 
+	fun scan_exp ctxt exp : unit = 
 	   (case exp of
-		  Var_e v => remove_candidate "Var_e" v
+		  Var_e v => escapeCandidate v
 		| Const_e _ => ()
-		| Prim_e(p,clist,elist) => app (scan_exp state) elist
-		| Switch_e sw => scan_switch state sw
+		| Prim_e(p,clist,elist) => app (scan_exp ctxt) elist
+		| Switch_e sw => scan_switch ctxt sw
 		| Let_e (letsort,bnds,e) => 
-			let val state = scan_bnds(bnds,state)
-			in  scan_exp state e
+			let val ctxt = scan_bnds(bnds,ctxt)
+			in  scan_exp ctxt e
 			end
-		| App_e(openness,Var_e v,clist,[],[]) => use_candidate(state,v,clist)
 		| App_e(openness,f,clist,elist,eflist) => 
-			(scan_exp state f; app (scan_exp state) elist; app (scan_exp state) eflist)
+			let val _ = app (scan_exp ctxt) elist
+			    val _ = app (scan_exp ctxt) eflist
+			in  (case (f,eflist) of
+				 (Var_e v, []) => checkCandidate(v,ctxt,clist,elist)
+			       | _ => scan_exp ctxt f)
+			end
 		| ExternApp_e(f,elist) => 
-			(scan_exp state f; app (scan_exp state) elist)
-
-		| Raise_e(e,c) => scan_exp state e
+			(scan_exp ctxt f; app (scan_exp ctxt) elist)
+		| Raise_e(e,c) => scan_exp ctxt e
 		| Handle_e{body,bound,handler,result_type} =>
-			(scan_exp state body; scan_exp state handler))
+			(scan_exp ctxt body; scan_exp ctxt handler))
 
-	and scan_switch (state : state) (switch : switch) : unit = 
-	  let fun scan_sw scan_info scan_arg scan_tag {info,arg,arms,default} = 
-			(scan_info info;
-			 scan_arg arg;
-			 map (fn (tag,f) => (scan_tag tag, scan_function state f)) arms;
-			 Util.mapopt (scan_exp state) default; ())
-	      fun nada _ = ()
-	      (* don't need to bind term-level variables *)
+	and scan_switch ctxt (switch : switch) : unit = 
+	  let fun scan_default NONE = ()
+		| scan_default (SOME e) = scan_exp ctxt e
 	  in  (case switch of
-		  Intsw_e {arg,arms,default,...} => 
-		      (scan_exp state arg;
-		       Util.mapopt (scan_exp state) default;
-		       app (fn (t,e) => (scan_exp state e)) arms)
-		| Sumsw_e {arg,arms,default,...} =>
-		      (scan_exp state arg;
-		       Util.mapopt (scan_exp state) default;
-		       app (fn (t,_,e) => (scan_exp state e)) arms)
-		| Exncase_e {arg,arms,default,...} =>
-		      (scan_exp state arg;
-		       Util.mapopt (scan_exp state) default;
-		       app (fn (e1,_,e2) => (scan_exp state e1; scan_exp state e2)) arms)
+		  Intsw_e {arg,arms,default,size,result_type} => 
+		      let val _ = scan_exp ctxt arg
+			  val _ = scan_default default
+		      in  app (fn (t,e) => (scan_exp ctxt e)) arms
+		      end
+		| Sumsw_e {arg,arms,default,bound,sumtype,result_type} =>
+		      let val _ = scan_exp ctxt arg
+			  val _ = scan_default default
+			  val ctxt = NilContext.insert_con(ctxt,bound,sumtype)
+		      in  app (fn (t,_,e) => (scan_exp ctxt e)) arms
+		      end
+		| Exncase_e {arg,arms,default,bound,result_type} =>
+		      let val _ = scan_exp ctxt arg
+			  val _ = scan_default default
+			  val ctxt = NilContext.insert_con(ctxt,bound,Prim_c(Exn_c, []))
+		      in  app (fn (e1,_,e2) => (scan_exp ctxt e1; scan_exp ctxt e2)) arms
+		      end
 		| Typecase_e _ => error "typecase_e not done")
 	  end
 
-	and scan_function state (Function{tFormals,body,...}) =
-		let val state = add_vars(state,map (fn (v,_) => (v,NONE)) tFormals)
-		in scan_exp state body
-		end
+	and scan_function ((v:var,f as Function{tFormals,fFormals,eFormals,body,recursive,...}), ctxt) =
+	    let	val fctxt = NilContext.insert_con(ctxt, v, NilUtil.function_type Open f)
+		val ctxt = NilContext.insert_kind_list(fctxt,tFormals)
+		val ctxt = NilContext.insert_con_list(ctxt,map (fn (v,_,c) => (v,c)) eFormals)
+		val float = Prim_c(Float_c Prim.F64, [])
+		val ctxt = NilContext.insert_con_list(ctxt,map (fn v => (v, float)) fFormals)
+		val _ = scan_exp ctxt body
+	    in  fctxt
+	    end
 
-	and scan_bnds(bnds : bnd list, state : state) : state = foldl scan_bnd state bnds
+	and scan_bnds(bnds : bnd list, ctxt) = foldl scan_bnd ctxt bnds
 
-	and scan_bnd (bnd : bnd, state : state) : state = 
+	and scan_cbnd (cbnd,ctxt) = 
+	    (case cbnd of
+		 Con_cb(v,c) => NilContext.insert_equation(ctxt,v,c)
+	       | Open_cb (v,vklist,c) => 
+		     let val k = Arrow_k(Open,vklist,Single_k c)
+		     in  NilContext.insert_kind(ctxt,v,k)
+		     end
+	       | Code_cb (v,_,_) => error "Cannot handle Code_cb")
+
+	and scan_bnd (bnd : bnd, ctxt) : context = 
 	  	(case bnd of
-		     Exp_b(v,_,e) => (scan_exp state e; state)
-		   | Con_b(p,cbnd) => 
-			 (case cbnd of
-			      Con_cb(v,c) => add_var(state,v,SOME c)
-			    | Open_cb (v,_,_) => add_var(state,v,SOME
-							   (Let_c(Sequential,[cbnd],Var_c v)))
-			    | Code_cb (v,_,_) => add_var(state,v,SOME
-							   (Let_c(Sequential,[cbnd],Var_c v))))
+		     Exp_b(v,_,e) => let val _ = scan_exp ctxt e
+					 val ctxt = NilContext.insert_exp(ctxt,v,e)
+				     in  ctxt
+				     end
+		   | Con_b(p,cbnd) => scan_cbnd(cbnd,ctxt)
 		   | Fixopen_b vfset =>
 		      let val vflist = (Sequence.toList vfset)
-			  val _ = 
-			      (case vflist of
-				   [(v,Function{recursive=Leaf,
-						tFormals,eFormals=[],fFormals=[],
-						body, ...})] =>
-				       (case body of
-					   Let_e(_,[Fixopen_b vfset], Var_e inner) =>
-					       (case (Sequence.toList vfset) of
-						   [(v',_)] => if (Name.eq_var(v',inner))
-								   then add_candidate(state,v,inner)
-							       else ()
-						 | _ => ())
-					 | _ => ())
-				 | _ => ())
-			  fun scan_vf (v,f) = scan_function state f
-		      in  (app scan_vf vflist; state)
+			  val _ = app (fn (v,f) => addCandidate(ctxt,v,f)) vflist
+			  val ctxt = foldl scan_function ctxt vflist
+		      in ctxt
 		      end
 		   | Fixcode_b _ => error "sorry: Fixcode not handled"
 		   | Fixclosure_b _ => error "sorry: Fixclosure not handled")
 
 
-	fun scan_import(ImportValue _,state) : state = state
-	  | scan_import(ImportType(l,v,k),state)  = add_var(state,v,NONE)
+	fun scan_import(ImportValue(l,v,tr,c),ctxt) = insert_con(ctxt,v,c)
+	  | scan_import(ImportType(l,v,k),ctxt)  = insert_kind(ctxt,v,k)
 
-	fun scan_export state (ExportValue(l,v)) : unit = ()
-	  | scan_export state (ExportType(l,v)) = ()
+	fun scan_export (ExportValue(l,v),ctxt) = (scan_exp ctxt (Var_e v); ctxt)
+	  | scan_export (ExportType(l,v),ctxt) = ctxt
 
 	fun scan_module(MODULE{imports, exports, bnds}) : unit = 
-	  let val state = new_state()
-	      val state = foldl scan_import state imports
-	      val state = scan_bnds(bnds,state)
-	      val _ = app (scan_export state) exports
-	      val _ = if (!diag)
-			  then show_candidate()
-		      else ()
+	  let val ctxt = NilContext.empty()
+	      val ctxt = foldl scan_import ctxt imports
+	      val ctxt = scan_bnds(bnds,ctxt)
+	      val ctxt = foldl scan_export ctxt exports
 	  in  ()
 	  end
 
@@ -306,36 +293,40 @@ struct
 	   (case exp of
 		  Var_e v => exp
 		| Const_e _ => exp
-		| Prim_e(p,clist,elist) => Prim_e(p, clist, map do_exp elist)
+		| Prim_e(p,clist,elist) => Prim_e(p, clist, do_explist elist)
 		| Switch_e sw => Switch_e(do_switch sw)
 		| Let_e (letsort,bnds,e) => Let_e(letsort,do_bnds bnds, do_exp e)
-		| App_e(openness,Var_e v,clist,[],[]) => 
-		      (case (is_candidate v) of
-			   NONE => App_e(openness,do_exp (Var_e v),clist,[],[])
-			 | SOME (inner,_) => Var_e inner)
+		| App_e(openness,Var_e v,clist,elist,[]) => 
+		      (case (rewriteApplication v) of
+			  NONE => App_e(openness,Var_e v,clist,do_explist elist,[])
+			| SOME replace => Var_e replace)
 		| App_e(openness,f,clist,elist,eflist) => 
-		      App_e(openness,do_exp f,clist,map do_exp elist,map do_exp eflist) 
-		| ExternApp_e(f,elist) =>
-		      ExternApp_e(do_exp f,map do_exp elist)
+		      App_e(openness, do_exp f, clist, do_explist elist, do_explist eflist) 
+		| ExternApp_e(f,elist) => ExternApp_e(do_exp f,do_explist elist)
 		| Raise_e(e,c) => Raise_e(do_exp e, c)
 		| Handle_e{body,bound,handler,result_type} => 
 		      Handle_e{body = do_exp body, bound = bound,
 			       handler = do_exp handler, 
 			       result_type = result_type})
 
+	and do_explist (explist : exp list) = map do_exp explist
+
+	and do_expopt NONE = NONE
+	  | do_expopt (SOME e) = SOME (do_exp e)
+
 	and do_switch (switch : switch) : switch = 
 	   (case switch of
 		Intsw_e {size,arg,arms,default,result_type} =>
 		    let val arg = do_exp arg
 			val arms = map (fn (w,e) => (w,do_exp e)) arms
-			val default = Util.mapopt do_exp  default
+			val default = do_expopt default
 		    in  Intsw_e {size=size,arg=arg,arms=arms,default=default,
 				 result_type=result_type}
 		    end
 	      | Sumsw_e {sumtype,arg,bound,arms,default,result_type} =>
 		    let val arg = do_exp arg
 			val arms = map (fn (t,tr,e) => (t,tr,do_exp e)) arms
-			val default = Util.mapopt do_exp default
+			val default = do_expopt default
 		    in  Sumsw_e {sumtype=sumtype,arg=arg,
 				 bound=bound,arms=arms,default=default,
 				 result_type=result_type}
@@ -343,21 +334,13 @@ struct
 	      | Exncase_e {arg,bound,arms,default,result_type} =>
 		let val arg = do_exp arg
 		    val arms = map (fn (e1,tr,e2) => (do_exp e1, tr, do_exp e2)) arms
-		    val default = Util.mapopt do_exp  default
+		    val default = do_expopt default
 		in  Exncase_e {arg=arg,
 			       bound=bound,arms=arms,default=default,
 			       result_type=result_type}
 		end
 	      | Typecase_e _ => error "typecase not handled")
 
-
-	and do_function (Function{effect,recursive,isDependent,
-				  tFormals, eFormals, fFormals, body, body_type}) =
-	    let val body = do_exp body
-	    in  Function{effect=effect,recursive=recursive,isDependent=isDependent,
-			 tFormals=tFormals, eFormals=eFormals, fFormals=fFormals,
-			 body = body, body_type = body_type}
-	    end
 
 	and do_bnds(bnds : bnd list) : bnd list = 
 	    let val bnds_list = map do_bnd bnds
@@ -366,29 +349,31 @@ struct
 
 	and do_bnd (bnd : bnd) : bnd list =
 	  	(case bnd of
-		     Exp_b(v,traceinfo,e) => 
-			 (case e of 
-			      (* XXX: May break if we go allow both
-                                 Sequential and Parallel bnds *)
-			      Let_e(Sequential,bnds,body) => bnds @ [Exp_b(v,traceinfo,body)]
-			    | _ => [Exp_b(v,traceinfo,e)])
+		     Exp_b(v,traceinfo,e) => [Exp_b(v,traceinfo,do_exp e)]
 		   | Con_b(v,c) => [bnd]
 		   | Fixopen_b vfset =>
-		      let val vflist = (Sequence.toList vfset)
-			  fun do_vflist vflist = 
-			      [Fixopen_b(Sequence.fromList(map (fn (v,f) => (v,do_function f)) vflist))]
-		      in  (case vflist of
-			       [(v,Function{recursive=Leaf,
-					    tFormals, eFormals=[], fFormals=[],
-					    body=Let_e(_,[Fixopen_b vflist'],_),...})] =>
-				   (case (is_candidate v) of
-					NONE => do_vflist vflist
-				      | SOME (v,clist) => 
-					    let fun mapper ((v,k),c) = Con_b(Runtime,Con_cb(v,c))
-						val cbnds = Listops.map2 mapper (tFormals,clist)
-					    in  cbnds @ do_vflist (Sequence.toList vflist')
-					    end)
-			     | _ => do_vflist vflist)
+		      let fun getBnd(v,_) = 
+			  (case rewriteFunction v of
+			       NONE => NONE
+			     | SOME (replace,bnds,body) => 
+				   let val body = do_exp body
+				   in  SOME(Exp_b(replace, TraceUnknown,
+						  makeLetE Sequential bnds body))
+				   end)
+			  fun getFun(v,Function{effect,recursive,isDependent,
+						tFormals, eFormals, fFormals, body, body_type}) =
+			      (case rewriteFunction v of
+				   NONE => 
+				       let val body = do_exp body
+				       in  SOME(v,Function{effect=effect,recursive=recursive,isDependent=isDependent,
+							   tFormals=tFormals, eFormals=eFormals, fFormals=fFormals,
+							   body = body, body_type = body_type})
+				       end
+				 | SOME _ => NONE)
+			  val vflist = (Sequence.toList vfset)
+			  val bnds = List.mapPartial getBnd vflist
+			  val funs = List.mapPartial getFun vflist
+		      in  [Fixopen_b (Sequence.fromList funs)] @ bnds
 		      end
 		   | Fixcode_b _ => error "sorry: Fixcode not handled"
 		   | Fixclosure_b _ => error "sorry: Fixclosure not handled")
@@ -408,8 +393,15 @@ struct
       (* Main optimization routine:
           Scan module for specializable candidates
 	   Rewrite module by specializing candidate and rewriting calls to candidates
-     *)
-      fun optimize module = (reset_candidate();
-			     scan_module module; 
-			     do_module module)
+	   *)
+
+      fun optimize module = 
+	  let val _ = resetCandidates()
+	      val _ = scan_module module
+	      val _ = showCandidates()
+	      val result = do_module module 
+	      val _ = resetCandidates()
+	  in result
+	  end
+
 end

@@ -667,6 +667,29 @@ structure IlUtil
       end
 
 
+      local 
+	  fun makeHandler s obj2path (obj,_) = 
+	      (case obj2path obj of
+		   NONE => NONE
+		 | SOME (PATH p) => (s := Name.PathSet.add(!s, p); SOME obj))
+	  fun findPaths f_obj obj = 
+	      let val set = ref Name.PathSet.empty
+		  val st = STATE(default_bound,
+				 {sdec_handler = default_sdec_handler,
+				  exp_handler = makeHandler set exp2path,
+				  con_handler = makeHandler set con2path,
+				  mod_handler = makeHandler set mod2path,
+				  sig_handler = default_sig_handler})
+		  val _ = f_obj st obj
+	      in  (!set)
+	      end
+
+      in
+	  val findPathsInMod = findPaths f_mod
+	  val findPathsInSig = findPaths f_signat
+	  val findPathsInCon = findPaths f_con
+      end
+
       local
 	  fun exp_handler s (VAR v,bound) = 
 	                 if (member_eq(eq_var,v,bound)) 

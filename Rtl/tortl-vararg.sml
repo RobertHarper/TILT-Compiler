@@ -205,7 +205,7 @@ val debug_full = ref false
 					    eFormals=[(NONE,con_tuple(map Var_c convars))],
 					    fFormals=0w0, body_type=Var_c resconvar}
 		    val state = add_term  (state,funvar,funcon,
-					   LOCATION(REGISTER (false,I function)))
+					   LOCATION(REGISTER (false,I function)), NONE)
 		    val e = App_e(Code,Var_e supportvar,(map Var_c convars) @ [Var_c resconvar],
 				  [Var_e funvar],[])
 		    val resulti = xexp(state,e)
@@ -263,10 +263,21 @@ val debug_full = ref false
 					    tFormals=[], 
 					    eFormals=[(NONE,con_tuple(map Var_c convars))],
 					    fFormals=0w0, body_type=Var_c resconvar}
-		    val state = add_term  (state,funvar,funcon,
-					  LOCATION(REGISTER (false,I function)))
-		    val e = App_e(Code,Var_e supportvar,(map Var_c convars) @ [Var_c resconvar],
-				  [Var_e funvar],[])
+		    val newfuncon = AllArrow_c{openness=Closure, effect=Partial, isDependent=false,
+					       tFormals=[], 
+					       eFormals=map (fn v => (NONE,Var_c v)) convars,
+					       fFormals=0w0, body_type=Var_c resconvar}
+		    val targs = (map Var_c convars) @ [Var_c resconvar]
+		    val supportcon = AllArrow_c{openness=Code, effect=Total, isDependent=false,
+						tFormals = map (fn _ => (fresh_var(), Type_k)) targs,
+						fFormals = 0w0, 
+						eFormals = [(NONE, funcon)],
+						body_type = newfuncon}
+		    val state = add_term (state,funvar,funcon,
+					  LOCATION(REGISTER (false,I function)), NONE)
+		    val state = add_term (state,supportvar,supportcon,
+					  LOCATION(REGISTER (false,I function)), NONE)
+		    val e = App_e(Code,Var_e supportvar, targs, [Var_e funvar],[])
 		    val resulti = xexp(state,e)
 		    val _ = add_instr(MV(resulti,desti))
 		    val _ = add_instr(BR afterl)

@@ -246,9 +246,10 @@ structure NilContextPre
    (*These are for debugging
     *)
    fun vprint v = (lprintl (var2string v);false)
-   fun allBound_c kindmap con = c_all (contains kindmap) vprint  (NilUtil.freeConVarInCon (true,con))
-   fun allBound_k kindmap kind = c_all (contains kindmap) vprint (NilUtil.freeConVarInKind kind)
-
+   fun allBound_c kindmap con = c_all (contains kindmap) vprint  
+                                (Name.VarSet.listItems (NilUtil.freeConVarInCon (true,0,con)))
+   fun allBound_k kindmap kind = c_all (contains kindmap) vprint 
+                                (Name.VarSet.listItems (NilUtil.freeConVarInKind (0,kind)))
 
    fun find_std_kind (context as {kindmap,...}:context,var) = 
      (case (Vfind (kindmap, var)) of
@@ -757,8 +758,8 @@ structure NilContextPre
 	   (case copt of SOME c => insert_kind_equation (D,v,c,k) | NONE => insert_kind (D,v,k))
 
        val (ev_list,cv_list) = Listops.unzip fvlist
-       val free_cvs = List.concat cv_list
-       val free_evs = List.concat ev_list
+       val free_cvs = Name.VarSet.listItems(foldl Name.VarSet.union Name.VarSet.empty cv_list)
+       val free_evs = Name.VarSet.listItems(foldl Name.VarSet.union Name.VarSet.empty ev_list)
 
        (*Get the equations opts and kinds, and then filter out the non-equations *)
        val (eqn_opts,kinds) = Listops.unzip (map (fn v => k_get(orig,v)) free_cvs)
@@ -780,19 +781,19 @@ structure NilContextPre
      end
    and generate_con_error_context' (orig,context,cons) = 
      let
-       val fvlist = map (fn c => NilUtil.freeExpConVarInCon (true,c)) cons
+       val fvlist = map (fn c => NilUtil.freeExpConVarInCon (true,0,c)) cons
      in
        generate_error_context (orig,context,fvlist)
      end
    and generate_kind_error_context' (orig,context,kinds) = 
      let
-       val fvlist = map (fn c => NilUtil.freeExpConVarInKind (true,c)) kinds
+       val fvlist = map (fn c => NilUtil.freeExpConVarInKind (true,0,c)) kinds
      in
        generate_error_context (orig,context,fvlist)
      end
    and generate_exp_error_context' (orig,context,exps) = 
      let
-       val fvlist = map (fn c => NilUtil.freeExpConVarInExp (true,c)) exps
+       val fvlist = map (fn c => NilUtil.freeExpConVarInExp (true,0,c)) exps
      in
        generate_error_context (orig,context,fvlist)
      end

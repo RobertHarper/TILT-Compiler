@@ -18,10 +18,11 @@ structure Name :> NAME =
     fun eq_var   (v1 : var, v2)     = v1 = v2
     val eq_var2 = curry2 eq_var
     val compare_var = Int.compare
-    structure VarKey : ORD_KEY = struct
-				     type ord_key = var
-				     val compare = compare_var
-				 end
+    structure VarKey = 
+	struct
+	    type ord_key = var
+	    val compare = compare_var
+	end
     structure VarSet = SplaySetFn(VarKey) 
     structure VarMap = SplayMapFn(VarKey) 
 
@@ -76,16 +77,6 @@ structure Name :> NAME =
     fun namespaceint (hash,str) = hash - (Symbol.number(Symbol.varSymbol str))
 
 
-    fun construct_var (i : int, s : string) : bool * var = 
-      let val _ = update_var_counter i
-	  val s = if (size s > 0 andalso (Char.isDigit(String.sub(s,0))))
-		    then "v" ^ s else s
-	  val inUse = (case VarMap.find(!varmap,i) of
-			   NONE => false
-			 | SOME _ => true)
-	  val _ = varmap := (VarMap.insert(!varmap,i,s))
-      in  (inUse, i)
-      end
     fun construct_label (i,s) = 
 	let val _ = update_label_counter i
 	in  (i,s)
@@ -100,8 +91,15 @@ structure Name :> NAME =
     fun deconstruct_tag x = x
     fun deconstruct_loc x = x
 
-    fun fresh_named_var str : var = #2(construct_var(inc_counter var_counter, str))
-    fun fresh_var() = inc_counter var_counter
+    fun fresh_named_var (s : string) : var = 
+	let val i = inc_counter var_counter
+	    val _ = update_var_counter i
+	    val s = if (size s > 0 andalso (Char.isDigit(String.sub(s,0))))
+			then "v" ^ s else s
+	    val _ = varmap := (VarMap.insert(!varmap,i,s))
+	in  i
+	end
+    fun fresh_var() = fresh_named_var ""
     fun gen_var_from_symbol v : var = fresh_named_var(Symbol.name v)
 
     fun var2int    (v : var) = v
@@ -111,8 +109,6 @@ structure Name :> NAME =
     fun var2string (v : var) = (var2name v) ^ "_" ^ (Int.toString v)
 
     fun derived_var v = fresh_named_var(var2name v)
-
-    fun deconstruct_var v = (v, var2name v)
 
     fun rename_var (v : var, s : string) : unit = varmap := (VarMap.insert(!varmap,v,s))
 

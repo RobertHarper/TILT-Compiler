@@ -9,10 +9,6 @@ sig
   val Rzero   : register   (* Integer zero *)
   val Rra     : register   (* The link register which holds the return address - 8 *)
 
-  datatype operand = 
-    REGop of register
-  | IMMop of int
-  
   val in_imm_range : int -> bool
   val in_ea_disp_range : int -> bool
   val maxsp_disp : int
@@ -39,19 +35,30 @@ sig
   datatype fpmove_instruction = 
     FABSD | FNEGD | FMOVD | FITOD | FDTOI
 
+  datatype imm = INT of int             (* Must fit in 13 bits sign-extended *)
+               | LOWINT of Word32.word  (* The low 10 bits of the word *)
+               | HIGHINT of Word32.word (* The high 22 buts of the word *)
+               | LOWLABEL of label      (* The low 10 buts of the label *)
+               | HIGHLABEL of label     (* The high 22 buts of the label *)
+
+  datatype operand = 
+    REGop of register
+  | IMMop of imm
 
   datatype specific_instruction =
     IALIGN of align
   | NOP  (* stylized for easier reading *)
-  | SETHI  of int * register
+  (* For sethi, the imm must be of the HIGH flavor *)
+  | SETHI  of imm * register
   | WRY    of register  (* the Y register is for 64-bit integer mult/div *)
   | RDY    of register
   | CMP    of register * operand
   | FCMPD  of register * register
-  | STOREI of storei_instruction * register * int * register
-  | LOADI  of loadi_instruction * register * int * register
-  | STOREF of storef_instruction * register * int * register
-  | LOADF  of loadf_instruction * register * int * register
+  (* For the load/store instructions, imm must be of the LOW flavors *)
+  | STOREI of storei_instruction * register * imm * register
+  | LOADI  of loadi_instruction * register * imm * register
+  | STOREF of storef_instruction * register * imm * register
+  | LOADF  of loadf_instruction * register * imm * register
   | CBRANCHI of cbri_instruction * label
   | CBRANCHF of cbrf_instruction * label
   | INTOP  of int_instruction * register * operand * register

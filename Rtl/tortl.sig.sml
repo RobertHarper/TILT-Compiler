@@ -9,14 +9,7 @@ sig
    val debug_simp : bool ref
    val debug_bound : bool ref
 
-   val do_constant_records : bool ref
-   val do_gcmerge : bool ref
-   type translate_params = { HeapProfile : int option, do_write_list : bool, 
-                             codeAlign : Rtl.align, FullConditionalBranch : bool, 
-                             elim_tail_call : bool, recognize_constants : bool}
-
-   val translate : string -> translate_params -> Nil.module -> Rtl.module
-                   (* unit name *)
+   val translate : (string * Nil.module) -> Rtl.module  (* unit name *)
    val entryTables : Rtl.label list -> Rtl.module
 
 end

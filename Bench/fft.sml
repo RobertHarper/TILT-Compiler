@@ -259,11 +259,11 @@ fun test np =
   end
  end)
 
-fun doit() = 
-  let val np = ref 16 
-  in for(1,13,fn i => (test (!np); np := (!np)*2))
-  end
 
 in
-    val fftResult = doit()
+    fun fftdoit() = 
+	let val np = ref 16 
+	in for(1,13,fn i => (test (!np); np := (!np)*2))
+	end
+    val fftResult = fftdoit()
 end

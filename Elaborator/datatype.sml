@@ -36,8 +36,11 @@ structure Datatype
         (* ---- tyvar_vars are the polymorphic type arguments for constructor functions
 	   ---- tyvar_labs name the type components when they are strucutre components
 	 *)
-	val tyvar_labs = flatten (map (fn (_,tyvars,_) => 
-					map (symbol_label o AstHelp.tyvar_strip) tyvars) std_list)
+	val tyvar_labs = flatten(map (fn (_,tyvars,_) => 
+				      map (symbol_label o AstHelp.tyvar_strip) tyvars) std_list)
+	val tyvar_labs = foldr (fn (l,acc) => if (Listops.member_eq(eq_label,l,acc))
+						  then acc else l::acc) [] tyvar_labs
+
 	val num_tyvar = length tyvar_labs
 	val tyvar_vars = map (fn lab => fresh_named_var "poly") tyvar_labs
 	val tyvar_tuple = con_tuple_inject(map CON_VAR tyvar_vars)
@@ -271,10 +274,16 @@ structure Datatype
 	val type_sbnd_sdecs = 
 		let val kind = if is_monomorphic then KIND_TUPLE 1 else KIND_ARROW(num_tyvar,1)
 		    fun mapper(i,l,v) =
-			let val c = if num_datatype = 1 then top_type_tyvar 
-					else CON_TUPLE_PROJECT(i,CON_VAR top_type_var)
+			let val c = if num_datatype = 1 
+					then top_type_tyvar
+				    else 
+			              let val c = CON_VAR top_type_var
+					  val c = if is_monomorphic then c
+						  else CON_APP(c, tyvar_tuple)
+				      in  CON_TUPLE_PROJECT(i,c)
+				      end
 			    val c = if is_monomorphic then c 
-				    else con_fun(tyvar_vars, c)
+				      else con_fun(tyvar_vars, c)
 			in  (SBND(l,BND_CON(v,c)), 
 			     SDEC(l,DEC_CON(v,kind,SOME c, false)))
 			end

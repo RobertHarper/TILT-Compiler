@@ -110,13 +110,17 @@ struct
        | _ => false)
 
 
+    datatype flex = RIGID | FLEXIBLE | FROZEN
+
     fun pp_recordcon (seen : (context,con) tyvar list) (isflex,rdecs) : format = 
 	let val is_tuple = rdecs_is_tuple rdecs
-	    val format = (case (is_tuple,isflex) of
-			      (true,false) => ("{", " *","}", true)
-			    | (true,true) => ("{?", " *","?}", true)
-			    | (false,false) => ("{", ",","}", true)
-			    | (false,true) => ("{?", ",","?}", true))
+	    val separator = if is_tuple then " *" else ","
+	    val (left,right) = 
+		(case isflex of
+		     RIGID => ("{", "}")
+		   | FLEXIBLE => ("{?", "?}")
+		   | FROZEN => ("{!", "!}"))
+	    val format = (left, separator, right, true)
 	    val doer = if is_tuple
 			   then (fn (l,c) => pp_con seen c)
 		       else
@@ -184,8 +188,9 @@ struct
        | CON_FLEXRECORD (ref(FLEXINFO(_,true,[]))) => String "UNIT"
        | CON_FLEXRECORD (ref(FLEXINFO(_,false,[]))) => String "FLEXUNIT"
        | CON_FLEXRECORD (ref(INDIRECT_FLEXINFO rf)) => pp_con seen (CON_FLEXRECORD rf)
-       | (CON_RECORD rdecs) => pp_recordcon seen (false,rdecs)
-       | CON_FLEXRECORD (ref (FLEXINFO (_,isrigid,rdecs))) => pp_recordcon seen (not isrigid,rdecs)
+       | (CON_RECORD rdecs) => pp_recordcon seen (RIGID,rdecs)
+       | CON_FLEXRECORD (ref (FLEXINFO (_,isFrozen,rdecs))) => 
+		pp_recordcon seen (if isFrozen then FROZEN else FLEXIBLE, rdecs)
        | CON_FUN (vlist,con) => HOVbox[String "/-\\",
 				       pp_list pp_var vlist ("(", ",",")", false),
 				       pp_con seen con]

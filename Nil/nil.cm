@@ -82,16 +82,17 @@ pass.sig.sml
 reduce.sml
 flatten.sml 
 
+analyze.sig.sml
+analyze.sml
+
 inline.sig.sml
 inline.sml
 
 linknil.sig.sml
 linknil.sml
 
-(*
 vararg.sig.sml
 vararg.sml
-*)
 
 reify.sig.sml
 reify.sml

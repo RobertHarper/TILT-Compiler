@@ -16,8 +16,6 @@ structure Machine =
     open Rtl
     open Core
 
-    datatype operand = REGop of register
-	             | IMMop of int
 
     val Rpv     = NONE
     val Rcc     = R (~1) (* useful for defining interferences WRT status register *)
@@ -87,18 +85,30 @@ structure Machine =
   datatype fpmove_instruction = 
     FABSD | FNEGD | FMOVD | FITOD | FDTOI
 
+  datatype imm = INT of int             (* Must fit in 13 bits sign-extended *)
+               | LOWINT of Word32.word  (* The low 10 bits of the word *)
+               | LOWLABEL of label      (* The low 10 buts of the label *)
+               | HIGHINT of Word32.word (* The high 22 buts of the word *)
+               | HIGHLABEL of label     (* The high 22 buts of the label *)
+
+  datatype operand = 
+    REGop of register
+  | IMMop of imm
+
   datatype specific_instruction =
     IALIGN of align
   | NOP  (* stylized for easier reading *)
-  | SETHI  of int * register
+  (* For sethi, the imm must be of the HIGH flavor *)
+  | SETHI  of imm * register
   | WRY    of register
   | RDY    of register
   | CMP    of register * operand
   | FCMPD  of register * register
-  | STOREI of storei_instruction * register * int * register
-  | LOADI  of loadi_instruction * register * int * register
-  | STOREF of storef_instruction * register * int * register
-  | LOADF  of loadf_instruction * register * int * register
+  (* For the load/store instructions, imm must be of the LOW flavors *)
+  | STOREI of storei_instruction * register * imm * register
+  | LOADI  of loadi_instruction * register * imm * register
+  | STOREF of storef_instruction * register * imm * register
+  | LOADF  of loadf_instruction * register * imm * register
   | CBRANCHI of cbri_instruction * label
   | CBRANCHF of cbrf_instruction * label
   | INTOP  of int_instruction * register * operand * register
@@ -117,7 +127,8 @@ structure Machine =
     val i2w = W.fromInt
     val w2i = W.toInt
     fun ms n = if n<0 then ("-"^(Int.toString (~n))) else Int.toString n
-	
+    val msw = TilWord32.toDecimalString
+
     fun msReg (R 14) = "%sp"
       | msReg (R 30) = "%fp"
       | msReg (R n) = "%r" ^ (ms n)
@@ -253,11 +264,19 @@ structure Machine =
   val comma  	    	       = ", "
   val tab                      = "\t"
   val newline                  = "\n"
-  fun msDisp(rd, 0)	       = "[" ^ (msReg rd) ^ "]"
-    | msDisp(rd, disp) 	       = "[" ^ (msReg rd) ^ "+" ^ (ms disp) ^ "]"
-  fun msOperand (REGop r) = msReg r
-    | msOperand (IMMop n) = (ms n)
 
+  fun msImm (INT i) = ms i
+    | msImm (LOWINT w) = "%lo(" ^ (msw w) ^ ")"
+    | msImm (HIGHINT w) = "%hi(" ^ (msw w) ^ ")"
+    | msImm (LOWLABEL l) = "%lo(" ^ (msLabel l) ^ ")"
+    | msImm (HIGHLABEL l) = "%hi(" ^ (msLabel l) ^ ")"
+  fun msOperand (REGop r) = msReg r
+    | msOperand (IMMop imm) = msImm imm
+  fun msDisp(rd, INT 0)     = "[" ^ (msReg rd) ^ "]"
+    | msDisp(rd, imm) = (case imm of
+			     HIGHINT _ => error "msDisp with HIGHINT"
+			   | HIGHLABEL _ => error "msDisp with HIGHLABEL"
+			   | _ =>  "[" ^ (msReg rd) ^ "+" ^ (msImm imm) ^ "]")
 
   fun msInstr' (IALIGN x) =
          let val i = 
@@ -270,9 +289,9 @@ structure Machine =
 	 in tab^".align "^Int.toString i
          end
     | msInstr' NOP = tab ^ "nop"
-    | msInstr' (SETHI (value, Rdest)) =
+    | msInstr' (SETHI (imm, Rdest)) =
                                 (tab ^ "sethi" ^ tab ^
-				 (ms value) ^ comma ^ (msReg Rdest))
+				 (msImm imm) ^ comma ^ (msReg Rdest))
     | msInstr' (WRY Rsrc) = (tab ^ "mov " ^  (msReg Rsrc) ^ ", %y")
     | msInstr' (RDY Rdest) = (tab ^ "mov %y, " ^  (msReg Rdest))
     | msInstr' (CMP (Rsrc1, op2)) =
@@ -329,16 +348,20 @@ structure Machine =
 				^ "\n\tnop"
     | msInstr_base (RTL instr) =  (tab ^ (rtl_to_ascii instr))
     | msInstr_base (MOVE (Rsrc,Rdest)) =
-      (case (Rsrc,Rdest) of
-	  (R _, R _) => ("\tmov\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
-	| (F m, F n) => ("\tfmovd\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
+      let val scratch = INT threadScratch_disp
+	  val scratch2 = INT (threadScratch_disp + 4)
+      in
+	  (case (Rsrc,Rdest) of
+	       (R _, R _) => ("\tmov\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
+	     | (F m, F n) => ("\tfmovd\t" ^ (msReg Rsrc) ^ comma ^ msReg Rdest)
 (*			 "\tfmovs\t" ^ (msReg (F (m+1))) ^ comma ^ (msReg (F (n+1)))) *)
-	| (R n, F _) => ("\tst\t" ^ (msReg Rsrc) ^ comma ^ (msDisp(Rth, threadScratch_disp)) ^ "\n" ^
-			 "\tst\t" ^ (msReg (R (n+1))) ^ comma ^ (msDisp(Rth, threadScratch_disp + 4)) ^ "\n" ^
-			 "\tldd\t" ^ (msDisp(Rth, threadScratch_disp)) ^ comma ^ (msReg Rdest))
-	| (F _, R n) => ("\tstd\t" ^ (msReg Rsrc) ^ comma ^ (msDisp(Rth, threadScratch_disp)) ^ "\n" ^
-	                 "\tld\t" ^ (msDisp(Rth, threadScratch_disp)) ^ comma ^ (msReg Rdest) ^ "\n" ^
-			 "\tld\t" ^ (msDisp(Rth, threadScratch_disp+ 4)) ^ comma ^ (msReg (R (n+1)))))
+	     | (R n, F _) => ("\tst\t" ^ (msReg Rsrc) ^ comma ^ (msDisp(Rth, scratch)) ^ "\n" ^
+			      "\tst\t" ^ (msReg (R (n+1))) ^ comma ^ (msDisp(Rth, scratch2)) ^ "\n" ^
+			      "\tldd\t" ^ (msDisp(Rth, scratch)) ^ comma ^ (msReg Rdest))
+	     | (F _, R n) => ("\tstd\t" ^ (msReg Rsrc) ^ comma ^ (msDisp(Rth, scratch)) ^ "\n" ^
+			      "\tld\t" ^ (msDisp(Rth, scratch)) ^ comma ^ (msReg Rdest) ^ "\n" ^
+			      "\tld\t" ^ (msDisp(Rth, scratch2) ^ comma ^ (msReg (R (n+1))))))
+      end
 			 
     | msInstr_base (PUSH (Rsrc, sloc)) = 
                                 ("\tPUSH\t" ^ (msReg Rsrc) ^ comma ^ (msStackLocation sloc))
@@ -346,14 +369,17 @@ structure Machine =
                                 ("\tPOP\t" ^ (msReg Rdest) ^ comma ^ (msStackLocation sloc))
     | msInstr_base (PUSH_RET NONE) = "PUSH_RET none"
     | msInstr_base (POP_RET NONE) = "POP_RET none"
-    | msInstr_base (PUSH_RET (SOME(ACTUAL4 offset))) = msInstr'(STOREI(ST,Rra,offset, Rsp))
-    | msInstr_base (POP_RET (SOME(ACTUAL4 offset))) = msInstr'(LOADI(LD,Rra,offset, Rsp))
+    | msInstr_base (PUSH_RET (SOME(ACTUAL4 offset))) = msInstr'(STOREI(ST,Rra,INT offset, Rsp))
+    | msInstr_base (POP_RET (SOME(ACTUAL4 offset))) = msInstr'(LOADI(LD,Rra,INT offset, Rsp))
     | msInstr_base (PUSH_RET (SOME sloc)) = ("\tPUSH_RET\t" ^ (msStackLocation sloc))
     | msInstr_base (POP_RET (SOME sloc)) =  ("\tPOP_RET\t" ^ (msStackLocation sloc))
     | msInstr_base (GC_CALLSITE label) = ("\tGC CALLING SITE\t" ^ (msLabel label))
-    | msInstr_base (LADDR (Rdest, label)) = ("\tsethi\t%hi(" ^ (msLabel label) ^ "), " ^ (msReg Rdest)) ^
-					  ("\n\tor\t" ^ (msReg Rdest) ^ 
+    | msInstr_base (LADDR (Rdest, label)) = 
+				let val str1 = msInstr'(SETHI(HIGHLABEL label, Rdest))
+				    val str2 = ("\tor\t" ^ (msReg Rdest) ^ 
 						",%lo(" ^ (msLabel label) ^ "), " ^ (msReg Rdest))
+				in  str1 ^ "\n" ^ str2
+				end
 
   fun msInstr (SPECIFIC i) = msInstr' i
     | msInstr (BASE i) = msInstr_base i
@@ -579,29 +605,29 @@ structure Machine =
 
 
    fun increase_stackptr sz = if (sz >= 0)
-				  then [SPECIFIC(INTOP(ADD, Rsp, IMMop sz, Rsp))]
+				  then [SPECIFIC(INTOP(ADD, Rsp, IMMop (INT sz), Rsp))]
 			      else error "increase_stackptr given negative stack size"
    fun decrease_stackptr sz = if (sz >= 0)
 				  then [BASE(MOVE(Rsp, Rframe)),
-					SPECIFIC(INTOP(SUB, Rsp, IMMop sz, Rsp))]
+					SPECIFIC(INTOP(SUB, Rsp, IMMop (INT sz), Rsp))]
 			      else error "decrease_stackptr given negative stack size"
    fun std_entry_code() = []
    fun std_return_code(NONE) = []
      | std_return_code(SOME sra) = []
    fun push (src,actual_location) =
        case (src,actual_location) of
-          (R _, ACTUAL8 offset) => SPECIFIC(STOREI(STD,  src, offset, Rsp))
-        | (R _, ACTUAL4 offset) => SPECIFIC(STOREI(ST,   src, offset, Rsp))
-	| (F _, ACTUAL8 offset) => SPECIFIC(STOREF(STDF, src, offset, Rsp))
-	| (F _, ACTUAL4 offset) => SPECIFIC(STOREF(STF,  src, offset, Rsp))
+          (R _, ACTUAL8 offset) => SPECIFIC(STOREI(STD,  src, INT offset, Rsp))
+        | (R _, ACTUAL4 offset) => SPECIFIC(STOREI(ST,   src, INT offset, Rsp))
+	| (F _, ACTUAL8 offset) => SPECIFIC(STOREF(STDF, src, INT offset, Rsp))
+	| (F _, ACTUAL4 offset) => SPECIFIC(STOREF(STF,  src, INT offset, Rsp))
 	| _ => error "push"
 
    fun pop (dst,actual_location) = 
        case (dst,actual_location) of
-          (R _,ACTUAL8 offset) => SPECIFIC(LOADI(LDD,  dst, offset, Rsp))
-        | (R _,ACTUAL4 offset) => SPECIFIC(LOADI(LD,   dst, offset, Rsp))
-	| (F _,ACTUAL8 offset) => SPECIFIC(LOADF(LDDF, dst, offset, Rsp))
-	| (F _,ACTUAL4 offset) => SPECIFIC(LOADF(LDF,  dst, offset, Rsp))
+          (R _,ACTUAL8 offset) => SPECIFIC(LOADI(LDD,  dst, INT offset, Rsp))
+        | (R _,ACTUAL4 offset) => SPECIFIC(LOADI(LD,   dst, INT offset, Rsp))
+	| (F _,ACTUAL8 offset) => SPECIFIC(LOADF(LDDF, dst, INT offset, Rsp))
+	| (F _,ACTUAL4 offset) => SPECIFIC(LOADF(LDF,  dst, INT offset, Rsp))
 	| _ => error "pop"
 
 

@@ -127,11 +127,9 @@ struct
          REGop (translateIReg rtl_reg)
      | translateOp (Rtl.IMM src2) =
 	 if (in_imm_range src2) then 
-	   IMMop src2
+	   IMMop (INT src2)
 	 else
 	   error ("immediate out of range: " ^ (Int.toString src2))
-
-
 
 
 
@@ -274,13 +272,17 @@ struct
 	      val high20 = w2i(W.rshifta(immed, 12))
 	      val high22  = w2i(W.rshifta(immed, 10))
 	      val low10   = w2i(W.andb(immed, 0w1023))
+	      val high22op = HIGHINT immed
+	      val low10op = LOWINT immed
 	  in
 	      if (high20 = 0 orelse high20 = ~1)
-		 then emit(SPECIFIC(INTOP(OR,Rzero,IMMop (w2i immed),Rdest)))
-	      else (emit(SPECIFIC(SETHI(high22,Rdest)));
+		 then let val low13op = INT (w2i immed)  (* assumes upper 22 bits all set or all clear *)
+		      in  emit(SPECIFIC(INTOP(OR,Rzero,IMMop low13op, Rdest)))
+		      end
+	      else (emit(SPECIFIC(SETHI(high22op,Rdest)));
 		    if (low10 = 0)
 			 then ()
-	 	     else (emit(SPECIFIC(INTOP(OR,Rdest,IMMop low10, Rdest)))))
+	 	     else (emit(SPECIFIC(INTOP(OR,Rdest,IMMop low10op, Rdest)))))
 	  end
 
    fun translate_icmp Rtl.EQ = BE
@@ -308,21 +310,43 @@ struct
      | translate_fcmp Rtl.LT = FBL
      | translate_fcmp Rtl.LE = FBLE
 
-   fun translate (Rtl.LI (immed, rtl_Rdest)) = load_imm(immed,translateIReg rtl_Rdest)
-     | translate (Rtl.LADDR (label, offset, rtl_Rdest)) =
-          let
-	    val Rdest = translateIReg rtl_Rdest
-	  in
-	    emit (BASE(LADDR (Rdest, label)));
-	    if (offset <> 0) then 
-	      emit (SPECIFIC(INTOP (ADD, Rdest, IMMop offset, Rdest)))
-	    else 
-	      ()
-	  end
+   fun loadEA' destOpt ea = 
+       (case ea of
+	    Rtl.REA(rtlBase, disp) => (translateIReg rtlBase, INT disp)
+	  | Rtl.LEA(label, 0) => let val base = freshIreg()
+				 in  emit(SPECIFIC(SETHI(HIGHLABEL label, base)));
+				     (base, LOWLABEL label)
+				 end
+	  | Rtl.LEA(label, disp) => let val base = freshIreg()
+				    in  emit(BASE(LADDR(base, label)));
+					(base, INT disp)
+				    end
+	  | Rtl.RREA(r1, r2) => let val Rsrc1 = translateIReg r1
+				    val Rsrc2 = translateIReg r2
+				    val dest = (case destOpt of
+						    NONE => translateIReg
+							(Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE))
+						  | SOME d => d)
+				    val _ = emit (SPECIFIC(INTOP (ADD, Rsrc1, REGop Rsrc2, dest)))
+				in  (dest, INT 0)
+				end)
 
-     | translate (Rtl.LEA (Rtl.EA (rtl_Raddr, offset), rtl_Rdest)) =
-          emit (SPECIFIC(INTOP (ADD, translateIReg rtl_Rdest, IMMop offset, 
-		       translateIReg rtl_Raddr)))
+   val loadEA = loadEA' NONE
+
+   fun translate (Rtl.LI (immed, rtl_Rdest)) = load_imm(immed,translateIReg rtl_Rdest)
+     | translate (Rtl.LADDR (ea, rtl_Rdest)) =
+          let val Rdest = translateIReg rtl_Rdest
+	      val (Rbase,disp) = loadEA' (SOME Rdest) ea
+	      val dispZero = (case disp of
+				  LOWINT 0w0 => true
+				| INT 0 => true
+				| _ => false)
+	  in  if dispZero
+		  then (if eqRegs'(Rbase,Rdest) 
+			    then ()
+			else emit (BASE(MOVE (Rbase, Rdest))))
+	      else emit (SPECIFIC(INTOP (OR, Rbase, IMMop disp, Rdest)))
+	  end
 
      | translate (Rtl.MV (rtl_Rsrc, rtl_Rdest)) =
           emit (BASE(MOVE (translateIReg rtl_Rsrc, translateIReg rtl_Rdest)))
@@ -334,7 +358,7 @@ struct
 	 val Rdest = translateIReg rtl_Rdest
          val label = Rtl.fresh_code_label "cmv"
          val cmp = translate_icmp rtl_cmp
-       in emit(SPECIFIC(CMP (Rsrc1, IMMop 0)));
+       in emit(SPECIFIC(CMP (Rsrc1, IMMop (INT 0))));
 	  emit(SPECIFIC(CBRANCHI(negate_icmp cmp,label)));
 	  emit(SPECIFIC NOP);
 	  emit(SPECIFIC(INTOP(OR, Rzero, Rop2, Rdest)));
@@ -389,7 +413,7 @@ struct
 	 val src2 = translateOp op2
 	 val Rdest = translateIReg rtl_Rdest
        in
-	 emit (SPECIFIC(INTOP (SRA, Rsrc1, IMMop 31, Rat)));
+	 emit (SPECIFIC(INTOP (SRA, Rsrc1, IMMop (INT 31), Rat)));
 	 emit (SPECIFIC(WRY   Rat));
 	 emit (SPECIFIC(INTOP (SDIV, Rsrc1, src2, Rdest)))
        end
@@ -418,7 +442,7 @@ struct
          val src2  = translateOp op2
          val Rdest = translateIReg rtl_Rdest
        in
-	 emit (SPECIFIC(INTOP (SLL, Rsrc1, IMMop 2, Rat)));
+	 emit (SPECIFIC(INTOP (SLL, Rsrc1, IMMop (INT 2), Rat)));
 	 emit (SPECIFIC(INTOP (ADD, Rat, src2, Rdest)))
        end
 
@@ -428,7 +452,7 @@ struct
          val src2  = translateOp op2
          val Rdest = translateIReg rtl_Rdest
        in
-	 emit (SPECIFIC(INTOP (SLL, Rsrc1, IMMop 3, Rat)));
+	 emit (SPECIFIC(INTOP (SLL, Rsrc1, IMMop (INT 3), Rat)));
 	 emit (SPECIFIC(INTOP (ADD, Rat, src2, Rdest)))
        end
 
@@ -438,7 +462,7 @@ struct
          val src2  = translateOp op2
          val Rdest = translateIReg rtl_Rdest
        in
-	 emit (SPECIFIC(INTOP (SLL, Rsrc1, IMMop 2, Rat)));
+	 emit (SPECIFIC(INTOP (SLL, Rsrc1, IMMop (INT 2), Rat)));
 	 emit (SPECIFIC(INTOP (SUB, Rat, src2, Rdest)))
        end
 
@@ -448,7 +472,7 @@ struct
          val src2  = translateOp op2
          val Rdest = translateIReg rtl_Rdest
        in
-	 emit (SPECIFIC(INTOP (SLL, Rsrc1, IMMop 3, Rat)));
+	 emit (SPECIFIC(INTOP (SLL, Rsrc1, IMMop (INT 3), Rat)));
 	 emit (SPECIFIC(INTOP (SUB, Rat, src2, Rdest)))
        end
 
@@ -665,19 +689,21 @@ struct
        let
 	 val Fsrc  = translateFReg rtl_Fsrc
          val Rdest = translateIReg rtl_Rdest
+	 val scratch = INT threadScratch_disp
        in
 	   emit (SPECIFIC (FPMOVE(FDTOI, Fsrc, Fat)));
-	   emit (SPECIFIC (STOREF (STF, Fat, threadScratch_disp, Rth)));
-	   emit (SPECIFIC (LOADI (LD, Rdest, threadScratch_disp, Rth)))
+	   emit (SPECIFIC (STOREF (STF, Fat, scratch, Rth)));
+	   emit (SPECIFIC (LOADI (LD, Rdest, scratch, Rth)))
        end
 
      | translate (Rtl.CVT_INT2REAL (rtl_Rsrc, rtl_Fdest)) =
        let
 	 val Rsrc  = translateIReg rtl_Rsrc
          val Fdest = translateFReg rtl_Fdest
+	 val scratch = INT threadScratch_disp
        in
-	   emit (SPECIFIC (STOREI (ST, Rsrc, threadScratch_disp, Rth)));
-	   emit (SPECIFIC (LOADF  (LDF, Fat, threadScratch_disp, Rth)));
+	   emit (SPECIFIC (STOREI (ST, Rsrc, scratch, Rth)));
+	   emit (SPECIFIC (LOADF  (LDF, Fat, scratch, Rth)));
 	   emit (SPECIFIC (FPMOVE (FITOD, Fat, Fdest)))
        end
 
@@ -768,81 +794,64 @@ struct
      | translate (Rtl.CATCH_EXN) = 
 	  let val tmp1 =  Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
 	      val tmp2 =  Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
-	  in  translate(Rtl.LOAD32I(Rtl.EA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1));
+	  in  translate(Rtl.LOAD32I(Rtl.REA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1));
 	      translate(Rtl.CMPUI(Rtl.GT,Rtl.SREGI Rtl.STACK,Rtl.REG tmp1,tmp2));
 	      translate(Rtl.CMV(Rtl.NE,tmp2,Rtl.REG(Rtl.SREGI Rtl.STACK), tmp1));
-	      translate(Rtl.STORE32I(Rtl.EA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1))
+	      translate(Rtl.STORE32I(Rtl.REA(Rtl.SREGI Rtl.THREADPTR,maxsp_disp),tmp1))
 	  end
 
-     | translate (Rtl.LOAD32I (Rtl.EA (rtl_Raddr, disp), rtl_Rdest)) =
-       let
-	 val Raddr = translateIReg rtl_Raddr
-	 val Rdest = translateIReg rtl_Rdest
-       in
-	 emit (SPECIFIC (LOADI (LD, Rdest, disp, Raddr)))
+     | translate (Rtl.LOAD32I (ea, rtl_Rdest)) =
+       let val (Raddr, disp) = loadEA ea
+	   val Rdest = translateIReg rtl_Rdest
+       in  emit (SPECIFIC (LOADI (LD, Rdest, disp, Raddr)))
        end
 
-     | translate (Rtl.STORE32I (Rtl.EA (rtl_Raddr, disp), rtl_Rdest)) =
-       let
-	 val Raddr = translateIReg rtl_Raddr
-	 val Rdest = translateIReg rtl_Rdest
-       in
-	 emit (SPECIFIC (STOREI (ST, Rdest, disp, Raddr)))
+     | translate (Rtl.STORE32I (ea, rtl_Rdest)) =
+       let val (Raddr, disp) = loadEA ea
+	   val Rdest = translateIReg rtl_Rdest
+       in  emit (SPECIFIC (STOREI (ST, Rdest, disp, Raddr)))
        end
 
-     | translate (Rtl.LOAD8I (Rtl.EA (rtl_Raddr, disp), rtl_Rdest)) =
-       let
-	 val Raddr = translateIReg rtl_Raddr
-	 val Rdest = translateIReg rtl_Rdest
-       in
-	 emit (SPECIFIC (LOADI (LDUB, Rdest, disp, Raddr)))
+     | translate (Rtl.LOAD8I (ea, rtl_Rdest)) =
+       let val (Raddr, disp) = loadEA ea
+	   val Rdest = translateIReg rtl_Rdest
+       in  emit (SPECIFIC (LOADI (LDUB, Rdest, disp, Raddr)))
        end
 
-     | translate (Rtl.STORE8I (Rtl.EA (rtl_Raddr, disp), rtl_Rdest)) =
-       let
-	 val Raddr = translateIReg rtl_Raddr
-	 val Rdest = translateIReg rtl_Rdest
-       in
-	 emit (SPECIFIC (STOREI (STUB, Rdest, disp, Raddr)))
+     | translate (Rtl.STORE8I (ea, rtl_Rdest)) =
+       let val (Raddr, disp) = loadEA ea
+	   val Rdest = translateIReg rtl_Rdest
+       in  emit (SPECIFIC (STOREI (STUB, Rdest, disp, Raddr)))
        end
 
-
-     | translate (Rtl.LOADQF (Rtl.EA (rtl_Raddr, disp), rtl_Fdest)) =
-       let
-	 val Raddr = translateIReg rtl_Raddr
-	 val Fdest = translateFReg rtl_Fdest
-       in
-	 emit (SPECIFIC (LOADF (LDDF, Fdest, disp, Raddr)))
+     | translate (Rtl.LOADQF (ea, rtl_Fdest)) =
+       let val (Raddr, disp) = loadEA ea
+	   val Fdest = translateFReg rtl_Fdest
+       in emit (SPECIFIC (LOADF (LDDF, Fdest, disp, Raddr)))
        end
 
-     | translate (Rtl.STOREQF (Rtl.EA (rtl_Raddr, disp), rtl_Fsrc)) =
-       let
-	 val Raddr = translateIReg rtl_Raddr
-	 val Fsrc  = translateFReg rtl_Fsrc
-       in
-	 emit (SPECIFIC (STOREF (STDF, Fsrc, disp, Raddr)))
+     | translate (Rtl.STOREQF (ea, rtl_Fsrc)) =
+       let val (Raddr, disp) = loadEA ea
+	   val Fsrc = translateFReg rtl_Fsrc
+       in emit (SPECIFIC (STOREF (STDF, Fsrc, disp, Raddr)))
        end
 
      | translate (Rtl.ICOMMENT str) = emit (BASE(ICOMMENT str))
 
-     | translate (Rtl.MUTATE (base,disp,newval,isptr_opt)) =
+     | translate (Rtl.MUTATE (ea,newval,isptr_opt)) =
 	 let 
 	     fun logwrite() = 
 		 let val writelist_cursor = Rtl.ML_EXTERN_LABEL "writelist_cursor"
 		     val writelist_end = Rtl.ML_EXTERN_LABEL "writelist_end"
 		     val cursor_addr = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_LABEL)
-		     val cursor_addr2 = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_LABEL)
-		     val end_addr = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_LABEL)
 		     val cursor_val = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 		     val cursor_val2 = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 		     val end_val = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 		     val store_loc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 		     val Rskip = Rtl.REGI(Name.fresh_var(), Rtl.NOTRACE_INT)
 		     val afterLabel = Rtl.fresh_code_label "afterMutateCheck"
-		 in  app translate [Rtl.LADDR(writelist_cursor,0,cursor_addr),
-				    Rtl.LOAD32I(Rtl.EA(cursor_addr,0),cursor_val),
-				    Rtl.LADDR(writelist_end,0,end_addr),
-				    Rtl.LOAD32I(Rtl.EA(end_addr,0),end_val),
+		 in  app translate [Rtl.LOAD32I(Rtl.LEA(writelist_cursor,0),cursor_val),
+				    Rtl.LOAD32I(Rtl.LEA(writelist_end,0),end_val),
 				    Rtl.BCNDI(Rtl.LT, cursor_val, Rtl.REG end_val, afterLabel, true)];
 		     emit (BASE (MOVE (Rheap, Rat)));
 		     emit (BASE (GC_CALLSITE afterLabel));
@@ -850,20 +859,15 @@ struct
 				      {regs_modified=[Rat], regs_destroyed=[Rat],
 				       args=[Rat]})));
 		     app translate [Rtl.ILABEL afterLabel,
-				    Rtl.LADDR(writelist_cursor,0,cursor_addr2),
-				    Rtl.LOAD32I(Rtl.EA(cursor_addr2,0),cursor_val2),
-				    Rtl.ADD(base, disp, store_loc),
-				    Rtl.STORE32I(Rtl.EA(cursor_val2,0),store_loc),
+				    Rtl.LADDR(Rtl.LEA(writelist_cursor,0),cursor_addr),
+				    Rtl.LOAD32I(Rtl.REA(cursor_addr,0),cursor_val2),
+				    Rtl.LADDR(ea, store_loc),
+				    Rtl.STORE32I(Rtl.REA(cursor_val2,0),store_loc),
 				    Rtl.ADD(cursor_val2, Rtl.IMM 4, cursor_val2),
-				    Rtl.STORE32I(Rtl.EA(cursor_addr2,0),cursor_val2)]
+				    Rtl.STORE32I(Rtl.REA(cursor_addr,0),cursor_val2)]
 		 end
 	 in
-	   (case disp of
-		Rtl.IMM disp => translate (Rtl.STORE32I(Rtl.EA(base,disp),newval))
-	      | Rtl.REG _ => let val addr = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
-				in  translate (Rtl.ADD(base, disp, addr));
-				    translate (Rtl.STORE32I(Rtl.EA(addr,0),newval))
-				end);
+	     translate (Rtl.STORE32I(ea,newval));
 	   (case isptr_opt of
 		NONE => logwrite()
 	      | SOME isptr =>
@@ -874,12 +878,10 @@ struct
 		    end)
 	 end
 
-     | translate (Rtl.INIT (Rtl.EA (rtl_Raddr, disp), rtl_Rdest, unused)) =
-       let
-	 val Raddr = translateIReg rtl_Raddr
-	 val Rdest = translateIReg rtl_Rdest
-       in
-	 emit (SPECIFIC (STOREI (ST, Rdest, disp, Raddr)))
+     | translate (Rtl.INIT (ea, rtl_Rdest, unused)) =
+       let val (Raddr, disp) = loadEA ea
+	   val Rdest = translateIReg rtl_Rdest
+       in  emit (SPECIFIC (STOREI (ST, Rdest, disp, Raddr)))
        end
 
      | translate (Rtl.NEEDGC (Rtl.IMM 0)) = ()
@@ -890,13 +892,13 @@ struct
 	   (case rtl_operand of
 		Rtl.REG rtl_Rsize => 
 		    let val Rsize = translateIReg rtl_Rsize
-		    in  emit (SPECIFIC (INTOP   (SLL, Rsize, IMMop 2, Rat)));
+		    in  emit (SPECIFIC (INTOP   (SLL, Rsize, IMMop (INT 2), Rat)));
 			emit (SPECIFIC (INTOP   (ADD, Rat, REGop Rheap, Rat)))
 		    end
 	      | Rtl.IMM words => 
 		    let val size = 4 * words
 		    in  if (in_ea_disp_range size) 
-			    then emit (SPECIFIC (INTOP (ADD, Rheap, IMMop size, Rat)))
+			    then emit (SPECIFIC (INTOP (ADD, Rheap, IMMop (INT size), Rat)))
 			else
 			    (load_imm(i2w size, Rat);
 			     emit (SPECIFIC (INTOP (ADD, Rheap, REGop Rat, Rat))))
@@ -934,6 +936,13 @@ struct
        (* HALT is a no-op from the translator's point of view *)
           ()
 
+   fun translateCode code = 
+       let fun translate1 arg = ((translate arg)
+				 handle e => (print "exn raised during translation of Rtl instruction:\n  ";
+				 Pprtl.pp_Instr arg;
+				 raise e))
+       in  Array.app translate1 code
+       end
 
    (* Translates an entire Rtl procedure *)
    fun translateProc (Rtl.PROC {name, args, code, results, return, 
@@ -960,12 +969,8 @@ struct
        resetBlock (freshCodeLabel()) true true;
 
        (* Translate instructions *)
-       (Array.app 
-	(fn arg => ((translate arg)
-		    handle e => (print "exn raised during translation of Rtl instruction:\n  ";
-				 Pprtl.pp_Instr arg;
-				 raise e)))
-	code);
+       translateCode code;
+
        
        (* Flush last block *)
        saveBlock ();

@@ -73,7 +73,9 @@ struct
     | regi2int (SREGI sregi) = sregi2int sregi
 
  (* effective address: register + sign-extended displacement *) 
-  datatype ea = EA of regi * int  
+  datatype ea = REA of regi * int  
+              | LEA of label * int 
+              | RREA of regi * regi    (* needed for the MUTATE *)
 
   val in_ea_disp_range = in_ea_disp_range
 
@@ -96,12 +98,10 @@ struct
   datatype calltype = ML_NORMAL | ML_TAIL of regi | C_NORMAL
   datatype instr = 
       LI     of TilWord32.word * regi
-    | LADDR  of label * int * regi
-    | LEA    of ea * regi               
+    | LADDR  of ea * regi               
     | MV     of regi * regi               (* src,dest *)
     | CMV    of cmp * regi * sv * regi    (* if cmp ra then c <- b *)
     | FMV    of regf * regf 
-
 
     | ADD    of regi * sv * regi        (* add(a,b,c): c <- a+b *)
     | SUB    of regi * sv * regi        (* c <- a-b *)
@@ -181,8 +181,8 @@ struct
     | STOREQF    of ea * regf
 
 
-    | MUTATE of regi * sv * regi * regi option   (* if option is present, a nonzero value indicates pointer;
-						   *(regi1 + sv) = regi2 *)
+    | MUTATE of ea * regi * regi option   (* if option is present, a nonzero value indicates pointer;
+						   *ea = regi *)
     | INIT of ea * regi * regi option     (* if option is present, a nonzero value indicates pointer *)
 
     | NEEDGC     of sv

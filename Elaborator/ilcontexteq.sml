@@ -16,21 +16,35 @@ struct
     fun curOut() = valOf(!cur_out)
     fun curIn() = valOf(!cur_in)
 
-
     fun exportOut f os arg =
 	let val _ = cur_out := SOME os
-	    val _ = NameBlast.resetVarMap()
 	    val res = f arg
 	    val _ = cur_out := NONE
-	    val _ = NameBlast.resetVarMap()
 	in  res
 	end
+
+    (* The mapping of integers to variables is used to alpha-vary variables on input. *)
+    structure IntKey =
+	struct
+	    type ord_key = int
+	    val compare = Int.compare
+	end
+    structure IntMap = SplayMapFn(IntKey)
+    val inMap = ref (IntMap.empty : Name.var IntMap.map)
+    fun int2var i = 
+	(case IntMap.find(!inMap,i) of
+	     SOME v => v
+	   | NONE => let val v = Name.fresh_var()
+			 val _ = inMap := IntMap.insert(!inMap,i,v)
+		     in  v
+		     end)
+
     fun exportIn f is arg =
 	let val _ = cur_in := SOME is
-	    val _ = NameBlast.resetVarMap()
+	    val _ = inMap := IntMap.empty
 	    val res = f arg
 	    val _ = cur_in := NONE
-	    val _ = NameBlast.resetVarMap()
+	    val _ = inMap := IntMap.empty
 	in  res
 	end
 
@@ -73,7 +87,7 @@ struct
     fun blastInTriple b1 b2 b3 = Blaster.blastInTriple (fn _ => b1()) (fn _ => b2()) (fn _ => b3()) (curIn()) 
 
     fun blastOutVar v = NameBlast.blastOutVar (curOut()) v
-    fun blastInVar () = NameBlast.blastInVar (curIn())
+    fun blastInVar () = NameBlast.blastInVar int2var (curIn())
     fun blastOutLabel l = NameBlast.blastOutLabel (curOut()) l
     fun blastInLabel () = NameBlast.blastInLabel (curIn())
     fun blastOutTag t = NameBlast.blastOutTag (curOut()) t
@@ -752,7 +766,7 @@ struct
 	fun blastOutPathMap label_list = 
 	    NameBlast.blastOutPathmap (curOut()) (fn _ => blastOutPair blastOutLabel blastOutPC) label_list
 	fun blastInPathMap () = 
-	    NameBlast.blastInPathmap (curIn()) (fn _ => blastInPair blastInLabel blastInPC)
+	    NameBlast.blastInPathmap int2var (curIn()) (fn _ => blastInPair blastInLabel blastInPC)
 
 	fun reconstructLabelMap pathMap = 
 	    let fun folder(p,(l,pc),pmap) = Name.LabelMap.insert(pmap,l,(PATH p,pc))
@@ -763,7 +777,7 @@ struct
 	    NameBlast.blastOutVarmap (curOut()) (fn _ => blastOutLabel) unresolved
 
 	fun blastInUnresolved () : Name.label Name.VarMap.map =
-	    NameBlast.blastInVarmap (curIn()) (fn _ => blastInLabel())
+	    NameBlast.blastInVarmap int2var (curIn()) (fn _ => blastInLabel())
 
     fun blastOutContext (CONTEXT {fixityMap, labelMap, pathMap, ordering}) = 
 	(blastOutFixityMap fixityMap;

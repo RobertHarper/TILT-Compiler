@@ -163,8 +163,8 @@ sig
 		    default : exp option}           (* exceptions *)
     | Typecase_e of {arg : con,
 		     result_type : con,
-		     arms : ((var * kind) list * exp) list,
-		     default : exp option}          (* typecase *)
+		     arms : (primcon * (var * kind) list * exp) list,
+		     default : exp}                 (* typecase *)
 
   and exp =                                          (* Term-level constructs *)
       Var_e of var                                   (* Term-level variables *)

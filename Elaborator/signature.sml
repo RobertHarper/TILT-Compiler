@@ -845,8 +845,9 @@ structure Signature :> SIGNATURE =
 			    then
 				let 
 				    val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
-				    val exp = if (inline) then e 
-					      else path2exp(join_path_labels(path_actual,lbls))
+				    val exp = (case (inline,eopt') of
+						   (true, SOME e) => e
+						 | _ => path2exp(join_path_labels(path_actual,lbls)))
 				    val bnd = BND_EXP(v,exp)
 				    val dec = DEC_EXP(v,con_actual,eopt',inline)
 				in  SOME(bnd,dec,subst)
@@ -1039,7 +1040,7 @@ structure Signature :> SIGNATURE =
 		      mod_actual : mod,
 		      sig_actual : signat,
 		      sig_target : signat) : mod =
-	    let val var_actual = fresh_named_var "orig_var"
+	    let val var_actual = fresh_named_var "origSeal"
 		val path_actual = PATH(var_actual,[])
 		val sig_actual_self = SelfifySig context (path_actual, sig_actual)
 		val context = add_context_mod'(context,var_actual,sig_actual_self)
@@ -1072,6 +1073,127 @@ structure Signature :> SIGNATURE =
 	end
 
     val track_coerce = Stats.ff("IlstaticTrackCoerce")
+
+    (* ctxt has var_actual in it *)
+    fun structureGC(ctxt : context,
+		    var_actual : var,
+		    mod_client : mod,
+		    sig_client : signat) = 
+	let 
+	    val pp_labs = pp_pathlist pp_label'
+	    fun pp_labsList labsList = app (fn labs => (pp_labs labs; print "   ")) labsList
+(*
+	    val _ = (print "XXXstructureGCXXX\n";
+		     print "  var_actual = "; pp_var var_actual; print "\n";
+		     print "  var_actual's sig = ";
+		     pp_signat (case Context_Lookup_Path(ctxt, PATH (var_actual,[])) of
+				    SOME(_,PHRASE_CLASS_MOD(_,_,s)) => s
+				  | _ => error "could not find var_actual's sig in ctxt");
+		     print "\n";
+		     print "  mod = "; pp_mod mod_client; print "\n";
+		     print "  sig = "; pp_signat sig_client; print "\n")
+*)
+	    val used = findPathsInMod mod_client
+	    val used = Name.PathSet.union(used, findPathsInSig sig_client)
+	    val filter = Name.PathSet.filter (fn (v,labs) => eq_var(v,var_actual))
+	    val strip = Name.PathSet.foldl 
+		        (fn ((v,labs),acc) => if eq_var(v,var_actual) 
+						  then labs::acc else acc) [] 
+	    val used = filter used
+	    fun getChildren path = 
+		(case Context_Lookup_Path_Open(ctxt, PATH path) of
+		     SOME (_,PHRASE_CLASS_MOD(_,_,s)) => findPathsInSig s
+		   | SOME (_,PHRASE_CLASS_EXP(_,c,_,_)) => findPathsInCon c
+		   | SOME (_,PHRASE_CLASS_CON(_,k,SOME c,_)) => findPathsInCon c
+		   | SOME (_,PHRASE_CLASS_CON(_,k,NONE,_)) => Name.PathSet.empty
+		   | SOME _ => (print "unexpected result from  path "; pp_path (PATH path); print "\n";
+			   error "no such path")
+		   | _ => (print "no such path "; pp_path (PATH path); print "\n";
+			   error "no such path"))
+		     
+	    fun reachable black gray = 
+		(case Name.PathSet.find (fn _ => true) gray of
+		     NONE => black
+		   | SOME first =>
+			 let fun folder (p, gray) =
+				 if (Name.PathSet.member(gray,p) orelse 
+				     Name.PathSet.member(black,p))
+				     then gray
+				 else Name.PathSet.add(gray, p)
+			     val children = filter(getChildren first)
+			     val gray = Name.PathSet.foldl folder gray children
+			     val gray = Name.PathSet.delete(gray,first)
+			     val black = Name.PathSet.add(black,first)
+			 in  reachable black gray
+			 end)
+	    val used = reachable Name.PathSet.empty used
+	    val used = strip used
+
+
+	    fun extract labs : sbnd * sdec = 
+		let val l = List.last labs
+		    val v = fresh_named_var (Name.label2string l)
+		    val p = PATH(var_actual, labs)
+		    val (bnd,dec) = 
+			(case Context_Lookup_Path_Open(ctxt, p) of
+			     SOME (_, PHRASE_CLASS_MOD(_,b,s)) => 
+				 (BND_MOD(v,b,path2mod p), DEC_MOD(v,b,s))
+			   | SOME (_, PHRASE_CLASS_EXP(_,c,eopt,b)) => 
+				 (BND_EXP(v,path2exp p), DEC_EXP(v,c,eopt,b))
+			   | SOME (_, PHRASE_CLASS_CON (_, k, copt, b)) => 
+				 (BND_CON(v,path2con p), DEC_CON(v,k,copt,b))
+			   | _ => (print "extract failed on path "; pp_path p;
+				   print "\n"; error "extract failed to find path"))
+		in  (SBND(l, bnd), SDEC(l, dec))
+		end
+	    fun split prefix acc [] : (sbnd * sdec) list = 
+		let val origSdecs = 
+		    (case Context_Lookup_Path_Open(ctxt, PATH(var_actual, prefix)) of
+			 SOME (_, PHRASE_CLASS_MOD(_,b,s)) =>
+			     (case reduce_signat ctxt s of
+				  SIGNAT_STRUCTURE(_,sdecs) => sdecs
+				| _ => error "split could not reduce signat to structure sig")
+		       | _ => error "split could not find prefix to reorder")
+		    fun find (SDEC(l,_)) = 
+			let fun loop[] = NONE
+			      | loop ((this as (SBND(l',_),_))::rest) = 
+			        if eq_label(l,l') then SOME this else loop rest
+			in  loop acc
+			end
+		in  List.mapPartial find origSdecs
+		end
+	      | split prefix acc (all as ((firstLab::_)::rest)) = 
+		let fun pred [] = error "split given empty labs"
+		      | pred (l1::_) = eq_label(firstLab,l1)
+		    val (match,mismatch) = List.partition pred all
+		    val matchTail = map tl match
+		    val newPrefix = prefix @ [firstLab]
+		    val this = 
+			if (Listops.orfold null matchTail)
+			    then extract newPrefix
+			else 
+			    let val (sbnds,sdecs) = Listops.unzip(split newPrefix [] matchTail)
+				val v = fresh_named_var (Name.label2string firstLab)
+			    in  (SBND(firstLab, BND_MOD (v, false, MOD_STRUCTURE sbnds)),
+				 SDEC(firstLab, DEC_MOD (v, false, SIGNAT_STRUCTURE (NONE,sdecs))))
+			    end
+		in  split prefix (this::acc) mismatch
+		end
+	    val (sbnds,sdecs) = Listops.unzip(split [] [] used)
+	    val module = MOD_STRUCTURE sbnds
+	    val path_actual = PATH(var_actual, [])
+	    val signat = SIGNAT_STRUCTURE (SOME path_actual, sdecs)
+	    val signat = IlStatic.UnselfifySig ctxt (path_actual, signat)
+(*
+	    val _ = (print "  used = "; help used; print "\n")
+	    val _ = (print "  sbnds = "; pp_sbnds sbnds; print "\n";
+		     print "  sdecs = "; pp_sdecs sdecs; print "\n";
+		     print "  module = "; pp_mod module; print "\n";
+		     print "  signat = "; pp_signat signat; print "\n")
+*)
+	in  (module, signat)
+	end
+
     fun xcoerce_transparent (polyinst : polyinst,
 			     context : context,
 			     mod_actual : mod,
@@ -1084,8 +1206,7 @@ structure Signature :> SIGNATURE =
 		    else ()
 
 	    (* first extract all necessary components with necessary coercions *)
-	    val hidden_lbl = internal_label "hidden_module"
-	    val var_actual = fresh_named_var "orig_var"
+	    val var_actual = fresh_named_var "origModule"
 	    val path_actual = PATH(var_actual,[])
 	    val sig_actual_self = SelfifySig context (path_actual, sig_actual)
 	    val context = add_context_mod'(context,var_actual,sig_actual_self)
@@ -1104,11 +1225,16 @@ structure Signature :> SIGNATURE =
 		    else ()
 	in
 	    if (coerced)
-	      then let
-		       val MOD_STRUCTURE coerced_sbnds = coerced_mod
-		       val SIGNAT_STRUCTURE (_,coerced_sdecs) = coerced_sig
-		       val sbnd = SBND(hidden_lbl, BND_MOD(var_actual, false, mod_actual))
-		       val sdec = SDEC(hidden_lbl, DEC_MOD(var_actual, false, sig_actual))
+	      then let val var_thin = fresh_named_var "thinModule"
+		       val (mod_thin, sig_thin) = 
+			   structureGC(context, var_actual, coerced_mod, coerced_sig)
+		       val mod_thin = MOD_LET(var_actual,mod_actual, mod_thin)
+		       val subst = subst_add_modvar(empty_subst, var_actual,MOD_VAR var_thin)
+		       val MOD_STRUCTURE coerced_sbnds = mod_subst(coerced_mod, subst)
+		       val SIGNAT_STRUCTURE (_,coerced_sdecs) = sig_subst(coerced_sig, subst)
+		       val hidden_lbl = internal_label "hiddenModule"
+		       val sbnd = SBND(hidden_lbl, BND_MOD(var_thin, false, mod_thin))
+		       val sdec = SDEC(hidden_lbl, DEC_MOD(var_thin, false, sig_thin))
 		       val mod_result = MOD_STRUCTURE(sbnd :: coerced_sbnds)
 		       val sig_result = SIGNAT_STRUCTURE(NONE, sdec :: coerced_sdecs)
 		   in  (mod_result, sig_result)

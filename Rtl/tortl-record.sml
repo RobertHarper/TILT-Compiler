@@ -54,12 +54,12 @@ struct
 
 	fun storenew(base,offset,r,rep) = 
 	    (case rep of
-		 TRACE => add_instr(INIT(EA(base,offset),r,NONE))
-	       | NOTRACE_INT => add_instr(STORE32I(EA(base,offset),r))
-	       | NOTRACE_CODE => add_instr(STORE32I(EA(base,offset),r))
-	       | NOTRACE_LABEL => add_instr(STORE32I(EA(base,offset),r))
+		 TRACE => add_instr(INIT(REA(base,offset),r,NONE))
+	       | NOTRACE_INT => add_instr(STORE32I(REA(base,offset),r))
+	       | NOTRACE_CODE => add_instr(STORE32I(REA(base,offset),r))
+	       | NOTRACE_LABEL => add_instr(STORE32I(REA(base,offset),r))
 	       | COMPUTE path => let val isPointer = repPathIsPointer path
-				 in  add_instr(INIT(EA(base,offset),r,SOME isPointer))
+				 in  add_instr(INIT(REA(base,offset),r,SOME isPointer))
 				 end
 	       | _ => error "storenew got funny rep")
 
@@ -78,11 +78,9 @@ struct
 		       in  if const 
 			       then 
 				   let val fieldl = fresh_data_label "location"
-				       val addr = alloc_regi NOTRACE_LABEL
 				   in  (add_data(DLABEL fieldl);
 					add_data(INT32 uninit_val);
-					add_instr(LADDR(fieldl,0,addr));
-					if (storeWithBarrier(addr, r, rep))
+					if (storeWithBarrier(LEA(fieldl,0), r, rep))
 					    then is_mutable := true
 					else ())
 				   end
@@ -110,7 +108,7 @@ struct
 	       let val r = alloc_regi(NOTRACE_INT)
 	       in  add_instr (LI(static,r));
 		   app (fn a => do_dynamic(r,a)) dynamic;
-		   add_instr(STORE32I(EA(heapptr(),offset),r)) (* tags *)
+		   add_instr(STORE32I(REA(heapptr(),offset),r)) (* tags *)
 	       end;
 	   scantags(offset+4,vl))
 
@@ -194,9 +192,9 @@ struct
 
   fun record_project (src, index, dest) = 
       if (index >= 0 andalso index < (maxRtlRecord-1))
-	  then add_instr(LOAD32I(EA(src,4*index), dest))
+	  then add_instr(LOAD32I(REA(src,4*index), dest))
       else let val tmp = alloc_regi TRACE
-	       val _ = add_instr(LOAD32I(EA(src,4*(maxRtlRecord-1)), tmp))
+	       val _ = add_instr(LOAD32I(REA(src,4*(maxRtlRecord-1)), tmp))
 	   in  record_project(tmp,index-(maxRtlRecord-1),dest)
 	   end
 
@@ -222,7 +220,7 @@ struct
 	  (* Non-empty record required tag extraction to compute len and mask *)
 	  val tag = alloc_regi NOTRACE_INT
 	  val tmp = alloc_regi NOTRACE_INT
-	  val _ = add_instr(LOAD32I(EA(record,~4),tag))
+	  val _ = add_instr(LOAD32I(REA(record,~4),tag))
 	  val _ = add_instr(SRL(tag, IMM rec_len_offset, tmp))
 	  val _ = add_instr(ANDB(tmp, IMM rec_len_mask, len))
 	  val _ = add_instr(SRL(tag, IMM rec_mask_offset, mask))
@@ -237,8 +235,8 @@ struct
 	  val _ = if (Rtltags.record = 0w0) then () else error "record_insert relies on record aspect being zero"
 	  val newtag = alloc_regi NOTRACE_INT
 	  val _ = add_instr(ORB(newmask, REG newlen, newtag))
-	  val _ = add_instr(INIT(EA(heapptr, 0), newtag, NONE))           (* write new tag *)
-	  val _ = add_instr(INIT(EA(heapptr, 4), field, NONE))            (* write first field v *)
+	  val _ = add_instr(INIT(REA(heapptr, 0), newtag, NONE))           (* write new tag *)
+	  val _ = add_instr(INIT(REA(heapptr, 4), field, NONE))            (* write first field v *)
 
 	  (* Now initialize the remaining fields *)
 	  val copyLoop = fresh_code_label "copyLoop"
@@ -257,11 +255,11 @@ struct
 	  val curField = alloc_regi (COMPUTE (Projvar_p (curFieldType, [])))
 	  val _ = add_instr(S4ADD(current, REG record, rLoc))
 	  val _ = add_instr(S4ADD(current, REG recType, rTypeLoc))
-	  val _ = LOAD32I(EA(rTypeLoc, 4), curFieldType) (* First word is tag *)
-	  val _ = LOAD32I(EA(rLoc, 0), curField)
+	  val _ = LOAD32I(REA(rTypeLoc, 4), curFieldType) (* First word is tag *)
+	  val _ = LOAD32I(REA(rLoc, 0), curField)
 	  val _ = add_instr(ADD(heapptr, IMM 8, destLoc))
 	  val _ = add_instr(S4ADD(current, REG destLoc, destLoc))
-	  val _ = STORE32I(EA(destLoc, 0), curField)
+	  val _ = STORE32I(REA(destLoc, 0), curField)
 	  val _ = add_instr(BR copyLoop)
 	  val _ = add_instr(ILABEL afterLoop)
 

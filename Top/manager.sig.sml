@@ -112,7 +112,8 @@ sig
   val slave : unit -> unit
   val master : string -> unit  
   val make : string -> unit
-  val pmake : string * string list -> unit  
+  val slaves : (int * string) list -> unit  
+  val pmake : string * (int * string) list -> unit  
 
   val tilc   : string * bool * string option * string list -> unit  
                                               (* mapfile, don't link,

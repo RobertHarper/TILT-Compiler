@@ -338,39 +338,11 @@ structure IlStatic
      in  (set, undo)
      end
 
-   and eq_con (ctxt, con1, con2) = 
-       let val (setter,undo) = unify_maker()
-       in  (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,false)
-	   (con1, con2, ctxt)
-       end
 
-   and sub_con (arg as (ctxt, con1, con2)) = 
-       let fun msg() = (print "subcon called with con1 = \n";
-			pp_con con1; print "\nand con2 = \n";
-			pp_con con2; print "\n")
-	   val (setter,undo) = unify_maker()
-       in  (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,true)
-	   (con1, con2, ctxt)
-       end
-
-   and soft_eq_con (ctxt,con1,con2) = 
-       let val (setter,undo) = unify_maker()
-	   val is_eq = meta_eq_con (setter,false) (con1,con2,ctxt)
-	   val _ = undo()
-       in  is_eq
-       end
-
-   and semi_sub_con (ctxt,con1,con2) = 
-       let val (setter,undo) = unify_maker()
-	   val is_eq = meta_eq_con (setter,true) (con1,con2,ctxt)
-	   val _ = if is_eq then () else undo()
-       in  is_eq
-       end
-
-   and meta_eq_con (setter,is_sub) (con1,con2,ctxt) = 
+   fun meta_eq_con (setter,is_sub) (con1,con2,ctxt) = 
        let val self = meta_eq_con (setter, is_sub)
 	   val _ = if (!showing)
-		       then (print "eq_con called on:-------------\n";
+		       then (print "meta_eq_con called on:-------------\n";
 			     print "con1 = "; pp_con con1; print "\n";
 			     print "con2 = "; pp_con con2; print "\n")
 		   else ()
@@ -399,7 +371,8 @@ structure IlStatic
 				 andalso self (a1,a2,ctxt))
 			  | _ => eq_cpath(con1,con2))
 		   in  same orelse
-		       let val (_, con1, path1) = HeadNormalize(con1,ctxt)
+		       let 			   
+			   val (_, con1, path1) = HeadNormalize(con1,ctxt)
 			   val (_, con2, path2) = HeadNormalize(con2,ctxt)
 		       in  (path_match path1 path2) orelse
 			   (meta_eq_con_hidden (setter,is_sub) (con1,con2,ctxt))
@@ -424,14 +397,13 @@ structure IlStatic
 			end
 		    local
 			fun check_one addflag (l,c) rdecs =
-			    let 
-				fun loop [] = if addflag then SOME((l,c)::rdecs) else NONE
+			    let fun loop [] = if addflag then SOME((l,c)::rdecs) else NONE
 				  | loop ((l',c')::rest) = 
 				    if (eq_label(l,l'))
 					(* do we need to flip arguments for subbing *)
-					then if (self(c,c',ctxt))
-					     then SOME rdecs
-					     else NONE
+					then (if (self(c,c',ctxt))
+						  then SOME rdecs
+					      else NONE)
 				    else loop rest
 			    in loop rdecs
 			    end
@@ -440,7 +412,7 @@ structure IlStatic
 			  | union (rdec::rest) rdecs = 
 			    (case (check_one true rdec rdecs) of
 				 NONE => NONE
-			   | SOME x => (union rest x))
+			       | SOME x => (union rest x))
 			fun subset ([]) rdecs = true
 			  | subset (rdec::rest) rdecs = 
 			    (case (check_one false rdec rdecs) of
@@ -536,8 +508,37 @@ structure IlStatic
 
      end
 
+   and eq_con (ctxt, con1, con2) = 
+       let val _ = if (!showing) 
+		       then print "eq_con calling meta_eq_con\n"
+		   else ()
+	   val (setter,undo) = unify_maker()
+       in  (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,false)
+	   (con1, con2, ctxt)
+       end
 
+   and sub_con (arg as (ctxt, con1, con2)) = 
+       let val _ = if (!showing) 
+		       then print "sub_con calling meta_eq_con\n"
+		   else ()
+	   val (setter,undo) = unify_maker()
+       in  (* Stats.subtimer("Elab-subeq_con", *) meta_eq_con (setter,true)
+	   (con1, con2, ctxt)
+       end
 
+   and soft_eq_con (ctxt,con1,con2) = 
+       let val (setter,undo) = unify_maker()
+	   val is_eq = meta_eq_con (setter,false) (con1,con2,ctxt)
+	   val _ = undo()
+       in  is_eq
+       end
+
+   and semi_sub_con (ctxt,con1,con2) = 
+       let val (setter,undo) = unify_maker()
+	   val is_eq = meta_eq_con (setter,true) (con1,con2,ctxt)
+	   val _ = if is_eq then () else undo()
+       in  is_eq
+       end
 
    and Exp_IsValuable(ctxt,exp) =
      (Exp_IsSyntacticValue exp) orelse
@@ -1449,13 +1450,14 @@ structure IlStatic
 	    | CON_FLEXRECORD (ref (INDIRECT_FLEXINFO rf)) => 
 		  ReduceAgain (CON_FLEXRECORD rf)
 	    | CON_FLEXRECORD (r as ref (FLEXINFO (stamp,flag,rdecs))) => 
-				    let fun mapper (l,c) = (l, (case Reduce how (c,ctxt) of
-								    NONE => c
-								  | SOME (c,_) => c))
-					val rdecs = map mapper rdecs
-					val _ = r := FLEXINFO(stamp,flag,rdecs)
-				    in  NONE
-				    end
+		  let val (labs,cons) = Listops.unzip rdecs
+		      fun constr cons = 
+			  let val rdecs = Listops.zip labs cons
+			      val _ = r := FLEXINFO(stamp,flag,rdecs) 
+			  in  CON_FLEXRECORD r
+			  end
+		  in  helplist constr cons
+		  end
 	    | CON_OVAR ocon => ReduceAgain (CON_TYVAR (ocon_deref ocon))
 	    | CON_TYVAR tv => (case tyvar_deref tv of
 				    NONE => NONE

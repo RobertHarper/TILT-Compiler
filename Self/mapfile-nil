@@ -74,6 +74,9 @@ Specialize Nil/specialize
 TOCLOSURE Nil/toclosure.sig
 ToClosure Nil/toclosure
 
+VARARG Nil/vararg.sig
+Vararg Nil/vararg
+
 TONIL Nil/tonil.sig
 ToNil Nil/tonil
 
@@ -86,6 +89,9 @@ Flatten Nil/flatten
 
 HOIST Nil/hoist.sig
 Hoist Nil/hoist
+
+ANALYZE Nil/analyze.sig
+Analyze Nil/analyze
 
 INLINE Nil/inline.sig
 Inline Nil/inline

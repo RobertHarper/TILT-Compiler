@@ -2481,7 +2481,9 @@ end (* local defining splitting context *)
 		   in
 		       if (VarSet.member(used, v)) then
 			   (iv :: imports, 
-			    VarSet.addList(used, NilUtil.freeVarInCon c))
+			    let val (fvTerm,fvType) = NilUtil.freeExpConVarInCon(true,0,c)
+			    in  VarSet.union(used, VarSet.union(fvTerm, fvType))
+			    end)
 		       else
 			   result
 		   end
@@ -2491,7 +2493,7 @@ end (* local defining splitting context *)
 		   in
 		       if (VarSet.member(used, v)) then
 			   (it :: imports, 
-			    VarSet.addList(used, NilUtil.freeVarInKind k))
+			    VarSet.union(used, NilUtil.freeVarInKind (0,k)))
 		       else
 			   result
 		   end

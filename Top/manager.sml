@@ -454,7 +454,7 @@ struct
 		     chat "   "; chat (Int.toString (length uncached)); chat " imports of total size ";
 		     chat (Int.toString uncached_size);  chat " were uncached and took ";
 		     chat (Real.toString diff); chat " seconds.  ";
-		     chat_strings 50 uncached;
+(*		     chat_strings 50 uncached; *)
 		     chat "]\n")
 	    val initial_ctxt = LinkIl.initial_context()
 	    val addContext = Stats.timer("AddingContext",LinkIl.plus_context)
@@ -533,10 +533,8 @@ struct
 		end
 	    fun generate il_module =
 		let (* Continue compilation, generating a platform-dependent .o object file *)
-		    val _ = Help.chat ("  [Compiling to assembly file ...")
+		    val _ = Help.chat ("  [Compiling to assembly file]\n")
 		    val sFile = Til.il_to_asm (unit,base, il_module)
-		    val _ =  Help.chat "]\n"
-			
 		in  ()
 		end
 	in  (elaborate, generate)
@@ -979,10 +977,10 @@ struct
 			    | SOME Comm.FLUSH => error ("slave " ^ (Comm.source ch) ^ " sent flush")
 			    | SOME (Comm.REQUEST _) => error "slave sent request"
 			    | SOME Comm.READY => ()
-			    | SOME (Comm.ACK_ERROR jobs) => 
+			    | SOME (Comm.ACK_ERROR (_::u::imps)) => 
 				  (chat "\n\nSlave "; chat (Comm.source ch); 
 				   chat " signalled error during job "; 
-				   chat_strings 30 jobs; chat "\n";
+				   chat u; chat "\n";
 				   error "Slave signalled error")
 			    | SOME (Comm.ACK_INTERFACE job) => do_ack_interface (Comm.source ch, job)
 			    | SOME (Comm.ACK_ASSEMBLY job) => 
@@ -1107,12 +1105,12 @@ struct
 					      else 
 						  true
 						  
-						  
 		      val _ = if fresh
-				  then (chat ("  [" ^ sourcebase ^ " is up-to-date.]\n");
+				  then (
+				      (* chat ("  [" ^ sourcebase ^ " is up-to-date.]\n"); *)
 					markDone unitname; ())
 			      else ()
-				  
+
 		  in  not fresh
 		  end)
 	      
@@ -1134,8 +1132,10 @@ struct
 		in  StringOrderedSet.cons(unit, foldl StringOrderedSet.cons acc imports)
 		end
 	    val units = rev (StringOrderedSet.toList (foldl folder StringOrderedSet.empty srcs))
-	    val _ = (chat "Computed all necessary units: \n";
-		     chat_strings 20 units; print "\n")
+
+	    val _ = (chat (Int.toString (length units));
+		     chat " necessary units: \n")
+		     (* chat_strings 20 units *)
 	    val _ = showTime (true,"Start compiling files")
 	    fun waitForSlaves() = 
 		let fun ack_inter (name,(platform::u::_::_)) = 
@@ -1182,6 +1182,11 @@ struct
 	    fun getReady waiting = 
 		let val (waiting,ready, [], [], [], []) = partition waiting
 		    val (ready,done) = List.partition needsCompile ready
+		    val _ = if (null done)
+				then ()
+			    else (chat "  [These files are up-to-date already:";
+				  chat_strings 40 done;
+				  chat "]\n")
 		in  if (null done) 
 			then (waiting, ready)        (* no progress *)
 		    else getReady (waiting @ ready)  (* some more may have become ready now *)
@@ -1203,21 +1208,25 @@ struct
 		let val (state as (_, ready, _, _, _)) = newState state
 		in  if (stateDone state)
 			then 	
-			    let fun mapper u = (case get_status u 
-						  of DONE        t => (u, Time.toReal t)  
-						  | READY        t => (print "Ready\n";     (u, Time.toReal t))
-						  | PENDING      t => (print "Pending\n";   (u, Time.toReal t))
-						  | ASSEMBLING   t => (print "Assembling\n";(u, Time.toReal t))
-						  | PROCEEDING   t => (print "Proceeding\n";(u, Time.toReal t))
-						  | WAITING => error "Unit still waiting for compilation!")
-				val unsorted = map mapper units
+			    let fun mapper u = 
+				(case get_status u of
+				     DONE         t => let val t = Time.toReal t
+						       in if (t>=1.0) then SOME(u,t) else NONE
+						       end
+				   | READY        t => (print "Ready\n";     NONE)
+				   | PENDING      t => (print "Pending\n";   NONE)
+				   | ASSEMBLING   t => (print "Assembling\n"; NONE)
+				   | PROCEEDING   t => (print "Proceeding\n"; NONE)
+				   | WAITING => error "Unit still waiting for compilation!")
+				val unsorted = List.mapPartial mapper units
 				fun greater ((_,x),(_,y)) = x > (y : real)
 				val sorted = ListMergeSort.sort greater unsorted
-				val _ = chat "------- Time to compile files in ascending order -------\n"
+				val _ = chat "------- Times (>1s) to compile files in ascending order -------\n"
 				val _ = app (fn (unit,t) => 
 					     let val t = (Real.realFloor(t * 100.0)) / 100.0
-					     in  chat (unit ^ " took " ^ 
-						       (Real.toString t) ^ "seconds.\n")
+					     in  chat (unit ^ (Util.spaces (20 - (size unit))) ^
+						       " took " ^ 
+						       (Real.toString t) ^ " seconds.\n")
 					     end) sorted
 			    in  COMPLETE (Time.now())
 			    end
@@ -1424,25 +1433,42 @@ struct
 	  val _ = showTime (true,"Finished compilation")
       in  reshowTimes()
       end
-  fun pmake (mapfile, slaves) = 
-      let fun startSlave (num,machine) = 
+  fun slaves (slaveList : (int * string) list) = 
+      let fun startSlave (num,count,machine) = 
 	  let val row = num mod 5
 	      val col = num div 5
-	      val geometry = "120x12+" ^ (Int.toString (col * 300)) ^ "+" ^ (Int.toString (row * 160))
+	      val geometry = "120x" ^ (Int.toString (11 * count)) ^ 
+			     "+" ^ (Int.toString (col * 300)) ^ "+" ^ (Int.toString (row * 160))
 	      val dir = OS.FileSys.getDir()
 	      val commDir = dir ^ "/" ^ Comm.tempDir
 	      val SOME display = OS.Process.getEnv "DISPLAY"
 	      val SOME user = OS.Process.getEnv "USER"
 	      val out = TextIO.openOut (commDir ^ "/startSlave1")
 	      val _ = TextIO.output(out, "(set-default-font \"courier7\")\n")
-	      val _ = TextIO.output(out, "(shell)\n")
-	      val _ = TextIO.output(out, "(end-of-buffer)\n")
-	      val _ = TextIO.output(out, "(insert-file \"" ^ commDir ^ "/startSlave2\")\n")
-	      val _ = TextIO.output(out, "(end-of-buffer)\n")
-	      val _ = TextIO.output(out, "(comint-send-input)\n")
-	      val _ = TextIO.output(out, "(insert-file \"" ^ commDir ^ "/startSlave3\")\n")
-	      val _ = TextIO.output(out, "(end-of-buffer)\n")
-	      val _ = TextIO.output(out, "(comint-send-input)\n")
+	      fun loop 0 = ()
+		| loop n = 
+		  (TextIO.output
+		   (out, 
+		    String.concat["(shell)",
+				  "(balance-windows)(balance-windows)\n"]);
+		   TextIO.output(out, "(rename-buffer \"slave" ^ (Int.toString n) ^ "\")");
+		   if (n > 1) then TextIO.output(out, "(split-window-vertically)") else ();
+		   loop (n-1))
+	      fun loop2 0 = ()
+		| loop2 n = 
+		  (TextIO.output
+		   (out, 
+		    String.concat["(other-window 1)",
+				  "(insert-file \"", commDir, "/startSlave2\")",
+				  "(end-of-buffer)",
+				  "(comint-send-input)\n",
+				  "(insert-file \"", commDir, "/startSlave3\")",
+				  "(end-of-buffer)",
+				  "(comint-send-input)",
+				  "(balance-windows)\n"]);
+		   loop2 (n-1))
+	      val _ = loop count
+	      val _ = loop2 count
 	      val _ = TextIO.closeOut out
 	      val out = TextIO.openOut (commDir ^ "/startSlave2")
 	      val _ = TextIO.output(out, "cd " ^ dir ^ "; Local/sml-cm\n")
@@ -1456,10 +1482,13 @@ struct
 		  "; emacs -bg black -fg yellow -geometry " ^ geometry ^ " -l " ^ commDir ^ "/startSlave1"
 	  in  (OS.Process.system ("rsh " ^ machine ^ " '" ^ command ^ "'&"); ()) 
 	  end
-      in  Listops.mapcount startSlave slaves; 
-	  chat "Started slaves.\n";
-	  master mapfile
+	  fun loop _ [] = ()
+	    | loop cur ((count,machine)::rest) = (startSlave(cur,count,machine); loop (cur+count) rest)
+      in  loop 0 slaveList;
+	  chat "Started slaves.\n"
       end
+  fun pmake (mapfile, slaveList) = (slaves slaveList; master mapfile)
+
   fun tilc arg =
       let fun runner args = 
 	  let val {setup,step,complete} = Master.once args

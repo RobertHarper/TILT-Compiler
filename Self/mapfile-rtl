@@ -19,8 +19,8 @@ TortlRecord  Rtl/tortl-record
 TORTLSUM Rtl/tortl-sum.sig
 TortlSum  Rtl/tortl-sum
 
-TORTLVARARG Rtl/tortl-vararg.sig
-TortlVararg Rtl/tortl-vararg
+//TORTLVARARG Rtl/tortl-vararg.sig
+//TortlVararg Rtl/tortl-vararg
 
 TORTLARRAY Rtl/tortl-array.sig
 TortlArray Rtl/tortl-array

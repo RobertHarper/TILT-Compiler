@@ -19,8 +19,8 @@ struct
            (fn v => (print (Name.var2string v); print " "))
 
     val pset_add_list = Name.VarSet.addList
-
     val pset_member = Name.VarSet.member
+    val pset_add_pset = Name.VarSet.union
 
     (* reify_con_rt 
          post: returned pset extends input pset, ensuring that 
@@ -28,9 +28,9 @@ struct
      *)
     fun reify_con_rt (c, pset) = 
       let
-         val free_cvars = NilUtil.freeConVarInCon(false, c)
+         val free_cvars = NilUtil.freeConVarInCon(false, 0, c)
       in
-         pset_add_list (pset, free_cvars)
+         pset_add_pset (pset, free_cvars)
       end
   
     and reify_cons_rt ([], pset) = pset
@@ -188,8 +188,15 @@ struct
               pset)
           end
 
-      | reify_exp ctxt (Switch_e (Typecase_e _), pset) =
-          error "reify_exp:  Typecase_e unimplemented"  
+      | reify_exp ctxt (Switch_e (Typecase_e {arg, arms, default, result_type}), pset) =
+
+          let val pset = reify_con_rt(arg,pset)
+	      val (arms', pset) = reify_typecase_arms ctxt (arms, pset)
+	      val (default',pset) = reify_exp ctxt (default, pset)
+	  in  (Switch_e (Typecase_e {arg = arg, arms = arms', 
+				    default = default', result_type = result_type}),
+	      pset)
+	  end
 
     and reify_seq_bnds ctxt ([], BODY_EXP e, pset) =
            let
@@ -304,6 +311,14 @@ struct
           in
              ((w,tinfo,e')::arms', pset)
           end
+
+    and reify_typecase_arms ctxt ([], pset) = ([],pset)
+      | reify_typecase_arms ctxt ((pc,vklist,e)::arms, pset) = 
+	let val (arms',pset) = reify_typecase_arms ctxt (arms,pset)
+	    val ctxt = NilContext.insert_kind_list(ctxt,vklist)
+	    val (e',pset) = reify_exp ctxt (e,pset)
+	in  ((pc,vklist,e')::arms',pset)
+	end
 
     and reify_exn_arms ctxt ([], _, pset) = ([], pset)
       | reify_exn_arms ctxt ((e1,_,e2)::arms, v, pset) = 

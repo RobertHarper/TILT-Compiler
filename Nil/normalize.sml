@@ -39,7 +39,6 @@ struct
   val strip_proj           = NilUtil.strip_proj
   val strip_prim           = NilUtil.strip_prim
   val strip_app            = NilUtil.strip_app
-  val con_free_convar      = NilUtil.con_free_convar
   val generate_tuple_label = NilUtil.generate_tuple_label
   val primequiv            = NilUtil.primequiv
   val singletonize         = NilUtil.singletonize 
@@ -239,9 +238,8 @@ struct
 		     in
 			 if (all2 eq (vars,actuals)) andalso
 			     (let
-				  val fvs = con_free_convar con
-			      in
-				  all (fn v => all (not o (eq_var2 v)) fvs) vars
+				  val fvs = NilUtil.freeConVarInCon(true,0,con)
+			      in  all (fn v => not(Name.VarSet.member(fvs,v))) vars
 			      end)
 			     then
 				 con

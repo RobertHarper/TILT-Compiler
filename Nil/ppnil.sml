@@ -106,21 +106,25 @@ structure Ppnil	:> PPNIL =
 	       | SingleType_k c => (pp_region "SINGLE_TYPE(" ")" [pp_con c])
 	       | Single_k c => (pp_region "SINGLE(" ")" [pp_con c]))
 
+    and pp_vklist (vklist : (var * kind) list) : format = 
+	let fun pp_vk(v,k) = Hbox[pp_var v, String " :: ", Break, pp_kind k]
+	in  pp_list pp_vk vklist ("",",","",false)
+	end
 
     and pp_conbnd (Con_cb(v,c)) : format = Hbox[pp_var v, String " = ", Break0 0 5, pp_con c]
       | pp_conbnd (Open_cb(v,vklist,c)) = 
 	HOVbox[pp_var v, String " = ", Break,
-	       HOVbox[String "FUN",
-		      (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", Break, pp_kind k])
-		       vklist),
+	       HOVbox[String "FUN(",
+		      pp_vklist vklist,
+		      String ")",
 		      Break0 0 3,
 		      String " = ",
 		      pp_con c]]
       | pp_conbnd (Code_cb(v,vklist,c)) = 
 	HOVbox[pp_var v, String " = ", Break0 0 5,
-	       String "CODE", Break0 0 2,
-	       (pp_list' (fn (v,k) => Hbox[pp_var v, String " :: ", pp_kind k])
-		vklist),
+	       String "CODE(",
+	       pp_vklist vklist,
+	       String ")",
 	       Break0 0 3,
 	       String " = ",
 	       pp_con c]
@@ -131,7 +135,7 @@ structure Ppnil	:> PPNIL =
 	   Var_c v => pp_var v
          | Prim_c(Record_c ([],NONE),[]) => HOVbox[String "UNIT"]
          | Prim_c (primcon, nil) => HOVbox[pp_primcon primcon]
-	 | Prim_c (primcon, conlist) => HOVbox[pp_primcon primcon,
+	 | Prim_c (primcon, conlist) => HOVbox[pp_primcon primcon, Break0 0 2, 
 					       pp_list' pp_con conlist]
 	 | Crecord_c lc_list => (pp_list (fn (l,c) => HOVbox[pp_label l, String " = ", pp_con c])
 				  lc_list ("CREC{", ",","}", false))
@@ -328,7 +332,7 @@ structure Ppnil	:> PPNIL =
 			   pp_exp arg, String ": ",
 			   pp_is' size, String ", ",
 			   Break0 0 5,
-			   (pp_list (fn (w,e) => Hbox[pp_word w, String ": ", Break0 0 2, pp_exp e])
+			   (pp_list (fn (w,e) => HOVbox[pp_word w, String ": ", Break0 0 2, pp_exp e])
 			      arms ("","","", true)),
 			   Break0 0 5,
 			   pp_default default,
@@ -339,9 +343,9 @@ structure Ppnil	:> PPNIL =
 			   pp_con sumtype, String ", ",
 			   Break0 0 5,
 			   pp_var bound, String ", ",  Break0 0 5,
-			   (pp_list (fn (w,tr,e) => Hbox[pp_word w, String ": ", 
-							 pp_trace tr, String ":: ", Break0 0 2,
-							 pp_exp e])
+			   (pp_list (fn (w,tr,e) => HOVbox[pp_word w, String ": ", 
+							   pp_trace tr, String ":: ", Break0 0 2,
+							   pp_exp e])
 			      arms ("","","", true)),
 			   Break0 0 5,
 			   pp_default default,
@@ -351,14 +355,24 @@ structure Ppnil	:> PPNIL =
 			   pp_exp arg, String ": EXN, ",
 			   Break0 0 5,
 			   pp_var bound, String ", ",  Break0 0 5,
-			   (pp_list (fn (t,tr,e) => Hbox[pp_exp t, String ": ", pp_trace tr,
+			   (pp_list (fn (t,tr,e) => HOVbox[pp_exp t, String ": ", pp_trace tr,
 								   String ": ", pp_exp e])
 			      arms ("","","", true)),
 			   Break0 0 5,
 			   pp_default default,
 			   String ")",String" : ",pp_con result_type]
-	      | Typecase_e sw => error "can't print typecase"
-
+	      | Typecase_e {arg,arms,default,result_type} => 
+		    HOVbox[String "TYPECASE(", 
+			   pp_con arg, String ": TYPE, ",
+			   Break0 0 5,
+			   (pp_list (fn (pc,vklist,e) => HOVbox[pp_primcon pc, 
+							      String ": ", pp_vklist vklist,
+							      String ": ", Break0 0 2,
+							      pp_exp e])
+			      arms ("","","", true)),
+			   Break0 0 5,
+			   pp_default (SOME default),
+			   String ")",String" : ",pp_con result_type]
 	end
 
     and pp_trace TraceUnknown = String "Unknown"

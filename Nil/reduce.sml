@@ -571,10 +571,10 @@ structure Reduce
 			(
 			 scan_con arg;
 			 scan_con result_type;
-			 map ( (map ( (declare false) o #1)) o #1) arms;
-			 map ( (map (scan_kind o #2)) o #1) arms;
-			 map (scan_exp o #2) arms;
-			 Option.map (scan_exp) default;
+			 map ( (map ( (declare false) o #1)) o #2) arms;
+			 map ( (map (scan_kind o #2)) o #2) arms;
+			 map (scan_exp o #3) arms;
+			 scan_exp default;
 			 ()
 			 )
 	    end
@@ -854,9 +854,9 @@ structure Reduce
 			 arg = xcon fset arg,
 			 result_type = xcon fset result_type,
 			 arms = map 
-			 (fn (w,e) => 
-			   (map (fn (v,k) => (v, xkind fset k)) w,xexp fset e)) arms,
-			 default =  Option.map (xexp fset) default
+			 (fn (pc,w,e) => 
+			   (pc,map (fn (v,k) => (v, xkind fset k)) w,xexp fset e)) arms,
+			 default =  xexp fset default
 			 }
 			 
 	    and xfunction fset 
@@ -1182,7 +1182,15 @@ structure Reduce
 			  let
 			      val new_app = App_e (openness, s(f), map (xcon fset) clist,
 						   map subst elist, map subst elist2)
-			      val Var_e sf = s(f)
+			      val Var_e sf = let val tmp = s(f)
+						 val _ = (case tmp of
+							      Var_e _ => ()
+							    | _ => (print "expect var but got ";
+								    Ppnil.pp_exp tmp; print "\nexp was";
+								    Ppnil.pp_exp exp; print "\n";
+								    error "expect var in reduce"))
+					     in  tmp
+					     end
 			  in 
 			      if !do_inline andalso 
 				  look count_app sf = 1 andalso 

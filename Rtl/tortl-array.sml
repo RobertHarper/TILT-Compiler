@@ -24,12 +24,12 @@ struct
 	  val a' = load_ireg_term(vl1,NONE)
 	  val destf = alloc_regf()
 	  val _ =  (case (in_ea_range 8 vl2) of
-			SOME i => add_instr(LOADQF(EA(a',i),destf))
+			SOME i => add_instr(LOADQF(REA(a',i),destf))
 		      | NONE =>
 			    let val b' = load_ireg_term(vl2,NONE)
 				val addr = alloc_regi (LOCATIVE)
 			    in  add_instr(S8ADD(b',REG a',addr));
-				add_instr(LOADQF(EA(addr,0),destf))
+				add_instr(LOADQF(REA(addr,0),destf))
 			    end)
       in  (LOCATION(REGISTER(false, F destf)), state)
       end
@@ -40,18 +40,18 @@ struct
       in  (case is of
 	       Prim.W32 => (add_instr(ICOMMENT "int sub start");
 			    (case (in_ea_range 4 vl2) of
-				SOME i => add_instr(LOAD32I(EA(a',i),desti))
+				SOME i => add_instr(LOAD32I(REA(a',i),desti))
 			      | NONE => let val b' = load_ireg_term(vl2,NONE)
 					    val addr = alloc_regi (LOCATIVE)
 					in  add_instr(S4ADD(b',REG a',addr));
-					    add_instr(LOAD32I(EA(addr,0),desti))
+					    add_instr(LOAD32I(REA(addr,0),desti))
 					end);
 				 add_instr(ICOMMENT "int sub end"))
 	     | Prim.W8 => let val b' = load_ireg_term(vl2,NONE)
 			      val addr = alloc_regi (LOCATIVE)
 			  in  add_instr(ICOMMENT "character sub start\n");
 			      add_instr(ADD(b',REG a',addr));
-			      add_instr(LOAD8I(EA(addr,0),desti));
+			      add_instr(LOAD8I(REA(addr,0),desti));
 			      add_instr(ICOMMENT "character sub end\n")
 			  end
 	     | _ => error "xintptrsub not done on all int sizes");
@@ -112,11 +112,11 @@ struct
       let val a' = load_ireg_term(vl1,NONE)
 	  val argf = load_freg_term(vl3,NONE)
       in (case (in_ea_range 8 vl2) of
-	      SOME i => add_instr(STOREQF(EA(a',i),argf))
+	      SOME i => add_instr(STOREQF(REA(a',i),argf))
 	    | NONE => let val b' = load_ireg_term(vl2,NONE)
 			  val addr = alloc_regi (LOCATIVE)
 		      in  add_instr(S8ADD(b',REG a',addr));
-			  add_instr(STOREQF(EA(addr,0),argf))
+			  add_instr(STOREQF(REA(addr,0),argf))
 		      end);
 	  (empty_record, state)
       end
@@ -127,17 +127,17 @@ struct
 	  val argi = load_ireg_term(vl3,NONE)
       in  (case is of
 	       Prim.W32 => (case (in_ea_range 4 vl2) of
-				SOME i => add_instr(STORE32I(EA(a',i),argi))
+				SOME i => add_instr(STORE32I(REA(a',i),argi))
 			      | NONE => let val b' = load_ireg_term(vl2,NONE)
 					    val addr = alloc_regi (LOCATIVE)
 					in  add_instr(S4ADD(b',REG a',addr));
-					    add_instr(STORE32I(EA(addr,0),argi))
+					    add_instr(STORE32I(REA(addr,0),argi))
 					end)
 	     | Prim.W8 => let val b' = load_ireg_term(vl2,NONE)
 			      val addr = alloc_regi (LOCATIVE)
 			  in  add_instr(ICOMMENT "character update start");
 			      add_instr(ADD(b',REG a',addr));
-			      add_instr(STORE8I(EA(addr,0),argi));
+			      add_instr(STORE8I(REA(addr,0),argi));
 			      add_instr(ICOMMENT "character update end")
 			  end
 	     | _ => error "xintupdate not implemented on this size");
@@ -148,13 +148,14 @@ struct
       let
 	  val base = load_ireg_term(vl1,NONE)
 	  val newval = load_ireg_term(vl3,NONE)
-      in  (case (in_imm_range_vl vl2) of
-	       SOME offset => add_instr(MUTATE(base,IMM (4 * offset),newval,NONE))
+	  val ea = (case (in_imm_range_vl vl2) of
+	       SOME offset => REA(base,4 * offset)
 	     | NONE => let val offset = load_ireg_term(vl2,NONE)
-			   val word_offset = alloc_regi NOTRACE_INT
-		       in  add_instr(SLL(offset,IMM 2, word_offset));
-			   add_instr(MUTATE(base, REG word_offset,newval,NONE))
-		       end);
+			   val byteOffset = alloc_regi NOTRACE_INT
+		       in  add_instr(SLL(offset,IMM 2, byteOffset));
+			   RREA(base, byteOffset)
+		       end)
+      in  add_instr(MUTATE(ea, newval,NONE));
 	  (empty_record, state)
       end
 
@@ -203,7 +204,7 @@ struct
   fun xlen_float (state,fs) (vl : term) : term * state =
       let val dest = alloc_regi NOTRACE_INT
 	  val src = load_ireg_term(vl,NONE)
-	  val _ = add_instr(LOAD32I(EA(src,~4),dest))
+	  val _ = add_instr(LOAD32I(REA(src,~4),dest))
 	  val _ = add_instr(SRL(dest,IMM real_len_offset,dest))
       in  (LOCATION (REGISTER (false,I dest)), state)
       end
@@ -211,7 +212,7 @@ struct
   fun xlen_int (state,is) (vl : term) : term * state =
       let val dest = alloc_regi NOTRACE_INT
 	  val src = load_ireg_term(vl,NONE)
-	  val _ = add_instr(LOAD32I(EA(src,~4),dest))
+	  val _ = add_instr(LOAD32I(REA(src,~4),dest))
 	  val offset = int_len_offset + (case is of
 					     Prim.W8 => 0
 					   | Prim.W16 => 1
@@ -223,7 +224,7 @@ struct
   fun xlen_known (state,c) (vl : term) : term * state =
       let val dest = alloc_regi NOTRACE_INT
 	  val src = load_ireg_term(vl,NONE)
-	  val _ = add_instr(LOAD32I(EA(src,~4),dest))
+	  val _ = add_instr(LOAD32I(REA(src,~4),dest))
 	  val _ = add_instr(SRL(dest,IMM (2 + int_len_offset),dest))
       in  (LOCATION (REGISTER (false,I dest)), state)
       end
@@ -233,7 +234,7 @@ struct
 	  val _ = Stats.counter("Rtlxlen_dyn")()
 	  val dest = alloc_regi NOTRACE_INT
 	  val src = load_ireg_term(vl,NONE)
-	  val _ = add_instr(LOAD32I(EA(src,~4),dest))
+	  val _ = add_instr(LOAD32I(REA(src,~4),dest))
 	  val r = con_ir
 	  val tmp = alloc_regi NOTRACE_INT
 	  val afterl = fresh_code_label "length_after"
@@ -308,27 +309,27 @@ struct
 		    (needgc(state,REG gctemp);
 		     align_odd_word();
 		     mk_realarraytag(len,tag);
-		     add_instr(STORE32I(EA(heapptr,0),tag)); (* store tag *)
+		     add_instr(STORE32I(REA(heapptr,0),tag)); (* store tag *)
 		     add_instr(ADD(heapptr,IMM 4,dest)))
 	       | SOME ptag =>
 		    (needgc(state,REG gctemp);
 		     align_even_word();
-		     add_instr(STORE32I(EA(heapptr,0), ptag));                (* store profile tag *)
+		     add_instr(STORE32I(REA(heapptr,0), ptag));                (* store profile tag *)
 		     mk_realarraytag(len,tag);               
-		     add_instr(STORE32I(EA(heapptr,4),tag)); (* store tag *)
+		     add_instr(STORE32I(REA(heapptr,4),tag)); (* store tag *)
 		     add_instr(ADD(heapptr,IMM 8,dest))));
 		
 	    (* now use a loop to initialize the data portion *)
 	    add_instr(S8ADD(len,REG dest,heapptr));
 	    add_instr(LI(Rtltags.skip, skiptag));
-	    add_instr(STORE32I(EA(heapptr,0),skiptag));
+	    add_instr(STORE32I(REA(heapptr,0),skiptag));
 	    add_instr(ADD(heapptr,IMM 4,heapptr));
 	    add_instr(SUB(len,IMM 1,i));       (* init val *)
 	    add_instr(BR fbottom);             (* enter loop from bottom *)
 	    do_code_align();
 	    add_instr(ILABEL ftop);            (* loop start *)
 	    add_instr(S8ADD(i,REG dest,tmp));
-	    add_instr(STOREQF(EA(tmp,0),fr));  (* initialize value *)
+	    add_instr(STOREQF(REA(tmp,0),fr));  (* initialize value *)
 	    add_instr(SUB(i,IMM 1,i));
 	    add_instr(ILABEL fbottom);
 	    add_instr(BCNDI(GE,i,IMM 0,ftop,true));
@@ -356,10 +357,10 @@ struct
       in 
 	  (case ptag_opt of
 	       NONE => (add_instr(ICOMMENT "storing tag");
-			add_instr(STORE32I(EA(heapptr,0),tag)); (* allocation *)
+			add_instr(STORE32I(REA(heapptr,0),tag)); (* allocation *)
 			add_instr(ADD(heapptr,IMM 4,dest)))
-	     | SOME ptag => (add_instr(STORE32I(EA(heapptr,0), ptag));
-			     add_instr(STORE32I(EA(heapptr,4),tag)); (* allocation *)
+	     | SOME ptag => (add_instr(STORE32I(REA(heapptr,0), ptag));
+			     add_instr(STORE32I(REA(heapptr,4),tag)); (* allocation *)
 			     add_instr(ADD(heapptr,IMM 8,dest))));
 	       
 	   (* gctemp's contents reflects the profile tag already *)
@@ -370,15 +371,15 @@ struct
 			 end);
 
 	    add_instr(LI(Rtltags.skip, skiptag));
-	    add_instr(STORE32I(EA(heapptr,0),skiptag));
+	    add_instr(STORE32I(REA(heapptr,0),skiptag));
 	    add_instr(SUB(len,IMM 1,i));  (* init val and enter loop from bot *)
 	    add_instr(BR gbottom);
 	    do_code_align();
 	    add_instr(ILABEL gtop);        (* top of loop *)
 	    add_instr(S4ADD(i,REG dest,tmp));
 	    if isptr
-		then add_instr(MUTATE(tmp,IMM 0,v,NONE))
-	    else add_instr(STORE32I(EA(tmp,0),v)); (* allocation *)
+		then add_instr(MUTATE(REA(tmp,0),v,NONE))
+	    else add_instr(STORE32I(REA(tmp,0),v)); (* allocation *)
 	    add_instr(SUB(i,IMM 1,i));
 	    add_instr(ILABEL gbottom);
 	    add_instr(BCNDI(GE,i,IMM 0,gtop,true));
@@ -555,7 +556,7 @@ struct
 	val _ = add_instr(ILABEL floatl)
 	val temp = load_ireg_term(vl2,NONE)
 	val fr = alloc_regf()
-	val _ = add_instr(LOADQF(EA(temp,0),fr))
+	val _ = add_instr(LOADQF(REA(temp,0),fr))
 	    
 	val float_state = 
 	    let val vl2 = LOCATION(REGISTER(false, F fr))

@@ -1,4 +1,4 @@
-(*$import TortlVararg Rtl Pprtl TortlRecord TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps NilContext TORTL *)
+(*$import Vararg Rtl Pprtl TortlRecord TortlSum TortlArray TortlBase Rtltags Nil NilUtil Ppnil Stats TraceOps NilContext TORTL Optimize *)
 
 (* (1) This translation relies on the layout of the thread structure which is
        pointed to by the thread pointer.  Check Runtime/thread.h for details.
@@ -43,6 +43,22 @@ struct
 
 
     val show_cbnd = Stats.ff("show_cbnd")
+    val linkUnitname = "LINKUNIT"
+    val localVararg = fresh_named_var "toVararg"
+    val localOnearg = fresh_named_var "toOnearg"
+    val localSub = fresh_named_var "sub"
+    val localVsub = fresh_named_var "vsub"
+    val localLen = fresh_named_var "len"
+    val localVlen = fresh_named_var "vlen"
+    val localUpdate = fresh_named_var "update"
+    val localArray = fresh_named_var "array"
+    val localVector = fresh_named_var "vector"
+
+    val {vararg,
+	 onearg,
+	 bnds = vararg_onearg_bnds} = Vararg.generate()
+    val {sub,vsub,len,vlen,update,array,vector,
+	 bnds = aggregate_bnds} = Optimize.generate()
 
     val exncounter_label = ML_EXTERN_LABEL "exncounter"
     val error = fn s => (Util.error "tortl.sml" s)
@@ -58,15 +74,11 @@ struct
 		        exp_depth := 0;
 			cbnd_depth := 0)
 
-      
-   type translate_params = {HeapProfile : int option, do_write_list : bool, 
-			    codeAlign : Rtl.align, FullConditionalBranch : bool, 
-			    elim_tail_call : bool, recognize_constants : bool}
-   val cur_params = ref {HeapProfile = NONE : int option, 
-			 do_write_list = true,
-			 codeAlign = Rtl.OCTA, FullConditionalBranch = false, 
-			 elim_tail_call = true, recognize_constants = true}
-
+    val HeapProfile = NONE : int option
+    val codeAlign = Rtl.OCTA
+    val do_write_list = Stats.tt("DoWriteList")
+    val recognize_constants = Stats.tt("RtlRecognizeConstants")
+    val elim_tail_call = Stats.tt("ElimTailCall")
 
    datatype work = FunWork of (state * var * function)
                  | ConFunWork of (state * var * (var * kind) list * con)
@@ -95,9 +107,7 @@ struct
 	    | Exp_b (v,t,e) => 
 		  let val _ = (msg "working on exp_b "; msg (var2string v); msg "\n")
 		      val (term,state) = xexp(state,v,e,t,NOTID)
-		  in  if istoplevel()
-			  then add_global_equation (state,v,e,term)
-		      else add_term_equation (state,v,e,term)
+		  in  add_term (state,v,Typeof_c e,term, SOME e)
 		  end
 	    | Fixopen_b var_fun_seq => error "no open functions permitted"
 	    | Fixcode_b var_fun_seq =>
@@ -105,6 +115,7 @@ struct
 		      val _ = msg "working on fixopen_b\n"
 		      fun folder ((v,function),s) =
 			  let val funcon = NilUtil.function_type Code function
+			      val _ = add_global v
 			  in  add_code (s, v, funcon, LOCAL_CODE ((get_unitname()) ^ "_" 
 								  ^ (Name.var2string v)))
 			  end
@@ -122,7 +133,7 @@ struct
 						  (Int.toString (length var_vcelist)) ^ " closures"))
 		      val toplevel = istoplevel()
 		      fun folder((v,{code,cenv,venv,tipe}),state) = 
-			  add_global(state,v,tipe,VALUE(LABEL(LOCAL_DATA(Name.var2string v))))
+			  add_term(state,v,tipe,VALUE(LABEL(LOCAL_DATA(Name.var2string v))),NONE)
 		      val state = if toplevel then foldl folder state var_vcelist else state
 		      fun loadcl ((v,{code,cenv,venv,tipe}),state) = 
 			  let val _ = incClosure()
@@ -154,7 +165,7 @@ struct
 			      val _ = if (maxRecordLength < 4)
 					  then error "the INIT in dowrite of making a closure is wrong\n"
 				      else ()
-			  in  (add_instr(INIT(EA(clregi,8), ir, NONE)); s)
+			  in  (add_instr(INIT(REA(clregi,8), ir, NONE)); s)
 			  end
 		      val _ = if is_recur 
 				  then (foldl2 dowrite rec_state (clregsi, var_vcelist); ())
@@ -191,14 +202,13 @@ struct
 			    let val (_,term,state) = xcon'(state,v,c)
 			    in  (SOME term,state)
 			    end
-		in  if istoplevel()
-			then add_conglobal (state,v,Single_k c,termOpt)
-		    else add_conterm (state,v,Single_k c,termOpt)
+		in  add_conterm (state,v,Single_k c,termOpt)
 		end
 	 | Code_cb (conwork as (name,vklist,c)) => 
 		let val funkind = Arrow_k(Code,vklist,Single_k c)
 		    val funcon = Let_c(Sequential,[cbnd],Var_c name)
 		    val l = LOCAL_CODE((get_unitname()) ^ "_" ^ (Name.var2string name))
+		    val _ = add_global name
 		    val state = add_conterm (state,name,funkind, SOME(VALUE(CODE l)))
 		    val _ = if phase = Compiletime
 				then ()
@@ -392,11 +402,9 @@ struct
 				     (NONE,SOME(CODE l)) => LABEL' l
 				   | (SOME(REGISTER (_,I r)),_) => REG' r
 				   | (SOME(GLOBAL (l,_)),_) => 
-					 let val addr = alloc_regi NOTRACE_LABEL
-					     val reg = alloc_regi NOTRACE_CODE
-					 in  (add_instr(LADDR(l,0,addr));
-					      add_instr(LOAD32I(EA(addr,0),reg));
-					      REG' reg)
+					 let val reg = alloc_regi NOTRACE_CODE
+					 in  add_instr(LOAD32I(LEA(l,0),reg));
+					     REG' reg
 					 end
 				   | _ => error "bad varloc or varval for function")
 				     
@@ -443,11 +451,9 @@ struct
 				    (NONE,SOME(CODE l)) => LABEL' l
 				  | (SOME(REGISTER (_,I r)),_) => REG' r
 				  | (SOME(GLOBAL (l,_)),_) => 
-					let val addr = alloc_regi NOTRACE_LABEL
-					    val reg = alloc_regi NOTRACE_CODE
-					in  (add_instr(LADDR(l,0,addr));
-					     add_instr(LOAD32I(EA(addr,0),reg));
-					     REG' reg)
+					let val reg = alloc_regi NOTRACE_CODE
+					in  add_instr(LOAD32I(LEA(l,0),reg));
+					    REG' reg
 					end
 				  | _ => error "bad varloc or varval for function"),
 				    [], [],state)
@@ -479,7 +485,7 @@ struct
 			         (map I cregsi') @
 				 eregs @ eregs' @ efregs
 		      val (resrep,dest) = alloc_reg_trace state trace
-		      val context = if (#elim_tail_call(!cur_params))
+		      val context = if (!elim_tail_call)
 					then context
 				    else NOTID
 		  in
@@ -526,13 +532,14 @@ struct
 		      (* compute free variables that need to be saved for handler *)
 
 		      local
-			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExp(false, handler_body)
+			  val (free_evars,free_cvars) = NilUtil.freeExpConVarInExp(false, 0, handler_body)
 			  (* Include only constructors that have locations *)
 			  val cTerms = List.mapPartial
 					    (fn v => (case (getconvarrep' state v) of
 							  NONE => NONE
 							| SOME (SOME loc, _) => SOME (LOCATION loc)
-							| _ => NONE)) free_cvars
+							| _ => NONE)) 
+					    (Name.VarSet.listItems free_cvars)
 			  (* Drop the exception variables - include only locations *)
 			  val eTerms = List.mapPartial 
 			                    (fn v => 
@@ -540,7 +547,8 @@ struct
 					     (case (getrep state v) of
 							 (_, SOME v) => NONE
 						       | (SOME l, _) => SOME(LOCATION l)
-						       | _ => error "eTerm wrong")) free_evars
+						       | _ => error "eTerm wrong")) 
+					    (Name.VarSet.listItems free_evars)
 			  val terms = eTerms @ cTerms
 			  fun folder (term, acc as (ir,it,fr,ft)) = 
 			      (case term of
@@ -576,7 +584,7 @@ struct
 
 		      (* --- create and install exn record --- *)
 		      val hlreg = alloc_regi NOTRACE_CODE
-		      val _ = add_instr(LADDR(hl,0,hlreg))
+		      val _ = add_instr(LADDR(LEA(hl,0),hlreg))
 		      val handlerTerm = LOCATION(REGISTER (false, I hlreg))
 		      val stackptrTerm = LOCATION(REGISTER (false, I (SREGI STACK)))
 		      val exnptrTerm = LOCATION(REGISTER (false, I (SREGI EXNSTACK)))
@@ -622,7 +630,7 @@ struct
 
 		      (* --- restore the float registers, if any --- *)			  
 		      val _ = let fun f (base : regi, h :: t,offset) = 
-			                    (add_instr(LOADQF(EA(base,offset),h));
+			                    (add_instr(LOADQF(REA(base,offset),h));
 					     f (base, t,offset+8))
 				    | f (base,nil,offset) = ()
 			      in (case fpbase of
@@ -803,7 +811,54 @@ struct
 			  SOME r => (LOCATION(REGISTER (false, r)),state)
 			| _ => error "no arms"
 		  end 
-	    | Typecase_e _ => error "typecase_e not implemented"
+	    | Typecase_e {arg,arms,default,result_type} => 
+		  let
+		      val (conr,state) = xcon(state,fresh_named_var "typecase_arg",arg)
+		      val afterl = fresh_code_label "afterTypecase"
+		      val defaultl = fresh_code_label "defaultTypecase"
+		      val contagr = alloc_regi(NOTRACE_INT)
+		      val arityr = alloc_regi(NOTRACE_INT)
+
+		      val _ = add_instr(BCNDI(LE, conr, IMM 255, defaultl, false))
+		      val _ = record_project(conr,0,contagr)
+		      val _ = add_instr(BCNDI(NE, contagr, IMM 5, defaultl, false)) (* skip non-records *)
+		      val _ = record_project(conr,1,arityr)
+
+		      fun scan(states,lab,[]) =
+			  let val _ = add_instr(ILABEL lab)
+			      val _ = add_instr(ILABEL defaultl)
+			      val (r,newstate) = xexp'(state,fresh_var(),default,
+						       trace,context)
+			  in  move r; newstate :: states
+			  end
+			| scan(states,lab,(Record_c _, vklist,body)::rest) = 
+			  let 
+			      val arity = length vklist
+			      val next = fresh_code_label "exnarm"
+			      fun loop (pos,[],state) = state
+				| loop (pos,(v,k)::rest,state) = 
+				  let val r = alloc_regi TRACE
+				      val _ = record_project(conr,pos,r)
+				      val state = add_conterm (state,v,k,SOME(LOCATION(REGISTER (false,I r))))
+				  in  loop (pos+1,rest,state)
+				  end
+			      val _ =  add_instr(ILABEL lab);
+			      val _ = add_instr(BCNDI(NE,arityr,IMM arity,next,true));
+			      val state = loop (2,vklist,state)
+			      val (r,state) = xexp'(state,fresh_var(),body,
+						    trace,context)
+			  in  move r;
+			      add_instr(BR afterl);
+			      scan(state::states,next,rest)
+			  end
+		      val states = scan([],fresh_code_label "typecasearm",arms)
+		      val state = join_states states
+		  in  
+		      add_instr(ILABEL afterl);
+		      case !dest of
+			  SOME r => (LOCATION(REGISTER (false, r)),state)
+			| _ => error "no arms"
+		  end 
 	    | Sumsw_e {sumtype, arg, bound, arms, default, result_type} =>
 	      let val (tagcount,_,cons) = reduce_to_sum "sumsw" state sumtype
 		  val totalcount = tagcount + TilWord32.fromInt(length cons)
@@ -987,8 +1042,7 @@ struct
 	       let val _ = incPrim()
 		   val [e] = elist
 		   val (I ir,state) = xexp'(state,fresh_var(),e,Nil.TraceUnknown,NOTID)
-		   val fr = alloc_regf()
-		   val _ = add_instr(LOADQF(EA(ir,0),fr))
+		   val fr = unboxFloat ir
 	       in (LOCATION(REGISTER(false, F fr)), state)
 	       end
 	 | box_float Prim.F32 => error "32-bit floats not done"
@@ -1008,10 +1062,10 @@ struct
 		       val desti = alloc_regi NOTRACE_INT
 		       val addr = alloc_regi TRACE
 		       val tmp = alloc_regi NOTRACE_INT
-		       val _ = (add_instr(LADDR(exncounter_label,0,addr));
-				add_instr(LOAD32I(EA(addr,0),desti));
+		       val _ = (add_instr(LADDR(LEA(exncounter_label,0),addr));
+				add_instr(LOAD32I(REA(addr,0),desti));
 				add_instr(ADD(desti,IMM 1,tmp));
-				add_instr(STORE32I(EA(addr,0),tmp)))
+				add_instr(STORE32I(REA(addr,0),tmp)))
 		   in  (LOCATION(REGISTER (false, I desti)), state)
 		   end
 	 | inj_exn name => 
@@ -1027,87 +1081,82 @@ struct
 		   in  make_record(state,terms)
 		   end
 	 | make_vararg oe => 
-		   let val _ = incPrim()
-		       fun local_xexp (s,e) = 
-		          let val (I ir, _) = xexp'(s,fresh_var(),e, Nil.TraceUnknown,NOTID)
-			  in  ir
-			  end
+		   let val _ = incVararg()
 		       val [c1,c2] = clist
-		       val (argc, state) = xcon(state,fresh_var(),c1)
-		       val (resc, state) = xcon(state,fresh_var(),c2)
-		       val (I function,state) = xexp'(state,fresh_var(),hd elist,
-							Nil.TraceUnknown, NOTID)
-		       val (state,resulti) = TortlVararg.xmake_vararg local_xexp (state,argc,resc,function)
-		   in  (LOCATION(REGISTER(false, I resulti)), state)
+		       val [e] = elist
+		       val e = App_e(Closure,Var_e localVararg, [c1,c2], [e], [])
+		   in  xexp(state,fresh_var(),e,Nil.TraceKnown TraceInfo.Trace,NOTID)
 		   end
 	 | make_onearg (openness,eff) => 
-		   let  val _ = incPrim()
-		       fun local_xexp (s,e) = 
-		          let val (I ir, _) = xexp'(s,fresh_var(),e, Nil.TraceUnknown,NOTID)
-			  in  ir
-			  end
+		   let val _ = incOnearg()
 		       val [c1,c2] = clist
-		       val (argc, state) = xcon(state,fresh_var(),c1)
-		       val (resc, state) = xcon(state,fresh_var(),c2)
-		       val (I function,state) = xexp'(state,fresh_var(),hd elist,
-							Nil.TraceUnknown, NOTID)
-		       val (state,resulti) = TortlVararg.xmake_onearg local_xexp (state,argc,resc,function)
-		   in  (LOCATION(REGISTER(false, I resulti)), state)
+		       val [e] = elist
+		       val e = App_e(Closure,Var_e localOnearg, [c1,c2], [e], [])
+		   in  xexp(state,fresh_var(),e,Nil.TraceKnown TraceInfo.Trace,NOTID)
 		   end
 	 | peq => error "peq not done")
       end
 
 
-
-  and xprim(state,Prim.neg_int is,clist,elist,context,trace) =
-          xprim(state, Prim.minus_int is, clist, (Const_e(Prim.int(Prim.W32,TW64.zero)))::elist,context,trace)
-    | xprim(state : state, prim,clist,elist,context,trace) : term * state = 
+   and xprim(state, prim, clist, elist, context, trace) : term * state = 
       let 
+
+	  open Prim
 	  fun error' s = (print "nilprimexpression was:\n";
 			  Ppnil.pp_exp (Nil.Prim_e(Nil.PrimOp prim, clist,elist));
 			  print "\n";
 			  error s)
-	  open Prim
+
+	  (* First, rewrite negation as subtraction and create_empty_table with create_table.
+	     We will represent zero length array as an integer zero-length array.
+	     Note that zero is NOT a legal representation for an empty array.
+	  *)
+	  val zero = Const_e(Prim.int(Prim.W32,TW64.zero))
+	  val (prim,elist) = (case (prim,elist) of
+				  (Prim.neg_int is, [e]) => (Prim.minus_int is, [zero,e])
+				| (Prim.create_empty_table t, []) => (Prim.create_table t, [zero, zero])
+				| _ => (prim,elist))
+
 	  val _ = incPrim()
-	  val (vl_list,state) = xexp_list(state,elist)
 	  val int32 = Prim_c(Int_c W32, []) 
 	  val float64 = Prim_c(Float_c F64, []) 
 	  fun xtt int_tt = INT_TT
 	    | xtt real_tt = REAL_TT
 	    | xtt both_tt = BOTH_TT
-	  fun commute (v1 as (VALUE(INT i)),v2) = 
-	      if in_imm_range i then (v2,v1) else (v1,v2)
-	    | commute arg = arg
+	  (* ----------- Casts / Identity ----------------------- *)
+	  fun identity() = 
+	      let val (vl_list,state) = xexp_list(state,elist)
+		  val [vl] = vl_list
+	      in  (vl,state)
+	      end
 	  (* ----------- integer comparisons ----------------------- *)
-	  fun flip EQ = EQ
-	    | flip LE = GE
-	    | flip LT = GT
-	    | flip GE = LE
-	    | flip GT = LT
-	    | flip NE = NE
-
-	  fun swap (a,v1 as VALUE(INT i),v2) = 
-	      if in_imm_range i 
-		  then (flip a,v2,v1)
-	      else (a,v1,v2)
-	    | swap arg = arg
-          fun stdcmp2i signed oper =
-                   let val [vl1,vl2] = vl_list
-		       val (oper,vl1,vl2) = swap(oper,vl1,vl2)
-		       val a' = load_ireg_term(vl1,NONE)
-		       val b' = load_ireg_sv vl2
-		       val dest = alloc_regi NOTRACE_INT
-		       val cmp = if signed then CMPSI else CMPUI
-		       val _ =  add_instr(cmp(oper,a',b',dest))
-		   in (LOCATION(REGISTER(false, I dest)), state)
-		   end
-
-          val stdcmp2si = stdcmp2i true
-          val stdcmp2ui = stdcmp2i false
-
-          (* ----------- floatint point comparison ---------------- *)
+          fun stdcmp2i (signed, oper) =
+	      let fun flip EQ = EQ
+		    | flip LE = GE
+		    | flip LT = GT
+		    | flip GE = LE
+		    | flip GT = LT
+		    | flip NE = NE
+		  fun swap (a,v1 as VALUE(INT i),v2) = 
+		      if in_imm_range i 
+			  then (flip a,v2,v1)
+		      else (a,v1,v2)
+		    | swap arg = arg
+		  val (vl_list,state) = xexp_list(state,elist)
+		  val [vl1,vl2] = vl_list
+		  val (oper,vl1,vl2) = swap(oper,vl1,vl2)
+		  val a' = load_ireg_term(vl1,NONE)
+		  val b' = load_ireg_sv vl2
+		  val dest = alloc_regi NOTRACE_INT
+		  val cmp = if signed then CMPSI else CMPUI
+		  val _ =  add_instr(cmp(oper,a',b',dest))
+	      in (LOCATION(REGISTER(false, I dest)), state)
+	      end
+	  
+          (* ----------- floating point comparison ---------------- *)
 	  fun cmpf oper =
-	      let val [vl1,vl2] = vl_list
+	      let val (vl_list,state) = xexp_list(state,elist)
+		  val [vl1,vl2] = vl_list
 		  val a' = load_freg_term(vl1,NONE)
 		  val b' = load_freg_term(vl2,NONE)
 		  val dest = alloc_regi NOTRACE_INT
@@ -1118,7 +1167,8 @@ struct
 
 	  (* ----------- unary integer operations ----------------- *)
 	  fun op1i oper : term * state =
-	      let val [vl1] = vl_list
+	      let val (vl_list,state) = xexp_list(state,elist)
+		  val [vl1] = vl_list
 		  val a' = load_ireg_term(vl1,NONE)
 		  val dest = alloc_regi NOTRACE_INT
 		  val _ = add_instr(oper(a',dest))
@@ -1126,8 +1176,12 @@ struct
 	      end
 
 	  (* ----------- binary integer operations ----------------- *)
-	  fun op2i comflag oper : term * state =
-	      let val [vl1,vl2] = vl_list 
+	  fun op2i (comflag, oper) : term * state =
+	      let fun commute (v1 as (VALUE(INT i)),v2) = 
+		         if in_imm_range i then (v2,v1) else (v1,v2)
+		    | commute arg = arg
+		  val (vl_list,state) = xexp_list(state,elist)
+		  val [vl1,vl2] = vl_list 
 		  (* commute values if the first arg is a small imm *)
 		  val (vl1,vl2) = if comflag then commute(vl1,vl2) else (vl1,vl2)
 		  val a' = load_ireg_term(vl1,NONE)
@@ -1137,14 +1191,14 @@ struct
 	      in (LOCATION(REGISTER(false, I dest)), state)
 	      end
 
-	  val commutesop2i = op2i true
-	  val stdop2i = op2i false
 	  fun add_ibar b1 b2 = (add_instr (b1 INT_TT); add_instr (b2 INT_TT))
 	  fun trapZero result = (add_ibar SOFT_ZBARRIER HARD_ZBARRIER; result)
 	  fun trapOver result = (add_ibar SOFT_VBARRIER HARD_VBARRIER; result)
+
 	  (* ----------- binary and unary float operations ----------------- *)
 	  fun op2f oper : term * state =
-	      (case vl_list of
+	      let val (vl_list,state) = xexp_list(state,elist)
+	      in  (case vl_list of
 		   [vl1,vl2] => 
 		       let val a' = load_freg_term(vl1,NONE)
 			   val b' = load_freg_term(vl2,NONE)
@@ -1153,8 +1207,10 @@ struct
 		       in (LOCATION(REGISTER(false, F dest)), state)
 		       end
 		 | _ => error "need exactly 2 arguments for this primitive")
+	      end
 	  fun op1f oper : term * state =
-	      (case vl_list of
+	      let  val (vl_list,state) = xexp_list(state,elist)
+	      in  (case vl_list of
 		   [vl] => 
 		       let val a' = load_freg_term(vl,NONE)
 			   val dest = alloc_regf()
@@ -1162,11 +1218,21 @@ struct
 		       in (LOCATION(REGISTER(false, F dest)), state)
 		       end
 		 | _ => error "need exactly 2 arguments for this primitive")
-	  fun extract_dispatch(t,state,arg,(xfloat,xint,xknown,xdynamic)) = 
-	      let fun dynamic c =
-		     let val (con_ir,state) = xcon(state,fresh_var(),c)
-		     in  xdynamic (state,c,con_ir) arg
-		     end
+	      end
+	  (* ----------- Array and vector operations -------------- *)
+	  val isLink = (get_unitname()) = linkUnitname
+	  fun aggregateApp localVar = 
+	      xexp(state,fresh_var(),
+		   App_e(Code,Var_e localVar,
+			 clist, elist, []), trace, context)
+	  fun extract_dispatch(t,state,arg,
+			       (xfloat,xint,xknown,xdynamic)) = 
+	      let fun dynamic c = 
+		  if (isLink)
+		      then let val (con_ir,state) = xcon(state,fresh_var(),c)
+			   in  xdynamic (state,c,con_ir) arg
+			   end
+		  else error "extract_dispatch: Can't get here"
 	      in  
 		  (case (t,clist) of
 		       (IntArray is,_) => xint (state,is) arg
@@ -1188,7 +1254,8 @@ struct
 	       
 
 	    | float2int => 
-		  let val [vl] = vl_list 
+		  let val (vl_list,state) = xexp_list (state,elist)
+		      val [vl] = vl_list 
 		      val src = load_freg_term(vl,NONE)
 		      val dest = alloc_regi NOTRACE_INT
 		      val _ = add_instr(CVT_REAL2INT(src,dest))
@@ -1196,7 +1263,8 @@ struct
 		  end
 
 	    | int2float => 
-		  let val [vl] = vl_list
+		  let val (vl_list,state) = xexp_list (state,elist)
+		      val [vl] = vl_list
 		      val src = load_ireg_term(vl,NONE)
 		      val dest = alloc_regf()
 		      val _ = add_instr(CVT_INT2REAL(src,dest))
@@ -1204,25 +1272,10 @@ struct
 		  end
 
             (* XXX do we want overflow in some cases or are these casts? *)
-	    | int2uint _ => 
-		  let val [vl] = vl_list 
-		  in  (vl, state)
-		  end
-
-	    | uint2uint _ => 
-		  let val [vl] = vl_list 
-		  in (vl, state)
-		  end
-
-	    | uint2int _ => 
-		  let val [vl] = vl_list 
-		  in (vl, state)
-		  end
-
-	    | int2int _ => 
-		  let val [vl] = vl_list 
-		  in (vl, state)
-		  end
+	    | int2uint _ => identity()
+	    | uint2uint _ => identity()
+	    | uint2int _ => identity()
+	    | int2int _ => identity()
 
 	    | neg_float fs => op1f FNEGD
 	    | abs_float fs => op1f FABSD
@@ -1237,141 +1290,112 @@ struct
 	    | eq_float fs => cmpf EQ
 	    | neq_float fs => cmpf NE
 
-	    | plus_int W32 =>  trapOver(commutesop2i ADDT)
-	    | mul_int W32 =>   trapOver(commutesop2i MULT)
-	    | minus_int W32 => trapOver(stdop2i SUBT)
+	    | plus_int W32 =>  trapOver(op2i (true,ADDT))
+	    | mul_int W32 =>   trapOver(op2i (true,MULT))
+	    | minus_int W32 => trapOver(op2i (false,SUBT))
 	    | div_int W32 =>   error "ml style div not implemented!"
 	    | mod_int W32 =>   error "ml style mod not implemented!"
-	    | quot_int W32 =>  trapZero(stdop2i DIVT)
-	    | rem_int W32 =>   trapZero(stdop2i MODT)
+	    | quot_int W32 =>  trapZero(op2i (false,DIVT))
+	    | rem_int W32 =>   trapZero(op2i (false,MODT))
 
-	    | plus_uint W32 =>  (commutesop2i ADD)
-	    | mul_uint W32 =>   (commutesop2i MUL)
-	    | minus_uint W32 => (stdop2i SUB)
-	    | div_uint W32 =>   (stdop2i DIV)
-	    | mod_uint W32 =>   (stdop2i MOD)
+	    | plus_uint W32 =>  op2i (true, ADD)
+	    | mul_uint W32 =>   op2i (true, MUL)
+	    | minus_uint W32 => op2i (false, SUB)
+	    | div_uint W32 =>   op2i (false, DIV)
+	    | mod_uint W32 =>   op2i (false, MOD)
 
 	    (* XXXXX should this mod with 255 *)
-	    | plus_uint W8 =>  (commutesop2i ADDT)
-	    | mul_uint W8 =>   (commutesop2i MULT)
-	    | minus_uint W8 => (stdop2i SUBT)
-	    | div_uint W8 =>   (stdop2i DIVT)
-	    | mod_uint W8 =>   (stdop2i MODT)
+	    | plus_uint W8 =>  op2i (true, ADDT)
+	    | mul_uint W8 =>   op2i (true, MULT)
+	    | minus_uint W8 => op2i (false, SUBT)
+	    | div_uint W8 =>   op2i (false, DIVT)
+	    | mod_uint W8 =>   op2i (false, MODT)
 
-	    | less_int W32 => stdcmp2si LT
-	    | greater_int W32 => stdcmp2si GT
-	    | lesseq_int W32 => stdcmp2si LE
-	    | greatereq_int W32 => stdcmp2si GE
-	    | eq_int _ => stdcmp2ui EQ
-	    | neq_int _ => stdcmp2ui NE
+	    | less_int W32 => stdcmp2i (true, LT)
+	    | greater_int W32 => stdcmp2i (true, GT)
+	    | lesseq_int W32 => stdcmp2i (true, LE)
+	    | greatereq_int W32 => stdcmp2i (true, GE)
+	    | eq_int _ => stdcmp2i (false, EQ)
+	    | neq_int _ => stdcmp2i (false, NE)
 
 	    (* assume upper bits of 8-bit and 16-bit unsigned ints are zero *)
-	    | less_uint _ => stdcmp2ui LT
-	    | greater_uint _ => stdcmp2ui GT
-	    | lesseq_uint _ => stdcmp2ui LE
-	    | greatereq_uint _ => stdcmp2ui GE
+	    | less_uint _ => stdcmp2i (false, LT)
+	    | greater_uint _ => stdcmp2i (false, GT)
+	    | lesseq_uint _ => stdcmp2i (false, LE)
+	    | greatereq_uint _ => stdcmp2i (false, GE)
 
-	    | neg_int is => error "should not get here"
-	    | abs_int is => error "abs_int not done"
+	    | neg_int is => error "neg_int should have been compiled away already"
+	    | abs_int is => error "abs_int should have been compiled away already"
 
 	    | not_int W64 => op1i NOTB
 	    | not_int _ => op1i NOTB
-	    | and_int W64 => commutesop2i ANDB
-	    | and_int _ => commutesop2i ANDB
-	    | or_int W64 => commutesop2i ORB
-	    | or_int _ => commutesop2i ORB
-	    | xor_int W64 => commutesop2i XORB
-	    | xor_int _ => commutesop2i XORB
-	    | lshift_int W32 => stdop2i SLL
-	    | rshift_int W32 => stdop2i SRA
-	    | rshift_uint W32 => stdop2i SRL
+	    | and_int W64 => op2i (true, ANDB)
+	    | and_int _ => op2i (true, ANDB)
+	    | or_int W64 => op2i (true, ORB)
+	    | or_int _ => op2i (true, ORB)
+	    | xor_int W64 => op2i (true, XORB)
+	    | xor_int _ => op2i (true, XORB)
+	    | lshift_int W32 => op2i (false, SLL)
+	    | rshift_int W32 => op2i (false, SRA)
+	    | rshift_uint W32 => op2i (false, SRL)
 
-(*
-	    | ((plus_int _) | (mul_int _) | (minus_int _) | (div_int _) | 
-	       (mod_int _) | (quot_int _) | (rem_int _) | 
-	       (plus_uint _) | (mul_uint _) | (minus_uint _) |
-	       (div_uint _) | (mod_uint _) |
-	       (less_int _) | (greater_int _) | (lesseq_int _) | (greatereq_int _) |
-	       (less_uint _) | (greater_uint _) | (lesseq_uint _) | (greatereq_uint _) |
-	       (eq_int _) | (neq_int _) | (not_int _) | (and_int _) | (or_int _) | 
-	       (lshift_int _) | (rshift_int _) | (rshift_uint _)
-	       ) => (print "non 32-bit math not done: ";
-		     Ppnil.pp_prim prim; print "\n";
-		     error "non 32-bit math not done")
-*)
-
-	    | (uinta2uinta (is1,is2)) =>
-		  let val [vl] = vl_list 
-		  in (vl, state)
-		  end
-		       
-	    | (uintv2uintv (is1,is2)) =>
-		  let val [vl] = vl_list 
-		  in  (vl, state)
-		  end
-
-	    | (array2vector table) => 
-		  (case (table,vl_list,clist) of 
-		       (IntArray is,[vl],_) => (vl, state)
-		     | (FloatArray fs,[vl],_) => (vl, state)
-		     | (OtherArray _,[vl],[c]) => (vl,state)
-		     | _ => error "illegal array2vector")
-
-	    | (vector2array table) => 
-		  (case (table,vl_list,clist) of 
-		       (IntVector is,[vl],_) => (vl,state)
-		     | (FloatVector fs,[vl],_) => (vl,state)
-		     | (WordVector,[vl],[c]) => (vl,state)
-		     | _ => error "illegal array2vector")
+	    | (uinta2uinta (is1,is2)) => identity()
+	    | (uintv2uintv (is1,is2)) => identity()
+	    | (array2vector table) => identity()
+	    | (vector2array table) => identity()
 				
-	     | (length_table t) => 
-		       let val [vl] = vl_list 
-		       in  extract_dispatch(t,state,vl,
-					    (TortlArray.xlen_float,
-					     TortlArray.xlen_int,
-					     TortlArray.xlen_known,
-					     TortlArray.xlen_dynamic))
-		       end
+	    | (length_table t) => 
+		  (case (isLink, t) of
+		       (false, OtherArray false) => aggregateApp localLen
+		     | (false, OtherVector false) => aggregateApp localLen
+		     | _ => let val ([vl],state) = xexp_list (state,elist)
+			    in  extract_dispatch(t,state,vl,
+						 (TortlArray.xlen_float,
+						  TortlArray.xlen_int,
+						  TortlArray.xlen_known,
+						  TortlArray.xlen_dynamic))
+			    end)
+
 	     | (sub t) => 
-		       let val [vl1,vl2] = vl_list 
-		       in  extract_dispatch(t,state,(vl1,vl2,trace),
-					    (TortlArray.xsub_float,
-					     TortlArray.xsub_int,
-					     TortlArray.xsub_known,
-					     TortlArray.xsub_dynamic))
-		       end
+		  (case (isLink, t) of
+		       (false, OtherArray false) => aggregateApp localSub
+		     | (false, OtherVector false) => aggregateApp localVsub
+		     | _ => let val ([vl1,vl2],state) = xexp_list (state,elist)
+			    in  extract_dispatch(t,state,(vl1,vl2,trace),
+						 (TortlArray.xsub_float,
+						  TortlArray.xsub_int,
+						  TortlArray.xsub_known,
+						  TortlArray.xsub_dynamic))
+			    end)
+
 	     | (update t) => 
-		       let val [vl1,vl2,vl3] = vl_list 
-		       in  extract_dispatch(t,state,(vl1,vl2,vl3),
-					    (TortlArray.xupdate_float,
-					     TortlArray.xupdate_int,
-					     TortlArray.xupdate_known,
-					     TortlArray.xupdate_dynamic))
-		       end
-
-	     (* we will represent zero length array as an integer zero-length array *)
-	     (*   zero is NOT a legal representation for an empty array *)
-	     | (create_empty_table t) => 
-		       let val vl1 = VALUE(INT 0w0)
-			   val vl2 = vl1
-		       in  extract_dispatch(t,state,(vl1,vl2),
-					    (TortlArray.xarray_float,
-					     TortlArray.xarray_int,
-					     TortlArray.xarray_known,
-					     TortlArray.xarray_dynamic))
-		       end
-
+		  (case (isLink, t) of
+		       (false, OtherArray false) => aggregateApp localUpdate
+		     | (false, OtherVector false) => error "can't update vector"
+		     | _ => let val ([vl1,vl2,vl3],state) = xexp_list (state,elist)
+			    in  extract_dispatch(t,state,(vl1,vl2,vl3),
+						 (TortlArray.xupdate_float,
+						  TortlArray.xupdate_int,
+						  TortlArray.xupdate_known,
+						  TortlArray.xupdate_dynamic))
+			    end)
+		  
+	     | (create_empty_table t) => error "cannot get here"
 	     | (create_table t) => 
-		       let val [vl1,vl2] = vl_list 
-		       in  extract_dispatch(t,state,(vl1,vl2),
-					    (TortlArray.xarray_float,
-					     TortlArray.xarray_int,
-					     TortlArray.xarray_known,
-					     TortlArray.xarray_dynamic))
-		       end
+		  (case (isLink, t) of
+		       (false, OtherArray false) => aggregateApp localArray
+		     | (false, OtherVector false) => aggregateApp localVector
+		     | _ => let val ([vl1,vl2],state) = xexp_list(state,elist)
+			    in  extract_dispatch(t,state,(vl1,vl2),
+						 (TortlArray.xarray_float,
+						  TortlArray.xarray_int,
+						  TortlArray.xarray_known,
+						  TortlArray.xarray_dynamic))
+			    end)
 
 	     | equal_table t =>
-		  let val [vl1,vl2] = vl_list 
+		  let val (vl_list,state) = xexp_list (state,elist)
+		      val [vl1,vl2] = vl_list
 		      val ir1 = load_ireg_term(vl1,NONE)
 		      val ir2 = load_ireg_term(vl2,NONE)
 		      val desti = alloc_regi NOTRACE_INT
@@ -1663,10 +1687,7 @@ struct
 						 eFormals=vclist,
 						 fFormals=vflist,body,...}) =
 	  let 
-	      val name = (case (Name.VarMap.find(!exports,vname)) of
-			      NONE => LOCAL_CODE ((get_unitname()) ^ "_" ^ (Name.var2string vname))
-			    | SOME [] => error "export has no labels"
-			    | SOME (l::_) => l)
+	      val name = LOCAL_CODE ((get_unitname()) ^ "_" ^ (Name.var2string vname))
 	      val _ = reset_state(is_top, (vname, name))
 	      val _ = incFun()
 	      val _ = msg ("-----dofun_help : " ^ (Pprtl.label2s name) ^ "\n")
@@ -1727,21 +1748,88 @@ struct
   end
 
 
+  (* Find all top-level variables that must be located globally.
+     This includes exported variables, imported variables,
+     code function varibles, and variables bound at the top-level
+     but used not at the top-level.  If a term variable is global,
+     then the variable inside its COMPUTE trace (if present)
+     is also global.
+  *)
+  fun computeGlobals(imports, bnds, exports) = 
+      let val traceMap = ref (Name.VarMap.empty : var Name.VarMap.map)
+	  val potentialGlobals = ref (Name.VarMap.empty : bool ref Name.VarMap.map)
+
+	  (* First do the imports and exports *)
+	  fun scanImport (ImportValue(l,v,_,_),s) = Name.VarSet.add(s,v)
+	    | scanImport (ImportType(l,v,_),s) = Name.VarSet.add(s,v)
+	  fun scanExport (ExportValue(l,v),s) = Name.VarSet.add(s,v)
+	    | scanExport (ExportType(l,v),s) = Name.VarSet.add(s,v)
+	  val fvs = foldl scanImport Name.VarSet.empty imports
+	  val fvs = foldl scanExport fvs exports
+	  fun addVar(v,tr) = 
+	      let val _ = potentialGlobals := Name.VarMap.insert(!potentialGlobals, v, ref false)
+		  val vopt = (case tr of
+				  TraceCompute cv => SOME cv
+				| TraceKnown (TraceInfo.Compute (cv, _)) => SOME cv
+				| _ => NONE)
+	      in  (case vopt of 
+		       NONE => ()
+		     | SOME cv => traceMap := Name.VarMap.insert(!traceMap, v, cv))
+	      end
+	  fun useVar (level,v) = 
+	      (case (level > 0, Name.VarMap.find(!potentialGlobals,v)) of
+		   (true, SOME r) => r := true
+		 | _ => ())
+	  val ptrTrace = TraceKnown TraceInfo.Trace
+	  fun expHandler({level, ...}:NilUtil.bound, Var_e v) = (useVar(level,v); NOCHANGE)
+	    | expHandler _ = NOCHANGE
+	  fun conHandler({level, ...}:NilUtil.bound, Var_c v) = (useVar(level,v); NOCHANGE)
+	    | conHandler _ = NOCHANGE
+	  fun bndHandler({level=0,...}:NilUtil.bound, Exp_b (v, tr, _)) = (addVar(v,tr); NOCHANGE)
+	    | bndHandler(_, Fixcode_b vfSeq) = (app (fn (v,_) => addVar(v,ptrTrace))
+						(Sequence.toList vfSeq); NOCHANGE)
+	    | bndHandler({level=0,...}, Fixclosure_b (_,vclSeq)) = (app (fn (v,_) => addVar(v,ptrTrace))
+						(Sequence.toList vclSeq); NOCHANGE)
+	    | bndHandler _ = NOCHANGE
+	  fun cbndHandler({level=0,...}:NilUtil.bound, Con_cb(v, _)) = (addVar(v,ptrTrace); NOCHANGE)
+	    | cbndHandler(_, Code_cb(v, _, _)) = (addVar(v,ptrTrace); NOCHANGE)
+	    | cbndHandler _ = NOCHANGE
+	  fun kindHandler _ = NOCHANGE
+	  val handlers = (expHandler, bndHandler, conHandler, cbndHandler, kindHandler)
+	  val _ = map (NilUtil.bnd_rewrite handlers) bnds
+	  fun folder (v, ref false, fvs) = fvs
+	    | folder (v, ref true, fvs) = let val fvs = Name.VarSet.add(fvs,v)
+					  in  (case Name.VarMap.find(!traceMap, v) of
+						   NONE => fvs
+						 | SOME cv => Name.VarSet.add(fvs,cv))
+					  end
+      in  Name.VarMap.foldli folder fvs (!potentialGlobals)
+      end
+
   (* unitname is the name of the unit; unit names are globally unique. *)
 
-   fun translate (unitname:string) trans_params (Nil.MODULE{bnds : bnd list,
-					  imports : import_entry list,
-					  exports : export_entry list}) =
+   fun translate (unitname : string,
+		  Nil.MODULE{bnds, imports, exports}) = 
          let 
 
-	     val _ = msg "tortl - entered translate\n"
+	     (* Augment imports with vector/array operations that are in the link file *)
+	     fun makeImport ((l,_,tr,c),v) = ImportValue(l,v,tr,c)
+	     val imports = if (unitname = linkUnitname)
+			       then imports
+			   else (makeImport(vararg, localVararg))::
+			       (makeImport(onearg, localOnearg))::
+			       (makeImport(sub, localSub))::
+			       (makeImport(vsub, localVsub))::
+			       (makeImport(len, localLen))::
+			       (makeImport(vlen, localVlen))::
+			       (makeImport(update, localUpdate))::
+			       (makeImport(array, localArray))::
+			       (makeImport(vector, localVector))::
+			       imports
 
-	     (* To reduce unnecessary labels, we can determine top-level locals.
-	        These are variables bound and only used outside functions.
-		For now, to avoid an initial pass, we leave it empty
-	     *)
-	     val toplevel_locals = VarSet.empty
+	     val trueGlobals = computeGlobals(imports, bnds, exports)
 
+	     (* Create named exports for setting global state *)
 	     local
 		 fun help l = ML_EXTERN_LABEL(Name.label2string l)
 		 fun mapper (ExportValue(l,v)) = (v, help l)
@@ -1749,46 +1837,33 @@ struct
 	     in  val named_exports = map mapper exports
 	     end
 
+             (* Set global state and reset debugging info *)
 	     val mainCodeVar = Name.fresh_named_var("main_" ^ unitname ^ "_code")
 	     val mainCodeName = ML_EXTERN_LABEL("main_" ^ unitname ^ "_code")
 	     val mainName = ML_EXTERN_LABEL("main_" ^ unitname ^ "_doit")
+	     val _ = set_global_state (unitname,
+				       (mainCodeVar,mainCodeName)::named_exports,
+				       trueGlobals)
 	     val _ = resetDepth()
 	     val _ = resetWork()
-	     val _ = set_global_state (unitname,
-					 (mainCodeVar,mainCodeName)::named_exports,
-					 toplevel_locals)
-		 
-	     val exp = Let_e(Sequential, bnds,NilUtil.true_exp)
-	     val con = NilUtil.bool_con
-
-	     (* set the translation parameters *)
-	     val _ = cur_params := trans_params
-	     val _ = (case trans_params of
-			  {HeapProfile = SOME c, ...} => (HeapProfile := true;
-							  SetHeapProfileCounter c)
-			| {HeapProfile = NONE, ...} => HeapProfile := false)
-
-		 
-	     val _ = msg "tortl - handling imports now\n"
+	     val exp = Let_e(Sequential, bnds, NilUtil.unit_exp)
+	     val con = NilUtil.unit_con
 
 	     val _ = reset_state(true, (mainCodeVar, mainCodeName))
 	     fun folder (ImportValue(l,v,tr,c),s) = 
-		 (* For extern or C functions, 
-		    the label IS the code value rather than an address containing the code value *)
 		 let val mllab = ML_EXTERN_LABEL(Name.label2string l)
-		     (* XXX not implemented fully *)
-		     val rep = (case tr of
-				  TraceUnknown => error "tortl- Import has TraceUnknown - not implemented"
-				| _ => niltrace2rep s tr)
+		     val rep = niltrace2rep s tr
+		     (* For extern or C functions, 
+		      the label IS the code value rather than an address containing the code value *)
 		     val lv = 			 
 			 (case c of
 			      ExternArrow_c _ => VALUE(CODE mllab)
 			    | _ => LOCATION(GLOBAL(mllab,rep)))
-		 in  add_global(s,v,c,lv)
+		 in  add_term(s,v,c,lv,NONE)
 		 end
 	       | folder (ImportType(l,v,k),s) = 
 		 let val vl = (GLOBAL(ML_EXTERN_LABEL(Name.label2string l),TRACE))
-		 in  add_conglobal (s,v,k, SOME(LOCATION vl))
+		 in  add_conterm (s,v,k, SOME(LOCATION vl))
 		 end
 	     val state = needgc(make_state(),IMM 0)
 	     val state = foldl folder state imports
@@ -1796,16 +1871,15 @@ struct
 	     val args = []
 	     val _ = set_args(args, return)
 	     val (r,state) = xexp'(state,fresh_named_var "result",exp,
-				      Nil.TraceUnknown, ID return)
-	      val result = getResult(fn() => r)
-	      val _ = (add_instr (mv(r,result));
-		       add_instr(RETURN return))
-	      val p = get_proc()
+				   Nil.TraceUnknown, ID return)
+	     val result = getResult(fn() => r)
+	     val _ = (add_instr (mv(r,result));
+		      add_instr(RETURN return))
+	     val p = get_proc()
 	     val _ = add_proc p
 
-	     val _ = msg "tortl - calling worklist now\n"
+	     val _ = msg "tortl - translating functions now\n"
 	     val _ = worklist_loop()
-	     val _ = msg "tortl - returned from worklist now\n"
 
 	     val _ = add_data(COMMENT("Module closure"))
 	     val {dynamic,static=moduleClosureTag} = Rtltags.recordtag [NOTRACE_CODE, TRACE, TRACE]
@@ -1828,13 +1902,20 @@ struct
 	 in module
 	 end
 
-     fun entryTables nl =
-	 let val nl = map (fn ML_EXTERN_LABEL str => str
-	                    | _ => error "bad RTL label") nl
-	     val count = length nl
+     fun entryTables moduleLabels = 
+	 let val nilmod = Nil.MODULE{bnds = aggregate_bnds @ vararg_onearg_bnds,
+				     imports = [],
+				     exports = map (fn (l,v,tr,c) => ExportValue(l,v))
+				                [sub,vsub,len,vlen,update,array,vector,vararg,onearg]}
+	     val Rtl.MODULE{procs=linkProcs,data=linkData,
+			    main=linkMain,global=linkGlobal} = translate(linkUnitname,nilmod)
+	     val moduleLabels = linkMain :: moduleLabels
+	     val moduleStrings = map (fn ML_EXTERN_LABEL str => str
+                                       | _ => error "bad module label") moduleLabels
+	     val count = length moduleStrings
              fun mktable(name,suffix) =
 		 DLABEL (ML_EXTERN_LABEL name) ::
-		 map (fn s => DATA(ML_EXTERN_LABEL (s ^ suffix))) nl
+		 map (fn s => DATA(ML_EXTERN_LABEL (s ^ suffix))) moduleStrings
 	     val gc_table_begin =  mktable("GCTABLE_BEGIN_VAL","_GCTABLE_BEGIN_VAL")
 	     val gc_table_end =	   mktable("GCTABLE_END_VAL","_GCTABLE_END_VAL")
 	     val globals_start =   mktable("GLOBALS_BEGIN_VAL","_GLOBALS_BEGIN_VAL")
@@ -1844,17 +1925,18 @@ struct
              val entrytable =      mktable("client_entry","")
 	     val count = [DLABEL (ML_EXTERN_LABEL "module_count"),
 			  INT32 (TilWord32.fromInt count)]
-	     val data = count @
-		 gc_table_begin @
-		 gc_table_end @
-		 globals_start @
-		 globals_end @
-		 trace_globals_start @
-		 trace_globals_end @
-		 entrytable
-	 in  MODULE{procs = [], data = data,
-		    main = ML_EXTERN_LABEL "linkfile", 
-		    global = []}
+	     val data = List.concat[count,
+				    gc_table_begin,
+				    gc_table_end,
+				    globals_start,
+				    globals_end,
+				    trace_globals_start,
+				    trace_globals_end,
+				    entrytable]
+	 in  MODULE{procs = linkProcs, 
+		    data = linkData @ data,
+		    main = linkMain,
+		    global = linkGlobal}
          end
 
 end

@@ -46,6 +46,8 @@ sig
 
    (* (global) RTL translation state *)
    val set_global_state : string * (var * label) list * Name.VarSet.set -> unit
+   val add_global : var -> unit
+   val is_global : var -> bool
    val unset_global_state : unit -> unit
    val reset_state : bool * (var * label) -> unit
    val get_unitname : unit -> string
@@ -66,15 +68,11 @@ sig
    val join_states : state list -> state  (* take the join of the GC states; retain info of first state *)
    val promote_maps : state -> state
 
+   (* These functions will allocate a global if the variable is in the global set *)
+   val add_term        : (state * var * con * term * exp option) -> state  (* equation optional *)
    val add_code        : (state * var * con * label) -> state
    val add_reg         : (state * var * con * reg) -> state
-   val add_term        : (state * var * con * term) -> state
-   val add_global      : (state * var * con * term) -> state
-   val add_term_equation   : (state * var * exp * term) -> state
-   val add_global_equation : (state * var * exp * term) -> state
-
    val add_conterm     : (state * var * kind * term option) -> state
-   val add_conglobal   : (state * var * kind * term option) -> state
 
    val getrep : state -> var -> var_rep
    val getconvarrep : state -> var -> convar_rep
@@ -105,7 +103,7 @@ sig
    val load_reg_term : term * reg option -> reg
 
    val repPathIsPointer : Rtl.rep_path -> regi
-   val storeWithBarrier : regi * regi * rep -> bool  (* true if there MIGHT be a barrier *)
+   val storeWithBarrier : Rtl.ea * regi * rep -> bool  (* true if there MIGHT be a barrier *)
 
    (* Routines for allocating registers and labels *)
    val alloc_regi : rep -> regi
@@ -164,6 +162,8 @@ sig
    val incSumProject : unit -> unit
    val incSumDynInject : unit -> unit
    val incSumDynProject : unit -> unit
+   val incVararg : unit -> unit
+   val incOnearg : unit -> unit
    val incPrim : unit -> unit
 
 end

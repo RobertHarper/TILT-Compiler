@@ -1,11 +1,18 @@
 (*$import Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps *)
-(* A one-pass optimizer with the following goals:
-	Convert project_sum to project_sum_record.
-        Fold constant expressions
+
+(* A one-pass optimizer with the following goals.  
+   Those marked - are controlled by the input parameters.
+   Those marked * require a typing context.
+*-	Perform CSE (context needed to maintain to determine valuability of applications)
+-	Eliminate dead code
+-       Replace projections of known records with the known value if value is small
+-       Uncurry functions
         Propagate constants
-	Eliminate dead code.
+*	Convert project_sum to project_sum_record
+	Cancel make_vararg and make_onearg
+        Fold constant expressions
+	Convert Sumsw to Intsw
 	Not anormalize (old fear of classifier sizes) 
-	Recognize certain patterns of Sumsw and convert to Intsw
 *)	
 
 structure Optimize
@@ -15,34 +22,13 @@ struct
 	open Util Nil NilUtil Listops
  	val error = fn s => Util.error "optimize.sml" s
 
-	val debug = Stats.ff("Optimize_debug")
-	val do_diag = ref false
-	fun diag s = if !do_diag then print s else()
-	(* Use Stats.subtimer(str,f) for real timing *)
-	fun subtimer(str,f) = f
+	val debug = Stats.ff("OptimizeDebug")
+	val doTimer = Stats.ff("DoOptimizeTimer")
+	fun subtimer(str,f) = if (!doTimer) then Stats.subtimer(str,f) else f
 
-fun path2con (v,labs) = 
-  let fun loop c [] = c
-        | loop c (l::rest) = loop (Proj_c(c,l)) rest
-  in  loop (Var_c v) labs
-  end
 
-	val do_lift_array = ref true
-	val do_dead = ref true
-	val do_proj = ref true
-	val do_uncurry = ref true
-	val do_cse = ref true
-
-	val local_sub = Name.fresh_named_var "local_subscript"
-	val local_update = Name.fresh_named_var "local_update"
-	val local_array = Name.fresh_named_var "local_array"
-	val local_len = Name.fresh_named_var "local_len"
-	val local_vsub = Name.fresh_named_var "local_vsubscript"
-	val local_vector = Name.fresh_named_var "local_vector"
-	val local_vlen = Name.fresh_named_var "local_vlen"
-
-	val local_bnds = 
-	    let fun make_length (aggregate,constr) = 
+	local
+	    fun make_length (aggregate,constr) = 
 		let val c = Name.fresh_named_var "len_type"
 		    val agg = Name.fresh_named_var "len_agg"
 		    val body = Prim_e(PrimOp(Prim.length_table 
@@ -51,59 +37,54 @@ fun path2con (v,labs) =
 		    val res_var = Name.fresh_named_var "len_result"
 		    val body = Let_e(Sequential, [Exp_b(res_var, TraceKnown TraceInfo.Notrace_Int, body)],
 						Var_e res_var)
-		    val len_fun = Function{effect = Partial, recursive = Leaf, isDependent = false,
-					   tFormals = [(c,Type_k)],
-					   eFormals = [(agg,TraceUnknown,Prim_c(constr,[Var_c c]))],
-					   fFormals = [],
-					   body = body, 
-					   body_type = Prim_c(Int_c Prim.W32, [])}
-		in  len_fun
+		in  Function{effect = Partial, recursive = Leaf, isDependent = false,
+			     tFormals = [(c,Type_k)],
+			     eFormals = [(agg,TraceKnown TraceInfo.Trace,Prim_c(constr,[Var_c c]))],
+			     fFormals = [],
+			     body = body, 
+			     body_type = Prim_c(Int_c Prim.W32, [])}
 		end
-		val len_fun = make_length(Prim.OtherArray, Array_c)
-		val vlen_fun = make_length(Prim.OtherVector, Vector_c)
 
 		fun make_sub (aggregate,constr) = 
-		let val c = Name.fresh_named_var "subscript_type"
-		    val agg = Name.fresh_named_var "subscript_agg"
-		    val index = Name.fresh_named_var "subscript_index"
-		    val res_var = Name.fresh_named_var "subscript_result"
-		    val body = Prim_e(PrimOp(Prim.sub (aggregate false)), 
-				      [Var_c c], 
-				      [Var_e agg, Var_e index])
-		    val body = Let_e(Sequential, [Exp_b(res_var, TraceKnown (TraceInfo.Compute(c,[])), body)],
-						Var_e res_var)
-		    val sub_fun = Function{effect = Partial, recursive = Leaf, isDependent = false,
-					   tFormals = [(c,Type_k)],
-					   eFormals = [(agg, TraceUnknown, Prim_c(constr,[Var_c c])),
-						       (index, TraceUnknown, Prim_c(Int_c Prim.W32 ,[]))], 
-					   fFormals = [],
-					   body = body, 
-					   body_type = Var_c c}
-		in  sub_fun
-		end
-		val sub_fun = make_sub(Prim.OtherArray, Array_c)
-		val vsub_fun = make_sub(Prim.OtherVector, Vector_c)
+		    let val c = Name.fresh_named_var "subscript_type"
+			val agg = Name.fresh_named_var "subscript_agg"
+			val index = Name.fresh_named_var "subscript_index"
+			val res_var = Name.fresh_named_var "subscript_result"
+			val body = Prim_e(PrimOp(Prim.sub (aggregate false)), 
+					  [Var_c c], 
+					  [Var_e agg, Var_e index])
+			val body = Let_e(Sequential, [Exp_b(res_var, TraceKnown (TraceInfo.Compute(c,[])), body)],
+					 Var_e res_var)
+		    in  Function{effect = Partial, recursive = Leaf, isDependent = false,
+				 tFormals = [(c,Type_k)],
+				 eFormals = [(agg, TraceKnown TraceInfo.Trace, Prim_c(constr,[Var_c c])),
+					     (index, TraceKnown TraceInfo.Notrace_Int, Prim_c(Int_c Prim.W32 ,[]))], 
+				 fFormals = [],
+				 body = body, 
+				 body_type = Var_c c}
+		    end
 
-		local
-		    val c = Name.fresh_named_var "update_type"
-		    val array = Name.fresh_named_var "update_array"
-		    val index = Name.fresh_named_var "update_index"
-		    val item = Name.fresh_named_var "update_item"
-		    val body = Prim_e(PrimOp(Prim.update (Prim.OtherArray false)), 
-				      [Var_c c], 
-				      [Var_e array, Var_e index, Var_e item])
-		    val res_var = Name.fresh_named_var "update_result"
-		    val body = Let_e(Sequential, [Exp_b(res_var, TraceKnown TraceInfo.Trace, body)],
-						Var_e res_var)
-		in  val update_fun = Function{effect = Partial, recursive = Leaf, isDependent = false,
-					      tFormals = [(c,Type_k)],
-					      eFormals = [(array, TraceUnknown, Prim_c(Array_c,[Var_c c])),
-							  (index, TraceUnknown, Prim_c(Int_c Prim.W32 ,[])),
-							  (item,  TraceUnknown, Var_c c)],
-					      fFormals = [],
-					      body = body, 
-					      body_type = unit_con}
-		end
+
+		fun make_update (aggregate,constr) = 
+		    let val c = Name.fresh_named_var "update_type"
+			val array = Name.fresh_named_var "update_array"
+			val index = Name.fresh_named_var "update_index"
+			val item = Name.fresh_named_var "update_item"
+			val body = Prim_e(PrimOp(Prim.update (aggregate false)), 
+					  [Var_c c], 
+					  [Var_e array, Var_e index, Var_e item])
+			val res_var = Name.fresh_named_var "update_result"
+			val body = Let_e(Sequential, [Exp_b(res_var, TraceKnown TraceInfo.Trace, body)],
+					 Var_e res_var)
+		    in  Function{effect = Partial, recursive = Leaf, isDependent = false,
+				 tFormals = [(c,Type_k)],
+				 eFormals = [(array, TraceKnown TraceInfo.Trace, Prim_c(constr, [Var_c c])),
+					     (index, TraceKnown TraceInfo.Notrace_Int, Prim_c(Int_c Prim.W32 ,[])),
+					     (item,  TraceCompute c, Var_c c)],
+				 fFormals = [],
+				 body = body, 
+				 body_type = unit_con}
+		    end
 
 		fun make_aggregate (aggregate,constr) = 
 		    let val c = Name.fresh_named_var "agg_type"
@@ -114,22 +95,56 @@ fun path2con (v,labs) =
 					  [Var_e size, Var_e item])
 		    in  Function{effect = Partial, recursive = Leaf, isDependent = false,
 				 tFormals = [(c,Type_k)],
-				 eFormals = [(size, TraceUnknown, Prim_c(Int_c Prim.W32 ,[])),
-					     (item, TraceUnknown, Var_c c)], 
+				 eFormals = [(size, TraceKnown TraceInfo.Notrace_Int, Prim_c(Int_c Prim.W32 ,[])),
+					     (item, TraceCompute c, Var_c c)], 
 				 fFormals = [],
 				 body = body, 
 				 body_type = Prim_c(constr,[Var_c c])}
 		    end
-		val array_fun = make_aggregate(Prim.OtherArray, Array_c)
-		val vector_fun = make_aggregate(Prim.OtherVector, Vector_c)
 
-	    in  [Fixopen_b (Sequence.fromList [(local_sub,sub_fun)]),
-		 Fixopen_b (Sequence.fromList [(local_vsub,vsub_fun)]),
-		 Fixopen_b (Sequence.fromList [(local_len,len_fun)]),
-		 Fixopen_b (Sequence.fromList [(local_vlen,vlen_fun)]),
-		 Fixopen_b (Sequence.fromList [(local_update,update_fun)]),
-		 Fixopen_b (Sequence.fromList [(local_vector,vector_fun)]),
-		 Fixopen_b (Sequence.fromList [(local_array,array_fun)])]
+		val subVar = Name.fresh_named_var "local_subscript"
+		val updateVar = Name.fresh_named_var "local_update"
+		val local_array = Name.fresh_named_var "local_array"
+		val local_len = Name.fresh_named_var "local_len"
+		val local_vsub = Name.fresh_named_var "local_vsubscript"
+		val local_vector = Name.fresh_named_var "local_vector"
+		val local_vlen = Name.fresh_named_var "local_vlen"
+
+		val lenFun = make_length(Prim.OtherArray, Array_c)
+		val vlenFun = make_length(Prim.OtherVector, Vector_c)
+		val subFun = make_sub(Prim.OtherArray, Array_c)
+		val vsubFun = make_sub(Prim.OtherVector, Vector_c)
+		val updateFun = make_update(Prim.OtherArray, Array_c)
+		val arrayFun = make_aggregate(Prim.OtherArray, Array_c)
+		val vectorFun = make_aggregate(Prim.OtherVector, Vector_c)
+
+		fun mkEntry(name, function) =
+		    let val v = Name.fresh_named_var name
+		    in  ((v, function),
+			 (Name.internal_label name, v, 
+			  TraceKnown TraceInfo.Notrace_Code,
+			  NilUtil.function_type Code function))
+		    end
+		val lenEntry = mkEntry ("polyLen",lenFun)
+		val vlenEntry = mkEntry("polyVlen",vlenFun)
+		val subEntry = mkEntry("polySub",subFun)
+		val vsubEntry = mkEntry("polyVsub",vsubFun)
+		val updateEntry = mkEntry("polyUpdate",updateFun)
+		val arrayEntry = mkEntry("polyArray",arrayFun)
+		val vectorEntry = mkEntry("polyVector",vectorFun)
+
+		val bnds = map (fn (vf, _) => Fixcode_b (Sequence.fromList [vf])) 
+				 [lenEntry, vlenEntry, subEntry, vsubEntry, 
+				  updateEntry, arrayEntry, vectorEntry]
+
+	    in  fun generate() = {sub = #2 subEntry,
+				  vsub = #2 vsubEntry,
+				  len = #2 lenEntry,
+				  vlen = #2 vlenEntry,
+				  update = #2 updateEntry,
+				  array = #2 arrayEntry,
+				  vector = #2 vectorEntry,
+				  bnds = bnds}
 	    end
 		
 	(* A transformation state is threaded through the optimizer maintaining:
@@ -148,7 +163,7 @@ fun path2con (v,labs) =
 			(iii) mustE - an equivalent term expression which must be used
 			(iv) etaE - an equivalent partially applied curried expression
 			(iv) optionalC - an equialent type expression which may be used
-			(iv) mustC - an equialent type expression which may be used
+			(iv) mustC - an equialent type expression which must be used
 	  
 		(1) allows some reification to occur
 		(2) allows type reduction and some code transformation to occur
@@ -161,9 +176,11 @@ fun path2con (v,labs) =
 	                    | USED of int
 	                    | DEFER of used_state ref list
 	datatype equivalent = UNKNOWN 
-	                    | OPTIONALe of exp | MUSTe of exp 
+	                    | OPTIONALe of exp 
+                            | MUSTe of exp 
 	                    | ETAe of int * var * (con list * exp list * exp list) list
-	                    | OPTIONALc of con | MUSTc of con
+	                    | OPTIONALc of con 
+                            | MUSTc of con
 	      
 fun pp_alias UNKNOWN = print "unknown"
 | pp_alias (OPTIONALe e) = (print "OPTIONALe "; Ppnil.pp_exp e)
@@ -172,6 +189,10 @@ fun pp_alias UNKNOWN = print "unknown"
 | pp_alias (MUSTc c) = (print "MUSTc "; Ppnil.pp_con c)
 | pp_alias (ETAe _) = print "ETAe ..."
 
+        type params = {doDead : bool, 
+		       doProjection : int option,
+		       doUncurry : bool,
+		       doCse : bool}
 	local
 	  type entry = used_state ref * equivalent
 	  datatype state = STATE of {curry_processed : (Name.VarSet.set * var Name.VarMap.map),
@@ -179,7 +200,8 @@ fun pp_alias UNKNOWN = print "unknown"
 				     current : used_state ref,
 				     mapping : entry Name.VarMap.map,
 				     avail : var ExpTable.Expmap.map * 
-				             var ExpTable.Conmap.map}
+				             var ExpTable.Conmap.map,
+				     params : params}
 	      
 	  fun isused r = 
 	      let fun loop count current [] = current
@@ -196,8 +218,9 @@ fun pp_alias UNKNOWN = print "unknown"
 		     | r => r)
 	      end
 
-	  fun update_mapping(STATE{equation, current, avail, curry_processed, ...}, mapping) =
-			STATE{curry_processed=curry_processed,
+	  fun update_mapping(STATE{params,equation, current, avail, curry_processed, ...}, mapping) =
+			STATE{params=params,
+			      curry_processed=curry_processed,
 			      equation=equation, avail = avail,
 			      current=current,mapping=mapping}
 
@@ -218,27 +241,30 @@ fun pp_alias UNKNOWN = print "unknown"
 	       Name.VarMap.appi show_pair (#2 curry_processed))
 
 	  type state = state
-	  fun new_state() = STATE {curry_processed = (Name.VarSet.empty, Name.VarMap.empty),
-				   equation = NilContext.empty(),
-				   current = ref (USED 1),
-				   avail = (ExpTable.Expmap.empty,
-					    ExpTable.Conmap.empty),
-				   mapping = Name.VarMap.empty}
-				   
-	  fun retain_state(STATE{equation, current, mapping, avail, curry_processed}) =
+	  fun newState params = STATE {curry_processed = (Name.VarSet.empty, Name.VarMap.empty),
+				       equation = NilContext.empty(),
+				       current = ref (USED 1),
+				       avail = (ExpTable.Expmap.empty,
+						ExpTable.Conmap.empty),
+				       mapping = Name.VarMap.empty,
+				       params = params}
+	  fun getParams (STATE{params,...}) = params		   
+	  fun retain_state(STATE{equation, current, mapping, avail, curry_processed, params}) =
 			STATE{equation=equation, avail=avail,
 			      curry_processed = curry_processed,
-			      current=ref (USED 1),mapping=mapping}
+			      current=ref (USED 1),mapping=mapping,
+			      params=params}
 
 
-	  fun enter_var(STATE{equation, curry_processed, current, mapping, avail}, v) =
+	  fun enter_var(STATE{equation, curry_processed, current, mapping, avail, params}, v) =
 		STATE{equation=equation,
 		      mapping = mapping,
 		      avail = avail,
 		      curry_processed = curry_processed,
 		      current=case (Name.VarMap.find(mapping,v)) of
 				NONE => error "enter_var given var not in used map"
-			      | SOME (us,_) => us}
+			      | SOME (us,_) => us,
+		      params = params}
 
 	  fun add_vars(state as STATE{mapping,...},vars) =
 		let val r = ref UNUSED
@@ -248,7 +274,8 @@ fun pp_alias UNKNOWN = print "unknown"
 	  fun add_var(state,v) = add_vars(state,[v])
 
 	  fun use_var(STATE{mapping,current,...},v) = 
-	  	(case Name.VarMap.find(mapping,v) of
+	  	((* print "XXX use_var on "; Ppnil.pp_var v; print "\n"; *)
+		 case Name.VarMap.find(mapping,v) of
 		  NONE => ()
 		| SOME (r,_) =>
 		   (case !r of
@@ -256,14 +283,15 @@ fun pp_alias UNKNOWN = print "unknown"
 		      | UNUSED => r := DEFER[current]
 		      | DEFER ls => r := DEFER (current::ls)))
 
-          fun get_varuse(STATE{mapping,...},v) = 
+          fun get_varuse(STATE{mapping,params,...},v) = 
 		case Name.VarMap.find(mapping,v) of
 		  NONE => (print "is_used_var given var not in state: ";
 		  	   Ppnil.pp_var v; print "\n";
 			   error "is_used_var given var not in state")
-		| SOME (r,_) => (case (!do_dead,isused r) of
-				       (false,_) => USED 999
-				     | (_,use) => use)
+		| SOME (r,_) => if (#doDead params)
+				    then isused r
+				else USED 999
+
           fun is_used_var(state,v) = (case get_varuse(state,v) of
 					  USED _ => true
 					| UNUSED => false)
@@ -284,29 +312,37 @@ fun pp_alias UNKNOWN = print "unknown"
 		 | SOME (_,alias) => alias)
 
 
-	  fun find_availC(STATE{avail,...},c) = 
-	      if (!do_cse) then ExpTable.Conmap.find(#2 avail,c) else NONE
-	  fun add_availC(state as STATE{curry_processed,mapping,current,equation,avail},c,v) = 
-	      if (!do_cse)
+	  fun find_availC(STATE{avail,params,...},c) = 
+	      if (#doCse params) then ExpTable.Conmap.find(#2 avail,c) else NONE
+	  fun add_availC(state as STATE{curry_processed,mapping,current,equation,avail,params},c,v) = 
+	      if (#doCse params)
 		  then STATE{mapping=mapping,current=current,
 			     equation=equation,
 			     curry_processed = curry_processed,
 			     avail=(#1 avail,
-				    ExpTable.Conmap.insert(#2 avail,c,v))}
+				    ExpTable.Conmap.insert(#2 avail,c,v)),
+			     params=params}
 	      else state
 
-	  fun find_availE(STATE{avail,...},e) = 
-	      if (!do_cse) then ExpTable.Expmap.find(#1 avail,e) else NONE
+	  fun find_availE(STATE{avail,params,...},e) = 
+	      if (#doCse params) then ExpTable.Expmap.find(#1 avail,e) else NONE
 
-          fun anormal_valuable (ctxt, App_e(_,Var_e v,_,_,_)) = 
-	      (case NilContext.find_con (ctxt,v) of
-		   AllArrow_c{effect=Total,...} => true
-                 | _ => false)
-            | anormal_valuable (ctxt, e) = not (NilUtil.effect e)
 
-	  fun add_availE(state as STATE{mapping,current,curry_processed,equation,avail},e,v) = 
-	      if (!do_cse andalso anormal_valuable(equation,e))
-		  then STATE{mapping=mapping,current=current,
+          fun valuable (state as STATE {equation=ctxt, ...}, e) = 
+	      let fun valuableList [] = true
+		    | valuableList (e::rest) = valuable(state,e) andalso valuableList rest
+	      in  (case e of
+		       App_e(_,Var_e v,_,elist,eflist) =>
+			   (case NilContext.find_con (ctxt,v) of
+				AllArrow_c{effect=Total,...} => valuableList (elist @ eflist)
+			      | _ => false)
+		     | _ => not (NilUtil.effect e))
+	      end
+
+	  fun add_availE(state as STATE{mapping,current,curry_processed,equation,avail,params},e,v) = 
+	      if (#doCse params andalso valuable(state,e))
+		  then STATE{params=params,
+			     mapping=mapping,current=current,
 			     curry_processed = curry_processed,
 			     equation=equation,
 			     avail=(ExpTable.Expmap.insert(#1 avail,e,v),
@@ -338,58 +374,57 @@ fun pp_alias UNKNOWN = print "unknown"
 	      end
 
 	  fun get_env(STATE{equation,...}) = equation
-	  fun find_equation(STATE{equation,...},c) = NilContext.find_kind_equation(equation,c)
 	  fun find_con(STATE{equation,...},v) = NilContext.find_con(equation,v)
 
-	  fun add_kind(STATE{avail,curry_processed,equation,current,mapping},v,k) = 
-	      STATE{equation=NilContext.insert_kind(equation,v,k),
+	  fun updateContext(STATE{avail,curry_processed,equation=_,current,mapping,params},equation) = 
+	      STATE{equation=equation,
 		    avail=avail,
 		    curry_processed = curry_processed,
 		    mapping=mapping,
-		    current=current}
+		    current=current,
+		    params=params}
+
+	  fun add_kind(state as STATE{equation,...},v,k) = 
+	      updateContext(state,NilContext.insert_kind(equation,v,k))
 	  
-	  fun add_con(STATE{avail,equation,mapping,curry_processed,current},v,c) = 
-	      (if (!debug)
-		   then (print "optimize: add_con "; Ppnil.pp_var v;
-			 print " -> "; Ppnil.pp_con c; print "\n")
-	       else ();
-	       STATE{equation=NilContext.insert_con(equation,v,c),
-		     avail=avail,
-		     curry_processed = curry_processed,
-		     mapping=mapping,
-		     current=current})
+	  fun add_con(state as STATE{equation,...},v,c) = 
+	      updateContext(state,NilContext.insert_con(equation,v,c))
 
-	  fun add_exp(STATE{avail,equation,mapping,curry_processed,current},v,e) = 
-	      (STATE{equation=NilContext.insert_exp(equation,v,e),
-		     avail=avail,
-		     curry_processed = curry_processed,
-		     mapping=mapping,
-		     current=current})
+	  fun add_exp(state as STATE{equation,...},v,e) = 
+	      updateContext(state,NilContext.insert_exp(equation,v,e))
 
-	  fun add_curry_processed(STATE{avail,equation,mapping,curry_processed,current},v) =
+	  fun add_curry_processed(STATE{avail,equation,mapping,curry_processed,current,params},v) =
 	       STATE{equation=equation,
 		     avail=avail,
 		     curry_processed = (Name.VarSet.add(#1 curry_processed,v), #2 curry_processed),
 		     mapping=mapping,
-		    current=current}
+		     current=current,
+		     params=params}
 
-	  fun add_curry_pair(STATE{avail,equation,mapping,curry_processed,current},
+	  fun add_curry_pair(STATE{avail,equation,mapping,curry_processed,current,params},
 			     curry_name,uncurry_name) =
 	       STATE{equation=equation,
 		     avail=avail,
 		     curry_processed = (#1 curry_processed, Name.VarMap.insert(#2 curry_processed,
 									       curry_name,uncurry_name)),
 		     mapping=mapping,
-		    current=current}
+		     current=current,
+		     params=params}
 
 	  fun find_curry_pair(STATE{curry_processed,...},v) = Name.VarMap.find(#2 curry_processed,v)
 	  fun is_curry_processed(STATE{curry_processed,...},v) = Name.VarSet.member(#1 curry_processed,v)
 
-	  val Normalize_reduce_hnf = subtimer("optimize_reduce_hnf", Normalize.reduce_hnf)
-	  val Normalize_reduceToSumtype = subtimer("optimize_reduce_tosumtype", Normalize.reduceToSumtype)
-	  val Normalize_type_of = subtimer("optimize_typeof", Normalize.type_of)
-	  fun type_of(STATE{equation,...},e) = Normalize_type_of(equation,e)
+	  fun reduce_hnf(STATE{equation,...},c) = 
+	      subtimer("optimizeReduceHnf", Normalize.reduce_hnf)(equation,c)
+
+	  fun reduceToSumtype(STATE{equation,...},c) = 
+	      subtimer("optimizeReduceToSumtype", Normalize.reduceToSumtype)(equation,c)
+
+	  fun type_of(STATE{equation,...},e) = 
+	      subtimer("optimizeTypeof", Normalize.type_of)(equation,e)
+
 	  fun get_trace(STATE{equation,...},t) = TraceOps.get_trace (equation,t)
+
 	end
 
         (* Helper functions for uncurry optimizations *)
@@ -667,8 +702,9 @@ fun pp_alias UNKNOWN = print "unknown"
 	and do_cbnd(cbnd : conbnd, state : state) : conbnd * state = 
 	   (case cbnd of
 		Con_cb(v,c) =>
-		  (case NilUtil.strip_two c  (*One for outer Let, one for body*)
-		     of Let_c(_,[Open_cb(v',vklist,c)],Var_c v'') => 
+		  (*One for outer Let, one for body*)
+		  (case NilUtil.strip_two c of 
+		       Let_c(_,[Open_cb(v',vklist,c)],Var_c v'') => 
 		       if (Name.eq_var(v',v''))
 			 then do_cbnd(Open_cb(v,vklist,c), state)
 		       else do_cbnd(Con_cb(v,Var_c v''),state)
@@ -716,7 +752,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		val state = add_var(state,name)
 		val state = add_var(state,uncurry_name)
 		val (wraps, body) = extract_lambdas (name,function)
-	    in  if ((not (!do_uncurry)) 
+	    in  if ((not (#doUncurry (getParams orig_state)))
 		    orelse is_curry_processed(orig_state,name)
 		    orelse (length wraps <= 1))
 		  then ([(name,function)],state)
@@ -759,10 +795,10 @@ fun pp_alias UNKNOWN = print "unknown"
 	    end 
 *)
 
-	and do_aggregate (state : state) funnames_opt (constr,t,clist,elist)  = 
+	and do_aggregate (state,constr,t,clist,elist)  = 
 	    let open Prim
 		fun helper is_array c = 
-		(case (is_array,Normalize_reduce_hnf(get_env state, c)) of
+		(case (is_array,reduce_hnf(state, c)) of
 		     (true,(_, Prim_c(Int_c is, _))) => (IntArray is,[]) 
 		   | (false,(_, Prim_c(Int_c is, _))) => (IntVector is,[]) 
 		   | (true,(_, Prim_c(Float_c is, _))) => (FloatArray is,[]) 
@@ -774,19 +810,9 @@ fun pp_alias UNKNOWN = print "unknown"
 			 OtherArray _ => helper true (hd clist)
 		       | OtherVector _ => helper false (hd clist)
 		       | _ => (t,clist))
-		val array_flavor = (case t of
-					OtherArray false => SOME true
-				      | OtherVector false => SOME false
-				      | _ => NONE)
 		val clist = map (do_con state) clist
 		val elist = map (do_exp state) elist
-	    in  (case (funnames_opt,array_flavor, !do_lift_array) of
-		     (SOME (aname,vname), SOME is_array, true) => 
-			  App_e(Open, 
-				do_exp state 
-				(Var_e (if is_array then aname else vname)), 
-				clist, elist, [])
-		   | _ => Prim_e(PrimOp(constr t), clist, elist))
+	    in  Prim_e(PrimOp(constr t), clist, elist)
 	    end
 		 
 	and do_inject (state : state) (k, clist, elist) = 
@@ -806,7 +832,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		 [] => do_prim state (NilPrimOp(inject_known k),clist,[])
 	       | [injectee] =>
 		     let val injectee_type = type_of(state,injectee)
-		     in  (case (Normalize_reduce_hnf(get_env state, injectee_type)) of
+		     in  (case (reduce_hnf(state, injectee_type)) of
 			  (true, _) => let val e = Prim_e(NilPrimOp(inject_known k), clist, elist)
 				       in  do_exp state e
 				       end
@@ -819,10 +845,6 @@ fun pp_alias UNKNOWN = print "unknown"
 	and do_prim (state : state) (prim, clist, elist) = 
 	 let open Prim
 
-	     val elist = map (do_exp state) elist
-             fun default() = Prim_e(prim,
-				    map (do_con state) clist, 
-				    elist)
 	     fun getVals [] = SOME []
 	       | getVals (e::rest) = 
 			if (NilUtil.is_closed_value e) then
@@ -834,34 +856,35 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	     fun help (e as Var_e v) = 
 		 (case lookup_alias(state,v) of
-		      MUSTe e =>  e
+		      MUSTe e => help e
 		    | OPTIONALe e => e
 		    | _ => e)
 	       | help e = e
+             fun default() = Prim_e(prim,
+				    map (do_con state) clist, 
+				    map (do_exp state) elist)
 
 	 in  case (prim,map help elist) of
 		 (NilPrimOp(select l),[Prim_e(NilPrimOp(record labs),_,elist)]) => 
 		     let val SOME new_exp = assoc_eq(Name.eq_label,l,zip labs elist)
-                     in  if (NilUtil.exp_size new_exp > 150)
-			     then default()
-			 else do_exp state new_exp
+                     in  (case (#doProjection (getParams state)) of
+			      NONE => default()
+			    | SOME maxSize => if (NilUtil.exp_size new_exp < maxSize)
+						  then do_exp state new_exp
+					      else default())
 		     end
 	       | (NilPrimOp (inject k),_) => do_inject state (k, clist, elist)
-	       | (PrimOp(create_table t), _) => do_aggregate state (SOME (local_array,local_vector)) 
-							(create_table,t,clist,elist)
+	       | (PrimOp(create_table t), _) => do_aggregate 
+							(state,create_table,t,clist,elist)
 	       | (PrimOp(create_empty_table t), _) => 
-		   do_aggregate state NONE (create_empty_table,t,clist,elist)
-	       | (PrimOp(sub t), _) => 
-		   do_aggregate state 
-		      (SOME (local_sub,local_vsub)) (sub,t,clist,elist)
-	       | (PrimOp(update t), _) => 
-		   do_aggregate state (SOME (local_update,local_update)) 
-		      (update,t,clist,elist)
-	       | (PrimOp(length_table t), _) => 
-		   do_aggregate state (SOME (local_len,local_vlen)) 
-		      (length_table,t,clist,elist)
-	       | (NilPrimOp unroll, [Prim_e(NilPrimOp roll,_,[e])]) => e
-	       | (NilPrimOp (unbox_float _), [Prim_e(NilPrimOp (box_float _),_,[e])]) => e
+		   do_aggregate (state,create_empty_table,t,clist,elist)
+	       | (PrimOp(sub t), _) => do_aggregate (state,sub,t,clist,elist)
+	       | (PrimOp(update t), _) => do_aggregate (state,update,t,clist,elist)
+	       | (PrimOp(length_table t), _) => do_aggregate (state,length_table,t,clist,elist)
+	       | (NilPrimOp unroll, [Prim_e(NilPrimOp roll,_,[e])]) => do_exp state e
+	       | (NilPrimOp (unbox_float _), [Prim_e(NilPrimOp (box_float _),_,[e])]) => do_exp state e
+	       | (NilPrimOp (make_vararg oe), [Prim_e(NilPrimOp (make_onearg _), _, [e])]) => do_exp state e
+	       | (NilPrimOp (make_onearg oe), [Prim_e(NilPrimOp (make_vararg _), _, [e])]) => do_exp state e
                | (PrimOp p, _) => 
 		      (case (getVals elist) of
 			   NONE => default ()
@@ -873,7 +896,7 @@ fun pp_alias UNKNOWN = print "unknown"
 
 
 	and do_exp (state : state) (exp : exp) : exp = 
-	   ((* print "do_exp doing "; Ppnil.pp_exp exp; print "\n";  *)
+	   ( (* print "XXX do_exp doing "; Ppnil.pp_exp exp; print "\n";   *)
 	    case exp of
 		  Var_e v =>
 			 (case lookup_alias(state,v) of
@@ -903,8 +926,7 @@ fun pp_alias UNKNOWN = print "unknown"
 			    val (bnds,state) = do_bnds(bnds,state)
 			    val e = do_exp state e
 			    val bnds = List.mapPartial (bnd_used state) bnds
-		        in  
-			    NilUtil.makeLetE letsort bnds e
+		        in  NilUtil.makeLetE letsort bnds e
 			end
 		| ExternApp_e(f,elist) =>
 			ExternApp_e(do_exp state f, map (do_exp state) elist)
@@ -947,7 +969,7 @@ fun pp_alias UNKNOWN = print "unknown"
 	and do_switch (state : state) (switch : switch) : exp = 
 	    let fun sum_switch {sumtype,arg,bound,arms,default,result_type} =
 		let val arg = do_exp state arg
-		    val (tagcount,_,carrier) = Normalize_reduceToSumtype(get_env state,sumtype) 
+		    val (tagcount,_,carrier) = reduceToSumtype(state,sumtype) 
 		    val totalcount = TilWord32.uplus(tagcount,TilWord32.fromInt(length carrier))	
 		    fun make_ssum i = Prim_c(Sum_c{tagcount=tagcount,
 						   totalcount=totalcount,
@@ -1035,7 +1057,7 @@ fun pp_alias UNKNOWN = print "unknown"
 				 val tr = do_niltrace state tr
 				 val tagcon = type_of(state,tag)
 				 val Prim_c(Exntag_c, [con]) = 
-				   (case Normalize_reduce_hnf(get_env state,tagcon)
+				   (case reduce_hnf(state,tagcon)
 				      of (true,con) => con
 				       | (false,_)  => error "Not able to reduce tagcon")
 				 val (_,state) = do_vclist state[(bound,con)]
@@ -1074,7 +1096,15 @@ fun pp_alias UNKNOWN = print "unknown"
 	       | _ => niltrace)
 
 	and do_bnds(bnds : bnd list, state : state) : bnd list * state = 
-	    let val (bnds_list,state) = foldl_acc do_bnd state bnds
+	    let  fun flattenBnds [] = []
+		   | flattenBnds (Exp_b(v,tr,Let_e(Sequential,innerBnds,body))::rest) = 
+		      let val innerBnds = flattenBnds innerBnds
+			  val bnd = Exp_b(v,tr,body)
+		      in  innerBnds @ (bnd :: (flattenBnds rest))
+		      end
+		   | flattenBnds (bnd::rest) = bnd :: (flattenBnds rest)
+		 val bnds = flattenBnds bnds
+		val (bnds_list,state) = foldl_acc do_bnd state bnds
 	    in  (List.concat bnds_list,state)
 	    end
 
@@ -1112,7 +1142,7 @@ fun pp_alias UNKNOWN = print "unknown"
 
 		     | Prim_e(NilPrimOp (project k),[sumcon],[Var_e sv]) =>
 			 let val sv_con = find_con(state,sv)
-			     val (tagcount,k,clist) = Normalize_reduceToSumtype(get_env state,sv_con)
+			     val (tagcount,k,clist) = reduceToSumtype(state,sv_con)
 			     val known = (case k of
 					  SOME k => k
 					| NONE => (print "Expression: "; Ppnil.pp_exp e;
@@ -1122,7 +1152,7 @@ fun pp_alias UNKNOWN = print "unknown"
 						   error "Type is not a special sum\n"))
 			     val fieldcon = List.nth(clist, TilWord32.toInt
 						            (TilWord32.uminus(known,tagcount)))
-			 in  case Normalize_reduce_hnf(get_env state, fieldcon) of
+			 in  case reduce_hnf(state, fieldcon) of
 			     (true, _) => 
 				 let val bnd = Exp_b(v,TraceUnknown,
 						     Prim_e(NilPrimOp(project_known known),[sumcon],[Var_e sv]))
@@ -1149,7 +1179,7 @@ fun pp_alias UNKNOWN = print "unknown"
 					     | SOME v' => let val _ = use_var(state',v')
 							  in  Var_e v'
 							  end)
-				      val eff = not (anormal_valuable(get_env(state),e))
+				      val eff = not (valuable(state,e))
 				      val (effect,alias) = 
 					  (case e of
 					       
@@ -1189,7 +1219,7 @@ fun pp_alias UNKNOWN = print "unknown"
 						     | _ => add_availE(state, e, v))
 				      val state = add_alias(state,v,alias)
 				      val state = add_exp(state,v,e)
-				  in  ([Exp_b(v, niltrace, e)], state)
+				  in  ([Exp_b(v,niltrace,e)], state)
 				  end
 			    | SOME bnds => do_bnds(bnds,state))
 		   | Con_b(p,cbnd) => let val (cbnd,state) = do_cbnd(cbnd,state)
@@ -1232,44 +1262,34 @@ fun pp_alias UNKNOWN = print "unknown"
 						   add_kind(state,v,k))
 
 	fun do_export state (ExportValue(l,v)) = 
-	    let val e = do_exp state (Var_e v)
+	    let val v = (case lookup_alias(state,v) of
+			     MUSTe (Var_e v) => v
+			   | _ => v)
 		val _ = use_var(state,v)
-	    in
-		(NONE, ExportValue(l,v))
+	    in	(NONE, ExportValue(l,v))
 	    end
 	  | do_export state (ExportType(l,v)) =
-	    let val c = do_con state (Var_c v)
+	    let val v = (case lookup_alias(state,v) of
+			     MUSTc (Var_c v) => v
+			   | _ => v)
 		val _ = use_var(state,v)
-	    in  
-		(NONE, ExportType(l,v))
+	    in  (NONE, ExportType(l,v))
 	    end
 
-	fun optimize {lift_array, dead, projection, uncurry, cse} 
-	              (MODULE{imports, exports, bnds}) =
+	fun optimize params (MODULE{imports, exports, bnds}) =
 	  let 
-	      val _ = do_dead := dead
-	      val _ = do_proj := projection
-	      val _ = do_uncurry := uncurry
-	      val _ = do_cse := cse
 	      val _ = reset_debug()
-	      val state = new_state()
+	      val state = newState params
 	      val (imports,state) = foldl_acc do_import state imports
 
-	      val _ = do_lift_array := false
-	      val (local_bnds,state) = if lift_array
-					   then do_bnds(local_bnds,state)
-				       else ([],state)
-	      val _ = do_lift_array := lift_array
 	      val (bnds,state) = do_bnds(bnds,state)
 
 	      (* we "retain" the state so that no exports are optimized away *)
 	      val state = retain_state state
 	      val temp = map (do_export state) exports
 	      val export_bnds = List.mapPartial #1 temp
-              val _ = Ppnil.pp_bnds export_bnds
 	      val exports = map #2 temp
-
-	      val bnds = local_bnds @ bnds @ export_bnds
+	      val bnds = if (null export_bnds) then bnds else bnds @ export_bnds
               val bnds = List.mapPartial (bnd_used state) bnds
 	  in  MODULE{imports=imports,exports=exports,bnds=bnds}
 	  end

@@ -18,7 +18,7 @@ struct
     fun map_unzip f ls = Listops.unzip(map f ls)
 
     local
-	type state =  var VarMap.map
+	type state = bool * var VarMap.map
 	val seen : VarSet.set ref = ref VarSet.empty
     in
 	type state = state
@@ -48,28 +48,28 @@ struct
 	fun inc n = n := !n + 1
 	fun dec n = n := !n - 1
 	    
-	fun reset_state() : state = (seen := VarSet.empty; 
-				     num_renamed := 0;
-				     num_var := 0;
-				     num_lexp := 0;
-				     num_lcon := 0;
-				     num_lkind := 0;
-				     num_lcon_prim := 0;
-				     num_lcon_import := 0;
-				     num_lcon_single := 0;
-				     num_lcon_function := 0;
-				     num_lcon_conb := 0;
-				     num_lcon_concb := 0;
-				     num_lkind_single := 0;
-				     depth_lcon_prim := 0;
-				     depth_lcon_single := 0;
-				     depth_lcon_function := 0;
-				     depth_lcon_conb := 0;
-				     depth_lcon_concb := 0;
-				     depth_lkind_single := 0;
-				     VarMap.empty)
+	fun reset_state canBeOpen : state = (seen := VarSet.empty; 
+					     num_renamed := 0;
+					     num_var := 0;
+					     num_lexp := 0;
+					     num_lcon := 0;
+					     num_lkind := 0;
+					     num_lcon_prim := 0;
+					     num_lcon_import := 0;
+					     num_lcon_single := 0;
+					     num_lcon_function := 0;
+					     num_lcon_conb := 0;
+					     num_lcon_concb := 0;
+					     num_lkind_single := 0;
+					     depth_lcon_prim := 0;
+					     depth_lcon_single := 0;
+					     depth_lcon_function := 0;
+					     depth_lcon_conb := 0;
+					     depth_lcon_concb := 0;
+					     depth_lkind_single := 0;
+					     (canBeOpen,VarMap.empty))
 
-	fun state_stat str (m : state) : unit = 
+	fun state_stat str ((canBeOpen,m) : state) : unit = 
 	    let val _ = if (!debug)
 			    then (print str; print "----\n";
 				  print "state map has ";
@@ -86,13 +86,15 @@ struct
 	    in ()
 	    end
 
-	fun find_var (s : state,v : var) : var = 
+	fun find_var ((canBeOpen,s) : state,v : var) : var = 
 	     case (VarMap.find(s,v)) of
-		 NONE => error ("find_var failed on " ^ (Name.var2string v))
+		 NONE => if canBeOpen
+			     then v
+			 else error ("find_var failed on " ^ (Name.var2string v))
 	       | SOME v' => v'
 
 	    
-	fun add_var (m : state, v : var) : state * var = 
+	fun add_var ((canBeOpen,m) : state, v : var) : state * var = 
 	    let val is_seen = VarSet.member(!seen,v)
 		val _ = if (!debug)
 			    then (print ("add_var on " ^ (Name.var2string v));
@@ -107,7 +109,7 @@ struct
 		val m = (case (VarMap.find(m,v)) of
 			     NONE => VarMap.insert(m,v,v')
 			   | SOME _ => VarMap.insert(#1(VarMap.remove(m,v)),v,v'))
-	    in  (m,v')
+	    in  ((canBeOpen,m),v')
 	    end
 
 
@@ -184,7 +186,16 @@ struct
 			     bound=bound,arms=arms,default=default,
 			     result_type=result_type}
 	      end
-	| Typecase_e _ => error "typecase not handled")
+	| Typecase_e {arg,arms,default,result_type} =>
+	      let val result_type = lcon_flat state result_type
+		  val arg = lcon_flat state arg
+		  val default = lexp_lift' state default
+		  val arms = map (fn (pc,vklist,e) => 
+				  let val (vklist,state) = lvklist state vklist
+				  in  (pc, vklist, lexp_lift' state e)
+				  end) arms
+	      in  Typecase_e {arg=arg, arms=arms, default=default, result_type=result_type}
+	      end)
 
    and lbnd state arg_bnd : bnd list * state =
        let 
@@ -392,8 +403,7 @@ struct
    and lexp_lift state arg_exp : bnd list * exp = lexp true state arg_exp
    and lexp_lift' state arg_exp : exp = 
        let val (bnds,e) = lexp true state arg_exp
-       in  
-	   NilUtil.makeLetE Sequential bnds e
+       in  NilUtil.makeLetE Sequential bnds e
        end
    and lexp_flat state arg_exp : exp  = 
 	let val (bnds,e) = lexp false state arg_exp
@@ -628,8 +638,17 @@ struct
        in  (rev rev_imps, s)
        end
        
+   fun linearize_exp e = 
+       let (* Permit expression to be open *)
+	   val state = reset_state true
+	   val e = lexp_lift' state e
+	   val _ = reset_state false
+       in  e
+       end
+
    fun linearize_mod (MODULE{bnds,imports,exports}) = 
-       let val state = reset_state()
+       let (* Module must be closed *)
+	   val state = reset_state false
 	   val (imports,state) = limports(imports,state)
 	   fun folder (bnd,state) = lbnd state bnd
 	   val (bnds,state) = foldl_acc folder state bnds
@@ -661,7 +680,7 @@ struct
 			     print "  Number of lkind calls: ";
 			     print (Int.toString (!num_lkind)); print "\n")
 		   else ()
-	   val _ = reset_state()
+	   val _ = reset_state false
 
        in  MODULE{bnds = bnds,
 		  imports = imports,

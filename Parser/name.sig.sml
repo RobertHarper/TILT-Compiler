@@ -46,11 +46,9 @@ signature NAME =
     val tag2string   : tag  -> string
 
     (* These should be used by NameBlast only *)
-    val reset_varmap : unit -> unit (* clear out the variable names *)
+    val reset_varmap : unit -> unit  (* clear out the string part of variables *)
     val deconstruct_label : label -> int * string 
     val construct_label : int * string -> label
-    val deconstruct_var : var -> int * string
-    val construct_var : int * string -> bool *  var (* true if already in use *)
     val deconstruct_loc : loc -> int
     val construct_loc : int -> loc
     val deconstruct_tag : tag -> int * string

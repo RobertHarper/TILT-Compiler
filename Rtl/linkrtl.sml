@@ -1,20 +1,20 @@
-(*$import LINKRTL Linknil TortlBase TortlSum Tortl Util TilWord32 Rtl Rtltags Pprtl TortlVararg *)
+(*$import LINKRTL Linknil TortlBase TortlSum Tortl Util TilWord32 Rtl Rtltags Pprtl *)
 
 structure Linkrtl :> LINKRTL =
 struct
 
-    val show_rtl = ref false
+    val show_rtl = Stats.ff("showRtl")
     val error = fn x => Util.error "Linkrtl." x
 
     structure Rtltags = Rtltags
     structure Pprtl = Pprtl
     structure TortlBase = TortlBase
     structure TortlSum = TortlSum
-    structure TortlVararg = TortlVararg
     structure Tortl = Tortl
 
 
 (*
+    structure TortlVararg = TortlVararg
     structure Rtlopt = MakeRtlopt(structure Pprtl = Pprtl)
 
     structure Registerset = MakeRegisterSet(structure Pprtl = Pprtl)
@@ -33,13 +33,9 @@ struct
 				    structure Operations = Operations)
 *)
     fun compile' (debug,unitname,nilmodule) = 
-	let val translate_params = {HeapProfile = NONE, do_write_list = true,
-				    codeAlign = Rtl.QUAD, FullConditionalBranch = false,
-				    elim_tail_call = true, recognize_constants = true}
-
-	    val _ = print "\n============================================\n";
+	let val _ = print "\n============================================\n";
 	    val _ = print "Starting translation to RTL\n"
-	    val rtlmod = Tortl.translate unitname translate_params nilmodule
+	    val rtlmod = Tortl.translate(unitname, nilmodule)
 	    val _ = print "Translation to RTL complete\n"
 	    val _ = if debug orelse !show_rtl
 			then (print "RTL code:\n";

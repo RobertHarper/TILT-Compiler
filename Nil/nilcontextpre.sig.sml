@@ -15,7 +15,6 @@ signature NILCONTEXTPRE =
     type var = Nil.var
     type context
 
-
     exception Unbound
 
     val empty : unit -> context

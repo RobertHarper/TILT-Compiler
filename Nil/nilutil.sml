@@ -141,7 +141,14 @@ struct
 	 | Prim.eq_float _ => false
 	 | Prim.neq_float _ => false
 *)
+    | effect (Let_e (_, bnds, e)) = (Listops.orfold bnd_effect bnds) orelse (effect e)
     | effect _ = true
+
+  and bnd_effect (Exp_b (_,_,e)) = effect e
+    | bnd_effect (Con_b _) = false
+    | bnd_effect (Fixopen_b _) = false
+    | bnd_effect (Fixcode_b _) = false
+    | bnd_effect (Fixclosure_b _) = false
 
   fun is_var_e (Var_e v) = true
     | is_var_e _ = false
@@ -392,54 +399,47 @@ struct
 
     (* collections *)
  
-    type bound = {boundcvars : Name.VarSet.set,
+    type bound = {level : int,   (* Initially zero and increases by one past each lambda *)
+		  boundcvars : Name.VarSet.set,
 		  boundevars : Name.VarSet.set}
 
     datatype 'a changeopt = NOCHANGE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
     datatype state =
 	STATE of {bound : bound,
-		  bndhandler : bound * bnd -> (bnd list) changeopt,
-		  cbndhandler : bound * conbnd -> (conbnd list) changeopt,
-		  conhandler : bound * con -> con changeopt,
-                  exphandler : bound * exp -> exp changeopt,
-		  kindhandler : bound * kind -> kind changeopt}
+		  handlers : 
+		  {bndhandler : bound * bnd -> (bnd list) changeopt,
+		   cbndhandler : bound * conbnd -> (conbnd list) changeopt,
+		   conhandler : bound * con -> con changeopt,
+		   exphandler : bound * exp -> exp changeopt,
+		   kindhandler : bound * kind -> kind changeopt}}
 
-    fun add_convars (STATE{bound={boundcvars,boundevars},
-			   bndhandler,cbndhandler,conhandler,exphandler,kindhandler},vs) =
-	(STATE{bound = {boundcvars = Name.VarSet.addList(boundcvars,vs),
+    fun add_convars (STATE{bound={level,boundcvars,boundevars},handlers},vs) = 
+	(STATE{bound = {level = level, 
+			boundcvars = Name.VarSet.addList(boundcvars,vs),
 			boundevars = boundevars},
-	       bndhandler = bndhandler,
-	       cbndhandler = cbndhandler,
-	       conhandler = conhandler,
-	       exphandler = exphandler,
-	       kindhandler = kindhandler})
+	       handlers = handlers})
 
     fun add_convar (h : state ,v) = add_convars(h,[v])
 
-    fun add_var (STATE{bound={boundevars,boundcvars},
-		       cbndhandler,bndhandler,conhandler,exphandler,kindhandler}, v) =
-	(STATE{bound = {boundcvars = boundcvars,
+    fun add_var (STATE{bound={level,boundevars,boundcvars},handlers=handlers}, v) = 
+	(STATE{bound = {level=level,
+			boundcvars = boundcvars,
 			boundevars = Name.VarSet.add(boundevars, v)},
-	       bndhandler = bndhandler,
-	       cbndhandler = cbndhandler,
-	       conhandler = conhandler,
-	       exphandler = exphandler,
-	       kindhandler = kindhandler})
+	       handlers = handlers})
 
+    fun add_level (STATE{bound={level,boundevars,boundcvars},handlers=handlers}) = 
+	(STATE{bound = {level = level + 1,
+			boundcvars = boundcvars,
+			boundevars = boundevars},
+	       handlers = handlers})
     
-
     fun f_cbnd (state : state) (cbnd : conbnd) : (conbnd list * state) = 
 	let 
-	    val (STATE{bound,cbndhandler,...}) = state
+	    val (STATE{bound,handlers={cbndhandler,...},...}) = state
 	    fun cbnd_help wrap (var, vklist, c) state openness = 
-		let fun folder((v,k),(vklist,s)) = 
-		    let val k' = f_kind state k
-			val s' = add_convar (s,v)
-		    in  ((v,k')::vklist,s')
-		    end
-		    val (rev_vklist',state') = foldl folder ([],state) vklist
+		let val state' = add_level state
+		    val (vklist',state') = f_vklist state' vklist
 		    val c' = f_con state' c
-		    val vklist' = rev rev_vklist'
 		in (wrap(var, vklist', c'), add_convar(state,var))
 		end
 	    fun do_cbnd (Con_cb(var, con),state) = 
@@ -467,7 +467,7 @@ struct
   and f_con (state : state) (con : con) : con = 
     let 
       val self = f_con state
-      val (STATE{bound,conhandler,...}) = state
+      val (STATE{bound,handlers={conhandler,...},...}) = state
       fun docon con = 
 	  (case con of
 	       (Prim_c (pcon,args)) => (Prim_c (pcon,map self args))
@@ -590,7 +590,7 @@ struct
   and f_kind (state : state) (arg_kind : kind) = 
     let 
       val self = f_kind state
-      val (STATE{bound,kindhandler,...}) = state
+      val (STATE{bound,handlers={kindhandler,...},...}) = state
       fun dokind kind = 
 	  (case kind 
 	     of Type_k => kind
@@ -625,8 +625,7 @@ struct
     end
 
   and f_vklist state vklist =
-    let
-	fun fold_one ((var,knd),state) = 
+    let	fun fold_one ((var,knd),state) = 
 	    let
 		val knd' = f_kind state knd
 		val state' = add_convar (state, var)
@@ -662,11 +661,11 @@ struct
 
   and dofun (state : state) (Function{effect,recursive,isDependent,
 				      tFormals,eFormals,fFormals,body,body_type}) = 
-      let 
-	  val (tFormals', state) = f_vklist state tFormals
-	  val (eFormals', state) = f_vtclist state eFormals
-	  val body' = f_exp state body
-	  val body_type' = f_con state body_type
+      let val state' = add_level state
+	  val (tFormals', state') = f_vklist state' tFormals
+	  val (eFormals', state') = f_vtclist state' eFormals
+	  val body' = f_exp state' body
+	  val body_type' = f_con state' body_type
       in
 	  Function{effect=effect, recursive=recursive, isDependent=isDependent,
 		   tFormals = tFormals', eFormals = eFormals', fFormals = fFormals,
@@ -694,7 +693,7 @@ struct
 	   | _ => nt)
 
   and f_bnd (state : state) (bnd : bnd) : bnd list * state = 
-      let val (STATE{bound,bndhandler,exphandler,...}) = state
+      let val (STATE{bound,handlers={bndhandler,exphandler,...},...}) = state
 	  fun do_bnd (bnd,s) : bnd list * state = 
 	      case bnd of
 		  Con_b(p,cb) => let val (cbnds,state) = f_cbnd state cb
@@ -758,11 +757,21 @@ struct
 			      default = Util.mapopt (f_exp state) default,
 			      result_type = f_con state result_type}
 	       end
-	 | Typecase_e _ => error "typecase not handled")
+	 | Typecase_e {arg, arms, default, result_type} =>
+	       let val arg = f_con state arg
+		   val default = f_exp state default
+		   val result_type = f_con state result_type
+		   val arms = map (fn (pc,vklist,e) => 
+				   let val (vklist,state') = f_vklist state vklist
+				   in  (pc, vklist, f_exp state' e)
+				   end) arms
+	       in  Typecase_e{arg=arg, default=default,
+			      result_type=result_type,arms=arms}
+	       end)
 
   and f_exp state (exp : exp) : exp = 
       let val self = f_exp state
-	  val (STATE{bound,exphandler,...}) = state
+	  val (STATE{bound,handlers={exphandler,...},...}) = state
 	  fun doexp e = 
 	      case e of
 		  (Var_e _) => e
@@ -813,7 +822,7 @@ struct
 	| NOCHANGE => doexp exp
       end
 
-  val default_bound = {boundcvars = Name.VarSet.empty, boundevars = Name.VarSet.empty}
+  val default_bound : bound = {level = 0, boundcvars = Name.VarSet.empty, boundevars = Name.VarSet.empty}
   fun default_bnd_handler _ = NOCHANGE
   fun default_cbnd_handler _ = NOCHANGE
   fun default_exp_handler _ = NOCHANGE
@@ -829,49 +838,16 @@ struct
 		   (bound * Nil.kind -> Nil.kind changeopt))
   fun to_handlers (eh,bh,ch,cbh,kh) =
       (STATE{bound = default_bound,
-	     bndhandler = bh,
-	     cbndhandler = cbh,
-	     exphandler = eh,
-	     conhandler = ch,
-	     kindhandler = kh})
+	     handlers = {bndhandler = bh,
+			 cbndhandler = cbh,
+			 exphandler = eh,
+			 conhandler = ch,
+			 kindhandler = kh}})
   fun exp_rewrite h e = f_exp (to_handlers h) e
   fun bnd_rewrite h b = #1(f_bnd (to_handlers h) b)
   fun kind_rewrite h k = f_kind(to_handlers h) k
   fun con_rewrite h c = f_con(to_handlers h) c
   fun cbnd_rewrite h cb = hd (#1(f_cbnd (to_handlers h) cb))
-
-  fun con_free_convar (argcon : con) : var list = 
-    let 
-      val free : var list ref = ref []
-      fun con_handler ({boundcvars,boundevars},Var_c v) = 
-	let
-	  val _ = if (Name.VarSet.member(boundcvars,v) orelse
-		      member_eq(eq_var,v,!free))
-		    then ()
-		  else free := (v::(!free))
-	in 
-	  NOCHANGE
-	end
-      
-	| con_handler _ = NOCHANGE
-
-      val handlers = (STATE{bound = default_bound,
-			    bndhandler = default_bnd_handler,
-			    cbndhandler = default_cbnd_handler,
-			    exphandler = default_exp_handler,
-			    conhandler = con_handler,
-			    kindhandler = default_kind_handler})
-      val _ = f_con handlers argcon
-    in !free
-    end
-
-  fun convar_occurs_free (var : var, con : con) : bool = 
-    let
-      val free_vars = con_free_convar con
-    in
-      List.exists (fn v => eq_var (v,var)) free_vars
-    end
-
 
 
   local
@@ -883,11 +859,11 @@ struct
 	  in 
 	      (count,
 	       STATE{bound = default_bound,
-		     bndhandler = default_bnd_handler,
-		     cbndhandler = default_cbnd_handler,
-		     exphandler = exp_handler,
-		     conhandler = con_handler,
-		     kindhandler = kind_handler})
+		     handlers = {bndhandler = default_bnd_handler,
+				 cbndhandler = default_cbnd_handler,
+				 exphandler = exp_handler,
+				 conhandler = con_handler,
+				 kindhandler = kind_handler}})
 	  end
   in  fun bnd_size argbnd = let val (count,handlers) = count_handler()
 			    in  (f_bnd handlers argbnd; !count)
@@ -930,20 +906,21 @@ struct
 	      | SOME e => CHANGE_NORECURSE e)
       | exp_handler _ _ = NOCHANGE
 
-    fun free_handler look_in_kind =
-	let val free_evars : (var list ref) = ref []
-	    val free_cvars : (var list ref) = ref []
-	    fun exp_handler ({boundevars,boundcvars},Var_e v) = 
-		(if (not (Name.VarSet.member(boundevars,v)) andalso not (member_eq(eq_var,v,!free_evars)))
-		     then free_evars := v :: (!free_evars)
+    fun free_handler (look_in_kind, minLevel) =
+	let val free_evars : (Name.VarSet.set ref) = ref Name.VarSet.empty
+	    val free_cvars : (Name.VarSet.set ref) = ref Name.VarSet.empty
+	    fun exp_handler ({level,boundevars,boundcvars},Var_e v) = 
+		(if (not (Name.VarSet.member(boundevars,v))
+		     andalso (level >= minLevel))
+		     then free_evars := Name.VarSet.add(!free_evars, v)
 		 else ();
 		     NOCHANGE)
 	      | exp_handler _ = NOCHANGE
 	    fun kind_handler (_,k) = CHANGE_NORECURSE k
-	    fun con_handler ({boundevars,boundcvars},Var_c v) = 
-		(if (not (Name.VarSet.member(boundcvars,v)) 
-		     andalso not (member_eq(eq_var,v,!free_cvars)))
-		     then free_cvars := v :: (!free_cvars)
+	    fun con_handler ({level,boundevars,boundcvars},Var_c v) = 
+		(if (not (Name.VarSet.member(boundcvars,v))
+		     andalso (level >= minLevel))
+		     then free_cvars := Name.VarSet.add(!free_cvars,v)
 		 else ();
 		     NOCHANGE)
 	      | con_handler _ = NOCHANGE
@@ -951,83 +928,62 @@ struct
 	    (free_evars,
 	     free_cvars,
 	     (STATE{bound = default_bound,
-		    bndhandler = default_bnd_handler,
-		    cbndhandler = default_cbnd_handler,
-		    exphandler = exp_handler,
-		    conhandler = con_handler,
-		    kindhandler = if (look_in_kind)
-				      then default_kind_handler
-				  else kind_handler}))
+		    handlers = {bndhandler = default_bnd_handler,
+				cbndhandler = default_cbnd_handler,
+				exphandler = exp_handler,
+				conhandler = con_handler,
+				kindhandler = if (look_in_kind)
+						  then default_kind_handler
+					      else kind_handler}}))
 	end
       
   in
 
-    fun freeExpConVarInExp(look_in_kind,e) = 
-	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
+    fun freeExpConVarInExp(lookInKind,minLevel,e) = 
+	let val (evars_ref,cvars_ref,handler) = free_handler (lookInKind,minLevel)
 	in  f_exp handler e;
 	    (!evars_ref, !cvars_ref)
 	end
 
-    fun freeExpConVarInCon(look_in_kind,c) = 
-	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
+    fun freeExpConVarInCon(lookInKind,minLevel,c) = 
+	let val (evars_ref,cvars_ref,handler) = free_handler (lookInKind,minLevel)
 	in  f_con handler c;
 	    (!evars_ref, !cvars_ref)
 	end
 
-    fun freeExpConVarInKind(look_in_kind,k) = 
-	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
+    fun freeExpConVarInKind(lookInKind,minLevel,k) = 
+	let val (evars_ref,cvars_ref,handler) = free_handler (lookInKind,minLevel)
 	in  f_kind handler k;
 	    (!evars_ref, !cvars_ref)
 	end
 
-    fun freeExpConVarInBnd (look_in_kind, eb) =
-	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
+    fun freeExpConVarInBnd (lookInKind,minLevel, eb) =
+	let val (evars_ref,cvars_ref,handler) = free_handler (lookInKind,minLevel)
 	in
 	    f_bnd handler eb;
 	    (! evars_ref, !cvars_ref)
 	end
 
-    fun freeConVarInCon(look_in_kind,c) =
-	let val (evars_ref,cvars_ref,handler) = free_handler look_in_kind
+    fun freeConVarInCon(lookInKind,minLevel,c) =
+	let val (evars_ref,cvars_ref,handler) = free_handler (lookInKind,minLevel)
 	in  f_con handler c;
 	    !cvars_ref
 	end
 
-    fun freeConVarInKind k =
-	let val (evars_ref,cvars_ref,handler) = free_handler true
+    fun freeConVarInKind (minLevel, k) =
+	let val (evars_ref,cvars_ref,handler) = free_handler (true, minLevel)
 	in  f_kind handler k;
 	    !cvars_ref
 	end
 
-    fun freeVarInKind k =
-	let val (evars_ref,cvars_ref,handler) = free_handler true
+    fun freeVarInKind (minLevel, k) =
+	let val (evars_ref,cvars_ref,handler) = free_handler (true, minLevel)
 	in  f_kind handler k;
-	    (!evars_ref) @ (!cvars_ref)
-	end
-
-    fun freeVarInCon c =
-	let val (evars_ref,cvars_ref,handler) = free_handler true
-	in  f_con handler c;
-	    (!evars_ref) @ (!cvars_ref)
-	end
-
-    fun freeVarInCbnd cb =
-	let val (evars_ref,cvars_ref,handler) = free_handler true
-	in
-	    f_cbnd handler cb;
-	    (! evars_ref) @ (!cvars_ref)
+	    Name.VarSet.union(!evars_ref,!cvars_ref)
 	end
 
   end
 
-  fun expvars_occur_free (vars : var list, exp : exp) : bool = 
-    let
-      val (free_expvars,_) = freeExpConVarInExp(true,exp)
-    in
-      case (Listops.list_inter_eq (eq_var, vars, free_expvars)) of
-	nil => true
-      | _ => false
-    end
 
   fun muExpand (flag,vcseq,v) = 
       let val vc_list = Sequence.toList vcseq
@@ -1405,13 +1361,13 @@ struct
     *)
     fun makeAppE (fn_exp as Let_e (Sequential, bnds, exp)) cargs eargs fargs =
 	let 
-            fun addone(v1,fv) = VarSet.addList(fv,v1)
-	    fun addpair((v1,v2),fv) = VarSet.addList(VarSet.addList(fv,v1),v2)
+	    fun addFree((fvTerm,fvType), fv) = Name.VarSet.union(fv,Name.VarSet.union(fvTerm,fvType))
+            fun addExp(e,fv) = addFree(freeExpConVarInExp(true,0,e), fv)
+            fun addCon(c,fv) = addFree(freeExpConVarInCon(true,0,c), fv)
 
-	    val fv = foldl addpair VarSet.empty 
-		           (map (fn e => freeExpConVarInExp(true,e))  eargs)
-	    val fv = foldl addpair fv (map (fn e => freeExpConVarInExp(true,e)) fargs)
-	    val fv = foldl addone  fv (map (fn c => freeConVarInCon(true,c)) cargs)
+	    val fv = foldl addExp VarSet.empty eargs
+	    val fv = foldl addExp fv fargs
+	    val fv = foldl addCon  fv cargs
 
 	    fun vf_mem(v,_) = VarSet.member(fv,v)
 
@@ -1480,4 +1436,9 @@ struct
 	    gv (bnds,[])
 	end
 
+    fun path2con (v,labs) = 
+	let fun loop c [] = c
+	      | loop c (l::rest) = loop (Proj_c(c,l)) rest
+	in  loop (Var_c v) labs
+	end
 end

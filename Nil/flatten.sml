@@ -281,8 +281,8 @@ val newbnds =  Listops.map3 (fn (v, c, l) =>
 	  Typecase_e 
 	  {
 	   arg = xcon arg,
-	   arms = map  (fn (w,e) => (w,xexp e)) arms,
-	   default =  Option.map (xexp ) default,
+	   arms = map  (fn (pc,w,e) => (pc,w,xexp e)) arms,
+	   default =  xexp default,
 	   result_type = xcon result_type
 	   }
 

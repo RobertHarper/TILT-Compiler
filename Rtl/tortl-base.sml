@@ -45,8 +45,11 @@ struct
        val (numSumProject, incSumProject) = makeStat()
        val (numSumDynInject, incSumDynInject) = makeStat()
        val (numSumDynProject, incSumDynProject) = makeStat()
+       val (numVararg, incVararg) = makeStat()
+       val (numOnearg, incOnearg) = makeStat()
        val (numPrim, incPrim) = makeStat()
        val (numGC, incGC) = makeStat()
+       val (numGlobal, incGlobal) = makeStat()
 
        val stats = [("Record projections", numSelect),
 		    ("Record creations", numRecord),
@@ -58,8 +61,11 @@ struct
 		    ("Static sum projections", numSumProject),
 		    ("Dynamic sum injections", numSumDynInject),
 		    ("Dynamic sum projections", numSumDynProject),
+		    ("Calls to makeVararg", numVararg),
+		    ("Calls to makeOnearg", numOnearg),
 		    ("Primitives", numPrim),
-		    ("GC checks", numGC)]
+		    ("GC checks", numGC),
+		    ("Globals", numGlobal)]
 
        fun clear_stats() = app (fn (_,r) => r := 0) stats
        fun show_stats() = (print "\nRTL statistics:\n";
@@ -176,12 +182,12 @@ struct
 
   (* ---- Looking up and adding new variables --------------- *)
 
-  fun top_rep (vl : location option, vv : value option) =
-      (case (vl,vv) of
- 	   (SOME(GLOBAL _),_) => true 
-	 | (_, SOME _) => true
-	 | _ => false)
-(*	 | _ => (VarSet.member(!globals,v))) *)
+  fun top_rep (v : var, vl : location option, vv : value option) =
+      (VarSet.member(!globals,v))
+      andalso (case (vl,vv) of
+		   (SOME(GLOBAL _),_) => true 
+		 | (_, SOME _) => true
+		 | _ => false)
 
   fun varmap_insert' ({is_top,varmap,
 		       env,convarmap,gcstate} : state) (v,(lc,lv,c)) : state = 
@@ -213,14 +219,14 @@ struct
       in  {is_top=is_top,env=env,varmap=varmap,convarmap=convarmap,gcstate=gcstate}
       end
   
-  fun varmap_insert state (arg as (_,(vl,vv,_))) =
-      (if (top_rep(vl,vv))
+  fun varmap_insert state (arg as (v,(vl,vv,_))) =
+      (if (top_rep(v,vl,vv))
 	   then global_state := varmap_insert' (!global_state) arg
        else ();
 	varmap_insert' state arg)
 
-  fun varmap_insert_eq state (arg as (_,(vl,vv,_))) =
-      (if (top_rep(vl,vv))
+  fun varmap_insert_eq state (arg as (v,(vl,vv,_))) =
+      (if (top_rep(v,vl,vv))
 	   then global_state := varmap_insert_eq' (!global_state) arg
        else ();
 	varmap_insert_eq' state arg)
@@ -264,15 +270,11 @@ struct
       in  state
       end
 
-  
-  fun add_term (s,v,con,LOCATION loc) = varmap_insert s (v,(SOME loc,NONE,con))
-    | add_term (s,v,con,VALUE value) = varmap_insert s (v,(NONE, SOME value,con))
-  fun add_term_equation (s,v,e,LOCATION loc) = varmap_insert_eq s (v,(SOME loc,NONE,e))
-    | add_term_equation (s,v,e,VALUE value) = varmap_insert_eq s (v,(NONE, SOME value,e))
-  fun add_reg (s,v,con,reg)         =  add_term (s,v,con,LOCATION(REGISTER(false,reg)))
-  fun add_code (s,v,con,l)          =  add_term (s,v,con,VALUE(CODE l))
-
-
+  (* adding term-level variables and functions *)
+  fun add_term (s,v,con,LOCATION loc,NONE) = varmap_insert s (v,(SOME loc,NONE,con))
+    | add_term (s,v,con,VALUE value ,NONE) = varmap_insert s (v,(NONE, SOME value,con))
+    | add_term (s,v,con,LOCATION loc,SOME e) = varmap_insert_eq s (v,(SOME loc,NONE,e))
+    | add_term (s,v,con,VALUE value, SOME e) = varmap_insert_eq s (v,(NONE, SOME value,e))
 
   (* adding constructor-level variables and functions *)
   fun add_conterm (s,v,kind,NONE) = convarmap_insert s (v,(NONE, NONE, kind))
@@ -328,10 +330,12 @@ struct
 
   fun cpath2indices (state : state) k labs = 
       let fun loop acc _ [] = rev acc
-	    | loop acc (Record_k fields_seq) (label::rest) = 
-	  let fun extract acc [] = error "bad Proj_c"
+	    | loop acc (k as Record_k fields_seq) (label::rest) = 
+	  let fun extract acc [] = (print "could not find label "; Ppnil.pp_label label; 
+				    print " in the fields of "; Ppnil.pp_kind k; print "\n";
+				    error "bad Proj_c")
 		| extract acc (((l,_),fc)::rest) = 
-	      if (eq_label(label,l)) then (fc,acc) else extract (acc+1) rest
+	        if (eq_label(label,l)) then (fc,acc) else extract (acc+1) rest
 	      val fields_list = (Sequence.toList fields_seq)
 	      val (con,index) = extract 0 fields_list 
 	      val acc = if (!do_single_crecord andalso length fields_list = 1)
@@ -493,8 +497,10 @@ struct
 			  end
 		    | _ => NONE)
 	     in  (case mergeImm of
-		      NONE => let val _ = incGC()
-				  val r = ref(NEEDGC operand)
+		      NONE => let val r = ref(NEEDGC operand)
+				  val _ = (case operand of
+					       IMM 0 => ()
+					     | _ => incGC())
 				  val _ = il := (r :: (!il))
 				  val gcinfo = (case operand of
 						    IMM _ => GC_IMM r 
@@ -502,7 +508,9 @@ struct
 			      in  {is_top=is_top,env=env,convarmap=convarmap,varmap=varmap,
 				   gcstate=[gcinfo]}
 			      end
-		    | SOME m => let fun update(GC_IMM(r as ref(NEEDGC (IMM n)))) = r := (NEEDGC(IMM(m+n)))
+		    | SOME m => let fun update(GC_IMM(r as ref(NEEDGC (IMM n)))) = 
+			                     (if (n = 0) then incGC() else ();
+					      r := (NEEDGC(IMM(m+n))))
 				      | update (GC_IMM _) = error "update given bad GC_IMM"
 				      | update _ = error "update not given GC_IMM"
 				in  (app update gcstate; state)
@@ -560,8 +568,10 @@ struct
 	    add_instr(ILABEL (!top)))
 
 
-	   
-       fun set_global_state (un,exportlist,ngset) = 
+       fun add_global v = globals := Name.VarSet.add(!globals, v)
+       fun is_global v = Name.VarSet.member(!globals, v)
+
+       fun set_global_state (un,exportlist,gl) = 
 	   let fun exp_adder((v,l),m) = (case VarMap.find(m,v) of
 					     NONE => VarMap.insert(m,v,[l])
 					   | SOME ls => VarMap.insert(m,v,l::ls))
@@ -569,7 +579,7 @@ struct
 	   in  (unitname := un;
 		global_state :=  make_state();
 		exports := (foldl exp_adder VarMap.empty exportlist);
-		globals := ngset;
+		globals := gl;
 		dl := nil;
 		pl := nil;
 		reset_mutable();
@@ -675,13 +685,13 @@ struct
   fun store_tag_zero tag =
     let val tmp = alloc_regi(NOTRACE_INT)
       in add_instr(LI(tag,tmp));
-	 add_instr(STORE32I(EA(heapptr,0),tmp)) (* store tag *)
+	 add_instr(STORE32I(REA(heapptr,0),tmp)) (* store tag *)
     end
   
   fun store_tag_disp (disp,tag) =
     let val tmp = alloc_regi(NOTRACE_INT)
     in add_instr(LI(tag,tmp));
-      add_instr(STORE32I(EA(heapptr,disp),tmp)) (* store tag *)
+      add_instr(STORE32I(REA(heapptr,disp),tmp)) (* store tag *)
     end
 
   (* ----- functions for loading NIL values into RTL registers ----------- *)
@@ -696,12 +706,10 @@ struct
 	(case loc of
 	     GLOBAL(l,NOTRACE_REAL) => error "load_ireg called with (GLOBAL real)"
 	   | GLOBAL(label,rep) =>
-		 let val addr = alloc_regi NOTRACE_LABEL
-		     val reg = (case destOpt of
+		 let val reg = (case destOpt of
 				    NONE => alloc_regi rep
 				  | SOME d => d)
-		 in  add_instr(LADDR(label,0,addr));
-		     add_instr(LOAD32I(EA(addr,0),reg));
+		 in  add_instr(LOAD32I(LEA(label,0),reg));
 		     reg
 		 end
 	   | REGISTER (_,I ir) => (case destOpt of
@@ -724,9 +732,9 @@ struct
 	| INT i => help (NOTRACE_INT, fn r => LI(i,r))
 	| TAG i => help (TRACE, fn r => LI(i,r))
 	| REAL _ => error "load_ireg: REAL"
-	| RECORD(label,_) => help (TRACE, fn r => LADDR(label,0,r))
-	| LABEL label => help (NOTRACE_LABEL, fn r => LADDR(label,0,r))
-	| CODE label => help (NOTRACE_CODE, fn r => LADDR(label,0,r))
+	| RECORD(label,_) => help (TRACE, fn r => LADDR(LEA(label,0),r))
+	| LABEL label => help (NOTRACE_LABEL, fn r => LADDR(LEA(label,0),r))
+	| CODE label => help (NOTRACE_CODE, fn r => LADDR(LEA(label,0),r))
       end
 
 
@@ -743,34 +751,28 @@ struct
 	end
   
     fun load_freg_loc (rep : location, destOpt : regf option) : regf =
-      let 
-	  val dest = (case destOpt of
-			  NONE => alloc_regf()
-			| SOME d => d)
-      in case rep of
+      (case rep of
 	  (REGISTER (_,F r)) => (case destOpt of
 				      NONE => r
-				    | _ => (add_instr(FMV(r,dest)); dest))
+				    | SOME dest => (add_instr(FMV(r,dest)); dest))
+	| (GLOBAL (l,NOTRACE_REAL)) => let val dest = (case destOpt of
+							   NONE => alloc_regf()
+							 | SOME d => d)
+				       in  add_instr(LOADQF(LEA(l,0),dest));
+					   dest
+				       end
 	| (REGISTER (_,I r)) => error "load_freg_loc called on REGISTER (_, I _)"
-	| (GLOBAL (l,NOTRACE_REAL)) =>
-	      let val addr = alloc_regi NOTRACE_LABEL
-	      in  add_instr(LADDR(l,0,addr));
-		  add_instr(LOADQF(EA(addr,0),dest));
-		  dest
-	      end
-	| (GLOBAL _) => error "load_freg_loc: got GLOBAL(_, non-NOTRACE_REAL)"
-      end
+	| (GLOBAL _) => error "load_freg_loc: got GLOBAL(_, non-NOTRACE_REAL)")
+
 
     fun load_freg_val (rep : value, destOpt : regf option) : regf =
 	(case rep of
 	     VOID rep => (print "WARNING: load_freg on VOID\n"; alloc_regf())
 	   | REAL label => 
-		 let val addr = alloc_regi TRACE
-		     val r = (case destOpt of
+		 let val r = (case destOpt of
 				  NONE => alloc_regf()
 				| SOME d => d)
-		 in  add_instr(LADDR(label,0,addr));
-		     add_instr(LOADQF(EA(addr,0),r));
+		 in  add_instr(LOADQF(LEA(label,0),r));
 		     r
 		 end
 	   | INT _ => error "load_freg_val: got INT"
@@ -837,7 +839,7 @@ struct
     let val tmp0 = alloc_regi(NOTRACE_INT)
       val tmp1 = alloc_regi(TRACE)
     in add_instr(LI(Rtltags.skip,tmp0));
-	 add_instr(STORE32I(EA(heapptr,0),tmp0));  (* store a skiptag *)
+	 add_instr(STORE32I(REA(heapptr,0),tmp0));  (* store a skiptag *)
 	 add_instr(ANDB(heapptr,IMM 4,tmp0));
 	 add_instr(ADD(heapptr,IMM 4,tmp1));
 	 add_instr(CMV(EQ,tmp0,REG tmp1,heapptr))
@@ -848,7 +850,7 @@ struct
     let val tmp0 = alloc_regi(NOTRACE_INT)
       val tmp1 = alloc_regi(NOTRACE_INT)
     in add_instr(LI(Rtltags.skip,tmp0));
-      add_instr(STORE32I(EA(heapptr,0),tmp0)); (* store a skiptag *)
+      add_instr(STORE32I(REA(heapptr,0),tmp0)); (* store a skiptag *)
       add_instr(ANDB(heapptr,IMM 4,tmp0));
       add_instr(ADD(heapptr,IMM 4,tmp1));
       add_instr(CMV(NE,tmp0,REG tmp1,heapptr))
@@ -859,7 +861,7 @@ struct
     if in_imm_range (i2w i) then
       add_instr(ADD(reg,IMM i,dest))
     else if in_ea_disp_range i then
-	add_instr(LEA(EA(reg,i),dest))
+	add_instr(LADDR(REA(reg,i),dest))
          else let val size = alloc_regi(NOTRACE_INT)
               in add_instr(LI (i2w i,size));
 		  add_instr(ADD(reg,REG size,dest))
@@ -876,37 +878,38 @@ struct
 					 val _ = if (index >= Rtltags.maxRecordLength)
 						     then error "Record too big"
 						 else ()
-					 val _ = add_instr(LOAD32I(EA(r,4*index),s))
+					 val _ = add_instr(LOAD32I(REA(r,4*index),s))
 				     in  loop (s,rest)
 				     end
       in  (case repPath of
 	       Notneeded_p => error "load_repPath called on Notneeded_p"
 	     | Projvar_p (r,ind) => loop(r,ind)
 	     | Projlabel_p (lab,ind) => let val addr = alloc_regi NOTRACE_LABEL
-					    val _ = add_instr(LADDR(lab,0,addr))
+					    val _ = add_instr(LADDR(LEA(lab,0),addr))
 					in  loop(addr,ind)
 					end)
       end
 
-  fun storeWithBarrier(addr,value,rep) : bool =
+  fun storeWithBarrier(ea,value,rep) : bool =
       (case rep of
-	   TRACE => (add_instr(MUTATE(addr, IMM 0,value, NONE)); true)
+	   TRACE => (add_instr(MUTATE(ea, value, NONE)); true)
 	 | COMPUTE rep_path => 
 	       let val isPointer = repPathIsPointer rep_path
 		   val pointerCase = fresh_code_label "allocateGlobal_pointerCase"
 		   val afterStore = fresh_code_label "allocateGlobal_afterStore"
 	       in  add_instr(BCNDI(EQ, isPointer, IMM 1, pointerCase,true));
-		   add_instr(STORE32I(EA(addr,0),value));
+		   add_instr(STORE32I(ea,value));
 		   add_instr(BR afterStore);
 		   add_instr(ILABEL pointerCase);
-		   add_instr(MUTATE(addr, IMM 0, value, NONE));
+		   add_instr(MUTATE(ea, value, NONE));
 		   add_instr(ILABEL afterStore);
 		   true
 	       end
-	 | _ => (add_instr(STORE32I(EA(addr,0),value)); false))
+	 | _ => (add_instr(STORE32I(ea,value)); false))
 
   fun allocate_global (label,labels,rtl_rep,lv) = 
       let 
+	  val _ = incGlobal()
 	  val _ = add_data(COMMENT "Global starts here")
 	  val _ = (case rtl_rep of
 		       LOCATIVE => error "global locative"
@@ -934,35 +937,31 @@ struct
 					     val _ = app do_bit dynamic
 					     val addr = alloc_regi NOTRACE_LABEL
 					     val tag = alloc_regi NOTRACE_INT
-					     val _ = add_instr(LADDR(label,0,addr))
-					     val _ = add_instr(LOAD32I(EA(addr,~4),tag))
+					     val _ = add_instr(LADDR(LEA(label,0),addr))
+					     val _ = add_instr(LOAD32I(REA(addr,~4),tag))
 					     val _ = add_instr(ORB(tag,REG mask,tag))
-					     val _ = add_instr(STORE32I(EA(addr,~4),tag))
+					     val _ = add_instr(STORE32I(REA(addr,~4),tag))
 					 in  ()
 					 end)
 			    in  add_data (INT32 static)
 			    end)
 	  val _ = app (fn l => add_data(DLABEL l)) (label::labels)
 
-	  fun get_addr() = let val addr = alloc_regi NOTRACE_LABEL
-			   in  add_instr(LADDR(label,0,addr)); addr
-			   end
+	  val labelEa = LEA(label,0)
       in  (case lv of
 	     LOCATION (REGISTER (_,reg)) =>
 		 (case reg of
 		      I r => (add_data(INT32 uninit_val);
-			      if (storeWithBarrier(get_addr(), r, rtl_rep))
+			      if (storeWithBarrier(labelEa, r, rtl_rep))
 				  then add_mutable label
 			      else ())
 		    | F r => (add_data(FLOAT "0.0");
-			      add_instr(STOREQF(EA(get_addr(),0),r))))
+			      add_instr(STOREQF(labelEa,r))))
 	   | LOCATION (GLOBAL (l,rep)) => 
 		      let val value = alloc_regi rep
-			  val loc = alloc_regi NOTRACE_LABEL
 		      in  (add_data(INT32 uninit_val);
-			   add_instr(LADDR(l,0,loc));
-			   add_instr(LOAD32I(EA(loc,0),value));
-			   if (storeWithBarrier(get_addr(), value, rtl_rep))
+			   add_instr(LOAD32I(LEA(l,0),value));
+			   if (storeWithBarrier(labelEa, value, rtl_rep))
 			       then add_mutable label
 			   else ())
 		      end
@@ -971,11 +970,9 @@ struct
 	   | VALUE (INT w32) => add_data(INT32 w32)
 	   | VALUE (TAG w32) => add_data(INT32 w32)
 	   | VALUE (REAL l) => let val fr = alloc_regf()
-				   val addr2 = alloc_regi NOTRACE_LABEL
 			       in  add_data(FLOAT "0.0");
-				   add_instr(LADDR(l,0,addr2));
-				   add_instr(LOADQF(EA(addr2,0), fr));
-				   add_instr(STOREQF(EA(get_addr(),0), fr))
+				   add_instr(LOADQF(LEA(l,0), fr));
+				   add_instr(STOREQF(labelEa, fr))
 			       end
 	   | VALUE (RECORD (l,_)) => add_data(DATA l)
 	   | VALUE (LABEL l) => add_data(DATA l)
@@ -983,7 +980,7 @@ struct
       end
 
 
-  fun help_global (add_obj, (state,v : var, obj, term : term)) : state =
+  fun help_global (add_obj, (state,v, obj, term, obj2)) : state =
     let 
 	val _ = Stats.counter("RTLglobal") ()
 	val (exported,label,labels) = (case (Name.VarMap.find(!exports,v)) of
@@ -1006,13 +1003,16 @@ struct
 		 LOCATION (REGISTER _) => LOCATION(GLOBAL(label,rep))
 	       | _ => term)
 
-    in  add_obj (state,v,obj,term)
+    in  add_obj (state,v,obj,term,obj2)
     end
 	
-
-  fun add_global arg : state = help_global(add_term, arg)
-  fun add_global_equation arg : state = help_global(add_term_equation, arg)
-
+  val add_term = 
+      fn arg as (_,v,_,_,_) =>
+      if (Name.VarSet.member(!globals,v)) 
+	  then help_global(add_term, arg)
+      else add_term arg
+  fun add_reg (s,v,con,reg) = add_term (s,v,con,LOCATION(REGISTER(false,reg)), NONE)
+  fun add_code(s,v,con,l)   = add_term (s,v,con,VALUE(CODE l),NONE)
 
   fun add_conglobal (state : state,
 		     v : var,
@@ -1043,8 +1043,14 @@ struct
     in state'
     end
 
+  val add_conterm = 
+      fn arg as (_,v,_,_) =>
+      if (Name.VarSet.member(!globals,v)) 
+	  then add_conglobal arg
+      else add_conterm arg
+
   fun unboxFloat regi : regf = let val fr = alloc_regf()
-				   val _ = add_instr(LOADQF(EA(regi,0),fr))
+				   val _ = add_instr(LOADQF(REA(regi,0),fr))
 			       in  fr
 			       end
 
@@ -1054,7 +1060,7 @@ struct
 		      then let val state = needgc(state,IMM 4)
 			   in  align_odd_word();
 			       store_tag_zero(realarraytag (i2w 1));
-			       add_instr(STOREQF(EA(heapptr,4),regf)); (* allocation *)
+			       add_instr(STOREQF(REA(heapptr,4),regf)); (* allocation *)
 			       add(heapptr,4,dest);
 			       add(heapptr,12,heapptr);
 			       state
@@ -1063,7 +1069,7 @@ struct
 		       in  align_even_word();
 			   store_tag_disp(0,MakeProfileTag());
 			   store_tag_disp(4,realarraytag (i2w 1));
-			   add_instr(STOREQF(EA(heapptr,8),regf)); (* allocation *)
+			   add_instr(STOREQF(REA(heapptr,8),regf)); (* allocation *)
 			   add(heapptr,8,dest);
 			   add(heapptr,16,heapptr);
 			   state
@@ -1090,7 +1096,7 @@ struct
       fun scan (nil,_) = ()
 	| scan (h::t,offset) =
 	  let val src = load_freg_term (h, NONE)
-	  in  add_instr(STOREQF(EA(res,offset),src));
+	  in  add_instr(STOREQF(REA(res,offset),src));
 	      scan(t,offset+8)
 	  end
       val state = 

@@ -57,7 +57,9 @@ sig
 
 
  (* effective address: register + sign-extended displacement *) 
-  datatype ea = EA of regi * int  
+  datatype ea = REA of regi * int  
+              | LEA of label * int
+              | RREA of regi * regi
 
   (* in_ea_disp_range: is an effective address in range for the displacement value ? *)
 
@@ -89,8 +91,7 @@ sig
 
   datatype instr = 
       LI     of TilWord32.word * regi
-    | LADDR  of label * int * regi
-    | LEA    of ea * regi               
+    | LADDR  of ea * regi               
     | MV     of regi * regi               (* src,dest *)
     | CMV    of cmp * regi * sv * regi    (* if cmp ra then c <- b *)
     | FMV    of regf * regf 
@@ -242,8 +243,8 @@ sig
     | LOADQF   of ea * regf
     | STOREQF  of ea * regf
 
-    | MUTATE of regi * sv * regi * regi option   (* if option is present, a nonzero value indicates pointer;
-						   *(regi1 + sv) = regi2 *)
+    | MUTATE of ea * regi * regi option   (* if option is present, a nonzero value indicates pointer;
+						   *ea = regi *)
     | INIT of ea * regi * regi option     (* if option is present, a nonzero value indicates pointer *)
 
     | NEEDGC of sv          (* needgc(sv) calls garbage collector if that

@@ -3,17 +3,20 @@
 signature NILUTIL =
   sig
 
-    (* if flag is true, will look inside kinds *)
-    val freeExpConVarInExp  : bool * Nil.exp  -> Nil.var list * Nil.var list (* free term and type level vars *)
-    val freeExpConVarInCon  : bool * Nil.con  -> Nil.var list * Nil.var list (* free term and type level vars *)
-    val freeExpConVarInKind : bool * Nil.kind -> Nil.var list * Nil.var list (* free term and type level vars *)
-    val freeExpConVarInBnd : bool * Nil.bnd -> Nil.var list * Nil.var list
-
-    val freeConVarInCon     : bool * Nil.con  -> Nil.var list (* free type level vars *)
-    val freeConVarInKind    : Nil.kind -> Nil.var list (* free type level vars in kind*)
-    val freeVarInKind       : Nil.kind -> Nil.var list
-    val freeVarInCon        : Nil.con -> Nil.var list
-    val freeVarInCbnd      : Nil.conbnd -> Nil.var list
+    (* The free??? functions take 
+         (1) a flag indicating whether to look inside kinds (true when not present)
+         (2) an integer indicating the minimum lambda depth a free variable has to be 
+         (3) the object whose free variables are needed
+       The free variables are returned as set.  
+       When 2 sets are returned, the first is the term level fvs followed by the type level ones 
+    *)
+    val freeExpConVarInExp  : bool * int * Nil.exp  -> Name.VarSet.set * Name.VarSet.set
+    val freeExpConVarInCon  : bool * int * Nil.con  -> Name.VarSet.set * Name.VarSet.set
+    val freeExpConVarInKind : bool * int * Nil.kind -> Name.VarSet.set * Name.VarSet.set
+    val freeExpConVarInBnd  : bool * int * Nil.bnd  -> Name.VarSet.set * Name.VarSet.set
+    val freeConVarInCon     : bool * int * Nil.con  -> Name.VarSet.set
+    val freeConVarInKind    :        int * Nil.kind -> Name.VarSet.set       
+    val freeVarInKind       :        int * Nil.kind -> Name.VarSet.set
 
     val varBoundByCbnd : Nil.conbnd  -> Nil.var
     val varsBoundByCbnds : Nil.conbnd list -> Nil.var list
@@ -49,16 +52,14 @@ signature NILUTIL =
     val effect : Nil.exp -> bool (* could the expression have an effect?
                                     assumes expression is A-normal *)
 
-    val con_free_convar : Nil.con -> Name.var list
-    val convar_occurs_free : Name.var * Nil.con -> bool
-    val expvars_occur_free : Name.var list * Nil.exp -> bool
 
     val same_openness : Nil.openness * Nil.openness -> bool
     val same_effect   : Nil.effect * Nil.effect -> bool
     val sub_effect    : bool * Nil.effect * Nil.effect -> bool
 
     datatype 'a changeopt = NOCHANGE | CHANGE_RECURSE of 'a | CHANGE_NORECURSE of 'a
-    type bound = {boundcvars : Name.VarSet.set,
+    type bound = {level : int,
+		  boundcvars : Name.VarSet.set,
 		  boundevars : Name.VarSet.set}
     type handlers = ((bound * Nil.exp -> Nil.exp changeopt) *
 		     (bound * Nil.bnd -> (Nil.bnd list) changeopt) *
@@ -146,4 +147,6 @@ signature NILUTIL =
     (*Get the kind of a projection*)
     val project_from_kind : ((Nil.label * Nil.var), Nil.kind) Nil.sequence * Nil.con * Nil.label -> Nil.kind
     val project_from_kind_nondep : Nil.kind * Nil.label -> Nil.kind
+
+    val path2con : Nil.var * Nil.label list -> Nil.con
   end

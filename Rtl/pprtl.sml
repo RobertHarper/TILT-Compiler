@@ -87,7 +87,9 @@ struct
   fun reg2s (I regi) = regi2s regi
     | reg2s (F regf) = regf2s regf
 
-  fun ea2s (EA (r,d)) = i2s d^"("^regi2s r^")"
+  fun ea2s (REA (r,d)) = i2s d^"("^regi2s r^")"
+    | ea2s (LEA(l,d)) = i2s d^"("^label2s l^")"
+    | ea2s (RREA(r1,r2)) = "(" ^ (regi2s r1) ^ "+" ^ (regi2s r2) ^ ")"
 
   fun sv2s (REG r) = regi2s r
     | sv2s (IMM i) = i2s i
@@ -166,10 +168,8 @@ struct
 
   fun pp_Instr' instr =
 	     case instr of
-		 LI (i,ri) => plain["li",word2str i,", ",regi2s ri]
-	       | LADDR (label,i,r) => plain ["laddr",(i2s i),"(",
-					     label2s label,"), ", regi2s r]
-	      | LEA (ea,r) => plain["lea",(ea2s ea),", ",regi2s r]
+		LI (i,ri) => plain["li",word2str i,", ",regi2s ri]
+	      | LADDR (ea,r) => plain["laddr",(ea2s ea),", ",regi2s r]
 	      | CMV (cmp,test,src,dest) =>
 		    plain["cmv", cmpi2s cmp false, " ", 
 			  regi2s test, ", ", sv2s src, ", ", regi2s dest]
@@ -258,8 +258,13 @@ struct
               | LOADQF (ea,r)   => plain ["ldt ",regf2s r,", ",ea2s ea]
               | STOREQF (ea,r)  => plain ["stt ",regf2s r,", ",ea2s ea]
 
-	      | MUTATE (r1,sv,r2,NONE) => plain ["mutate ",regi2s r1,", ", sv2s sv, ", ", regi2s r2]
-	      | MUTATE (r1,sv,r2,SOME r3) => plain ["mutate_dyn ",regi2s r1,", ", sv2s sv, ", ", regi2s r2, ", ", regi2s r3]
+	      | MUTATE (ea,r,ropt) => let val ea = ea2s ea
+					  val r = regi2s r
+				      in  (case ropt of
+					       NONE => plain ["mutate ", ea, ", ", r]
+					     | SOME r2 => plain ["mutate_dyn ", ea, ", ", r, ",", regi2s r2])
+				      end
+
 	      | INIT (ea,r,NONE) => op2si "init" (ea,r)
 	      | INIT (ea,r,SOME r2) => plain ["init_dyn ",regi2s r,", ", regi2s r2, ", ", ea2s ea]
 

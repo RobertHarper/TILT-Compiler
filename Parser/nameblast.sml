@@ -8,37 +8,14 @@ structure NameBlast :> NAMEBLAST =
     open Blaster
     val error = fn s => error "nameblast.sml" s
 
-    val varMap = ref (Name.VarMap.empty : Name.var Name.VarMap.map)
-    fun resetVarMap() = varMap := Name.VarMap.empty
-    fun addMap(v,v') = (case (Name.VarMap.find(!varMap,v)) of
-			    NONE => varMap := (Name.VarMap.insert(!varMap,v,v'))
-			  | SOME _ => (error "addMap called on variable already in map"))
-    fun lookupMap v = Name.VarMap.find(!varMap,v)
-
-
     fun blastOutVar os v =
-	let val (n,str) = deconstruct_var v
+	let val n = var2int v
 	in  blastOutInt os n
 	end
 
-    fun blastInVar is = 
+    fun blastInVar int2var is = 
 	let val n = blastInInt is
-	    val (inUse, v) = construct_var(n, "")
-	in  (case lookupMap v of
-		 SOME v' => v'
-	       | NONE => let val v' = if inUse then Name.derived_var v else v
-			     val _ = addMap(v,v')
-(*
-			     val _ = if (eq_var(v,v'))
-					 then ()
-				     else (print "blastInVar alpha-varying: ";
-					   print (Name.var2string v); 
-					   print "  -> "; 
-					   print (Name.var2string v'); 
-					   print "\n")
-*)
-			 in  v'
-			 end)
+	in  int2var n
 	end
     
     fun blastOutTag os t =
@@ -67,7 +44,7 @@ structure NameBlast :> NAMEBLAST =
     
     fun blastOutPath os (v,labs) = (blastOutVar os v; blastOutList blastOutLabel os labs)
 
-    fun blastInPath is = let val v = blastInVar is
+    fun blastInPath int2var is = let val v = blastInVar int2var is
 			     val labs = blastInList blastInLabel is
 			 in  (v,labs)
 			 end
@@ -78,14 +55,14 @@ structure NameBlast :> NAMEBLAST =
     fun blastOutPathmap os blaster pmap = 
 	blastOutList (blastOutPair blastOutPath blaster) os (PathMap.listItemsi pmap)
 
-    fun blastInVarmap is blaster =
-	let val ls = blastInList (blastInPair blastInVar blaster)  is
+    fun blastInVarmap int2var is blaster =
+	let val ls = blastInList (blastInPair (blastInVar int2var) blaster)  is
 	    fun folder((v,item),acc) = VarMap.insert(acc,v,item)
 	    in  foldl folder VarMap.empty ls
 	end
 
-    fun blastInPathmap is blaster =
-	let val ls = blastInList (blastInPair blastInPath blaster)  is
+    fun blastInPathmap int2var is blaster =
+	let val ls = blastInList (blastInPair (blastInPath int2var) blaster)  is
 	    fun folder((p,item),acc) = PathMap.insert(acc,p,item)
 	    in  foldl folder PathMap.empty ls
 	end

@@ -270,7 +270,8 @@ structure Linker :> LINKER =
 			   else (print "load failed: "; print command; print "\n";
 				 error "mk_exe - ld failed")
 		   val rmcommand = "rm " ^ link_s ^ "; rm " ^ link_o ^ "\n"
-		   val _ = Util.system rmcommand
+		   val _ = if !(Stats.bool("keep_asm"))
+			       then () else (Util.system rmcommand; ())
 	       in ()
 	       end
 	    | _ => let val units = map #1 imports
