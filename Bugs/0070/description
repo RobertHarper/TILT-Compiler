@@ -1,0 +1,21 @@
+Number: 0070
+Title:       Possible datatype bug tickled by parser.
+Keywords:    datatypes, runtime error, parser
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        1/25/02
+Version:     CVS
+System:	     solaris
+Severity:    major
+Problem:
+	The parser was dying while bootstrapping.
+	See NOTES.
+
+	It looks like somehow the binaries did not get rebuilt.
+	When I re-compiled from scratch, the bug did not show up.
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: closed

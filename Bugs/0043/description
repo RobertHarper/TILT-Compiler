@@ -1,0 +1,24 @@
+Number: 0043
+Title:       Assembler warnings on Alpha.
+Keywords:    code generator, assembler
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        4/11/2001
+Version:     CVS
+System:	     alpha
+Severity:    minor
+Problem:
+	The code we generate for multiply can lead to an as(1) warning.
+Code:
+	Basis/OS/time.sml hits the problem.
+Transcript:
+	as1: Warning: /usr1/swasey/ml96/Basis/OS/TM/alpha/time.sml.s, line 2119: macro instruction used $at
+	one_case_248126:
+		ldl	$25, 32($sp)
+	2119:	mullv	$25, 10, $25
+		stl	$25, 16($sp)
+		trapb
+Comments:
+Fix:
+Test: 
+Owner: swasey
+Status: open

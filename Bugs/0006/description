@@ -1,0 +1,31 @@
+Number: 0006
+Title:       Segv on alpha.
+Keywords:    alpha, runtime
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        7/8/00
+Version:     CVS
+System:	     alpha
+Severity:    major
+Problem:
+	A segmentation violation occurs when starting up
+	TILT-generated executables.
+Code:
+Transcript:
+	Running the TILT executable produces:
+		Defaulting to model DEC3000_500
+		Proc 0:  Memory error at 438127604 with PC = 0
+		SEGV_MAPERR  address 438127604 not mapped
+	Note 438127604 = 0x1a1d4bf4.
+
+	Running a Hello, World executable produces:
+		Defaulting to model DEC3000_500
+		Proc 0:  Memory error at 436370196 with PC = 0
+		SEGV_MAPERR  address 436370196 not mapped
+	Note 436370196 = 0x1a027b14.
+Comments:
+	The problem was a mismatch between the *_disp values
+	in Alpha/decalpha.sml and struct Thread__t in Runtime/thread.h.
+Fix:
+Test: *
+Owner: swasey
+Status: closed

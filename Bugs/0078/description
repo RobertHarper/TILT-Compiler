@@ -1,0 +1,128 @@
+Number: 0078
+Title:       Particularly bad code generation.
+Keywords:    Optimization
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        6/2/02
+Version:     CVS
+System:	     solaris
+Severity:    minor
+Problem:
+	The code generated for $ml96/Basis/Unix/posix-prim-io-fn.sml:#4299,#4358
+	which is, roughly,
+		fun announce (s:string) x y = x y
+		
+		val toFPI = Position.fromInt
+		fun incPos k = pos := Position.+(!pos, toFPI k)
+		
+		fun putV x = incPos(announce "writeVec" PIO.writeVec x)
+	appears horrible.
+
+	This may not really be a bug or it may be a bug we don't care about.
+
+	The function announce is implemented as a function which returns
+	a closure.
+
+	I can not find a real code sample to work with until I have the Runtime
+	functioning properly.  Meanwhile, here are some notes from
+	when I noticed this bug.
+
+	Here is an edited copy of
+	$ml96/Basis/Unix/TM/sparc/posix-prim-io-fn.sml.s:/PosixPrimIOFn_putV_code_157734
+	which corresponds to $ml96/Basis/Unix/posix-prim-io-fn.sml:#4299,#4358
+
+			.global PosixPrimIOFn_putV_code_157734
+		 ! arguments : [$157736,$8] [$157737,$9] [$154913,$10] [$154914,$11] 
+		PosixPrimIOFn_putV_code_157734:
+			.proc   07
+			mov	%sp, %fp
+			sub	%sp, 112, %sp
+			ld	[%r2+800], %r16
+			cmp	%sp, %r16
+			bg	code_163622
+			mov	%sp, %fp		delay slot (separate bug, fixed)
+			... branch taken ...
+		code_163622:
+			st	%r15, [%sp+92]	0xdcc10
+			st	%r9, [%sp+104]	0xeeb95aa4
+			st	%r10, [%sp+96]	0xeeb90e34
+			st	%r11, [%sp+100]	0x0
+		code_163589:
+		funtop_160748:
+			pds XXX Note that the next 12 instructions are a complete lose.  TILT has inlined
+			pds the body of announce ``fun announce (s:string) x y = x y'' (witness the
+			pds normal call to writeVec) yet still does all the work to invoke a (trivial)
+			pds closure.  I do not know if this is worth fixing, but it is worth looking at.
+
+			sethi	%hi(string_159282), %r8
+			or	%r8, %lo(string_159282), %r10	pds "writeVec"
+			pds Note this value goes unused.  It is not passed to the call
+			pds to announce.  It should never be loaded.
+			! making closure call
+
+			pds Four instruction sequence to set %r8 to the address of a global.
+			pds _150134 is a global defined at $ml96/Basis/Unix/TM/sparc/posix-prim-io-fn.sml.s:14645
+			pds at runtime, the address is 0x192368 the value (including tag) is
+			pds 0x192364: 0x6f 0xeeb937cc 0x102 0x42
+			pds The word at thread pointer + 804 is the current globalOffset.  At runtime, this is 0.
+
+			sethi	%hi(_150134), %r8
+			or	%r8, %lo(_150134), %r9
+			ld	[%r2+804], %r8
+			add	%r9, %r8, %r8	pds %r8 = _150134 = 0x192368: 0xeeb937cc
+
+			pds The global points to a closure whose term environment contains a closure.
+			pds 0xeeb937c8: 0x619 0xd01a8 0xeeb93790 0xeeb937bc {
+				PosixPrimIOFn_announce_inner_code_157496,
+				($ml96/Basis/Unix/TM/sparc/posix-prim-io-fn.sml.s:#6765,#7462)
+
+				0xeeb93790: 0x00192040 0xeeb9377c 0x00000002 0x00000619 (trace data)
+				0xeeb937a0: 0x00000006 0xeeb9377c 0x00000002 0x00000311,
+
+				0xeeb937b8: 0x00000619 0x000d0098 0xeeb937b0 0x00000100 {
+					PosixPrimIOFn_anonfun_code_157476,
+					($ml96/Basis/Unix/TM/sparc/posix-prim-io-fn.sml.s:#3721,#6212)
+
+					0xeeb937b0: 0x00000002 0xeeb9377c 0x00000619 0x000d0098 (trace data)
+					0xeeb937c0: 0xeeb937b0 0x00000100 0x00000619 0x000d01a8
+					0xeeb937d0: 0xeeb93790 0xeeb937bc,
+
+					() : unit
+				}
+			}
+			ld	[%r8], %r9	pds %r9 = 0xeeb937cc
+			ld	[%r9], %r11
+			ld	[%r9+4], %r8
+			jmpl	%r11, %r15
+			ld	[%r9+8], %r9
+		code_163621:
+			mov	%r8, %r12
+		code_163593:
+			! done making normal call
+			sethi	%hi(strbindvar_r_writeVec_150137), %r8
+			or	%r8, %lo(strbindvar_r_writeVec_150137), %r9
+			ld	[%r2+804], %r8
+			add	%r9, %r8, %r8
+			ld	[%r8], %r10
+			! making closure call
+			ld	[%r12], %r11
+			ld	[%r12+4], %r8
+			jmpl	%r11, %r15
+			ld	[%r12+8], %r9
+		code_163617:
+			mov	%r8, %r9
+		code_163596:
+			! done making normal call
+			! making closure call
+			ld	[%r9], %r12
+			ld	[%r9+4], %r8
+			ld	[%r9+8], %r9
+			ld	[%sp+96], %r10
+			jmpl	%r12, %r15	pds This is the jump to POSIX_IO_Str_writeVec_code_123246.
+			ld	[%sp+100], %r11	pds delay slot
+Code:
+Transcript:
+Comments:
+Fix:
+Test: 
+Owner: swasey
+Status: open

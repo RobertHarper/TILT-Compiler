@@ -1,0 +1,93 @@
+thread 0x9 >*[MLLrValsFun_f_code_426441:15921, 0x866b14c]       ldl     r28, 1088(r12) <0xa4b5c40>      <r12=0xa4b5800,r28=0x200008b8>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15922, 0x866b150]       cmpule  sp, r28, r28    <r28=0x10002000,sp=0x10015c90>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15923, 0x866b154]       beq     r28, 0x866b170  <r28=0>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15930, 0x866b170]       stq     r26, 0(sp) <0x10015c90> <r26=0x866b270,sp=0x10015c90>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15931, 0x866b174]       stl     r0, 24(sp) <0x10015ca8> <r0=0x100,sp=0x10015c90>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15932, 0x866b178]       stl     r1, 20(sp) <0x10015ca4> <r1=0x200fe9e8,sp=0x10015c90>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15935, 0x866b17c]       ldl     r25, 20(sp) <0x10015ca4>        <r25=0x200008b4,sp=0x10015c90>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15936, 0x866b180]       ldl     r25, 0(r25) <0x200fe9e8>        <r25=0x200fe9e8>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15937, 0x866b184]       stl     r25, 16(sp) <0x10015ca0>        <r25=0x200fe9f4,sp=0x10015c90>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15938, 0x866b188]       ldl     r25, 20(sp) <0x10015ca4>        <r25=0x200fe9f4,sp=0x10015c90>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15939, 0x866b18c]       ldl     r25, 4(r25) <0x200fe9ec>        <r25=0x200fe9e8>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15940, 0x866b190]       stl     r25, 8(sp) <0x10015c98> <r25=0,sp=0x10015c90>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15942, 0x866b194]       ldl     r25, 16(sp) <0x10015ca0>        <r25=0,sp=0x10015c90>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15943, 0x866b198]       ldl     r2, 0(r25) <0x200fe9f4> <r2=0x5c,r25=0x200fe9f4>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15944, 0x866b19c]       ldl     r25, 16(sp) <0x10015ca0>        <r25=0x200fe9f4,sp=0x10015c90>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15945, 0x866b1a0]       ldl     r0, 4(r25) <0x200fe9f8> <r0=0x100,r25=0x200fe9f4>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15946, 0x866b1a4]       ldl     r25, 16(sp) <0x10015ca0>        <r25=0x200fe9f4,sp=0x10015c90>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15947, 0x866b1a8]       ldl     r1, 8(r25) <0x200fe9fc> <r1=0x200fe9e8,r25=0x200fe9f4>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15948, 0x866b1ac]       bis     r2, r2, r27     <r2=0x866ad18,r27=0x866b140>
+thread 0x9 >*[MLLrValsFun_f_code_426441:15949, 0x866b1b0]       jsr     r26, (r2), MLLrValsFun_f_code_426441+0x78(line 15951)   <r2=0x866ad18,r26=0x866b270>
+
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15474, 0x866ad18]         ldah    gp, 448(r27) <0xa26ad18>        <r27=0x866ad18,gp=0xa2655d8>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15474, 0x866ad1c]         lda     gp, -22336(gp) <0xa2655d8>      <gp=0xa26ad18>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15475, 0x866ad20]         lda     sp, -32(sp) <0x10015c70>        <sp=0x10015c90>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15476, 0x866ad24]         ldl     r28, 1088(r12) <0xa4b5c40>      <r12=0xa4b5800,r28=0>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15477, 0x866ad28]         cmpule  sp, r28, r28    <r28=0x10002000,sp=0x10015c70>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15478, 0x866ad2c]         beq     r28, 0x866ad48  <r28=0>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15485, 0x866ad48]         stq     r26, 0(sp) <0x10015c70> <r26=0x866b1b4,sp=0x10015c70>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15488, 0x866ad4c]         ldl     r25, 0(r1) <0x201002f4> <r1=0x201002f4,r25=0x200fe9f4>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15489, 0x866ad50]         stl     r25, 16(sp) <0x10015c80>        <r25=0x200fe9e0,sp=0x10015c70>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15490, 0x866ad54]         ldl     r4, 4(r1) <0x201002f8>  <r1=0x201002f4,r4=0x80ba6f8>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15492, 0x866ad58]         ldl     r25, 0(r4) <0x200fe9d8> <r4=0x200fe9d8,r25=0x200fe9e0>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15493, 0x866ad5c]         stl     r25, 12(sp) <0x10015c7c>        <r25=0x1034,sp=0x10015c70>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15495, 0x866ad60]         ldl     r25, 12(sp) <0x10015c7c>        <r25=0x1034,sp=0x10015c70>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15496, 0x866ad64]         addlv   r25, 0x2, r3    <r3=0x80ad998,r25=0x1034>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15497, 0x866ad68]         trapb <0x100>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15498, 0x866ad6c]         ldl     r0, 1080(r12) <0xa4b5c38>       <r0=0x100,r12=0xa4b5800>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15499, 0x866ad70]         ldl     r1, 1084(r12) <0xa4b5c3c>       <r1=0x201002f4,r12=0xa4b5800>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15500, 0x866ad74]         addl    r0, 0xc, r0     <r0=0xa498d54>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15501, 0x866ad78]         cmple   r0, r1, r0      <r0=0xa498d60,r1=0xa49c038>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15502, 0x866ad7c]         bne     r0, 0x866ad8c   <r0=0x1>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15507, 0x866ad8c]         ldl     r2, 1080(r12) <0xa4b5c38>       <r2=0x866ad18,r12=0xa4b5800>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15508, 0x866ad90]         bis     r4, r4, r1      <r1=0xa49c038,r4=0x200fe9d8>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15509, 0x866ad94]         lda     r0, 0(r31) <0x0>        <r0=0x1,r31=0>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15510, 0x866ad98]         stl     r1, 0(r2) <0xa498d54>   <r1=0x200fe9d8,r2=0xa498d54>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15511, 0x866ad9c]         stl     r0, 4(r2) <0xa498d58>   <r0=0,r2=0xa498d54>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15512, 0x866ada0]         addl    r2, 0xc, r0     <r0=0,r2=0xa498d54>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15513, 0x866ada4]         stl     r0, 1080(r12) <0xa4b5c38>       <r0=0xa498d60,r12=0xa4b5800>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15514, 0x866ada8]         stl     r3, 0(r4) <0x200fe9d8>  <r3=0x1036,r4=0x200fe9d8>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15516, 0x866adac]         ldl     r25, 16(sp) <0x10015c80>        <r25=0x1034,sp=0x10015c70>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15517, 0x866adb0]         ldl     r2, 0(r25) <0x200fe9e0> <r2=0xa498d54,r25=0x200fe9e0>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15520, 0x866adb4]         ldq     r1, 27336(gp) <0xa26c0a0>       <r1=0x200fe9d8,gp=0xa2655d8>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15521, 0x866adb8]         ldl     r0, 1092(r12) <0xa4b5c44>       <r0=0xa498d60,r12=0xa4b5800>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15522, 0x866adbc]         addl    r1, r0, r0      <r0=0,r1=0xa22aa30>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15523, 0x866adc0]         ldl     r1, 0(r0) <0xa22aa30>   <r0=0xa22aa30,r1=0xa22aa30>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15524, 0x866adc4]         ldl     r4, 0(r1) <0xa1d40b0>   <r1=0xa1d40b0,r4=0x200fe9d8>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15525, 0x866adc8]         ldl     r0, 4(r1) <0xa1d40b4>   <r0=0xa22aa30,r1=0xa1d40b0>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15526, 0x866adcc]         ldl     r1, 8(r1) <0xa1d40b8>   <r1=0xa1d40b0>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15527, 0x866add0]         ldl     r3, 12(sp) <0x10015c7c> <r3=0x1036,sp=0x10015c70>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15528, 0x866add4]         bis     r4, r4, r27     <r4=0x80ba6f8,r27=0x866ad18>
+thread 0x9 >*[MLLrValsFun_anonfun_code_426399:15529, 0x866add8]         jsr     r26, (r4), MLLrValsFun_anonfun_code_426399+0xc8(line 15531)     <r4=0x80ba6f8,r26=0x866b1b4>
+
+thread 0x9 >*[String_sub_code_138422:140, 0x80ba6f8]    ldah    gp, 537(r27) <0xa24a6f8>        <r27=0x80ba6f8,gp=0xa2655d8>
+thread 0x9 >*[String_sub_code_138422:140, 0x80ba6fc]    lda     gp, -18184(gp) <0xa245ff0>      <gp=0xa24a6f8>
+thread 0x9 >*[String_sub_code_138422:141, 0x80ba700]    lda     sp, -16(sp) <0x10015c60>        <sp=0x10015c70>
+thread 0x9 >*[String_sub_code_138422:142, 0x80ba704]    ldl     r28, 1088(r12) <0xa4b5c40>      <r12=0xa4b5800,r28=0>
+thread 0x9 >*[String_sub_code_138422:143, 0x80ba708]    cmpule  sp, r28, r28    <r28=0x10002000,sp=0x10015c60>
+thread 0x9 >*[String_sub_code_138422:144, 0x80ba70c]    beq     r28, 0x80ba728  <r28=0>
+
+thread 0x9 >*[String_sub_code_138422:151, 0x80ba728]    stq     r26, 0(sp) <0x10015c60> <r26=0x866addc,sp=0x10015c60>
+thread 0x9 >*[String_sub_code_138422:155, 0x80ba72c]    ldl     r1, -4(r2) <0xa2299e4>  <r1=0x100,r2=0xa2299e8>
+thread 0x9 >*[String_sub_code_138422:156, 0x80ba730]    cmpeq   r1, 0xf, r0     <r0=0x100,r1=0x81a2>
+thread 0x9 >*[String_sub_code_138422:157, 0x80ba734]    bne     r0, 0x80ba72c   <r0=0>
+thread 0x9 >*[String_sub_code_138422:159, 0x80ba738]    and     r1, 0x3, r0     <r0=0,r1=0x81a2>
+thread 0x9 >*[String_sub_code_138422:160, 0x80ba73c]    bne     r0, 0x80ba748   <r0=0x2>
+
+thread 0x9 >*[String_sub_code_138422:165, 0x80ba748]    zap     r1, 0xf0, r0    <r0=0x2,r1=0x81a2>
+thread 0x9 >*[String_sub_code_138422:166, 0x80ba74c]    srl     r0, 0x3, r0     <r0=0x81a2>
+thread 0x9 >*[String_sub_code_138422:167, 0x80ba750]    addl    r0, r31, r0     <r0=0x1034,r31=0>
+thread 0x9 >*[String_sub_code_138422:168, 0x80ba754]    cmpule  r0, r3, r0      <r0=0x1034,r3=0x1034>
+thread 0x9 >*[String_sub_code_138422:169, 0x80ba758]    bne     r0, 0x80ba774   <r0=0x1>
+
+thread 0x9 >*[String_sub_code_138422:180, 0x80ba774]    ldq     r1, -30200(gp) <0xa23e9f8>      <r1=0x81a2,gp=0xa245ff0>
+thread 0x9 >*[String_sub_code_138422:181, 0x80ba778]    ldl     r0, 1092(r12) <0xa4b5c44>       <r0=0x1,r12=0xa4b5800>
+thread 0x9 >*[String_sub_code_138422:182, 0x80ba77c]    addl    r1, r0, r0      <r0=0,r1=0xa1d40a4>
+thread 0x9 >*[String_sub_code_138422:183, 0x80ba780]    ldl     r0, 0(r0) <0xa1d40a4>   <r0=0xa1d40a4>
+thread 0x9 >*[String_sub_code_138422:184, 0x80ba784]    bis     r0, r0, r26     <r0=0x200710e0,r26=0x866addc>
+thread 0x9 >*[String_sub_code_138422:185, 0x80ba788]    ldl     r27, 0(r15) <0xa005934> <r15=0xa005934,r27=0x80ba6f8>
+thread 0x9 >*[String_sub_code_138422:186, 0x80ba78c]    ldl     sp, 4(r15) <0xa005938>  <r15=0xa005934,sp=0x10015c60>
+thread 0x9 >*[String_sub_code_138422:187, 0x80ba790]    ldl     r0, 1096(r12) <0xa4b5c48>       <r0=0x200710e0,r12=0xa4b5800>
+thread 0x9 >*[String_sub_code_138422:188, 0x80ba794]    addl    sp, r0, sp      <r0=0,sp=0x1001bf80>
+thread 0x9 >*[String_sub_code_138422:189, 0x80ba798]    bis     r27, r27, r27   <r27=0x873a264>
+thread 0x9 >*[String_sub_code_138422:190, 0x80ba79c]    jsr     r31, (r27), String_sub_code_138422+0xac(line 194)       <r27=0x873a264,r31=0>

@@ -1,0 +1,946 @@
+head	1.10;
+access;
+symbols;
+locks
+	swasey:1.10; strict;
+comment	@# @;
+
+
+1.10
+date	2002.01.14.09.47.41;	author swasey;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2001.11.23.10.34.20;	author swasey;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2001.11.21.13.16.17;	author swasey;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2001.11.21.13.12.43;	author swasey;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2001.11.21.13.09.39;	author swasey;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2001.11.21.13.08.25;	author swasey;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2001.11.21.13.07.32;	author swasey;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2001.11.21.13.00.14;	author swasey;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2001.11.21.12.56.36;	author swasey;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2001.11.21.12.53.14;	author swasey;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.10
+log
+@Need 64 types to hit (corrected) limit in tracetable.sml.
+@
+text
+@(*$import *)
+
+signature RTL =
+sig
+    type T0  type T1  type T2  type T3  type T4  type T5  type T6  type T7  type T8  type T9
+    type T10 type T11 type T12 type T13 type T14 type T15 type T16 type T17 type T18 type T19
+    type T20 type T21 type T22 type T23 type T24 type T25 type T26 type T27 type T28 type T29
+    type T30 type T31 type T32 type T33 type T34 type T35 type T36 type T37 type T38 type T39
+    type T40 type T41 type T42 type T43 type T44 type T45 type T46 type T47 type T48 type T49
+    type T50 type T51 type T52 type T53 type T54 type T55 type T56 type T57 type T58 type T59
+    type T60 type T61 type T62 type T63
+
+
+    val tin : unit -> T63
+    val teq : T63 * T63 -> int
+end
+
+functor bug (structure Rtl : RTL) =
+struct
+    fun cmpf2s c = Rtl.teq (c, Rtl.tin ())
+end
+@
+
+
+1.9
+log
+@Example of bug without datatypes.
+@
+text
+@d8 4
+a11 1
+    type T30 type T31
+d13 3
+a15 2
+    val t31_in : unit -> T31
+    val t31_eq : T31 * T31 -> int
+d20 1
+a20 1
+    fun cmpf2s c = Rtl.t31_eq (c, Rtl.t31_in ())
+@
+
+
+1.8
+log
+@*** empty log message ***
+@
+text
+@d5 7
+a11 12
+  type var
+  datatype label = LABLE
+  datatype sregi = SREGI
+  datatype regi = REGI
+  datatype rep_path = REP_PATH
+  datatype rep = REP
+  datatype regf = REGF
+  datatype reg = REG
+  datatype ea = EA
+  datatype reg_or_label = REG_OR_LABEL
+  datatype sv = SV
+  datatype cmp = CMP
+d14 1
+a14 1
+functor bug (Rtl : RTL) =
+d16 1
+a16 4
+  fun cmpf2s c =
+      case c
+      of Rtl.CMP => 1
+  fun cmpi2s c signflag = TiltPrim.iplus (signflag, cmpf2s c)
+@
+
+
+1.7
+log
+@*** empty log message ***
+@
+text
+@a4 1
+
+d16 1
+a16 1
+  datatype cmp = EQ | LE | LT | GE | GT | NE 
+a20 1
+
+d23 2
+a24 9
+      of Rtl.EQ => "eq"
+       | Rtl.NE => "ne"
+       | Rtl.LE => "le"
+       | Rtl.LT => "lt" 
+       | Rtl.GE => "ge"
+       | Rtl.GT => "gt"
+
+  fun cmpi2s c signflag = ((if signflag then "" else "u");(cmpf2s c))
+
+@
+
+
+1.6
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+(*$import Prelude *)
+d7 10
+a16 38
+  datatype label = ML_EXTERN_LABEL of string  
+                 | LOCAL_DATA of string
+                 | LOCAL_CODE of string
+
+  datatype sregi = THREADPTR | HEAPALLOC | HEAPLIMIT | 
+                   HANDLER | EXNSTACK | EXNARG | STACK
+
+  datatype regi = REGI of var * rep  (* int in var is register # *)
+                | SREGI of sregi
+
+  and rep_path = Projvar_p of (regi * int list)     (* if list is empty, then it is not a projection *)
+               | Projlabel_p of (label * int list)  (* if list is empty, then it is just a label *)
+               | Projglobal_p of (label * int list)  (* if list is empty, then it is just the global *)
+               | Notneeded_p
+
+  and rep = TRACE
+          | NOTRACE_INT
+          | NOTRACE_CODE
+          | NOTRACE_REAL
+          | NOTRACE_LABEL (* global labels outside the heap -- should not be traced *)
+          | LOCATIVE      (* pointer into middle of array/record: must not be live across GC *)
+          | UNSET         (* an uninitialized locative address: will be set once, may persist across GC *)
+          | COMPUTE of rep_path (* trace is not statically known *)
+
+  datatype regf = REGF of var * rep
+  datatype reg = I of regi | F of regf
+
+ (* effective address: register + sign-extended displacement *) 
+  datatype ea = REA of regi * int  
+              | LEA of label * int
+              | RREA of regi * regi
+
+  datatype reg_or_label = REG' of regi
+                        | LABEL' of label
+
+  datatype sv = REG of regi
+	      | IMM of int
+
+@
+
+
+1.5
+log
+@*** empty log message ***
+@
+text
+@a10 18
+  val eq_label : label * label -> bool
+  val named_data_label : string -> label
+  val named_code_label : string -> label
+  val fresh_data_label : string -> label
+  val fresh_code_label : string -> label
+
+  (* ML externs are addresses of values
+     C externs are addresses which _are_ values;
+
+     In C parlance, C externs are r-values, while ML externs
+     are l-values.*)
+
+  (* Special registers at the RTL level translate to actual registers at the lower Alpha/Sparc level.
+     The HANDLER, EXNSTACK, EXNARG, and STACK are exposed at this level to allow exceptions to be compiled.
+     It would be nice if these last 4 registers are unnecssary.  However, the implementation of
+     an exception stack requires allocation and the lower levels cannot correctly insert
+     allocation code given that the RTL code has performed GC coaslescing.
+   *)
+a33 9
+  val eqsregi : sregi * sregi -> bool
+  val eqregi  : regi * regi -> bool
+  val eqregf  : regf * regf -> bool
+  val eqreg : reg * reg -> bool
+
+  val regi2int : regi -> int
+  val sregi2int : sregi -> int
+
+
+a38 4
+  (* in_ea_disp_range: is an effective address in range for the displacement value ? *)
+
+   val in_ea_disp_range : int -> bool
+
+a41 2
+  (* small value: small integer value or register *)
+
+a44 2
+  (* in_imm_range: is an integer in a range of immediate values ? *) 
+
+d46 1
+a46 235
+
+  datatype traptype = INT_TT | REAL_TT | BOTH_TT
+
+  datatype calltype = ML_NORMAL | ML_TAIL of regi | C_NORMAL
+
+  datatype mutateType = INT_MUTATE | FLOAT_MUTATE | PTR_MUTATE | GLOBAL_INIT
+
+  datatype instr = 
+      LI
+    | LADDR  of ea * regi               
+    | MV     of regi * regi               (* src,dest *)
+    | CMV    of cmp * regi * sv * regi    (* if cmp ra then b <- c *)
+    | FMV    of regf * regf 
+
+
+    | ADD    of regi * sv * regi        (* add(a,b,c): c <- a+b *)
+    | SUB    of regi * sv * regi        (* c <- a-b *)
+    | MUL    of regi * sv * regi        (* c <- a*b *)
+    | UDIV   of regi * sv * regi        (* c <- a/b *)
+    | UMOD   of regi * sv * regi        (* c <- a mod b *)
+    | S4ADD of regi * sv * regi        (* scaled add by 4: c <- 4*a+*b *)
+    | S8ADD of regi * sv * regi        (* scaled add by 8: c <- 8*a+*b *)
+    | S4SUB of regi * sv * regi        (* scaled sub by 4: c <- 4*a-b *)
+    | S8SUB of regi * sv * regi        (* scaled sub by 8: c <- 8*a-b *)
+    | ADDT   of regi * sv * regi        (* c <- a+b, trap on overflow *)
+    | SUBT   of regi * sv * regi        (* c <- a-b, trap on overflow *)
+    | MULT   of regi * sv * regi        (* c <- a*b, trap on overflow *)
+    | DIVT   of regi * sv * regi        (* c <- a/b, trap on zero, overflow *)
+    | MODT   of regi * sv * regi        (* c <- a mod b, trap on zero *)
+    | CMPSI  of cmp * regi * sv * regi  (* c <- a op b *)
+    | CMPUI  of cmp * regi * sv * regi  (* c <- a op b *)
+
+    | NOTB    of regi * regi
+    | ANDB    of regi * sv * regi
+    | ORB     of regi * sv * regi
+    | ANDNOTB of regi * sv * regi
+    | ORNOTB  of regi * sv * regi
+    | XORB    of regi * sv * regi 
+    | SRA     of regi * sv * regi (* shift right arithmetic:(value, shift)*)
+    | SRL     of regi * sv * regi (* shift right logical *)
+    | SLL     of regi * sv * regi (* shift left logical *)
+
+    | CVT_REAL2INT  of regf * regi  (* does a floor with rounding towards neg inf *)
+    | CVT_INT2REAL  of regi * regf  (* converts int to real format *)
+
+    | FADDD  of regf * regf * regf        (* c <- a+b *)
+    | FSUBD  of regf * regf * regf        (* c <- a-b *)
+    | FMULD  of regf * regf * regf        (* c <- a*b *)
+    | FDIVD  of regf * regf * regf        (* c <- a/b *)
+    | FABSD  of regf * regf 
+    | FNEGD  of regf * regf
+
+    | CMPF   of cmp * regf * regf * regi
+
+    (* flow of control instructions *)
+
+    (* jumps and branches *)
+
+    | BR     of label
+
+    (* BCND(I/F): compare operands with cmp and branch is cmp succeeds 
+                  bool predicts whether branch taken or not *)
+    | BCNDI  of cmp * regi * sv * label * bool  
+    | BCNDF  of cmp * regf * regf * label * bool
+    | JMP    of regi * label list 
+                         (* label list includes set of possible destinations.
+			    These destinations must all be within the same
+			    procedure as this jump.*)
+
+    (* procedure call and return: these are "heavyweight" operations in
+       this machine.   This avoids over-constraining register allocation.*)
+
+
+    (* CALL function will invoke the function identified in _func
+       at the point of invocation, the arguments lie in _arg
+       Upon a return, the code expects its results to be in _results
+       The call may be a normal ML call or a normal C call.  If the call
+          is an ML tailcall, then there are no results and the extra
+	  register contains the return address to return to.
+       The save field contains registers the caller would like save/restore
+          around the call.
+    *)
+
+    | CALL of {call_type : calltype,
+	       func: reg_or_label,
+	       args : reg list,
+	       results : reg list,
+	       save : reg list}
+
+    | RETURN of regi                 (* address to return to *)
+
+    (* Exceptions are implemented by maintaining a stack
+       of exception record.  Each exception record contains the
+       handler, its free variables, and the stack pointer where
+       the handler was installed.  The stack itself is implemented
+       by chaining together the exception records.  Thus,
+       the exception pointer is always a record with
+       the following format:
+
+	   . the pc to jump to if an exception occurs
+	   . the stack pointer to restore
+           . the handler's free variables
+           . the previous value of the exnptr
+
+       Four RTL instructions (PUSH_EXN, POP_EXN, THROW_EXN, and CATCH_EXN)
+       are used in the translation of the Nil level Handle_e and Raise_e.
+       Though the creation, installation, de-installation, and use of the
+       exeption record is made explicit in the translation to RTL,
+       we retain these abstract instructions since some of them, 
+       notably CATCH_EXN, still translate into platform-dependent
+       code.  Currently, PUSH_EXN, POP_EXN, THROW_EXN are no-ops
+       while CATCH_EXN translate into code that records the fact that
+       a handler has entered and some special calling convention code
+       on the Alpha.
+
+       - PUSH_EXN adds a new entry to the exception stack
+       - POP_EXN  discards the top entry of the exception stack
+       - THROW_EXN jumps to the handler on the exception stack
+       - CATCH_EXN __assumes__ the stack pointer has been restored 
+                   by THROW_EXN or the code itself.  It also
+		   pops the control stack.
+         
+       Nil.Handle_e(e,h) becomes
+
+       The expression e with the handler is translated as
+         (1) Allocating a record free containing all variables that need to be saved.
+	     Include the handler, the stack pointer, and the previous exnptr as the first 3 fields.
+	 (2) PUSH_EXN - nop
+         (3) Evaluates the expression e into register d (an exception may be raised here)
+	 (4) pop the exn record
+         (5) POP_EXN - nop
+	 (6) branch to after the handler
+
+       The handler h itself follows next as
+         (1) CATCH_EXN which performs action that occurs after stack pointer restored
+	 (2) restore free variable record and pops the exn stack
+	 (3) restore free variables from free variable record
+	 (4) move EXNARG into exception variable register
+	 (5) the handler code h evaluating to destination register d
+	 (6) fall through to the code after the handler
+
+       A Nil.Raise_e is compiled as 
+         (1) THROW_EXN - nop
+	 (2) move exception into EXNARG
+	 (3) restore the stack pointer of top record of the exception stack
+         (4) branch to the handler of the top record of the exception stack
+
+  *)
+
+    | PUSH_EXN
+    | POP_EXN
+    | THROW_EXN
+    | CATCH_EXN
+
+    | LOAD8I    of ea * regi             
+    | LOAD32I   of ea * regi 
+    | LOAD64F   of ea * regf
+
+    (* unchecked stores - STOREMUTATE adds to write list *)
+    | STORE8I   of ea * regi
+    | STORE32I  of ea * regi 
+    | STORE64F  of ea * regf
+
+    | MIRROR_GLOBAL_OFFSET of regi    (* 0 or 4 *)
+    | MIRROR_PTR_ARRAY_OFFSET of regi (* 0 or 4 *)
+
+    | REL_STACKPTR of regi * regi (* b = relativize (abs stack pointer a) *)
+    | ABS_STACKPTR of regi * regi (* b = absolutize (rel stack pointer b) *)
+
+    | STOREMUTATE of ea * mutateType
+    | NEEDALLOC  of sv                       (* Calls GC if sv words are not allocatable *)
+    | NEEDMUTATE of int                      (* Calls GC if int writes won't fit in write list *)
+
+    (* for signalling hardware(Alpha): SOFT -> BARRIER; HARD -> nop
+       for non-signalling hardware(PPC): SOFT -> NOP; HARD -> test-and-branch *)
+    | SOFT_VBARRIER of traptype
+    | SOFT_ZBARRIER of traptype
+    | HARD_VBARRIER of traptype
+    | HARD_ZBARRIER of traptype
+
+    | ILABEL of label
+    | HALT                  (* needed for termination of main *)    
+    | ICOMMENT of string
+
+  datatype labelortag = PTR of label | TAG
+
+  datatype data = 
+      COMMENT  of string
+    | DLABEL   of label                   (* data segment label *)
+    | STRING   of string                  (* separate string case to avoid endian-ness issue *)
+    | INT32
+    | FLOAT    of string                  (* double-precision float point literal *)
+    | DATA     of label                   (* address value - label as value *)
+
+  (* _return is where the return address is expected to be passed in
+     _args is where args should be passed in
+     _results is where this procedure will put the results 
+     _save is what registers this procedure will use
+	so the first action upon entry is to save these regs
+  *)
+  datatype proc = PROC of {name : label,
+			   return : regi,
+			   args : reg list,
+			   results : reg list,
+			   code : instr array,
+			   save : reg list,
+                           vars : (int * int) option}
+
+
+  (* an RTL module
+
+     procs is a list a procedures.
+
+     data is a list of static data for the module.
+
+     main is the entry point for the module.
+
+     global is a list of addresses of objects whose fields may point into the heap
+       (1) The list contains addresses of statically allocated objects which have
+             pointers into the heap.
+       (2) The list also contains the addresses of globals by treating them as
+             records of one field.  Globals pointing to statically allocated
+	     objects are not recorded only globals that may contain heap pointers.
+
+     Objects in the global list must contain a header word.
+
+  *)
+ 
+  datatype module = MODULE of
+                          {procs : proc list,
+			   data : data list,  (* assumed that data segment starts even-word aligned *)
+			   main : label,
+			   global : label list}
+
+end (* RTL *)
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+(*$import Prelude TopLevel *)
+a319 2
+  open Rtl
+
+d322 6
+a327 6
+      of EQ => "eq"
+       | NE => "ne"
+       | LE => "le"
+       | LT => "lt" 
+       | GE => "ge"
+       | GT => "gt"
+d329 1
+a329 1
+  fun cmpi2s c signflag = (if signflag then "" else "u")^(cmpf2s c)
+d331 1
+a331 1
+end@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d1 318
+a318 1
+(*$import Prelude TopLevel Rtl *)
+d321 1
+a321 1
+      
+d332 2
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 96
+(*$import Prelude TopLevel Name Array TilWord32 Int Rtl Rtltags Formatter TextIO *)
+
+structure Pprtl =
+struct
+
+  open Rtl Formatter
+  structure Formatter = Formatter
+
+  val elideSave = ref true
+  val DEBUG = ref false
+
+  val symbolic_name = ref true
+  val predicted = ref false
+  val i2s = Int.toString
+
+  fun pp_list_flat doer objs (left,sep,right,break) = 
+      let 
+	  fun loop [] = [String right]
+	    | loop [a] = [doer a, String right]
+	    | loop (a::rest) = (doer a) :: (String sep) :: Break :: (loop rest)
+	  val fmts = (String left) :: (loop objs)
+      in fmts
+      end
+
+  fun pp_list doer objs (left,sep,right,break) = 
+      let 
+	  fun loop [] = [String right]
+	    | loop [a] = [doer a, String right]
+	    | loop (a::rest) = (doer a) :: (String sep) :: Break :: (loop rest)
+	  val fmts = (String left) :: (loop objs)
+      in (if break then Vbox0 else HOVbox0 1) (size left) 1 fmts
+      end
+
+  fun extend name = let val diff = 10 - size name
+			fun loop n = if (n < 0) then ""
+				     else " " ^ (loop (n-1))
+		    in  name ^ loop diff
+		    end
+  fun plain [] = Hbox[]
+    | plain (c::rest) = Hbox((String (extend c))::(map String rest))
+  fun separate _ [] = []
+    | separate _ [a] = [a]
+    | separate sep (a::b) = a :: sep :: (separate sep b)
+
+
+  (* ------------ various to-string functions --------------------------- *)
+
+  val var2s = Name.var2string
+  fun pp_var' v = String (var2s v)
+  fun bool2s true = "true"
+    | bool2s false = "false"
+  fun label2s (ML_EXTERN_LABEL s) = "ML "^s
+    | label2s (LOCAL_CODE s) = "LC" ^ s
+    | label2s (LOCAL_DATA s) = "LD" ^ s
+  fun rep2s TRACE  = "(TRACE)"
+    | rep2s UNSET = "(UNSET)"
+    | rep2s NOTRACE_INT = "(NOTRACE_INT)"
+    | rep2s NOTRACE_CODE = "(NOTRACE_CODE)"
+    | rep2s NOTRACE_REAL = "(NOTRACE_REAL)"
+    | rep2s NOTRACE_LABEL = "(NOTRACE_LABEL)"
+    | rep2s LOCATIVE = "(LOCATIVE)"
+    | rep2s (COMPUTE p) = "(COMPUTE "^reppath2s p^")"
+
+   and reppath2s p =
+       let fun loop [] = ""
+	   | loop (i::rest) = "." ^ (Int.toString i) ^ (loop rest)
+       in  case p of
+	   Projvar_p (v,indices) => regi2s v^(loop indices)
+	 | Projlabel_p (l,indices) => label2s l^(loop indices)
+	 | Projglobal_p (l,indices) => "(*" ^ label2s l ^ ")" ^(loop indices)
+	 | Notneeded_p => "Notneed"
+       end
+
+  and regi2s (REGI(v,tf)) = (if !symbolic_name then var2s v else i2s(Name.var2int v)) ^ (rep2s tf)
+    | regi2s (SREGI HEAPALLOC)  = "HEAPALLOC"
+    | regi2s (SREGI HEAPLIMIT)  = "HEAPLIMIT"
+    | regi2s (SREGI THREADPTR)  = "THREADPTR"
+    | regi2s (SREGI STACK)      = "STACK"
+    | regi2s (SREGI EXNSTACK)   = "EXNSTACK"
+    | regi2s (SREGI EXNARG)     = "EXNARG"
+    | regi2s (SREGI HANDLER)    = "HANDLER"
+
+
+  and regf2s (REGF(v,tf)) =
+    (if !symbolic_name then var2s v else i2s(Name.var2int v))
+       ^ (rep2s tf)
+
+  fun reg2s (I regi) = regi2s regi
+    | reg2s (F regf) = regf2s regf
+
+  fun ea2s (REA (r,d)) = i2s d^"("^regi2s r^")"
+    | ea2s (LEA(l,d)) = i2s d^"("^label2s l^")"
+    | ea2s (RREA(r1,r2)) = "(" ^ (regi2s r1) ^ "+" ^ (regi2s r2) ^ ")"
+
+  fun sv2s (REG r) = regi2s r
+    | sv2s (IMM i) = i2s i
+d3 2
+a13 1
+
+a14 51
+
+  fun pred2s true = "taken"
+    | pred2s false = "not taken"
+
+  fun tt2s INT_TT = "(INT_TT)"
+    | tt2s REAL_TT = "(REAL_TT)"
+    | tt2s BOTH_TT = "(BOTH_TT)"
+
+  fun calltype2s ML_NORMAL = "ML_NORMAL"
+    | calltype2s (ML_TAIL r) = "ML_TAIL(" ^ (regi2s r) ^")"
+    | calltype2s C_NORMAL = "C_NORMAL"
+
+  fun pp_Label' l = String(label2s l)
+
+  fun pp_List' pr l = 
+     let fun f (h::t) = String "," :: Break :: pr h :: f t
+           | f nil = [String "]"]
+     in case l
+        of nil => String "[]"
+         | h :: t => HOVbox (String "[" :: pr h :: f t)
+     end
+
+  fun pp_Array' pr a =
+    let fun loop i = if i<Array.length a
+		     then pr(Array.sub(a,i)) :: (Break0 0 0)  :: loop(i+1)
+		     else nil
+    in Vbox0 0 1 (loop 0)
+    end
+
+  val pp_RegiList' = pp_List' (String o regi2s)
+  val pp_RegfList' = pp_List' (String o regf2s)
+  val pp_RegList' = pp_List' (String o reg2s)
+
+
+
+  fun op3i name (r,sv,dest) = plain [name,regi2s r,", ",sv2s sv,", ",regi2s dest]
+  fun op2i name (r,dest) = plain [name,regi2s r,", ",regi2s dest]
+  fun opif name (isrc,fdest) = plain [name,regi2s isrc,", ",regf2s fdest]
+  fun opfi name (fsrc,idest) = plain [name,regf2s fsrc,", ",regi2s idest]
+  fun opffi name (fsrc1,fsrc2,idest) = plain [name,regf2s fsrc1,", ",regf2s fsrc2,", ",regi2s idest]
+  fun op3f name (r1,r2,dest) = plain [name,regf2s r1,", ",regf2s r2,", ",regf2s dest]
+  fun op2f name (r,dest) = plain [name,regf2s r,", ",regf2s dest]
+  fun op2si name (dest,ri) = plain [name,regi2s ri,", ",ea2s dest]
+  fun op2li name (src,ri) = plain [name,regi2s ri,", ",ea2s src]
+
+
+
+  val w2i = TilWord32.toInt
+
+
+end (* Pprtl *)
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 1
+a1 1
+(*$import Prelude TopLevel Name Array TilWord32 Int PPRTL Rtl Rtltags Formatter TextIO *)
+d3 1
+a3 1
+structure Pprtl :> PPRTL =
+a156 223
+  val i2w = TilWord32.fromInt
+  val word2str = TilWord32.toDecimalString
+
+  fun wordpair2str (a,b) = "(" ^ (i2s (w2i a)) 
+      ^ ", " ^ (i2s (w2i b)) ^ ")";
+
+
+  fun pp_Instr' instr =
+	     case instr of
+		LI (i,ri) => plain["li",word2str i,", ",regi2s ri]
+	      | LADDR (ea,r) => plain["laddr",(ea2s ea),", ",regi2s r]
+	      | CMV (cmp,test,src,dest) =>
+		    plain["cmv", cmpi2s cmp false, " ", 
+			  regi2s test, ", ", sv2s src, ", ", regi2s dest]
+	      | MV (src,dest) =>  plain["mv", regi2s src, ", ", regi2s dest]
+	      | FMV (src,dest) => plain["fmv", regf2s src, ", ", regf2s dest]
+	      | ADD a => op3i "addl" a
+	      | SUB a => op3i "subl" a
+	      | S4ADD a => op3i "s4add" a
+              | S8ADD a => op3i "s8add" a
+              | S4SUB a => op3i "s4sub" a
+              | S8SUB a => op3i "s8sub" a
+	      | MUL a => op3i "mull" a
+	      | UDIV a => op3i "divlu" a
+	      | UMOD a => op3i "modlu" a
+              | ADDT a => op3i "addl/v" a
+	      | SUBT a => op3i "subl/v" a
+	      | MULT a => op3i "mull/v" a
+	      | DIVT a => op3i "divl/v" a
+	      | MODT a => op3i "modl/v" a
+              | CMPUI (cmp,r,v,dest) => op3i ("cmp"^cmpi2s cmp false) (r,v,dest)
+              | CMPSI (cmp,r,v,dest) => op3i ("cmp"^cmpi2s cmp true)  (r,v,dest)
+	      | NOTB a => op2i "not" a
+	      | ANDB a => op3i "and" a
+	      | ORB a => op3i "or" a
+	      | ANDNOTB a => op3i "andnot" a
+	      | ORNOTB a => op3i "ornot" a
+              | XORB a => op3i "xor" a
+              | SRA a => op3i "sra" a
+              | SRL a => op3i "srl" a
+              | SLL a => op3i "sll" a
+	      | FADDD a => op3f "add" a
+	      | FSUBD a => op3f "sub" a
+	      | FMULD a => op3f "mul" a
+              | FDIVD a => op3f "div" a
+              | FABSD a => op2f "abs" a
+              | FNEGD a => op2f "neg" a
+	      | CVT_REAL2INT a => opfi "floor" a
+	      | CVT_INT2REAL a => opif "int2real" a
+	      | CMPF (cmp,r,v,dest) => opffi (cmpf2s cmp) (r,v,dest)
+              | BR l => String("br "^label2s l)
+              | BCNDI (cmp,regi1,sv2,dest,pred) =>
+		    plain("b"^(cmpi2s cmp true) ::
+			  regi2s regi1 ::
+			  sv2s sv2 ::
+			  label2s dest ::
+			  (if !predicted then [pred2s pred]
+			   else nil))
+              | BCNDF (cmp,regf1,regf2,dest,pred) =>
+		    plain("br"^(cmpf2s cmp) ::
+			  regf2s regf1 ::
+			  regf2s regf2 ::
+			  label2s dest ::
+			  (if !predicted then [pred2s pred]
+			  else nil))
+              | JMP (r,labels) => Hbox [String ("jmp "^regi2s r),
+					pp_List' (String o label2s) labels]
+              | CALL {call_type, func, args,
+		      results, save} =>
+		   HOVbox0 1 15 1
+		   [String (extend ("call_" ^ (calltype2s call_type))),
+		    String (case func of
+				REG' f => (regi2s f)
+			      | LABEL' l => (label2s l)),
+		    Break,
+		    String "arguments = (",
+		    pp_RegList' args,
+		    Break,
+		    String "results = (",
+		    pp_RegList' results,
+		    Break,
+		    if !elideSave 
+			then String ""
+		    else (HOVbox [String " saved = ",pp_RegList' save]),
+		    String "}"]
+              | RETURN r => plain["return", regi2s r]
+
+	      | PUSH_EXN => String "push_exn"
+              | POP_EXN => String "pop_exn"
+	      | THROW_EXN => String "throw_exn"
+	      | CATCH_EXN => String "catch_exn"
+
+	      | LOAD8I a           => op2li "ldb" a
+	      | LOAD32I (ea,r) => op2li "ldw" (ea,r)
+              | LOAD64F (ea,r)     => plain ["ldf ",regf2s r,", ",ea2s ea]
+	      | STORE8I (ea,r)  => op2si "stb" (ea, r)
+	      | STORE32I (ea,r) => op2si "stw" (ea, r)
+              | STORE64F (ea,fr) => plain ["stt",regf2s fr,", ",ea2s ea]
+	      | MIRROR_GLOBAL_OFFSET r => plain ["mirror_global_offset",regi2s r]
+	      | MIRROR_PTR_ARRAY_OFFSET r => plain ["mirror_ptr_array_offset",regi2s r]
+
+	      | REL_STACKPTR (ra,rb) => plain ["relStackPtr", regi2s ra, ", ", regi2s rb]
+	      | ABS_STACKPTR (ra,rb) => plain ["absStackPtr", regi2s ra, ", ", regi2s rb]
+	      | STOREMUTATE (ea,mutType) => plain ["storemutate", ea2s ea, ",", (case mutType of
+										     INT_MUTATE => "intMutate"
+										   | FLOAT_MUTATE => "floatMutate"
+										   | PTR_MUTATE => "ptrMutate"
+										   | GLOBAL_INIT => "globalInit")]
+              | NEEDALLOC sv       => plain ["needalloc ",sv2s sv]
+              | NEEDMUTATE n       => plain ["needmutate ",Int.toString n]
+
+	      | (SOFT_VBARRIER tt) => String ("soft_vbarrier" ^ (tt2s tt))
+	      | (SOFT_ZBARRIER tt) => String ("soft_zbarrier" ^ (tt2s tt))
+	      | (HARD_VBARRIER tt) => String ("hard_vbarrier" ^ (tt2s tt))
+	      | (HARD_ZBARRIER tt) => String ("hard_zbarrier" ^ (tt2s tt))
+	      | ILABEL l        => String (label2s l^":")
+	      | HALT            => String ("halt")
+	      | ICOMMENT s => String ("### " ^ s)
+
+  fun labelortag2s (PTR l) = label2s l
+    | labelortag2s (TAG i) = word2str i
+
+  fun pp_Data' d =
+      case d of
+	  COMMENT s => String ("### " ^ s)
+	| STRING s =>  String (".ascii \""^s^"\"")
+	| INT32 bi =>  String (".long "^(word2str bi))
+	| FLOAT s =>  String (".double "^s)
+	| DATA l => String(".data "^(label2s l))
+	| DLABEL l =>  String (label2s l^":")
+
+  fun pp_DataList' da = 
+      let fun pp_Data'' x =
+	        let val s = pp_Data' x
+		in case x of
+		     DLABEL _ => s
+		   | _ => Hbox[String "     ", s]
+		end
+      in  pp_List' pp_Data'' da
+      end
+
+
+  fun pp_code' code = 
+      let fun pp_Instr'' x =
+	        let val s = pp_Instr' x
+		in case x of
+		      ILABEL _ => s
+		    | _ => Hbox[String "     ", s]
+		end
+      in  pp_Array' pp_Instr'' code
+      end
+
+  fun pp_Proc' (PROC{name,return,args,results,code,save,vars}) =
+      (if !DEBUG then
+	    (print "laying out procedure "; 
+	     print (label2s name); print "\n")
+      else ();
+	   Vbox0 0 1 [String(label2s name),
+		      Break,
+		      Hbox[String "     ", HOVbox[String "args = ",pp_RegList' args]],
+		      Break,
+		      Hbox[String "     ret = ",String (regi2s return)],
+		      Break,
+		      Hbox[String "     ", HOVbox[String "results = ",pp_RegList' results]],
+		      Break,
+		      if !elideSave 
+			  then String ""
+		      else (HOVbox [String " save = ",
+				    pp_RegList' save,
+				    String ","]),
+		      Break,
+		      String "{", Break,
+		      pp_code' code,
+		      String "}", Break])
+	   
+  fun pp_Module' (MODULE{procs,data,main,global}) =
+      Vbox0 0 1 ([Break,
+		 String ("main = "^(label2s main)),
+		 Break, Break]
+		 @@ 
+		 (separate Break (map pp_Proc' procs))
+		 @@
+		 [String "data objects = ",
+		  Break,
+		  pp_DataList'  data,
+		  Break,
+		  HOVbox[String "global = ",
+			 pp_List' pp_Label' global],
+		  Break])
+
+  fun pp_rep_path _ = String "rep_path_not_done"
+
+  fun pp_tag' ({static,dynamic} : Rtltags.tag) = 
+      let 
+	  fun pp_dyn{bitpos,path} = 
+	      Hbox[String (Int.toString bitpos), String " = ",
+		   pp_rep_path path]
+	  val x = String ("0x" ^ (TilWord32.toHexString static))
+	  val y = map pp_dyn dynamic
+      in  (case y of 
+	       [] => x
+	     | _ => HOVbox(x :: y))
+      end
+
+
+    fun wrapper pp out obj = 
+      let 
+	val fmtstream = open_fmt out
+	val fmt = pp obj
+      in (Formatter.DoDepth := false;
+	  output_fmt (fmtstream,fmt); 
+	  close_fmt fmtstream;
+	  Formatter.DoDepth := true;
+	  fmt)
+      end
+    fun help pp obj = (wrapper pp TextIO.stdOut obj; ())
+    val pp_var = help pp_var'
+    val pp_Instr = help pp_Instr'
+    val pp_Data = help pp_Data'
+    val pp_Proc = help pp_Proc'
+    val pp_Module = help pp_Module'
+    val pp_tag = help pp_tag'
+
+a159 3
+
+
+      
+@

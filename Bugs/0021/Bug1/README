@@ -1,0 +1,9 @@
+The bug is that the counter used by Parser/namedform.sml (line 88)
+is global.  It should be reset at least for each file.
+
+tilt -fUptoElaborate mapfile1
+	Builds interfaces for bug1 and bug2.
+tilt mapfile2
+tilt mapfile3
+	Reuses interface for bug1 and bug2, respectively.
+	One of these will fail.

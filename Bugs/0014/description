@@ -1,0 +1,101 @@
+Number: 0014
+Title:       Stack overflow in C code on alpha.
+Keywords:    alpha,runtime,stacklets
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        7/19/00
+Version:     CVS
+System:	     alpha
+Severity:    major
+Problem:     TILT dies with a stack overflow segv while bootstrapping.
+	     Became repeatable:  while compiling MLLexFun.
+Code:	     tiltb mapfile-all
+Transcript:
+	================================================
+	Starting translation to TIL-Alpha assembly
+	 There are 129 procedures and  129 recursive components with the largest being of size 1
+	function TextIOFn_mkOutstream_code_210469 with 52 labels. liveness analysis took 4 steps
+	function TextIOFn_mkInstream_code_210854 with 65 labels. liveness analysis took 4 steps
+	Stack overflow: pid 4278, proc Top.nomirror.alp, addr 0x10001fd0, pc 0x3ff8059caa0
+	segmentation violation
+	status=sigsegv
+
+	Trying to reproduce:
+	       tiltb mapfile-all
+	[nope]
+
+	Trying to reproduce:
+		rm /afs/cs.cmu.edu/project/fox-28/member/swasey/ml96/Basis/IO/text-io-fn.alpha.o
+		rm /afs/cs.cmu.edu/project/fox-28/member/swasey/ml96/Basis/IO/text-io-fn.alpha.s.gz
+		rm /afs/cs.cmu.edu/project/fox-28/member/swasey/ml96/Basis/IO/text-io-fn.alpha.uo
+		rm /afs/cs.cmu.edu/project/fox-28/member/swasey/ml96/Basis/IO/text-io-fn.ui
+		tiltb mapfile-all
+	[nope]
+	
+	Trying to reproduce the bug:
+		TILT_LIBDIR=$m/tilt/b
+		tiltb -c mapfile-all
+		[gdb]
+	===== Starting Reify1: MLLexFun                          =====
+	sendsig: can't grow stack, pid 4651, proc Top.nomirror.alp, sig 11
+
+	Program terminated with signal SIGSEGV, Segmentation fault.
+	The program no longer exists.
+	.gdbinit:20: Error in sourced command file:
+	You can't do that without a process to debug	[note to self: gdb sucks on the alpha]
+	[possibly same bug]
+	
+	Trying again:
+		TILT_LIBDIR=$m/tilt/b
+		[gdb]
+	===== Starting Reify1: MLLexFun                          =====
+
+	Program terminated with signal SIGSEGV, Segmentation fault.
+	The program no longer exists.
+	[Yay, reproducable.  On to dbx.]
+
+	Trying again:
+		[dbx]
+		r -fdebug_asm -fkeep_link_asm mapfile-all
+	===== Starting Reify1: MLLexFun                          =====
+	Program terminated by Segmentation fault	[program gone]
+	[On to shell, for a pc and address.]
+
+	Trying again
+	       tiltb mapfile-all
+       ===== Starting Reify1: MLLexFun                          =====
+       Stack overflow: pid 6282, proc Top.nomirror.alp, addr 0x100c1ff8, pc 0x3ff814870b8
+       [ok]
+Comments:
+	So far, I've been unable to reproduce this bug.  Probably the
+	current stacklet was nearly exhausted when the runtime took
+	over.  The code to garuantee a certain amount of stack space
+	was implemented but currently only Perry has it.
+
+	The address 0x3ff8059caa0 looks suspicious.  Disassembling
+	around there reveals symbols like __tsdRunup, __trcWrite,
+	__tsdInit, and __errBugcheck but the address itself isn't
+	associated with a symbol.  Shared library?  [Recursive fgreps
+	of /usr/lib and /usr/local/lib didn't reveal anything.]  If it
+	WERE library code, this would reinforce the theory that we're
+	dealing with an overflow from the C code.
+
+	On the other hand the address 0x10001fd0 is very familiar.  It
+	should lie in the protected region below the first stacklet.
+	On *previous runs*, the first stacklet occupied
+		Threads[0].stack->stacklets[0].baseTop    = 0x1001bf80
+		Threads[0].stack->stacklets[0].baseBottom = 0x10002000
+
+	The second address 0x3ff814870b8 is definitely library code.
+	Disassembling around there shows symbols _getpid, __isatty,
+	and _reml.
+
+	If the problem is stack overflow in C code, the workaround for
+	now is to compile with '@stackletSize=4096'.  This avoids the
+	stack overflow while compiling MLLexFun.  We need to
+	re-bootstrap after Perry's fix has been checked in.
+
+	Perry's change seemed to fix this problem while compiling MLLrValsFun.
+Fix:
+Test: 
+Owner: swasey
+Status: closed

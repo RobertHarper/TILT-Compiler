@@ -1,0 +1,166 @@
+Number: 0071
+Title:       Spurious illegal instruction trap on sparc.
+Keywords:    runtime, register windows
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        3/13/2002
+Version:     CVS
+System:	     solaris
+Severity:    major
+Problem:
+	While bootstrapping with the slave and master executing
+	concurrently, somtimes one of the processes dies with
+	an illegal instruction trap.
+Code:
+	See communication.sml, bug.c, and bug_solaris_asm.s.
+	(All but the first must be built as part of the runtime
+	to reproduce the bug.)
+Transcript:
+Comments:
+	Note that control flow of this code is:
+		ML sets an exception handler
+		C raises an exception
+		ML handles exception
+		C calls open
+		  ILLEGAL INSTRUCTION
+
+	The illegal instruction trap occurs in stack space.  As I have
+	discovered, this does not mean that control was somehow
+	transferred to a random stack location.  (So "illegal
+	instruction" is a misnomer.)
+
+	The clue to understanding this bug is that, as indicated in
+	the comments in bug_solaris_asm.s, increasing the size of the
+	stack frame allocated by my_openf from 112 bytes to 120 bytes
+	is all that is necessary to change the code from non-bug
+	producing to bug-producing.
+
+	This leads us to question how the compiler interacts with
+	register windows (see the documentation on the SPARC's save,
+	restore, and flushw instructions).
+
+	On the sparc, the C compiler uses register windows.  The code
+	TILT generates does not use register windows: We treat the
+	SPARC as if it has 32 registers.
+
+	We must ask: What is the impact of this fact on the interface
+	between ML code and C code?
+
+	I think we need to maintain the invariant that there is only
+	one valid register window while we are in ML code.  If you
+	think of the extended register file as a cache for a portion
+	of the data stack, then the invariant is that this cache
+	should be empty when we are in ML code.  We can maintain this
+	invariant by doing flushw before jumping from C code to ML
+	code.  We don't have to do this when going the other way
+	because ML code doesn't use SAVE/RESTORE.
+
+	Here are some questions and answers (if you accept my
+	invariant) that came up when examining the runtime.
+
+	      - Do we have to use FLUSHW/ST_FLUSH_WINDOWS when control
+	        transfers from ML code to C code?  How about from C
+	        code to ML code?
+
+		ML code to C code: No.  (But extra FLUSHW instructions
+		are cheap.)
+
+		C code to ML code: Yes.
+
+	      - When do we need to use ST_FLUSH_WINDOWS in addition to
+	        FLUSHW?
+
+		Never.
+
+	      - What is the difference between FLUSHW and
+	        ST_FLUSH_WINDOWS?  From the docs, it looks like they
+	        both should flush and invalidate all but one (the
+	        current) register window.
+
+		The trap ST_FLUSH_WINDOWS is more expensive when there
+		are no register windows to flush.  The flushw
+		instruction is basiaclly a conditional trap: It avoids
+		the overhead of switching to the kernel when there is
+		no work to do.
+
+	The runtime was not maintaining my invariant.
+
+	* Only GCFromC used ST_FLUSH_WINDOWS.
+
+	* Most routines which sit between ML code and the runtime do
+	  FLUSHW (eg, NewStackletFromML, PopStackletFromML, GCFromML,
+	  returnToML, etc.) but there are some that do not:
+
+	        load_regs_MLtoC
+	        save_regs_MLtoC
+	        raise_exception_raw
+	        global_exnhandler
+	        OverflowFromML
+	        DivFromML
+
+	  (The first two are used to implement our Ccall extension.
+	  The third is related: C routines must sometimes raise
+	  exceptions rather than returning a value.  The last three
+	  are related to exception and signal handling.)
+
+	CAVEAT:  I do no know why this bug is happening.
+
+	It is unfortunate that many details related to SPARC register
+	windows---in particular, the semantics of FLUSHW and
+	spill/fill traps---are not specified by the architecture and
+	appear to be poorly documented in implementations.  In
+	particular, register windows do not act as a cache for part of
+	the data stack.  It is permitted that register window data be
+	written relative to the value of %sp in effect at FLUSHW/spill
+	time and not the value of %sp in effect at SAVE time.  For
+	example, on page 167 of the SPARC architecture manual version
+	9 (1994), we read ``FLUSHW causes all active register windows
+	except the current window to be flushed to memory at locations
+	/determined/ /by/ /privileged/ /software/'' (emphasis added).
+	For example, the sample spill handler on page 307 appears to
+	(naively) use the spill-time value of %sp.
+
+	It appears that if an application changes %sp between SAVE and
+	the next FLUSHW or spill trap, the register window state will
+	be written to the wrong memory locations.  One theory on this
+	bug is that this actually happens: That our stack frame gets
+	corrupted and we jump (on procedure return) to a bogus return
+	address which happens to be in the stack frame and happens to
+	contain an illegal instruction.  Another theory is that the OS
+	detects what it considers a "behind the scenes" change to %sp
+	and complains with an illegal instruction trap pointing into
+	the stack.
+
+	Both theories seem to fit the evidence but I can not say
+	definitively why this particular trap is being raised by this
+	particular code.
+
+	To see that the first theory fits the evidence, here again is
+	the control flow of our code.  This time, I have been explicit
+	about what runtime functions are involved in the transfer of
+	control between ML and C.
+
+		1. ML sets an exception handler
+		2. ML calls save_regs_MLtoC then jumps to C
+		3. C raises an exception
+		4. C calls raise_exception_raw which jumps to ML
+		5. ML handles exception
+		6. ML calls save_regs_MLtoC then jumps to C
+		7. C calls open
+		  ILLEGAL INSTRUCTION
+
+	Note that neither save_regs_MLtoC nor raise_exception_raw
+	interact with register windows.  Imagine that at time (4),
+	there are multiple register windows that have not been
+	flushed.  This state will persist to time (7) because none of
+	the intervening code interacts with register windows.  Now
+	imagine that a spill trap occurs after time (7).  Imagine
+	that, while flushing the old register window state from time
+	(4), the OS writes incorrect values into our stack.  BOOM.
+Fix:
+	I have implemented the invariant that there is only one active
+	register window while executing ML code.  In particular, I
+	eliminated some unnecessary FLUSHW and ST_FLUSH_WINDOWS
+	instructions and added the "missing" FLUSHW instructions.
+Test:
+Owner: swasey
+Status: closed

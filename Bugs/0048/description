@@ -1,0 +1,42 @@
+Number: 0048
+Title:       Datatype elaboration problems.
+Keywords:    Elaborator, datatypes
+Submitter:   Tom Murphy <tom7+@cs.cmu.edu>, Leaf Petersen <leaf+@cs.cmu.edu>
+Date:        6/28/2000, 4/13/2001
+Version:     CVS
+System:	     all
+Severity:    major
+Problem:
+	(1) The IL type for ``datatype 'a foo = A of 'a | B of ('a list) foo'' is
+
+		foo_TYC > foo_8188 = /-\(poly_8208)CON_MU(/-\(vdt_foo_8199)(SUM[(A, B); 0; (poly_8208, vdt_foo_8199)]))#0,
+
+	which actually corresponds to ``datatype 'a foo = A of 'a | B of 'a foo''.
+
+		(1a) The odd type translation could mean that datatypes exist which are uniform but which
+		     we translate incorrectly.
+		(1b) this should be rejected with "non-uniform datatypes are not supported"
+
+	(2) The error messages for ``datatype 'a foo = A of bar and bar = B of int foo'' are not clear.
+
+		(2a) this should be rejected with "non-uniform datatypes are not supported"
+
+	(3) Lack of alpha conversion prevents elaboration of ``datatype 'a foo = A of 'a bar and 'b bar = B of 'b foo''
+
+	(4) ``datatype ('a,'a) foo = A of 'a'' elaborates but should fail due to the duplicate bound variable.
+Code:
+Transcript:
+Comments:
+	+fox/til 340 341
+	+fox/til 686 689 691 720 721
+Fix:
+	Most of the changes were in Elaborator/datatype.sml.  I also
+	added alpha conversion support for AST tyvars to AstHelp.
+
+	The datatype compiler performs a number of syntactic checks
+	before attempting a translation.  This took care of (1), (2),
+	and (4).  The translation of a single strongly-connected type
+	performs alpha-conversion.  This took care of (3).
+Test:
+Owner: swasey
+Status: closed

@@ -1,0 +1,305 @@
+; truss -f ./MakeRelease.sparc.exe :pserver:swasey_tilt@cvs.concert.cs.cmu.edu:/cvsroot -rrelease_may_2002
+381:	execve("./MakeRelease.sparc.exe", 0xEFFFF07C, 0xEFFFF08C)  argc = 3
+381:	open("/dev/zero", O_RDONLY)			= 3
+381:	mmap(0x00000000, 8192, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE, 3, 0) = 0xEF7C0000
+381:	open("/usr/lib/libpthread.so.1", O_RDONLY)	= 4
+381:	fstat(4, 0xEFFFED3C)				= 0
+381:	mmap(0x00000000, 8192, PROT_READ|PROT_EXEC, MAP_SHARED, 4, 0) = 0xEF7B0000
+381:	mmap(0x00000000, 81920, PROT_READ|PROT_EXEC, MAP_PRIVATE, 4, 0) = 0xEF790000
+381:	munmap(0xEF794000, 57344)			= 0
+381:	mmap(0xEF7A2000, 5063, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_FIXED, 4, 8192) = 0xEF7A2000
+381:	close(4)					= 0
+381:	open("/usr/lib/libposix4.so.1", O_RDONLY)	= 4
+381:	fstat(4, 0xEFFFED3C)				= 0
+381:	mmap(0xEF7B0000, 8192, PROT_READ|PROT_EXEC, MAP_SHARED|MAP_FIXED, 4, 0) = 0xEF7B0000
+381:	mmap(0x00000000, 73728, PROT_READ|PROT_EXEC, MAP_PRIVATE, 4, 0) = 0xEF770000
+381:	munmap(0xEF772000, 57344)			= 0
+381:	mmap(0xEF780000, 6376, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_FIXED, 4, 0) = 0xEF780000
+381:	close(4)					= 0
+381:	open("/usr/lib/libm.so.1", O_RDONLY)		= 4
+381:	fstat(4, 0xEFFFED3C)				= 0
+381:	mmap(0xEF7B0000, 8192, PROT_READ|PROT_EXEC, MAP_SHARED|MAP_FIXED, 4, 0) = 0xEF7B0000
+381:	mmap(0x00000000, 155648, PROT_READ|PROT_EXEC, MAP_PRIVATE, 4, 0) = 0xEF740000
+381:	munmap(0xEF756000, 57344)			= 0
+381:	mmap(0xEF764000, 6054, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_FIXED, 4, 81920) = 0xEF764000
+381:	close(4)					= 0
+381:	open("/usr/lib/libc.so.1", O_RDONLY)		= 4
+381:	fstat(4, 0xEFFFED3C)				= 0
+381:	mmap(0xEF7B0000, 8192, PROT_READ|PROT_EXEC, MAP_SHARED|MAP_FIXED, 4, 0) = 0xEF7B0000
+381:	mmap(0x00000000, 622592, PROT_READ|PROT_EXEC, MAP_PRIVATE, 4, 0) = 0xEF680000
+381:	munmap(0xEF700000, 57344)			= 0
+381:	mmap(0xEF70E000, 29384, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_FIXED, 4, 516096) = 0xEF70E000
+381:	mmap(0xEF716000, 5400, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_FIXED, 3, 0) = 0xEF716000
+381:	close(4)					= 0
+381:	open("/usr/lib/libdl.so.1", O_RDONLY)		= 4
+381:	fstat(4, 0xEFFFED3C)				= 0
+381:	mmap(0xEF7B0000, 8192, PROT_READ|PROT_EXEC, MAP_SHARED|MAP_FIXED, 4, 0) = 0xEF7B0000
+381:	close(4)					= 0
+381:	open("/usr/platform/SUNW,Ultra-Enterprise/lib/libc_psr.so.1", O_RDONLY) = 4
+381:	fstat(4, 0xEFFFEB9C)				= 0
+381:	mmap(0x00000000, 8192, PROT_READ|PROT_EXEC, MAP_SHARED, 4, 0) = 0xEF730000
+381:	mmap(0x00000000, 81920, PROT_READ|PROT_EXEC, MAP_PRIVATE, 4, 0) = 0xEF660000
+381:	munmap(0xEF664000, 57344)			= 0
+381:	mmap(0xEF672000, 5464, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_FIXED, 4, 8192) = 0xEF672000
+381:	close(4)					= 0
+381:	open("/usr/lib/libthread.so.1", O_RDONLY)	= 4
+381:	fstat(4, 0xEFFFE984)				= 0
+381:	mmap(0xEF730000, 8192, PROT_READ|PROT_EXEC, MAP_SHARED|MAP_FIXED, 4, 0) = 0xEF730000
+381:	mmap(0x00000000, 188416, PROT_READ|PROT_EXEC, MAP_PRIVATE, 4, 0) = 0xEF620000
+381:	munmap(0xEF636000, 57344)			= 0
+381:	mmap(0xEF644000, 7232, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_FIXED, 4, 81920) = 0xEF644000
+381:	mmap(0xEF646000, 28944, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_FIXED, 3, 0) = 0xEF646000
+381:	close(4)					= 0
+381:	brk(0x00376CF8)					= 0
+381:	sysconfig(_CONFIG_PAGESIZE)			= 8192
+381:	sigfillset(0xEF71697C)				= 0
+381:	lwp_self()					= 1
+381:	lwp_self()					= 1
+381:	sigprocmask(SIG_SETMASK, 0x00000000, 0xEFFFEA00) = 0
+381:	sigprocmask(SIG_SETMASK, 0xEF645104, 0x00000000) = 0
+381:	sigaction(SIGLWP, 0xEF645568, 0x00000000)	= 0
+381:	sigaction(SIGCANCEL, 0xEF645568, 0x00000000)	= 0
+381:	sigaction(SIGSEGV, 0xEF645568, 0x00000000)	= 0
+381:	brk(0x00376CF8)					= 0
+381:	brk(0x00378CF8)					= 0
+381:	open("/dev/zero", O_RDWR)			= 4
+381:	mmap(0x00000000, 8454144, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_NORESERVE, 4, 0) = 0xEEC00000
+381:	close(4)					= 0
+381:	mprotect(0xEEC00000, 8192, PROT_NONE)		= 0
+381:	mprotect(0xEED02000, 8192, PROT_NONE)		= 0
+381:	mprotect(0xEEE04000, 8192, PROT_NONE)		= 0
+381:	mprotect(0xEEF06000, 8192, PROT_NONE)		= 0
+381:	mprotect(0xEF008000, 8192, PROT_NONE)		= 0
+381:	mprotect(0xEF10A000, 8192, PROT_NONE)		= 0
+381:	mprotect(0xEF20C000, 8192, PROT_NONE)		= 0
+381:	mprotect(0xEF30E000, 8192, PROT_NONE)		= 0
+381:	lwp_create(0xEFFFE730, 0x0100, 0xEF40FE14)	= 2
+381:	lwp_create(0xEFFFE730, 0x0100, 0xEF40FE14)	= 3632376
+381:	lwp_mutex_lock(0xEF7F98E0)			= 0
+381:	lwp_cond_signal(0xEF7F9908)			= 0
+381:	lwp_cond_wait(0xEF7F9908, 0xEF7F98E0, 0x00000000) = 0
+381:	close(3)					= 0
+381:	munmap(0xEF730000, 8192)			= 0
+381:	sigaction(SIGWAITING, 0xEF644F90, 0x00000000)	= 0
+381:	lwp_self()					= 1
+381:	getpid()					= 381 [380]
+381:	open("/proc/381", O_RDONLY)			= 3
+381:	ioctl(3, PIOCUSAGE, 0xEFFFEDC4)			= 0
+381:	close(3)					= 0
+381:	sysconfig(_CONFIG_PHYS_PAGES)			= 196608
+381:	sysconfig(_CONFIG_PAGESIZE)			= 8192
+381:	brk(0x00378CF8)					= 0
+381:	brk(0x00388CF8)					= 0
+381:	open("/dev/zero", O_RDWR)			= 3
+381:	mmap(0x10000000, 344064, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, 3, 0) = 0x10000000
+381:	mprotect(0x10000000, 8192, PROT_NONE)		= 0
+381:	mprotect(0x1002A000, 8192, PROT_NONE)		= 0
+381:	brk(0x00388CF8)					= 0
+381:	brk(0x0038ACF8)					= 0
+381:	mmap(0x10054000, 344064, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, 3, 0) = 0x10054000
+381:	mprotect(0x10054000, 8192, PROT_NONE)		= 0
+381:	mprotect(0x1007E000, 8192, PROT_NONE)		= 0
+381:	brk(0x0038ACF8)					= 0
+381:	brk(0x0038CCF8)					= 0
+381:	mmap(0x100A8000, 344064, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, 3, 0) = 0x100A8000
+381:	mprotect(0x100A8000, 8192, PROT_NONE)		= 0
+381:	mprotect(0x100D2000, 8192, PROT_NONE)		= 0
+381:	mmap(0x100FC000, 344064, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, 3, 0) = 0x100FC000
+381:	mprotect(0x100FC000, 8192, PROT_NONE)		= 0
+381:	mprotect(0x10126000, 8192, PROT_NONE)		= 0
+381:	brk(0x0038CCF8)					= 0
+381:	brk(0x0038ECF8)					= 0
+381:	mmap(0x10150000, 344064, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, 3, 0) = 0x10150000
+381:	mprotect(0x10150000, 8192, PROT_NONE)		= 0
+381:	mprotect(0x1017A000, 8192, PROT_NONE)		= 0
+381:	brk(0x0038ECF8)					= 0
+381:	brk(0x00390CF8)					= 0
+381:	ioctl(1, TCGETA, 0xEFFFE1D4)			= 0
+381:	brk(0x00390CF8)					= 0
+381:	brk(0x003B2CF8)					= 0
+381:	brk(0x003B2CF8)					= 0
+381:	brk(0x0392CCF8)					= 0
+381:	brk(0x0392CCF8)					= 0
+381:	brk(0x0393CCF8)					= 0
+381:	brk(0x0393CCF8)					= 0
+381:	brk(0x0393ECF8)					= 0
+381:	brk(0x0393ECF8)					= 0
+381:	brk(0x0394ECF8)					= 0
+381:	brk(0x0394ECF8)					= 0
+381:	brk(0x03956CF8)					= 0
+381:	brk(0x03956CF8)					= 0
+381:	brk(0x0395ACF8)					= 0
+381:	brk(0x0395ACF8)					= 0
+381:	brk(0x0395CCF8)					= 0
+381:	brk(0x0395CCF8)					= 0
+381:	brk(0x03960CF8)					= 0
+381:	brk(0x03960CF8)					= 0
+381:	brk(0x03962CF8)					= 0
+381:	brk(0x03962CF8)					= 0
+381:	brk(0x03966CF8)					= 0
+381:	brk(0x03966CF8)					= 0
+381:	brk(0x0396ACF8)					= 0
+381:	brk(0x0396ACF8)					= 0
+381:	brk(0x03992CF8)					= 0
+381:	brk(0x03992CF8)					= 0
+381:	brk(0x039B2CF8)					= 0
+381:	brk(0x039B2CF8)					= 0
+381:	brk(0x039B4CF8)					= 0
+381:	mmap(0x20000000, 579821568, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, 3, 0) = 0x20000000
+381:	brk(0x039B4CF8)					= 0
+381:	brk(0x039B6CF8)					= 0
+381:	getuid()					= 5665 [5665]
+381:	mmap(0x428F8000, 579821568, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, 3, 0) = 0x428F8000
+381:	brk(0x039B6CF8)					= 0
+381:	brk(0x039B8CF8)					= 0
+381:	getuid()					= 5665 [5665]
+381:	mmap(0x651F0000, 450560, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, 3, 0) = 0x651F0000
+381:	getuid()					= 5665 [5665]
+381:	mmap(0x65260000, 16777216, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, 3, 0) = 0x65260000
+381:	getuid()					= 5665 [5665]
+381:	brk(0x039B8CF8)					= 0
+381:	brk(0x039BACF8)					= 0
+381:	processor_info(0, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(1, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(2, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(3, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(4, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(5, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(6, 0xEFFFEE70)			= 0
+381:	processor_info(7, 0xEFFFEE70)			= 0
+381:	processor_info(8, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(9, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(10, 0xEFFFEE70)			= 0
+381:	processor_info(11, 0xEFFFEE70)			= 0
+381:	processor_info(12, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(13, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(14, 0xEFFFEE70)			= 0
+381:	processor_info(15, 0xEFFFEE70)			= 0
+381:	processor_info(16, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(17, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(18, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(19, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(20, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(21, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(22, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(23, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(24, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(25, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(26, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(27, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(28, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(29, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(30, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(31, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(32, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(33, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(34, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(35, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(36, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(37, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(38, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(39, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(40, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(41, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(42, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(43, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(44, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(45, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(46, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(47, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(48, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(49, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(50, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(51, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(52, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(53, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(54, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(55, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(56, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(57, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(58, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(59, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(60, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(61, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(62, 0xEFFFEE70)			Err#22 EINVAL
+381:	processor_info(63, 0xEFFFEE70)			Err#22 EINVAL
+381:	brk(0x039BACF8)					= 0
+381:	brk(0x039BCCF8)					= 0
+381:	open("/dev/zero", O_RDWR)			= 4
+381:	mmap(0x00000000, 270336, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_NORESERVE, 4, 0) = 0xEF5D0000
+381:	close(4)					= 0
+381:	mprotect(0xEF5D0000, 8192, PROT_NONE)		= 0
+381:	lwp_create(0xEFFFEAF8, 0x00C0, 0xEF611E14)	= 3
+381:	lwp_continue(3)					= 0
+381:	lwp_create(0xEF7145B8, 0, 0x7EFEFEFF)		= 2137354872
+381:	lwp_self()					= 3
+381:	lwp_mutex_lock(0xEF7F98E0)			= 0
+381:	open("/dev/perfmon", O_RDONLY)			= 4
+381:	sigaction(SIGFPE, 0xEF611B38, 0x0018E478)	= 0
+381:	sigaction(SIGSEGV, 0xEF611B38, 0x00000000)	= 0
+381:	sigaction(SIGBUS, 0xEF611B38, 0x00000000)	= 0
+381:	sigaction(SIGILL, 0xEF611B38, 0x00000000)	= 0
+381:	sysconfig(_CONFIG_CLK_TCK)			= 100
+381:	fstat(0, 0x10029A18)				= 0
+381:	fstat(0, 0x10029A98)				= 0
+381:	fstat(1, 0x10029A18)				= 0
+381:	fstat(1, 0x10029AC8)				= 0
+381:	fstat(2, 0x10029A28)				= 0
+381:	open("/usr/share/lib/zoneinfo/US/Eastern", O_RDONLY) = 5
+381:	read(5, "\0\0\0\0\0\0\0\0\0\0\0\0".., 8192)	= 817
+381:	close(5)					= 0
+381:	chdir("/usr/tmp")				= 0
+Performing CVS export.
+381:	write(1, " P e r f o r m i n g   C".., 23)	= 23
+381:	access("tilt-20020522", 0)			Err#2 ENOENT
+381:	fork1()						= 382
+382:	fork1()		(returning as child ...)	= 381
+382:	lwp_self()					= 1
+382:	munmap(0xEF30E000, 1056768)			= 0
+381:	signotifywait()					= 32
+382:	munmap(0xEF20C000, 1056768)			= 0
+381:	sigtimedwait(0xEF40FD70, 0x00000000, 0x00000000) = SIGWAITING
+381:	sigaction(SIGWAITING, 0xEF644FB0, 0x00000000)	= 0
+382:	munmap(0xEF10A000, 1056768)			= 0
+382:	munmap(0xEF008000, 1056768)			= 0
+382:	munmap(0xEEF06000, 1056768)			= 0
+382:	munmap(0xEEE04000, 1056768)			= 0
+382:	munmap(0xEED02000, 1056768)			= 0
+382:	munmap(0xEEC00000, 1056768)			= 0
+382:	open("/dev/zero", O_RDWR)			= 5
+382:	mmap(0x00000000, 8454144, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_NORESERVE, 5, 0) = 0xEEC00000
+382:	close(5)					= 0
+382:	mprotect(0xEEC00000, 8192, PROT_NONE)		= 0
+382:	mprotect(0xEED02000, 8192, PROT_NONE)		= 0
+382:	mprotect(0xEEE04000, 8192, PROT_NONE)		= 0
+382:	mprotect(0xEEF06000, 8192, PROT_NONE)		= 0
+382:	mprotect(0xEF008000, 8192, PROT_NONE)		= 0
+382:	mprotect(0xEF10A000, 8192, PROT_NONE)		= 0
+382:	mprotect(0xEF20C000, 8192, PROT_NONE)		= 0
+382:	mprotect(0xEF30E000, 8192, PROT_NONE)		= 0
+382:	sigaction(SIGWAITING, 0xEF644F90, 0x00000000)	= 0
+382:	lwp_create(0x10029A38, 0x0100, 0xEF30DE14)	= 2
+382:	lwp_create(0x10029A38, 0x0100, 0xEF30DE14)	= -276852296
+382:	execve("/usr/local/bin/cvs", 0x03991C18, 0xEFFFF09C) Err#14 EFAULT
+382:	    Incurred fault #5, FLTACCESS  %pc = 0xEF6CC5A0
+382:	      siginfo: SIGBUS BUS_ADRALN addr=0x03991409
+382:	    Received signal #10, SIGBUS [caught]
+382:	      siginfo: SIGBUS BUS_ADRALN addr=0x03991409
+382:	sigprocmask(SIG_SETMASK, 0xEF645104, 0x00000000) = 0
+Proc 0:  Memory error at 3991409 with PC = ef6cc5a0
+382:	write(1, " P r o c   0 :     M e m".., 52)	= 52
+Bus Error
+382:	write(1, " B u s   E r r o r\n", 10)		= 10
+BUS_ADRALN invalid address alignment
+382:	write(1, " B U S _ A D R A L N   i".., 37)	= 37
+382:	lseek(0, 0, SEEK_CUR)				= 26203
+382:	_exit(-1)
+381:	signotifywait()					= 18
+381:	waitid(P_PID, 382, 0x10029C68, WEXITED|WTRAPPED) = 0
+./MakeRelease.sparc.exe: 381:	write(2, " . / M a k e R e l e a s".., 25)	= 25
+command returned non-zero exit status: /usr/local/bin/cvs -Q -d :pserver:swasey_tilt@cvs.concert.cs.cmu.edu:/cvsroot export -rrelease_may_2002 -d tilt-20020522 ml96381:	write(2, " c o m m a n d   r e t u".., 164)	= 164
+
+381:	write(2, "\n", 1)				= 1
+381:	lseek(0, 0, SEEK_CUR)				= 26672
+381:	_exit(1)
+; 

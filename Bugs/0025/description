@@ -1,0 +1,39 @@
+Number: 0025
+Title:       Elaborator fails to terminate.
+Keywords:    elaborator
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        9/16/00
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	Elaborator fails to terminate.
+	This came up while compiling Twelf's parse-fixity.fun.sml with
+	missing imports.
+Code:
+	(*$import *)
+	(* exception A  ---  as if from a missing import *)
+	exception B
+	val bug = (()
+		   handle A => ()
+		        | B => ())
+Transcript:
+	tilt -fUptoElaborate mapfile
+	...
+	  [0 imports of total size 0 were cached.
+	   0 imports of total size 0 were uncached and took 0.0 seconds.]
+	  [Added contexts.]
+	  [Parsing bug.sml]
+	  [Elaborating bug.sml non-constrained]
+	... Hangs ...
+Comments:
+	The problem was in the pattern match compiler.
+	Exn_case, unlike constructor_case, wasn't explicity checking
+	for ill-formed columns like
+		_
+		A
+Fix:
+	The missing checks were added to exn_case.
+Test:
+Owner: swasey
+Status: closed

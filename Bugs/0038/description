@@ -1,0 +1,22 @@
+Number: 0038
+Title:       Nontermination in elaborator.
+Keywords:    elaborator, constructor equivalence
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        12/18/00
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	Elaboration of bug.sml fails to terminate.
+	This comes up with Tom's wizard.
+Code:
+Transcript:
+Comments:
+	Constructor equivalence was not terminating.
+	The code to compare two CON_MU's was not doing
+	its bookkeeping properly.
+Fix:
+	A one-liner in ilstatic.sml.
+Test:
+Owner: swasey
+Status: closed

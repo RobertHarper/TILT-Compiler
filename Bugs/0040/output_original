@@ -1,0 +1,267 @@
+cd ~/ml96/Local/Bugs/0040/
+tilt -fSignatureDebug mapfile
+Starting compilation           : Fri Apr 13 11:01:59 2001   0.0 sec
+Warning: only compiling to assembly because non-native
+Mapfile mapfile with 1 units processed.
+Imports read.
+Dependency graph computed: 1 nodes and 0 edges.
+Not reducing dependency graph.
+Creating directories.
+1 necessary units:   Bug
+Start compiling files          : Fri Apr 13 11:01:59 2001   0.16 sec
+Starting slave grilled.fox.4611.
+  [Plan for Bug:   elaborate  generate  cleanup]
+  [Sending FLUSH_ALL to grilled.fox.4611]
+  [Calling grilled.fox.4611 to compile Bug]
+Slave received FLUSH_ALL.
+Setting PtrWriteBarrier to true
+Setting FullWriteBarrier to true
+Setting MirrorGlobal to true
+Setting MirrorPtrArray to false
+Setting BranchingTraps to true
+Setting UptoElaborate to false
+Setting UptoPhasesplit to false
+Setting UptoClosureConvert to false
+Setting UptoRtl to false
+Setting UptoAsm to true
+Setting debug_asm to true
+Setting keep_asm to true
+Setting compress_asm to true
+Setting ManagerChat to true
+Setting ManagerVerbose to true
+Setting TimeEachFile to false
+Setting makeBackups to false
+Setting ShowWrittenContext to false
+Setting WriteUnselfContext to false
+Setting ShowTools to false
+  [0 imports of total size 0 were cached.
+   0 imports of total size 0 were uncached and took 0.0 seconds.]
+  [Added contexts.]
+  [Parsing bug.sml]
+  [Elaborating bug.sml non-constrained]
+XXX m = Y_914    s =           [Y_INT > copy_Y_912 : TYPE == Y_910, 
+*          expose_INT > exposer_933 : 
+**            (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+**                                          (exposee_920 : Y_910)
+**                                          : Y_sum_916 =
+**                                    UNROLL(Y_910,Y_sum_916,exposee_920), 
+*          A > _935 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]
+
+
+-------xcoerce_structure------
+sdecs_actual = 
+          [D_TYC > D_940 : TYPE = Y_910, 
+*          D_sumarg_INT > D_sumarg_942 : KIND(0) = Y_sumarg_915, 
+*          D_sum_INT > D_sum_941 : TYPE = Y_sum_916, 
+*          +ED_INT > eqfun_943 : 
+**            ({Y_910 *
+**              Y_910} -> CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0), 
+*          +O+DD_INT > dt_944 : 
+**            SIGS_SELF(strbindvar_939.+O+DD_INT, 
+**            UNSELF_SIG = NONE
+**            SELF_SIG = [Y_INT > copy_Y_912 : TYPE == Y_910, 
+**                        expose_INT > exposer_933 : 
+***                          (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+***                                                        (exposee_920 : Y_910)
+***                                                        : Y_sum_916 =
+***                                                  UNROLL(Y_910,Y_sum_916,exposee_920), 
+**                        A > _935 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]
+**            )]
+sdecs_actual_self = 
+          [D_TYC > D_940 : TYPE = Y_910, 
+*          D_sumarg_INT > D_sumarg_942 : KIND(0) = Y_sumarg_915, 
+*          D_sum_INT > D_sum_941 : TYPE = Y_sum_916, 
+*          +ED_INT > eqfun_943 : 
+**            ({Y_910 *
+**              Y_910} -> CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0), 
+*          +O+DD_INT > dt_944 : 
+**            SIGS_SELF(strbindvar_939.+O+DD_INT, 
+**            UNSELF_SIG = NONE
+**            SELF_SIG = [Y_INT > copy_Y_912 : TYPE == Y_910, 
+**                        expose_INT > exposer_933 : 
+***                          (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+***                                                        (exposee_920 : Y_910)
+***                                                        : Y_sum_916 =
+***                                                  UNROLL(Y_910,Y_sum_916,exposee_920), 
+**                        A > _935 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]
+**            )]
+sdecs_target = 
+          [D_TYC > D_940 : TYPE = CON_MU(/-\(vdt_D_956)(SUM[ (A); 1; ()]))#0, 
+*          D_sumarg_INT > D_sumarg_942 : KIND(0) = (), 
+*          D_sum_INT > D_sum_941 : TYPE = SUM[ (A); 1; D_sumarg_942], 
+*          +ED_INT > eqfun_943 : 
+**            ({D_940 *
+**              D_940} -> CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0), 
+*          +O+DD_INT > dt_944 : 
+**            [D_INT > copy_D_950 : TYPE == D_940, 
+**             expose_INT > exposer_971 : 
+***               (D_940 => D_sum_941) == /TOTALNONRECUR\anonfun_959
+***                                             (exposee_958 : D_940)
+***                                             : D_sum_941 =
+***                                       UNROLL(D_940,D_sum_941,exposee_958), 
+**             A > _973 : D_940 == ROLL(D_940,INJ(0, D_sum_941))]]
+xcoerce_help' working on SDEC with label = D_TYC
+xcoerce_help' working on SDEC with label = D_sumarg_INT
+xcoerce_help' working on SDEC with label = D_sum_INT
+xcoerce_help' working on SDEC with label = +ED_INT
+xcoerce_help' working on SDEC with label = +O+DD_INT
+
+
+-------xcoerce_structure------
+sdecs_actual = 
+          [Y_INT > copy_Y_912 : TYPE == Y_910, 
+*          expose_INT > exposer_933 : 
+**            (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+**                                          (exposee_920 : Y_910)
+**                                          : Y_sum_916 =
+**                                    UNROLL(Y_910,Y_sum_916,exposee_920), 
+*          A > _935 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]
+sdecs_actual_self = 
+          [Y_INT > copy_Y_912 : TYPE == Y_910, 
+*          expose_INT > exposer_933 : 
+**            (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+**                                          (exposee_920 : Y_910)
+**                                          : Y_sum_916 =
+**                                    UNROLL(Y_910,Y_sum_916,exposee_920), 
+*          A > _935 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]
+sdecs_target = 
+          [D_INT > copy_D_950 : TYPE == CON_PATH(origModule_978.D_TYC), 
+*          expose_INT > exposer_933 : 
+**            (CON_PATH(origModule_978.D_TYC) => CON_PATH(origModule_978.D_sum_INT)) == 
+**        +1   /TOTALNONRECUR\anonfun_959
+**        +1         (exposee_958 : CON_PATH(origModule_978.D_TYC))
+**        +1         : CON_PATH(origModule_978.D_sum_INT) =
+**        +1   UNROLL(CON_PATH(origModule_978.D_TYC),CON_PATH(origModule_978.D_sum_INT),exposee_958), 
+*          A > _935 : 
+**            CON_PATH(origModule_978.D_TYC) == ROLL(CON_PATH(origModule_978.D_TYC),
+**        +1   INJ(0, CON_PATH(origModule_978.D_sum_INT)))]
+coerced because of length/order mismatch
+xcoerce_help' working on SDEC with label = D_INT
+bug.sml:11.1-11.20 Error: coercion of a non-existent component
+            to a type specification failed at D_INT
+xcoerce_help' working on SDEC with label = expose_INT
+xcoerce_help' working on SDEC with label = A
+
+
+-------xcoerce_structure------
+Returning mod = 
+          STR[expose_INT > copy_expose_INT_983 = 
+**               /TOTALNONRECUR\anonfun_921
+**                     (exposee_920 : Y_910)
+**                     : Y_sum_916 =
+**               UNROLL(Y_910,Y_sum_916,exposee_920), 
+*             A > copy_A_984 = ROLL(Y_910,INJ(0, Y_sum_916))]
+Returning sig = 
+          [expose_INT > copy_expose_INT_983 : 
+**            (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+**                                          (exposee_920 : Y_910)
+**                                          : Y_sum_916 =
+**                                    UNROLL(Y_910,Y_sum_916,exposee_920), 
+*          A > copy_A_984 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]
+
+coerced because of inner module
+
+
+-------xcoerce_structure------
+Returning mod = 
+          STR[D_TYC > copy_D_TYC_979 = CON_PATH(origModule_978.D_TYC), 
+*             D_sumarg_INT > copy_D_sumarg_INT_980 = CON_PATH(origModule_978.D_sumarg_INT), 
+*             D_sum_INT > copy_D_sum_INT_981 = CON_PATH(origModule_978.D_sum_INT), 
+*             +ED_INT > copy_+ED_INT_982 = origModule_978.+ED_INT, 
+*             +O+DD_INT > copy_+O+DD_INT_985 = 
+**               STR[expose_INT > copy_expose_INT_983 = 
+***                     /TOTALNONRECUR\anonfun_921
+***                           (exposee_920 : Y_910)
+***                           : Y_sum_916 =
+***                     UNROLL(Y_910,Y_sum_916,exposee_920), 
+**                   A > copy_A_984 = ROLL(Y_910,INJ(0, Y_sum_916))]]
+Returning sig = 
+          [D_TYC > copy_D_TYC_979 : TYPE = Y_910, 
+*          D_sumarg_INT > copy_D_sumarg_INT_980 : KIND(0) = Y_sumarg_915, 
+*          D_sum_INT > copy_D_sum_INT_981 : TYPE = Y_sum_916, 
+*          +ED_INT > copy_+ED_INT_982 : 
+**            ({Y_910 *
+**              Y_910} -> CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0), 
+*          +O+DD_INT > copy_+O+DD_INT_985 : 
+**            [expose_INT > copy_expose_INT_983 : 
+***               (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+***                                             (exposee_920 : Y_910)
+***                                             : Y_sum_916 =
+***                                       UNROLL(Y_910,Y_sum_916,exposee_920), 
+**             A > copy_A_984 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]]
+
+coerced to mod_coerced = 
+          STR[D_TYC > copy_D_TYC_979 = CON_PATH(origModule_978.D_TYC), 
+*             D_sumarg_INT > copy_D_sumarg_INT_980 = CON_PATH(origModule_978.D_sumarg_INT), 
+*             D_sum_INT > copy_D_sum_INT_981 = CON_PATH(origModule_978.D_sum_INT), 
+*             +ED_INT > copy_+ED_INT_982 = origModule_978.+ED_INT, 
+*             +O+DD_INT > copy_+O+DD_INT_985 = 
+**               STR[expose_INT > copy_expose_INT_983 = 
+***                     /TOTALNONRECUR\anonfun_921
+***                           (exposee_920 : Y_910)
+***                           : Y_sum_916 =
+***                     UNROLL(Y_910,Y_sum_916,exposee_920), 
+**                   A > copy_A_984 = ROLL(Y_910,INJ(0, Y_sum_916))]]
+coerced to sig_coerced = 
+          [D_TYC > copy_D_TYC_979 : TYPE = Y_910, 
+*          D_sumarg_INT > copy_D_sumarg_INT_980 : KIND(0) = Y_sumarg_915, 
+*          D_sum_INT > copy_D_sum_INT_981 : TYPE = Y_sum_916, 
+*          +ED_INT > copy_+ED_INT_982 : 
+**            ({Y_910 *
+**              Y_910} -> CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0), 
+*          +O+DD_INT > copy_+O+DD_INT_985 : 
+**            [expose_INT > copy_expose_INT_983 : 
+***               (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+***                                             (exposee_920 : Y_910)
+***                                             : Y_sum_916 =
+***                                       UNROLL(Y_910,Y_sum_916,exposee_920), 
+**             A > copy_A_984 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]]
+mod_result = 
+          MOD_LET origModule_978 = strbindvar_939
+*         IN  MOD_LET coercedModule_986 = STR[D_TYC > copy_D_TYC_979 = 
+**                                               CON_PATH(origModule_978.D_TYC), 
+*                                             D_sumarg_INT > copy_D_sumarg_INT_980 = 
+**                                               CON_PATH(origModule_978.D_sumarg_INT), 
+*                                             D_sum_INT > copy_D_sum_INT_981 = 
+**                                               CON_PATH(origModule_978.D_sum_INT), 
+*                                             +ED_INT > copy_+ED_INT_982 = 
+**                                               origModule_978.+ED_INT, 
+*                                             +O+DD_INT > copy_+O+DD_INT_985 = 
+**                                               STR[expose_INT > copy_expose_INT_983 = 
+***                                                     /TOTALNONRECUR\anonfun_921
+***                                                           (exposee_920 : Y_910)
+***                                                           : Y_sum_916 =
+***                                                     UNROLL(Y_910,Y_sum_916,exposee_920), 
+**                                                   A > copy_A_984 = 
+***                                                     ROLL(Y_910,INJ(0, Y_sum_916))]]
+*             IN  STR[hiddenThinModule_INT > thinModule_987 = STR[], 
+*                     D_TYC > copy_D_TYC_979 = CON_PATH(coercedModule_986.D_TYC), 
+*                     D_sumarg_INT > copy_D_sumarg_INT_980 = 
+**                       CON_PATH(coercedModule_986.D_sumarg_INT), 
+*                     D_sum_INT > copy_D_sum_INT_981 = 
+**                       CON_PATH(coercedModule_986.D_sum_INT), 
+*                     +ED_INT > copy_+ED_INT_982 = coercedModule_986.+ED_INT, 
+*                     +O+DD_INT > copy_+O+DD_INT_985 = 
+**                       STR[expose_INT > copy_expose_INT_983 = 
+***                             MPROJ(coercedModule_986,+O+DD_INT).expose_INT, 
+**                           A > copy_A_984 = MPROJ(coercedModule_986,+O+DD_INT).A]]
+*             END
+*         END
+sig_result = 
+          [hiddenThinModule_INT > thinModule_987 : [], 
+*          D_TYC > copy_D_TYC_979 : TYPE = Y_910, 
+*          D_sumarg_INT > copy_D_sumarg_INT_980 : KIND(0) = Y_sumarg_915, 
+*          D_sum_INT > copy_D_sum_INT_981 : TYPE = Y_sum_916, 
+*          +ED_INT > copy_+ED_INT_982 : 
+**            ({Y_910 *
+**              Y_910} -> CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0), 
+*          +O+DD_INT > copy_+O+DD_INT_985 : 
+**            [expose_INT > copy_expose_INT_983 : 
+***               (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+***                                             (exposee_920 : Y_910)
+***                                             : Y_sum_916 =
+***                                       UNROLL(Y_910,Y_sum_916,exposee_920), 
+**             A > copy_A_984 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]]
+tilt: compiler.sml: File bug.sml failed to elaborate.
+
+Compilation exited abnormally with code 1 at Fri Apr 13 11:02:00

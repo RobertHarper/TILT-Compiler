@@ -1,0 +1,2 @@
+I was checking that the counter for hidden<N>_label labels was not global.
+It isn't.  See toil.sml:packagedecs.

@@ -1,0 +1,85 @@
+Number: 0019
+Title:       Manager is overwriting up-to-date il files.
+Keywords:    elaborator,IlContextEq,Manager
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        8/27/00
+Version:     CVS
+System:	     all
+Severity:    major
+Problem:
+	The elaborator is overwriting up-to-date interface files.  In
+	particular, a new context is written every time Nil
+	(Nil/nil.sml) is elaborated (overwriting
+	Nil/TM/any/nil.sml.il).
+
+	The same thing happens with test/mapfile.
+Code:
+Transcript:
+	CRC's don't match up at end of compile, probably an elaborator bug.
+	
+	At 18:22, I purged interfaces and alpha binaries then compiled to
+	assembler for alpha.  This elaborated everything, creating new .il
+	files.
+
+	At 18:55, I compiled to object for alpha.  This elaborated those Top/*
+	files I had modified.  Everything else was only assembled.
+
+	At 19:27, I compiled to object for solaris.  This should not have
+	elaborated anything.  However, Nil's .il file was re-written, causing
+	a few of its children to be re-compiled.  Note that some of Nil's
+	children were being compiled in parallel with Nil because it's old
+	interface had been up to date.  That is why the CRC imported by
+	NILCONTEXTPRE doesn't match up with the CRC of Nil.
+
+	See the archives of compiler output.  In particular:
+
+	From sparc.20000826:19:27/master:
+	>  [Plan for Nil:   generate  prepare  assemble  cleanup]
+	>  [Plan for NILCONTEXTPRE:   generate  prepare  assemble  cleanup]
+	>  [Calling pickled.fox.12670 to compile NILCONTEXTPRE]
+	>  [Calling cuff.link.21589 to compile Nil]
+	>  [Checking that unit environments match up.]
+	>tilt: prelink.sml: Link Error: The unit NILCONTEXTPRE builds
+	>on a version of Nil with CRC 8eb300003e4d59e48cce14069d2c8cb4aa721138
+	> which is inconsistent with the actual version with CRC 8eb30000cc7a73934312ff65ecffdf500bc52638
+
+	Cuff.link.21589 generated a new .il file for Nil.  This is probably a
+	bug in the elaborator since the old context was up to date.  See lines
+	2288-11375 of sparc.20000826:19:27/slave.cuff.link.21589.
+Comments:
+	I changed the manager to signal an error if an up-to-date .il
+	file is overwritten.  So the bug will be caught when it happens
+	rather than by the pre-link CRC checks.
+
+	This bug is repeatable.  Try:
+	   1. tilt -C mapfile-all				[ purge interfaces and assembler ]
+	      Manager.purgeAl();
+	   2. tilt -fUptoElaborate -m mapfile-all		[ create interfaces ]
+	      Stats.bool "UptoElaborate" := true;
+	      Manager.master "mapfile-all";
+	   3. tilt -fUptoAsm -fmakeBackups -m mapfile-all	[ create assembler (and a new Nil.il and Nil.il.BACKUP) ]
+	      Stats.bool "UptoElaborate" := false;
+	      Stats.bool "UptoAsm" := true;
+	      Stats.bool "makeBackups" := true;
+	      Manager.master "mapfile-all";
+
+	Or
+		cd test
+		rm -rf TM
+		tilt -fUptoElaborate mapfile
+		tilt -fUptoAsm mapfile
+
+	The il files were not buggy.  The problem was with plus_context.
+	We were forgetting to map the path component of SIGNAT_SELF (p,_,_)
+	to the path to the module inherited from the context so far.
+
+	To dump enough information to figure out the problem, we tried
+	the above with the flags IlcontexteqShowUnequal, showHIL,
+	showHILContext, and showOnlyModule all set and with the print
+	in in ilcontexteq.sml's int2var enabled.
+Fix:
+	The fix was in f_signat of ilutil.sml.  SIGNAT_SELF now treats
+	its path component just like SIGNAT_OF did.
+Test: 
+Owner: pscheng
+Status: closed

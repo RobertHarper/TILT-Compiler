@@ -1,0 +1,45 @@
+Number: 0059
+Title:       Phase splitter rejecting valid programs.
+Keywords:    Elaborator,datatype labels,where structure
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        10/30/01
+Version:     CVS
+System:	     all
+Severity:    major
+Problem:
+	The compiler dies while phase splitting the following code.
+Code:
+	signature S =
+	    sig
+		structure A :
+		    sig
+			datatype term = T
+		    end
+	    end
+	functor JoinWithArg (structure Arg : S) :> S where A = Arg.A =
+	    struct
+		structure A = Arg.A
+	    end
+Transcript:
+	  [0 imports of total size 0 were cached.
+	   0 imports of total size 0 were uncached and took 0.0 seconds.]
+	  [Added contexts.]
+	  [Parsing join-bug.sml]
+	  [Elaborating join-bug.sml non-constrained]
+	gc_context: 29 items in original context.  0 items in reduced context.
+	  [writing TM/any/join-bug.sml.il - unnecessary]
+	  [Compiling Join to assembly]
+	===== Starting Phasesplit: Join                          =====
+	  Initial context is phase-split
+	tilt: tonil.sml: use of datatype labels detected
+Comments:
+	The translation of JoinWithArg mentions
+		CON_PATH(funct_arg_993.Arg_STR. A_STR. B_STR. +O+Dterm_INT. term_INT)
+	rather than
+		CON_PATH(funct_arg_993.Arg_STR. A_STR. B_STR. term_TYC)
+	This hits a sanity check in the phase splitter, causing the error message.
+Fix:
+	The fix was a small change to the where stucture code.
+Test:
+Owner: swasey
+Status: closed

@@ -1,0 +1,30 @@
+Number: 0023
+Title:       Elaborator raising exceptions.
+Keywords:    exceptions, error handling
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        9/16/00
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	The elaborator calls error() rather than returning values that indicate
+	a user-program error in some circumstances.
+
+	Only LinkIl should be concerned with whether or not user level errors
+	result in exceptions.
+Code:
+	This came up while fixing imports to be non-transitive.  The errors
+	I noticed most often were all due to missing imports:
+	        tilt: equal.sml: elaborator impossibility: unresolved type does not permit equailty
+		tilt: pat.sml: non-constructor path pattern
+		tilt: toil.sml: cannot parse pattern
+		tilt: pat.sml: untilPred: matched empty
+		      datatype c = C
+		      fun bug (A) = ()
+		        | bug (C) = ()
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

@@ -1,0 +1,146 @@
+Number: 0028
+Title:       Equality compiler is failing.
+Keywords:    Elaborator,equality
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        10/17/00
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	Combining datatypes, tyvars, equality types, and signature ascription can cause the equality
+	compiler to fail.
+Code:
+	See the mapfiles here.
+Transcript:
+	  [Elaborating bug.sml non-constrained]
+	  bug.sml:19.1-53.4 Error: no equality at type: CON_PATH(var_poly_9184.'a_TYV)
+	  tilt: compiler.sml: File bug.sml failed to elaborate.
+Comments:
+	Polymorphic equality is implemented using IL modules.  The IL signature for ``eqtype ('a,
+	'b) t'' looks something like:
+
+	   [t : TYPE -> TYPE -> TYPE,
+	    Et : (v : [a : TYPE, Ea : a * a -> bool, b : TYPE, Eb : b * b -> bool])
+	       => [it : (t v.a v.b) * (t v.a v.b) -> bool]]
+
+	The Definition requires that type ``'a ref'' admits equality whether or not type 'a admits
+	equality.  So the correct IL signature for ``type 'a t = 'a ref'' looks something like:
+
+	   [t : TYPE -> TYPE,
+	    Et : (v : [a : TYPE]) => [it : (t v.a) * (t v.a) -> bool]]
+
+	but the compiler is creating something like:
+
+	   [t : TYPE -> TYPE,
+	    Et : (v : [a : TYPE, Eq : a * a -> bool]) => [it : (t v.a) * (t v.a) -> bool]]
+
+	and the unnecessary requirement for an equality function at 'a causes the problem.
+
+	Some other bugs were fixed while working on this:
+
+	* Parallel polymorphic type declarations (eg, type ('a) a and ('a) b) were not being handled
+	  properly.  In this example, b would not have been made polymorphic.
+
+	* The non-side-effecting unification routines in IlStatic were not undoing their constrain
+	  operations.
+
+Fix:
+	The first attempt was a local change where polymorphic equality functors are generated and
+	used:
+
+	(a) When you compile a type definition or datatype, you assume equality functions at each
+	    type variable.  After the equality compiler terminates you examine the generated
+	    equality expression to discover those assumptions which are relevant and reduce the
+	    equality functor's argument signature accordingly.  This is easy to do.
+
+	(b) When you coerce a structure to match a signature you may have a spec like ``eqtype 'a
+	    t'' matching a type t which doesn't require an equality function at 'a.  In such cases,
+	    the coercion has to require and drop an equality function at 'a.  This involves no
+	    changes.  The coerction is already doing the right thing.  If we have
+
+		structure A = struct type 'a t = unit end
+		structure B :> sig eqtype 'a t end = A
+
+	    then at the IL level, the equality function for 'a A.t does not require an equality
+	    function for 'a but that for 'a B.t does.
+
+	(c) When you compile a polymorphic function or value declaration, you assume equality
+	    functions at each type variable.  After the declarations are translated you examine the
+	    generated expression to discover those assumptions which are relevant and reduce the
+	    functor argument signature accordingly.
+
+	This breaks down due to the way overloaded type variables interact with uses of equality
+	functions in (c).  Consider the expression a=a.  When this is translated it is not clear
+	whether a has an overloaded type.  This could be part of a larger expression like (a=a;
+	a+a).  So the translation of = introduces a new tyvar, defers the equality compilation at
+	that type, and returns an empty oneshot.  When the entire unit has been translated, all
+	overloading has been eliminated.  At this point, the deferred equality compilations are
+	performed and the oneshots are filled with appropriate equality functions.  These empty
+	oneshots make it impossible to determine which assumptions are relevant in (c).
+
+	One solution would be to try to perform whatever deferred equality compilations you can in
+	(c) prior to examining the generated expression.  This is ugly.
+
+	The solution suggested by Bob is to let unification drive the compilation of these deferred
+	equality functions.  This allows us to invoke the equality compiler as soon as possilble, to
+	avoid invoking it too soon, and to eliminate the ugly eq_table/eq_stack support which
+	currently handles deferred equality compilation.  To implement this, we let type variables
+	carry around an optional reference to an equality expression (eq : exp oneshot option).  Eq
+	is NONE if the tyvar doesn't use equality.  Eq is SOME os otherwise.  Os is empty if an
+	equality function at this type has yet to be determined.  Os is filled when the tyvar is
+	unified with some other constructor c or when its generalized because it remained unbound
+	during a translation.  This oneshot is not used to memoize the results of equality
+	compilation since the non-side-effecting unifier can invoke the eq compiler and setting a
+	oneshot cannot be undone.
+
+	<aside>
+	The eq_stack and eq_table stuff in toil.sml is at first confusing because of its use of
+	state.  Roughly, the eq_table and eq_stack mechanism could be replaced by an additional
+	accumulated data structure that is weaved through the translation routines.  It might look
+	like:
+
+	    datatype eq = Defer of (region * context * tyvar * exp Util.oneshot)
+	                | Extradec of dec * eq list
+	    (* translations return an eq list. *)
+
+	Defers (add_eq_entry) are deferred equality compiles.  They are introduced when translating
+	(op=) and when performing polymorphic instantiation.  Extradecs (eq_table_push and
+	eq_table_pop) are introduced when translating polymorphic function and value declarations.
+	They record assumptions which are available to any equality compilations deferred during the
+	translation of their bodies.
+	</aside>
+
+	(1) Extend Tyvars with a hole for equality expressions.  This hole should only be filled by
+	    side-effecting unification or when generalizing over free tyvars.
+
+	    . The types tyvar_info, tyvar, constraint, and ocon in TYVAR are polymorphic in 'ctxt
+	      and 'con.  Extend these to be polymorhic in 'exp.
+
+	    . Replace tyvar_info's use_equal:bool with eq:'exp oneshot option.
+
+	    . Add tyvar_eq_hole : ('ctxt,'con,'exp) tyvar -> 'exp oneshot option.
+
+	(2) Update equality compiler to succeed, returning an expression with a hole, when
+	    it encounters an unset tyvar which has been marked for equality.
+	
+	(3) Update unification routines.
+
+	    . Change unifier to invoke the equality compiler when a tyvar which has been marked for
+	      equality is set to a constructor c with no unset tyvars.  Unification fails if the
+	      equality compiler fails for c.
+
+	    . find_tyvars_flexes performs path compression on chains of tyvars.  Compression doesn't
+	      need to be aware of the equality functions.  On the other hand, this function also
+	      determines whether or not a tyvar needs equality based on whether it appears under a
+	      CON_ARRAY or CON_REF.  This needs to be extended to deal with tyvars appearing in an
+	      argument of a CON_APP(c,_) where the existing polymorphic equality function for c
+	      doesn't require equality at that argument.
+
+	(4) Update IL utility functions.
+
+	    . Rebind_free_type_var patches up tyvars which are being generalized.  It uses tyvar_set
+	      and not unification to do the patching.  It should also set the tyvar_eq_hole when
+	      appropriate.  (This code could probably be rearranged to let unification do the work.)
+Test:
+Owner: swasey
+Status: closed

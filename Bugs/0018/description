@@ -1,0 +1,29 @@
+Number: 0018
+Title:       Parser doesn't allow signature constraints on a structure expression which is a functor application.
+Keywords:    modules,parser
+Submitter:   Tom 7 <twm@andrew.cmu.edu>
+Date:        8/9/00
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	TILT doesn't allow signature constraints on a structure expression
+	which is a functor application. The following is OK in NJ, but gives
+	parse errors on lines 3 and 4 in TILT. This is legal ML as far as I
+	can tell; see the Definition page 13.
+
+
+	 1:   functor F (s : sig end) : sig end = s
+	  :
+	 2:   signature S = sig end
+	  :
+	 3:   structure X = F (struct end) : sig end
+	  :
+	 4:   structure Y = F (X) : S
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: closed

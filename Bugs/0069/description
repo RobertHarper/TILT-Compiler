@@ -1,0 +1,58 @@
+Number: 0069
+Title:       Allocate_stack_frame can't handle large frames.
+Keywords:    Backend, stacklets
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        1/17/02
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	Under the opaque interpretation, some code in MLLrValsFun
+	needed a larger stack frame than Sparc.allocate_stack_frame
+	could handle.  The frame size was too big to fit in a sparc
+	immediate operand (13 bits, sign-extended).
+Code:
+Transcript:
+Comments:
+Fix:
+	In Sparc, I am avoiding the immediate operand limit in
+	allocate_stack_frame, deallocate_stack_frame, push, and pop by
+	emitting more complicated code when the frame size or stack
+	offsets are too big.  I made corresponding changes to
+	structure Decalpha.  This is necessary: We do not assume the
+	alpha assembler generates multiple instructions to load large
+	immediate values.
+
+	There is another limit on frame size: The size of a stacklet.
+	I presume this limit is checked by the GC.  The user has
+	control over this limit at runtime and the default is
+	generous.
+
+	The current reifier and trace table support conspire to create
+	horrible code which is why we needed such large stack frames.
+	It would be a very good thing to avoid creating type records
+	or performing redundant projections.  The assembler code for
+	MLLrValsFun is 278K lines.
+
+	[Leaf addressed this in April 2002.  The number of lines of
+	 SPARC assembler for MLLrValsFun and all of TILT are:
+
+			Transparent   Opaque	Opaque+Leaf
+	      parser	108221	      280967	137220
+	      TILT	3578885	      6642332	5050324
+
+	 the ratios x/Transparent are
+	
+			Transparent   Opaque	Opaque+Leaf
+	      parser	1.0	      2.59	1.26
+	      TILT	1.0	      1.85	1.41
+
+	 the ratios x/Opaque are
+
+			Transparent   Opaque	Opaque+Leaf
+	      parser	0.38	      1.0	0.48
+	      TILT	0.53	      1.0	0.76
+	]
+Test: 
+Owner: swasey
+Status: closed

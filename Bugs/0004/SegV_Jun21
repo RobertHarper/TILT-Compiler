@@ -1,0 +1,185 @@
+-------
+cd $fox/member/swasey/tilt/b
+setenv TILT_LIBDIR `pwd`
+gdb #   $fox/member/swasey/ml96/Top.nomirror.sparc.exe mapfile-all
+-------
+
+ There are 493 procedures and  493 recursive components with the largest being of size 1
+function MLLrValsFun_anonfun_code_1849518 with 257 labels. liveness analysis took 3 steps
+function MLLrValsFun_anonfun_code_1849528 with 422 labels. liveness analysis took 3 steps
+function MLLrValsFun_anonfun_code_1851189 with 8495 labels. liveness analysis took 3 steps
+function MLLrValsFun_functor_var_r_code_1849483 with 88 labels. liveness analysis took 5 steps
+function MLLrValsFun_main with 111 labels. liveness analysis took 2 steps
+segmentation violation--core dumped
+
+ There are 493 procedures and  493 recursive components with the largest being of size 1
+function MLLrValsFun_anonfun_code_211188 with 257 labels. liveness analysis took 3 steps
+function MLLrValsFun_anonfun_code_211198 with 422 labels. liveness analysis took 3 steps
+function MLLrValsFun_anonfun_code_212859 with 8495 labels. liveness analysis took 3 steps
+function MLLrValsFun_functor_var_r_code_211153 with 88 labels. liveness analysis took 5 steps
+function MLLrValsFun_main with 111 labels. liveness analysis took 2 steps
+segmentation violation--core dumped
+
+ There are 493 procedures and  493 recursive components with the largest being of size 1
+function MLLrValsFun_anonfun_code_175732 with 257 labels. liveness analysis took 3 steps
+function MLLrValsFun_anonfun_code_175742 with 422 labels. liveness analysis took 3 steps
+function MLLrValsFun_anonfun_code_177403 with 8495 labels. liveness analysis took 3 steps
+function MLLrValsFun_functor_var_r_code_175697 with 88 labels. liveness analysis took 5 steps
+function MLLrValsFun_main with 111 labels. liveness analysis took 2 steps
+
+Program received signal SIGSEGV, Segmentation fault.
+gc_large_alloc (proc=0x959800, byteLen=2056, align=NoWordAlign) at gc_large.c:39
+39        region = largeSpace->bottom + (largebitmapsize * bitmapPos) / (sizeof (val_t));
+(gdb) p largeSpace
+$1 = (Heap_t *) 0xb4d7a4
+(gdb) p *largeSpace
+$2 = {id = 3, valid = 1, bottom = 0x30100000, top = 0x31100000, mappedTop = 0x31100000, writeableTop = 0x31100000, 
+  cursor = 0x30100000, prevCursor = 0x30100000, size = 16777216, range = {low = 0x30100000, high = 0x31100000, 
+    diff = 16777216}, lock = 0xb4a8b0, freshPages = 0xd1f038, bitmap = 0x0}
+(gdb) p largebitmapsize 
+$3 = 512
+(gdb) p bitmapPos 
+$4 = 512
+(gdb) p region
+$5 = 0x0
+(gdb) 
+
+
+Program received signal SIGSEGV, Segmentation fault.
+gc_large_alloc (proc=0x959800, byteLen=2056, align=NoWordAlign) at gc_large.c:39
+39        region = largeSpace->bottom + (largebitmapsize * bitmapPos) / (sizeof (val_t));
+(gdb) p allocMap
+$1 = (Bitmap_t *) 0xb4aaf0
+(gdb) p *allocMap
+$2 = {lock = 0, size = 32768, pos = 257, used = 65, data = 0xd22050}
+(gdb) p chunksNeeded
+$3 = 5
+
+------------------------------------------------------------------------------
+ There are 493 procedures and  493 recursive components with the largest being of size 1
+function MLLrValsFun_anonfun_code_175732 with 257 labels. liveness analysis took 3 steps
+function MLLrValsFun_anonfun_code_175742 with 422 labels. liveness analysis took 3 steps
+function MLLrValsFun_anonfun_code_177403 with 8495 labels. liveness analysis took 3 steps
+function MLLrValsFun_functor_var_r_code_175697 with 88 labels. liveness analysis took 5 steps
+function MLLrValsFun_main with 111 labels. liveness analysis took 2 steps
+
+Program received signal SIGSEGV, Segmentation fault.
+gc_large_alloc (proc=0x959c00, byteLen=2056, align=NoWordAlign) at gc_large.c:39
+39        region = largeSpace->bottom + (largebitmapsize * bitmapPos) / (sizeof (val_t));
+
+(gdb) info locals
+region = 0x0
+end = 0xb4dc2c
+bitmapPos = 512
+padByteLen = 129024
+chunksNeeded = 5
+
+(gdb) info args
+proc = (Proc_t *) 0x959c00
+byteLen = 2056
+align = NoWordAlign
+
+(gdb) disassemble
+Dump of assembler code for function gc_large_alloc:
+0x7047a8 <gc_large_alloc>:      save  %sp, -120, %sp
+0x7047ac <gc_large_alloc+4>:    cmp  %i2, 0
+0x7047b0 <gc_large_alloc+8>:    be  0x7047bc <gc_large_alloc+20>
+0x7047b4 <gc_large_alloc+12>:   mov  %i1, %o0
+0x7047b8 <gc_large_alloc+16>:   add  %i1, 4, %o0
+0x7047bc <gc_large_alloc+20>:   sethi  %hi(0x959c00), %i0
+0x7047c0 <gc_large_alloc+24>:   ld  [ %i0 + 0x21c ], %o1        ! 0x959e1c <largebitmapsize>
+0x7047c4 <gc_large_alloc+28>:   add  %o0, %o1, %o0
+0x7047c8 <gc_large_alloc+32>:   call  0x8eedcc <.div>
+0x7047cc <gc_large_alloc+36>:   add  %o0, -1, %o0
+0x7047d0 <gc_large_alloc+40>:   cmp  %i1, 0x3ff
+0x7047d4 <gc_large_alloc+44>:   bg  0x7047fc <gc_large_alloc+84>
+0x7047d8 <gc_large_alloc+48>:   mov  %o0, %l1
+0x7047dc <gc_large_alloc+52>:   sethi  %hi(0x8dd800), %o0
+0x7047e0 <gc_large_alloc+56>:   sethi  %hi(0x8dd800), %o1
+0x7047e4 <gc_large_alloc+60>:   sethi  %hi(0x8dd800), %o3
+0x7047e8 <gc_large_alloc+64>:   or  %o0, 0x2c8, %o0
+0x7047ec <gc_large_alloc+68>:   or  %o1, 0x2e8, %o1
+0x7047f0 <gc_large_alloc+72>:   or  %o3, 0x2f8, %o3
+0x7047f4 <gc_large_alloc+76>:   call  0x70d570 <__eprintf>
+0x7047f8 <gc_large_alloc+80>:   mov  0x22, %o2
+0x7047fc <gc_large_alloc+84>:   sethi  %hi(0x959c00), %o1
+0x704800 <gc_large_alloc+88>:   ld  [ %o1 + 0x220 ], %o0        ! 0x959e20 <allocMap>
+0x704804 <gc_large_alloc+92>:   call  0x6f63e0 <AllocBitmapRange>
+0x704808 <gc_large_alloc+96>:   mov  %l1, %o1
+0x70480c <gc_large_alloc+100>:  orcc  %o0, 0, %o1
+0x704810 <gc_large_alloc+104>:  bl  0x704874 <gc_large_alloc+204>
+0x704814 <gc_large_alloc+108>:  sethi  %hi(0x959c00), %o0
+0x704818 <gc_large_alloc+112>:  ld  [ %o0 + 0x228 ], %l0        ! 0x959e28 <largeSpace>
+0x70481c <gc_large_alloc+116>:  call  0x8ef084 <.umul>
+0x704820 <gc_large_alloc+120>:  ld  [ %i0 + 0x21c ], %o0
+0x704824 <gc_large_alloc+124>:  ld  [ %l0 + 8 ], %o2
+0x704828 <gc_large_alloc+128>:  and  %o0, -4, %o0
+0x70482c <gc_large_alloc+132>:  add  %o2, %o0, %o2
+0x704830 <gc_large_alloc+136>:  ld  [ %i0 + 0x21c ], %o1
+0x704834 <gc_large_alloc+140>:  st  %o2, [ %fp + -20 ]		! *** SEGV ***
+0x704838 <gc_large_alloc+144>:  call  0x8ef084 <.umul>
+0x70483c <gc_large_alloc+148>:  mov  %l1, %o0
+0x704840 <gc_large_alloc+152>:  ld  [ %fp + -20 ], %l0
+0x704844 <gc_large_alloc+156>:  and  %o0, -4, %o0
+0x704848 <gc_large_alloc+160>:  add  %l0, %o0, %l0
+0x70484c <gc_large_alloc+164>:  mov  %i2, %o1
+0x704850 <gc_large_alloc+168>:  call  0x6f007c <AlignMemoryPointer>
+0x704854 <gc_large_alloc+172>:  add  %fp, -20, %o0
+0x704858 <gc_large_alloc+176>:  ld  [ %fp + -20 ], %o1
+0x70485c <gc_large_alloc+180>:  and  %i1, -4, %o0
+0x704860 <gc_large_alloc+184>:  add  %o1, %o0, %o0
+0x704864 <gc_large_alloc+188>:  call  0x6f85e4 <PadHeapArea>
+0x704868 <gc_large_alloc+192>:  mov  %l0, %o1
+0x70486c <gc_large_alloc+196>:  b  0x704878 <gc_large_alloc+208>
+0x704870 <gc_large_alloc+200>:  ld  [ %fp + -20 ], %i0
+0x704874 <gc_large_alloc+204>:  clr  %i0
+0x704878 <gc_large_alloc+208>:  ret 
+0x70487c <gc_large_alloc+212>:  restore 
+End of assembler dump.
+
+(gdb) info registers
+g0             0x0      0
+g1             0x10b000 1093632
+g2             0x1      1
+g3             0x0      0
+g4             0x8000   32768
+g5             0x2006cccc       537316556
+g6             0xef6f49f8       -277919240
+g7             0xef611de0       -278848032
+o0             0x1f800  129024
+o1             0x200    512
+o2             0x3011f800       806483968
+o3             0x0      0
+o4             0x73c100 7586048
+o5             0x0      0
+sp             0x10101e98       269491864
+o7             0x70481c 7358492
+l0             0xb4dc2c 11852844
+l1             0x5      5
+l2             0x2ae9eef8       719974136
+l3             0x2ae9eef8       719974136
+l4             0x2ae9eee8       719974120
+l5             0x0      0
+l6             0x0      0
+l7             0x0      0
+i0             0x959c00 9804800
+i1             0x808    2056
+i2             0x0      0
+i3             0x1      1
+i4             0x5268   21096
+i5             0x4      4
+fp             0x10101f10       269491984
+i7             0x7039ac 7354796
+y              0x0      0
+psr            0xfe401006       -29356026
+wim            0x0      0
+tbr            0x0      0
+pc             0x704834 7358516
+npc            0x704838 7358520
+fpsr           0xc0000ba1       -1073738847
+cpsr           0x0      0
+
+---------------------------------------------------------------------------
+;; objdump -d -l -S --show-raw-insn
+;; -r -- relocations
+;; -R -- dyn reloc

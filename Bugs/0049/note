@@ -1,0 +1,303 @@
+XXXX constructor = MU((vdt_bar_1033=SUM(0,1)(vdt_foo_1034), vdt_foo_1034=SUM(0,1)(vdt_bar_1033)))
+    c =           APP(LET  _1035 =  FUN('a_1032 ::  TYPE) = MU((vdt_bar_1033=SUM(0,1)(vdt_foo_1034), vdt_foo_1034=SUM(0,1)(vdt_bar_1033)))
+*             IN   _1035
+*             END,
+*           ('a_1085))
+
+module_valid called with module =
+PASS: 
+
+
+          [_1035 =  FUN('a_1032 ::  TYPE) = MU((vdt_bar_1033=SUM(0,1)(vdt_foo_1034), vdt_foo_1034=SUM(0,1)(vdt_bar_1033))),
+*          _1086 =  FUN('a_1085 ::  TYPE) = PROJ(APP(_1035,('a_1085)),1),
+*          _1089 =  FUN('a_1088 ::  TYPE) = PROJ(APP(_1035,('a_1088)),2),
+*          _1092 =  FUN('a_1091 ::  TYPE) = APP(_1089,('a_1091)),
+*          _1095 =  FUN('a_1094 ::  TYPE) = APP(_1086,('a_1094)),
+*          _1100 =  FUN('a_1097 ::  TYPE) = SUM(0,1)(APP(_1092,('a_1097))),
+*          _1103 =  FUN('a_1102 ::  TYPE) = SUM(0,1)(APP(_1095,('a_1102))),
+*          /LEAF\_bar_foo_eq_r_1038
+*            (mpoly_var_c_1039 :: REC_K{'a > 'a_1041 :  TYPE} ;; mpoly_var_r_1040 : Unknown : DEP_RECORD[ ] ;; )
+*          =>LET  type_1195 = ALLARROW(Open; PARTIAL; (); 
+*                                (PROJ(MU((vdt_bar_1335=SUM(0,1)(vdt_foo_1336), vdt_foo_1336=SUM(0,1)(vdt_bar_1335))),1),
+*                                 PROJ(MU((vdt_bar_1337=SUM(0,1)(vdt_foo_1338), vdt_foo_1338=SUM(0,1)(vdt_bar_1337))),1)); 0; 
+*                                LET  type_1193 = MU_NR((_1083=SUM(2,2)(CREC{})))
+*                                     type_1194 = type_1193.1
+*                                IN   type_1194
+*                                END)
+*                 type_1208 = ALLARROW(Open; PARTIAL; (); 
+*                                (PROJ(MU((vdt_bar_1343=SUM(0,1)(vdt_foo_1344), vdt_foo_1344=SUM(0,1)(vdt_bar_1343))),2),
+*                                 PROJ(MU((vdt_bar_1345=SUM(0,1)(vdt_foo_1346), vdt_foo_1346=SUM(0,1)(vdt_bar_1345))),2)); 0; 
+*                                LET  type_1206 = MU_NR((_1078=SUM(2,2)(CREC{})))
+*                                     type_1207 = type_1206.1
+*                                IN   type_1207
+*                                END)
+*                 type_1209 = RECORD[1, 2](type_1195, type_1208)
+*            IN   type_1209
+*            END =
+*          Let  type_1132 = MU_NR((_1042=SUM(2,2)(CREC{})))
+*               type_1133 = type_1132.1
+*               type_1136 = MU((vdt_bar_1046=SUM(0,1)(vdt_foo_1047), vdt_foo_1047=SUM(0,1)(vdt_bar_1046)))
+*               type_1138 = MU_NR((_1044=SUM(2,2)(CREC{})))
+*               type_1139 = type_1138.1
+*               type_1140 = CREC{}
+*               type_1141 = SUM(2,2)(type_1140)
+*               _1142 : Unknown = inject_known_0[type_1141]()
+*               false_1143 : Unknown = roll[type_1139](_1142)
+*               /\ vars_eq_0_1049
+*                 ( ;; v1_1349 : Unknown : type_1136.1, v2_1350 : Unknown : type_1136.1 ;; )
+*               =>type_1133 =
+*               Let  arg_pair_1051 : Unknown = record(1>v1_1349, 2>v2_1350)
+*                    type_1144 = type_1136.2
+*                    type_1145 = SUM(0,1)(type_1144)
+*                    type_1146 = type_1136.1
+*                    arg_pair_1_1147 : Unknown = select[1][](arg_pair_1051)
+*                    eqargpair_1_1148 : Unknown = unroll[type_1146](arg_pair_1_1147)
+*                    type_1149 = type_1136.1
+*                    arg_pair_2_1150 : Unknown = select[2][](arg_pair_1051)
+*                    eqargpair_2_1151 : Unknown = unroll[type_1149](arg_pair_2_1150)
+*                    _1162 : Unknown = 
+*                      SUM_SWITCH(eqargpair_1_1148: type_1145, 
+*                           eqarg1_1058, 
+*                           0: Unknown:: 
+*                             Let  _1161 : Unknown = 
+*                                    SUM_SWITCH(eqargpair_2_1151: type_1145, 
+*                                         eqarg2_1059, 
+*                                         0: Unknown:: 
+*                                           Let  type_1155 = type_1136.2
+*                                                type_1156 = SUM_0(0,1)(type_1155)
+*                                                _1157 : Unknown = project_known0[type_1156](eqarg1_1058)
+*                                                _1158 : Unknown = project_known0[type_1156](eqarg2_1059)
+*                                                _1159 : Unknown = record(1>_1157, 2>_1158)
+*                                                _1160 : Unknown = 
+*                                                  Let  funarg_1354 : Unknown = _1159
+*                                                       funarg_1_1355 : Unknown = select[1][](funarg_1354)
+*                                                       funarg_2_1356 : Unknown = select[2][](funarg_1354)
+*                                                       _1357 : Unknown = 
+*                                                         App_Open(vars_eq_1_1050;  ; funarg_1_1355, funarg_2_1356;  )
+*                                                  In   _1357
+*                                                  End
+*                                           In   _1160
+*                                           End
+*                                         DEFAULT = false_1143) : type_1133
+*                             In   _1161
+*                             End
+*                           NODEFAULT) : type_1133
+*               In   _1162
+*               End
+*               /\ vars_eq_1_1050
+*                 ( ;; v1_1358 : Unknown : type_1136.2, v2_1359 : Unknown : type_1136.2 ;; )
+*               =>type_1133 =
+*               Let  arg_pair_1061 : Unknown = record(1>v1_1358, 2>v2_1359)
+*                    type_1163 = type_1136.1
+*                    type_1164 = SUM(0,1)(type_1163)
+*                    type_1165 = type_1136.2
+*                    arg_pair_1_1166 : Unknown = select[1][](arg_pair_1061)
+*                    eqargpair_1_1167 : Unknown = unroll[type_1165](arg_pair_1_1166)
+*                    type_1168 = type_1136.2
+*                    arg_pair_2_1169 : Unknown = select[2][](arg_pair_1061)
+*                    eqargpair_2_1170 : Unknown = unroll[type_1168](arg_pair_2_1169)
+*                    _1181 : Unknown = 
+*                      SUM_SWITCH(eqargpair_1_1167: type_1164, 
+*                           eqarg1_1066, 
+*                           0: Unknown:: 
+*                             Let  _1180 : Unknown = 
+*                                    SUM_SWITCH(eqargpair_2_1170: type_1164, 
+*                                         eqarg2_1067, 
+*                                         0: Unknown:: 
+*                                           Let  type_1174 = type_1136.1
+*                                                type_1175 = SUM_0(0,1)(type_1174)
+*                                                _1176 : Unknown = project_known0[type_1175](eqarg1_1066)
+*                                                _1177 : Unknown = project_known0[type_1175](eqarg2_1067)
+*                                                _1178 : Unknown = record(1>_1176, 2>_1177)
+*                                                _1179 : Unknown = 
+*                                                  Let  funarg_1363 : Unknown = _1178
+*                                                       funarg_1_1364 : Unknown = select[1][](funarg_1363)
+*                                                       funarg_2_1365 : Unknown = select[2][](funarg_1363)
+*                                                       _1366 : Unknown = 
+*                                                         App_Open(vars_eq_0_1049;  ; funarg_1_1364, funarg_2_1365;  )
+*                                                  In   _1366
+*                                                  End
+*                                           In   _1179
+*                                           End
+*                                         DEFAULT = false_1143) : type_1133
+*                             In   _1180
+*                             End
+*                           NODEFAULT) : type_1133
+*               In   _1181
+*               End
+*               top_eq_1182 : Unknown = record(1>vars_eq_0_1049, 2>vars_eq_1_1050)
+*          In   top_eq_1182
+*          End,
+*          /LEAF\poly+Ebar_INT_r_1106
+*            (mpoly_var_c_1107 :: REC_K{'a > 'a_1109 :  TYPE} ;; mpoly_var_r_1108 : Unknown : DEP_RECORD[ ] ;; )
+*          =>LET  type_1220 = ALLARROW(Open; PARTIAL; (); 
+*                                (APP(_1086,(mpoly_var_c_1107.'a)), APP(_1086,(mpoly_var_c_1107.'a))); 0; 
+*                                LET  type_1218 = MU_NR((_1115=SUM(2,2)(CREC{})))
+*                                     type_1219 = type_1218.1
+*                                IN   type_1219
+*                                END)
+*            IN   type_1220
+*            END =
+*          Let  _1210 : Unknown = App_Open(_bar_foo_eq_r_1038;  mpoly_var_c_1107; mpoly_var_r_1108;  )
+*               v1_1211 : Unknown = select[1][](_1210)
+*          In   v1_1211
+*          End,
+*          /LEAF\poly+Efoo_INT_r_1118
+*            (mpoly_var_c_1119 :: REC_K{'a > 'a_1121 :  TYPE} ;; mpoly_var_r_1120 : Unknown : DEP_RECORD[ ] ;; )
+*          =>LET  type_1231 = ALLARROW(Open; PARTIAL; (); 
+*                                (APP(_1089,(mpoly_var_c_1119.'a)), APP(_1089,(mpoly_var_c_1119.'a))); 0; 
+*                                LET  type_1229 = MU_NR((_1127=SUM(2,2)(CREC{})))
+*                                     type_1230 = type_1229.1
+*                                IN   type_1230
+*                                END)
+*            IN   type_1231
+*            END =
+*          Let  _1221 : Unknown = App_Open(_bar_foo_eq_r_1038;  mpoly_var_c_1119; mpoly_var_r_1120;  )
+*               v2_1222 : Unknown = select[2][](_1221)
+*          In   v2_1222
+*          End]
+*         IMPORTS:
+*         
+*         EXPORTS:
+*         +Efoo_INT_r = poly+Efoo_INT_r_1118
+*         +Ebar_INT_r = poly+Ebar_INT_r_1106
+*         foo_sum = _1103
+*         bar_sum = _1100
+*         foo_sumarg = _1095
+*         bar_sumarg = _1092
+*         foo = _1089
+*         bar = _1086
+*         _bar_foo_eq_TYC_r = _bar_foo_eq_r_1038
+*         +Q_bar_foo = _1035
+*         
+and context
+ Constructor variables, kinds, and equations are :
+
+ Expression variables and constructors are :
+
+
+bnd_valid called with bound =
+          /LEAF\poly+Ebar_INT_r_1106
+*           (mpoly_var_c_1107 :: REC_K{'a > 'a_1109 :  TYPE} ;; mpoly_var_r_1108 : Unknown : DEP_RECORD[ ] ;; )
+*         =>LET  type_1220 = ALLARROW(Open; PARTIAL; (); 
+*                               (APP(_1086,(mpoly_var_c_1107.'a)), APP(_1086,(mpoly_var_c_1107.'a))); 0; 
+*                               LET  type_1218 = MU_NR((_1115=SUM(2,2)(CREC{})))
+*                                    type_1219 = type_1218.1
+*                               IN   type_1219
+*                               END)
+*           IN   type_1220
+*           END =
+*         Let  _1210 : Unknown = App_Open(_bar_foo_eq_r_1038;  mpoly_var_c_1107; mpoly_var_r_1108;  )
+*              v1_1211 : Unknown = select[1][](_1210)
+*         In   v1_1211
+*         End
+and context
+ Constructor variables, kinds, and equations are :
+_1103 =           LET  _1103 =  FUN('a_1102 ::  TYPE) = SUM(0,1)(APP(_1095,('a_1102)))
+*         IN   _1103
+*         END::Arrow_k(Open; 'a_1102 : TYPE; SINGLE_TYPE(SUM(0,1)(APP(_1095,('a_1102)))))
+_1100 =           LET  _1100 =  FUN('a_1097 ::  TYPE) = SUM(0,1)(APP(_1092,('a_1097)))
+*         IN   _1100
+*         END::Arrow_k(Open; 'a_1097 : TYPE; SINGLE_TYPE(SUM(0,1)(APP(_1092,('a_1097)))))
+_1095 =           LET  _1095 =  FUN('a_1094 ::  TYPE) = APP(_1086,('a_1094))
+*         IN   _1095
+*         END::Arrow_k(Open; 'a_1094 : TYPE; SINGLE_TYPE(APP(_1086,('a_1094))))
+_1092 =           LET  _1092 =  FUN('a_1091 ::  TYPE) = APP(_1089,('a_1091))
+*         IN   _1092
+*         END::Arrow_k(Open; 'a_1091 : TYPE; SINGLE_TYPE(APP(_1089,('a_1091))))
+_1089 =           LET  _1089 =  FUN('a_1088 ::  TYPE) = PROJ(APP(_1035,('a_1088)),2)
+*         IN   _1089
+*         END::Arrow_k(Open; 'a_1088 : TYPE; SINGLE_TYPE(PROJ(APP(_1035,('a_1088)),2)))
+_1086 =           LET  _1086 =  FUN('a_1085 ::  TYPE) = PROJ(APP(_1035,('a_1085)),1)
+*         IN   _1086
+*         END::Arrow_k(Open; 'a_1085 : TYPE; SINGLE_TYPE(PROJ(APP(_1035,('a_1085)),1)))
+_1035 =           LET  _1035 =  FUN('a_1032 ::  TYPE) = MU((vdt_bar_1033=SUM(0,1)(vdt_foo_1034), vdt_foo_1034=SUM(0,1)(vdt_bar_1033)))
+*         IN   _1035
+*         END::          Arrow_k(Open; 'a_1032 : TYPE; REC_K{1 > vdt_bar_1415 : 
+*                                             SINGLE_TYPE(PROJ(MU((vdt_bar_1033=SUM(0,1)(vdt_foo_1034),
+*                                                                  vdt_foo_1034=SUM(0,1)(vdt_bar_1033))),1)),
+*                                             2 > vdt_foo_1416 : 
+*                                             SINGLE_TYPE(PROJ(MU((vdt_bar_1033=SUM(0,1)(vdt_foo_1034),
+*                                                                  vdt_foo_1034=SUM(0,1)(vdt_bar_1033))),2))})
+
+ Expression variables and constructors are :
+_bar_foo_eq_r_1038:          ALLARROW(Open; TOTAL; (mpoly_var_c_1039 :: REC_K{'a > 'a_1041 :  TYPE}); 
+*            (DEP_RECORD[ ]); 0; 
+*            LET  type_1195 = ALLARROW(Open; PARTIAL; (); 
+*                                (PROJ(MU((vdt_bar_1335=SUM(0,1)(vdt_foo_1336), vdt_foo_1336=SUM(0,1)(vdt_bar_1335))),1),
+*                                 PROJ(MU((vdt_bar_1337=SUM(0,1)(vdt_foo_1338), vdt_foo_1338=SUM(0,1)(vdt_bar_1337))),1)); 0; 
+*                                LET  type_1193 = MU_NR((_1083=SUM(2,2)(CREC{})))
+*                                     type_1194 = type_1193.1
+*                                IN   type_1194
+*                                END)
+*                 type_1208 = ALLARROW(Open; PARTIAL; (); 
+*                                (PROJ(MU((vdt_bar_1343=SUM(0,1)(vdt_foo_1344), vdt_foo_1344=SUM(0,1)(vdt_bar_1343))),2),
+*                                 PROJ(MU((vdt_bar_1345=SUM(0,1)(vdt_foo_1346), vdt_foo_1346=SUM(0,1)(vdt_bar_1345))),2)); 0; 
+*                                LET  type_1206 = MU_NR((_1078=SUM(2,2)(CREC{})))
+*                                     type_1207 = type_1206.1
+*                                IN   type_1207
+*                                END)
+*                 type_1209 = RECORD[1, 2](type_1195, type_1208)
+*            IN   type_1209
+*            END)
+
+
+con_equiv called with constructor =
+          ALLARROW(Open; PARTIAL; (); 
+*            (PROJ(MU((vdt_bar_1437=SUM(0,1)(vdt_foo_1438), vdt_foo_1438=SUM(0,1)(vdt_bar_1437))),1),
+*             PROJ(MU((vdt_bar_1439=SUM(0,1)(vdt_foo_1440), vdt_foo_1440=SUM(0,1)(vdt_bar_1439))),1)); 0; 
+*            LET  type_1441 = MU_NR((_1083=SUM(2,2)(CREC{})))
+*                 type_1442 = type_1441.1
+*            IN   type_1442
+*            END)
+and
+          LET  type_1220 = ALLARROW(Open; PARTIAL; (); 
+*                             (APP(_1086,(mpoly_var_c_1107.'a)), APP(_1086,(mpoly_var_c_1107.'a))); 0; 
+*                             LET  type_1218 = MU_NR((_1115=SUM(2,2)(CREC{})))
+*                                  type_1219 = type_1218.1
+*                             IN   type_1219
+*                             END)
+*         IN   type_1220
+*         END
+and minimal context
+ Constructor variables, kinds, and equations are :
+mpoly_var_c_1107::REC_K{'a > 'a_1109 :  TYPE}
+_1086 =           LET  _1086 =  FUN('a_1085 ::  TYPE) = PROJ(APP(_1035,('a_1085)),1)
+*         IN   _1086
+*         END::Arrow_k(Open; 'a_1085 : TYPE; SINGLE_TYPE(PROJ(APP(_1035,('a_1085)),1)))
+_1035 =           LET  _1035 =  FUN('a_1032 ::  TYPE) = MU((vdt_bar_1033=SUM(0,1)(vdt_foo_1034), vdt_foo_1034=SUM(0,1)(vdt_bar_1033)))
+*         IN   _1035
+*         END::          Arrow_k(Open; 'a_1032 : TYPE; REC_K{1 > vdt_bar_1415 : 
+*                                             SINGLE_TYPE(PROJ(MU((vdt_bar_1033=SUM(0,1)(vdt_foo_1034),
+*                                                                  vdt_foo_1034=SUM(0,1)(vdt_bar_1033))),1)),
+*                                             2 > vdt_foo_1416 : 
+*                                             SINGLE_TYPE(PROJ(MU((vdt_bar_1033=SUM(0,1)(vdt_foo_1034),
+*                                                                  vdt_foo_1034=SUM(0,1)(vdt_bar_1033))),2))})
+
+ Expression variables and constructors are :
+
+
+con_equiv called with constructor =
+APP(_1086,(mpoly_var_c_1107.'a))
+and
+PROJ(MU((vdt_bar_1437=SUM(0,1)(vdt_foo_1438), vdt_foo_1438=SUM(0,1)(vdt_bar_1437))),1)
+and minimal context
+ Constructor variables, kinds, and equations are :
+mpoly_var_c_1107::REC_K{'a > 'a_1109 :  TYPE}
+_1086 =           LET  _1086 =  FUN('a_1085 ::  TYPE) = PROJ(APP(_1035,('a_1085)),1)
+*         IN   _1086
+*         END::Arrow_k(Open; 'a_1085 : TYPE; SINGLE_TYPE(PROJ(APP(_1035,('a_1085)),1)))
+_1035 =           LET  _1035 =  FUN('a_1032 ::  TYPE) = MU((vdt_bar_1033=SUM(0,1)(vdt_foo_1034), vdt_foo_1034=SUM(0,1)(vdt_bar_1033)))
+*         IN   _1035
+*         END::          Arrow_k(Open; 'a_1032 : TYPE; REC_K{1 > vdt_bar_1415 : 
+*                                             SINGLE_TYPE(PROJ(MU((vdt_bar_1033=SUM(0,1)(vdt_foo_1034),
+*                                                                  vdt_foo_1034=SUM(0,1)(vdt_bar_1033))),1)),
+*                                             2 > vdt_foo_1416 : 
+*                                             SINGLE_TYPE(PROJ(MU((vdt_bar_1033=SUM(0,1)(vdt_foo_1034),
+*                                                                  vdt_foo_1034=SUM(0,1)(vdt_bar_1033))),2))})
+
+ Expression variables and constructors are :
+
+
+Error while calling module_valid
+tilt: Normalize::context_beta_reduce: Proj from non-record

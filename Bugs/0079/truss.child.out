@@ -1,0 +1,39 @@
+cd ~/ml96/Local/Bugs/0077/
+grep -n '^382:' truss.out /dev/null
+truss.out:256:382:	fork1()		(returning as child ...)	= 381
+truss.out:257:382:	lwp_self()					= 1
+truss.out:258:382:	munmap(0xEF30E000, 1056768)			= 0
+truss.out:260:382:	munmap(0xEF20C000, 1056768)			= 0
+truss.out:263:382:	munmap(0xEF10A000, 1056768)			= 0
+truss.out:264:382:	munmap(0xEF008000, 1056768)			= 0
+truss.out:265:382:	munmap(0xEEF06000, 1056768)			= 0
+truss.out:266:382:	munmap(0xEEE04000, 1056768)			= 0
+truss.out:267:382:	munmap(0xEED02000, 1056768)			= 0
+truss.out:268:382:	munmap(0xEEC00000, 1056768)			= 0
+truss.out:269:382:	open("/dev/zero", O_RDWR)			= 5
+truss.out:270:382:	mmap(0x00000000, 8454144, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_NORESERVE, 5, 0) = 0xEEC00000
+truss.out:271:382:	close(5)					= 0
+truss.out:272:382:	mprotect(0xEEC00000, 8192, PROT_NONE)		= 0
+truss.out:273:382:	mprotect(0xEED02000, 8192, PROT_NONE)		= 0
+truss.out:274:382:	mprotect(0xEEE04000, 8192, PROT_NONE)		= 0
+truss.out:275:382:	mprotect(0xEEF06000, 8192, PROT_NONE)		= 0
+truss.out:276:382:	mprotect(0xEF008000, 8192, PROT_NONE)		= 0
+truss.out:277:382:	mprotect(0xEF10A000, 8192, PROT_NONE)		= 0
+truss.out:278:382:	mprotect(0xEF20C000, 8192, PROT_NONE)		= 0
+truss.out:279:382:	mprotect(0xEF30E000, 8192, PROT_NONE)		= 0
+truss.out:280:382:	sigaction(SIGWAITING, 0xEF644F90, 0x00000000)	= 0
+truss.out:281:382:	lwp_create(0x10029A38, 0x0100, 0xEF30DE14)	= 2
+truss.out:282:382:	lwp_create(0x10029A38, 0x0100, 0xEF30DE14)	= -276852296
+truss.out:283:382:	execve("/usr/local/bin/cvs", 0x03991C18, 0xEFFFF09C) Err#14 EFAULT
+truss.out:284:382:	    Incurred fault #5, FLTACCESS  %pc = 0xEF6CC5A0
+truss.out:285:382:	      siginfo: SIGBUS BUS_ADRALN addr=0x03991409
+truss.out:286:382:	    Received signal #10, SIGBUS [caught]
+truss.out:287:382:	      siginfo: SIGBUS BUS_ADRALN addr=0x03991409
+truss.out:288:382:	sigprocmask(SIG_SETMASK, 0xEF645104, 0x00000000) = 0
+truss.out:290:382:	write(1, " P r o c   0 :     M e m".., 52)	= 52
+truss.out:292:382:	write(1, " B u s   E r r o r\n", 10)		= 10
+truss.out:294:382:	write(1, " B U S _ A D R A L N   i".., 37)	= 37
+truss.out:295:382:	lseek(0, 0, SEEK_CUR)				= 26203
+truss.out:296:382:	_exit(-1)
+
+grep finished (matches found) at Wed May 22 13:37:11

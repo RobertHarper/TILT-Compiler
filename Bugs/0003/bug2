@@ -1,0 +1,25 @@
+While compiling Apps/Twelf/mapfile-twelf-server:
+
+================================================
+Starting translation to TIL-Sparc assembly
+ There are 1 procedures and  1 recursive components with the largest being of size 1
+Generation of TIL-Sparc assembly files complete
+  [Assembling to object file ...]
+]
+gc_gen.c:45: failed assertion `region != NULL'
+abort--core dumped
+status=sigabrt+core
+swasey@cuff ; swasey: Message sent
+
+--------------------------------------------------------------------------------
+
+The core file is /tmp/swasey/bug2core
+
+--------------------------------------------------------------------------------
+
+Rerunning in gdb gave same assertion (at a different part of the compile).
+
+tagByteLen = 1396
+spec = {type = IntField, elemLen = 1392, byteLen = 1392, intVal = 0, ...}
+
+--------------------------------------------------------------------------------

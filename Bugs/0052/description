@@ -1,0 +1,34 @@
+Number: 0052
+Title:       Equality compiler generates poor code.
+Keywords:    Equality
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        5/18/2001
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	The HIL code for datatypes, esp the equality compiler output,
+	is verbose.  Compare with the phase-split version.
+Code:
+Transcript:
+Comments:
+	Comparing modified equal.sml with previous version (CVS 1.26).
+	Measure lines of code generated for triv.sml.
+			before	after
+	HIL		2037	1917		SBNDS..gc_context
+	Phasesplit	797	645		PASS..====
+	ClosureConv	1188	1061		PASS..====
+	Asm		2502	2486		wc -l
+
+	(As expected, we haven't caused harm--but we didn't make any major improvement.)
+Fix:
+	The equality compiler now names intermediate types so that HIL
+	equality functions are at least human readable.
+	
+	See triv.sml for some more ideas (from staring at the HIL
+	code).
+	
+	Made minor improvements to the HIL pretty-printer.
+Test: 
+Owner: swasey
+Status: open

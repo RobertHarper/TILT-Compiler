@@ -1,0 +1,81 @@
+0001 [closed]	Parser failes on seemingly OK file.
+0002 [closed]	Bus error on solaris.
+0003 [open]	Runtime assertion while compiling twelf with TILT-generated TILT.
+0004 [closed]	Segv in gc_large_alloc on solaris. 
+0005 [closed]	Possible code generation error.
+0006 [closed]	Segv on alpha.
+0007 [closed]	Runtime looping on alpha.
+0008 [closed]	Bus error on alpha.
+0009 [closed]	Stack overflow segv on alpha.
+0010 [open]	Want a separate stack for signal handlers on alpha.
+0011 [closed]	Segv on alpha.
+0012 [open]	"Invalid Float operation" on alpha.
+0013 [closed]	Prolog-based stacklet allocation not working properly on alpha.
+0014 [closed]	Stack overflow in C code on alpha.
+0015 [closed]	Large string constant compiles incorrectly on alpha.
+0016 [open]	Want raised exceptions to carry debugging information.
+0017 [closed]   Incorrect L2 cache size on some alphas.
+0018 [closed]   Parser doesn't allow signature constraints on a structure expression which is a functor application.
+0019 [closed]	Manager is overwriting up-to-date il files.
+0020 [closed]	Runtime reading extra characters at end of some files.
+0021 [closed]	Regenerated partial contexts are not considered equal.
+0022 [open]	TILT doesn't distinguish between errors in source programs and compiler errors.
+0023 [open]	Elaborator raising exceptions.
+0024 [open]	Manager linking when unnecessary.
+0025 [closed]	Elaborator fails to terminate.
+0026 [closed]	Local definitions don't work in overload declaration.
+0027 [closed]	Compile fails on trivial source.
+0028 [closed]	Equality compiler is failing.
+0029 [closed]	Generating invalid IL code when applying functor.
+0030 [closed]	Where type in signature not allowed.
+0031 [closed]	Partially supported language extensions.
+0032 [closed]	Overloading of word constants and default overloading does not work.
+0033 [closed]	Bad use of LDD on sparc.
+0034 [closed]	Stack chain corruption.
+0035 [closed]	Runtime error (Proc_t data getting trashed) on sparc.
+0036 [closed]	Incorret code generation on the alpha.
+0037 [open]	High overhead on alpha.
+0038 [closed]	Nontermination in elaborator.
+0039 [open]	Problems with our treatment of reals.
+0040 [closed]	Datatype replication doesn't work behind opaque ascription.
+0041 [closed]	Assertion failure when running TILT+wizard.
+0042 [open]	Runtime not being made up-to-date.
+0043 [open]	Assembler warnings on Alpha.
+0044 [open]	TILT on alpha fails TestBasis/Dynamic tests.
+0045 [closed]	Equality for datatypes.
+0046 [open]	Generativity.
+0047 [closed]	Mishandling ref in patterns.
+0048 [closed]	Datatype elaboration problems.
+0049 [closed]	Datatype optimizer problems.
+0050 [open]	Type abbreviations in signatures are handled poorly.
+0051 [closed]	Vararg violating bound variable invariant.
+0052 [open]	Equality compiler generates poor code.
+0053 [closed]	Nil bool2exp violating bound variable invariant.
+0054 [open]	TILT not enforcing syntactic restrictions.
+0055 [open]	Unresolved tyvars breaking elaborator and phase-splitter.
+0056 [closed]	Transparent ascription failing on datatype equality functions.
+0057 [closed]	Coercion compilation not alpha-varying correctly.
+0058 [closed]	Elaborator not coercing total arrows to partial arrows correctly.
+0059 [closed]	Phase splitter rejecting valid programs.
+0060 [open]	Warnings from phase splitter.
+0061 [closed]	Typechecking fails after Hoist.
+0062 [closed]	Typechecking fails after Optimize2.
+0063 [closed]	Typechecking fails after Phasesplit.
+0064 [closed]	Typechecking fails after Reify1.
+0065 [closed]	Translation to RTL fails.
+0066 [closed]	Trace tables may be too large.
+0067 [closed]	Representation of indices in trace table inadequate.
+0068 [closed]	Representation of sizes in trace table inadequate.
+0069 [closed]	Allocate_stack_frame can't handle large frames.
+0070 [closed]	Possible datatype bug tickled by parser.
+0071 [closed]	Spurious illegal instruction trap on sparc.
+0072 [open]	Minor bug in register allocator.
+0073 [open]	ref does not have constructor status.
+0074 [open]	Manager not parallelizing enough.
+0075 [closed]	Pattern compiler generating incorrect code for exceptions.
+0076 [closed]	Dead data possibly being retained by GC.
+0077 [closed]	Memory corruption error.
+0078 [open]	Particularly bad code generation.
+0079 [closed]	Signed comparison of pointers.
+0080 [open]	Phase splitting fails on some files.
+0081 [open]	Compiled compiler seg faults.

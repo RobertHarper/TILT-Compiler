@@ -1,0 +1,140 @@
+Number: 0056
+Title:       Transparent ascription failing on datatype equality functions.
+Keywords:    Elaborator,transparant ascription,coercion compilation,equality functions
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        9/10/01
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	The following code doesn't elaborate on the latest compiler
+	which includes Derek's and Joe's work on opaque datatypes:
+Code:
+        (*$import Prelude *)
+
+        signature TOKEN =
+        sig
+            datatype term = T of int
+            datatype token = TOKEN of term
+        end
+
+        structure Token : TOKEN  =
+        struct
+            datatype term = T of int
+            datatype token = TOKEN of term
+            fun works (t,TOKEN t') = t=t'
+        end
+
+        fun fails (t, Token.TOKEN t') = t=t'
+Transcript:
+Comments:
+	The ascription is handled by xcoerce_transparent in
+	Elaborator/signature.sml.  The second invocation of the equality compiler
+	fails.  The sdec for structure Token follows.  (The brief description of
+	this SDEC in the comment preceding xcoerce_transparent is worth reading
+	at this point.)
+
+	The problem appears to be that the thin module doesn't include
+	equality functions.  For example, the SDEC below doesn't provide the
+	path strbindvar_1174.hiddenThinModule_INT.+O_term_INT.+Eterm_INT
+	and yet the equality compiler can be invoked at
+	strbindvar_1174.hiddenThinModule_INT.+O_term_INT.term_TYC.
+
+	          CONTEXT_SDEC: Token_STR > strbindvar_1174 : 
+	**                         [hiddenThinModule_INT > thinModule_1305 : 
+	***                            [+O_term_INT > _term_1181 : 
+	****                               [term_TYC > term_1176 : TYPE, 
+	****                                term_sumarg_INT > term_sumarg_1184 : TYPE = INT32, 
+	****                                term_sum_INT > term_sum_1185 : TYPE = SUM[(T); 0; term_sumarg_1184], 
+	****                                +Nterm_in_INT > term_in_1188 : CON_COERCION([], term_sum_1185, term_1176), 
+	****                                +Nterm_out_INT > term_out_1189 : CON_COERCION([], term_1176, term_sum_1185)], 
+	***                             +O_token_INT > _token_1222 : 
+	****                               [token_TYC > token_1217 : TYPE, 
+	****                                token_sumarg_INT > token_sumarg_1225 : TYPE = CON_PATH(_term_1181.term_TYC), 
+	****                                token_sum_INT > token_sum_1226 : TYPE = SUM[(TOKEN); 0; token_sumarg_1225], 
+	****                                +Ntoken_in_INT > token_in_1229 : CON_COERCION([], token_sum_1226, token_1217), 
+	****                                +Ntoken_out_INT > token_out_1230 : CON_COERCION([], token_1217, token_sum_1226)]], 
+	**                          term_TYC > copy_term_TYC_1284 : TYPE = CON_PATH(thinModule_1305.+O_term_INT. term_TYC), 
+	**                          term_sumarg_INT > copy_term_sumarg_INT_1285 : 
+	***                            TYPE = 
+	***                               CON_PATH(thinModule_1305.+O_term_INT. term_sumarg_INT), 
+	**                          term_sum_INT > copy_term_sum_INT_1286 : TYPE = CON_PATH(thinModule_1305.+O_term_INT. term_sum_INT), 
+	**                          +Nterm_in_INT > copy_+Nterm_in_INT_1287 : 
+	***                            CON_COERCION([], SUM[(T); 0; INT32], CON_PATH(thinModule_1305.+O_term_INT. term_TYC)), 
+	**                          +Nterm_out_INT > copy_+Nterm_out_INT_1288 : 
+	***                            CON_COERCION([], CON_PATH(thinModule_1305.+O_term_INT. term_TYC), SUM[(T); 0; INT32]), 
+	**                          +Eterm_INT > copy_+Eterm_INT_1289 : 
+	***                            ({CON_PATH(thinModule_1305.+O_term_INT. term_TYC) *
+	***                              CON_PATH(thinModule_1305.+O_term_INT. term_TYC)} ->
+	***                            CON_MU(/-\(_259)(SUM[(false, true); 2; ()]))#0), 
+	**                          +O+Dterm_INT > copy_+O+Dterm_INT_1293 : 
+	***                            [term_INT > copy_term_1178 : TYPE == CON_PATH(thinModule_1305.+O_term_INT. term_TYC), 
+	***                             expose_INT > exposer_1210 : 
+	****                               (CON_PATH(thinModule_1305.+O_term_INT. term_TYC) =>
+	****                               CON_PATH(thinModule_1305.+O_term_INT. term_sum_INT)) == 
+	****                                  /TOTALNONRECUR\anonfun_1194
+	****                                        (exposee_1193 : CON_PATH(thinModule_1305.+O_term_INT. term_TYC))
+	****                                        : CON_PATH(thinModule_1305.+O_term_INT. term_sum_INT) =
+	****                                  COERCE(MPROJ(thinModule_1305,+O_term_INT).+Nterm_out_INT, [], exposee_1193), 
+	***                             T > _1212 : 
+	****                               (INT32 => CON_PATH(thinModule_1305.+O_term_INT. term_TYC)) == 
+	****                                  /TOTALNONRECUR\anonfun_1192
+	****                                        (injectee_1191 : INT32)
+	****                                        : CON_PATH(thinModule_1305.+O_term_INT. term_TYC) =
+	****                                  COERCE(MPROJ(thinModule_1305,+O_term_INT).+Nterm_in_INT,
+	****                                         [],
+	****                                         INJ(0, CON_PATH(thinModule_1305.+O_term_INT. term_sum_INT), injectee_1191))], 
+	**                          token_TYC > copy_token_TYC_1294 : TYPE = CON_PATH(thinModule_1305.+O_token_INT. token_TYC), 
+	**                          token_sumarg_INT > copy_token_sumarg_INT_1295 : 
+	***                            TYPE = 
+	***                               CON_PATH(thinModule_1305.+O_token_INT. token_sumarg_INT), 
+	**                          token_sum_INT > copy_token_sum_INT_1296 : TYPE = CON_PATH(thinModule_1305.+O_token_INT. token_sum_INT), 
+	**                          +Ntoken_in_INT > copy_+Ntoken_in_INT_1297 : 
+	***                            CON_COERCION([],
+	***                                         CON_PATH(thinModule_1305.+O_token_INT. token_sum_INT),
+	***                                         CON_PATH(thinModule_1305.+O_token_INT. token_TYC)), 
+	**                          +Ntoken_out_INT > copy_+Ntoken_out_INT_1298 : 
+	***                            CON_COERCION([],
+	***                                         CON_PATH(thinModule_1305.+O_token_INT. token_TYC),
+	***                                         CON_PATH(thinModule_1305.+O_token_INT. token_sum_INT)), 
+	**                          +Etoken_INT > copy_+Etoken_INT_1299 : 
+	***                            ({CON_PATH(thinModule_1305.+O_token_INT. token_TYC) *
+	***                              CON_PATH(thinModule_1305.+O_token_INT. token_TYC)} ->
+	***                            CON_MU(/-\(_259)(SUM[(false, true); 2; ()]))#0), 
+	**                          +O+Dtoken_INT > copy_+O+Dtoken_INT_1303 : 
+	***                            [token_INT > copy_token_1219 : TYPE == CON_PATH(thinModule_1305.+O_token_INT. token_TYC), 
+	***                             expose_INT > exposer_1252 : 
+	****                               (CON_PATH(thinModule_1305.+O_token_INT. token_TYC) =>
+	****                               CON_PATH(thinModule_1305.+O_token_INT. token_sum_INT)) == 
+	****                                  /TOTALNONRECUR\anonfun_1235
+	****                                        (exposee_1234 : CON_PATH(thinModule_1305.+O_token_INT. token_TYC))
+	****                                        : CON_PATH(thinModule_1305.+O_token_INT. token_sum_INT) =
+	****                                  COERCE(MPROJ(thinModule_1305,+O_token_INT).+Ntoken_out_INT, [], exposee_1234), 
+	***                             TOKEN > _1254 : 
+	****                               (CON_PATH(thinModule_1305.+O_term_INT. term_TYC) =>
+	****                               CON_PATH(thinModule_1305.+O_token_INT. token_TYC)) == 
+	****                                  /TOTALNONRECUR\anonfun_1233
+	****                                        (injectee_1232 : CON_PATH(thinModule_1305.+O_term_INT. term_TYC))
+	****                                        : CON_PATH(thinModule_1305.+O_token_INT. token_TYC) =
+	****                                  COERCE(MPROJ(thinModule_1305,+O_token_INT).+Ntoken_in_INT,
+	****                                         [],
+	****                                         INJ(0, CON_PATH(thinModule_1305.+O_token_INT. token_sum_INT), injectee_1232))]]
+Fix:
+	The fix that occurred to me was to treat equality functions like coercions
+	and type components by permitting them to appear in the thin mod and sig.
+	This would require changing generateModFromSig to treat equality labels
+	similar to coercion labels, a similar change to the expression case of the
+	selfification routine sdec_folder in ilcontext.sml, and the inclusion of
+	"equality paths" in the root set passed to structureGC.
+Test:
+	These changes appear to work.  I've asked Perry, Derek, and Leaf:
+	(1) Do you agree they make sense?
+	(2) Can I avoid changing the selfification routine?
+
+	[derek replied]
+	I will look at it more closely later.  As a first cut, I'd say this is basically
+	a fine fix, albeit the thinModule is getting thicker and thicker. I don't see
+	any reason why you need to change selfification.  I only added coercions to the
+	cumulative substitution in selfification because they appear in inlining specs,
+Owner: swasey
+Status: closed

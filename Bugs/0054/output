@@ -1,0 +1,98 @@
+Warning: setting TILT_LIBDIR to /usr0/swasey/ml96
+Starting compilation           : Fri Jun 22 14:01:00 2001   0.0 sec
+Warning: flags prevent full compile
+Mapfile mapfile with 13 units processed.
+Imports read.
+Dependency graph computed: 13 nodes and 0 edges.
+Not reducing dependency graph.
+Creating directories.
+12 necessary units:   ValDec  ValrecDec  FunDec  TypeDec  DatatypeDec  AbstypeDec  TycSpec  DataSpec  WhereSpec
+        RecordExp  RecordTy  Bind_ValDec
+Start compiling files          : Fri Jun 22 14:01:00 2001   0.01 sec
+Starting slave c1660464-b.ehlls1.pa.home.com.5674.
+  [Plan for Bind_ValDec:   elaborate]
+  [These files are up-to-date already:  ValDec  ValrecDec  FunDec  TypeDec  DatatypeDec  AbstypeDec  TycSpec  DataSpec
+        WhereSpec  RecordExp  RecordTy]
+  [Sending FLUSH_ALL to c1660464-b.ehlls1.pa.home.com.5674]
+  [Calling c1660464-b.ehlls1.pa.home.com.5674 to compile Bind_ValDec]
+Slave received FLUSH_ALL.
+Setting PtrWriteBarrier to true
+Setting FullWriteBarrier to true
+Setting MirrorGlobal to true
+Setting MirrorPtrArray to false
+Setting BranchingTraps to true
+Setting UptoElaborate to true
+Setting UptoPhasesplit to false
+Setting UptoClosureConvert to false
+Setting UptoRtl to false
+Setting UptoAsm to false
+Setting debug_asm to true
+Setting keep_asm to true
+Setting compress_asm to true
+Setting ManagerChat to true
+Setting ManagerVerbose to true
+Setting TimeEachFile to false
+Setting makeBackups to false
+Setting ShowWrittenContext to false
+Setting WriteUnselfContext to false
+Setting ShowTools to false
+  [0 imports of total size 0 were cached.
+   0 imports of total size 0 were uncached and took 0.0 seconds.]
+  [Added contexts.]
+  [Parsing bind_valdec.sml]
+  [Elaborating bind_valdec.sml non-constrained]
+gc_context: 17 items in original context.  0 items in reduced context.
+  [writing TM/any/bind_valdec.sml.il]
+  [c1660464-b.ehlls1.pa.home.com.5674 compiled Bind_ValDec in 0.03 seconds]
+------- Times to compile files -------
+1 of  12 units needed compilation.
+  Unit work times (in seconds): min 0.03 max 0.03 mean 0.03 absdev 0.0 (n=1)
+  Unit wait times (in seconds): min 0.05 max 0.05 mean 0.05 absdev 0.0 (n=1)
+  Slave work times (in seconds): min 0.03 max 0.03 mean 0.03 absdev 0.0 (n=1)
+  Slave idle times (in seconds): min 0.0 max 0.0 mean 0.0 absdev 0.0 (n=2)
+1 files under 1.0 second.
+0 files from 1.0 to 10.0 seconds.
+0 files from 10.0 to 30.0 seconds:  
+0 files over 30.0 seconds:
+Start linking on ValDec        : Fri Jun 22 14:01:00 2001   0.1 sec
+  [Checking that unit environments match up.]
+Start linking on ValrecDec     : Fri Jun 22 14:01:00 2001   0.1 sec
+  [Checking that unit environments match up.]
+Start linking on FunDec        : Fri Jun 22 14:01:00 2001   0.1 sec
+  [Checking that unit environments match up.]
+Start linking on TypeDec       : Fri Jun 22 14:01:00 2001   0.11 sec
+  [Checking that unit environments match up.]
+Start linking on DatatypeDec   : Fri Jun 22 14:01:00 2001   0.11 sec
+  [Checking that unit environments match up.]
+Start linking on AbstypeDec    : Fri Jun 22 14:01:00 2001   0.11 sec
+  [Checking that unit environments match up.]
+Start linking on TycSpec       : Fri Jun 22 14:01:00 2001   0.11 sec
+  [Checking that unit environments match up.]
+Start linking on DataSpec      : Fri Jun 22 14:01:00 2001   0.12 sec
+  [Checking that unit environments match up.]
+Start linking on WhereSpec     : Fri Jun 22 14:01:00 2001   0.12 sec
+  [Checking that unit environments match up.]
+Start linking on RecordExp     : Fri Jun 22 14:01:00 2001   0.12 sec
+  [Checking that unit environments match up.]
+Start linking on RecordTy      : Fri Jun 22 14:01:00 2001   0.12 sec
+  [Checking that unit environments match up.]
+Start linking on Bind_ValDec   : Fri Jun 22 14:01:00 2001   0.12 sec
+  [Checking that unit environments match up.]
+Finished compilation           : Fri Jun 22 14:01:00 2001   0.13 sec
+
+
+Starting compilation           : Fri Jun 22 14:01:00 2001   0.0 sec
+Start compiling files          : Fri Jun 22 14:01:00 2001   0.01 sec
+Start linking on ValDec        : Fri Jun 22 14:01:00 2001   0.1 sec
+Start linking on ValrecDec     : Fri Jun 22 14:01:00 2001   0.1 sec
+Start linking on FunDec        : Fri Jun 22 14:01:00 2001   0.1 sec
+Start linking on TypeDec       : Fri Jun 22 14:01:00 2001   0.11 sec
+Start linking on DatatypeDec   : Fri Jun 22 14:01:00 2001   0.11 sec
+Start linking on AbstypeDec    : Fri Jun 22 14:01:00 2001   0.11 sec
+Start linking on TycSpec       : Fri Jun 22 14:01:00 2001   0.11 sec
+Start linking on DataSpec      : Fri Jun 22 14:01:00 2001   0.12 sec
+Start linking on WhereSpec     : Fri Jun 22 14:01:00 2001   0.12 sec
+Start linking on RecordExp     : Fri Jun 22 14:01:00 2001   0.12 sec
+Start linking on RecordTy      : Fri Jun 22 14:01:00 2001   0.12 sec
+Start linking on Bind_ValDec   : Fri Jun 22 14:01:00 2001   0.12 sec
+Finished compilation           : Fri Jun 22 14:01:00 2001   0.13 sec

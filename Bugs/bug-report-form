@@ -1,0 +1,27 @@
+Number: *
+Title:       <one line descriptive title>
+Keywords:    <optional - e.g. "modules", "types", "IO", "reals">
+Submitter:   <name and email address>
+Date:        <current date, in US month/day/year format>
+Version:     <TILT version number>
+System:	     <e.g. solaris,alpha,linux>
+Severity:    <critical, major, minor, cosmetic>
+Problem:     <description of problem>
+Code:	     <SML source code to reproduce the bug>
+Transcript:  <transcript of exectution demonstating the bug>
+Comments:    <additional comments>
+Fix:	     <optional - but you get extra credit>
+Test: *
+Owner: *
+Status: *
+
+Please fill out as many of the fields as you can, as
+completely as you can.  In particular, it is very important
+to supply code that will reproduce the problem, if at all
+possible.  Unless we can reproduce the problem ourselves it
+is unlikely we will be able to eliminate the bug.
+
+Fields with * will be filled out by us.  Please replace the
+descriptions in angle brackets with your information.
+
+Please email bug reports to til-bugs@cs.cmu.edu.

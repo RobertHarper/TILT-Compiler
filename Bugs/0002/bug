@@ -1,0 +1,106 @@
+I have a reproducable bug on cuff. I've run it down a little but 
+I don't know enough about the Runtime to figure out the problem.
+
+When bootstrapping the compiler I get
+
+Proc 0:  Memory error at 1565 with PC = 6020224
+Bus Error
+BUS_ADRALN invalid address alignment
+
+That PC is in Runtime/stack.c's should_trace_special()
+
+at line 355.  I set debugStack and the error dump ends with
+
+==========================================================
+SP = 270510400   RA = 2363632   FrameSize = 32 words
+slot   28:    538232116d  TRACE_YES
+slot   29:    548281796d  TRACE_SPECIAL(526, 100)
+
+it should be saying "   SPECIAL_STACK_REC(100[3,2,0,0])  "
+but the change to res causes a bus error.  I don't know what
+a special stack rec is or where the bug is being introduced,
+so it'd be hard for me to go much further.
+
+I can tell you how to reproduce this -- I have a read-only copy
+of the compiler in cuff's tmp which I'm using to build my
+AFS copy... the bug always occurs.'
+
+---
+
+PC is in should_trace_special() at /tmp/swasey/ml96/Runtime/stack.c:355
+
+    if (rec_pos2 > 0) res = (ptr_t) res[rec_pos2-1];
+000006d0 <should_trace_special+1bc> cmp  %o3, 0
+000006d4 <should_trace_special+1c0> ble  000006e8 <should_trace_special+1d4>
+000006d8 <should_trace_special+1c4> ld  [ %i1 + %o1 ], %i1
+000006dc <should_trace_special+1c8> sll  %o3, 2, %o0
+000006e0 <should_trace_special+1cc> add  %o0, %i1, %o0
+000006e4 <should_trace_special+1d0> ld  [ %o0 + -4 ], %i1
+
+special_type = 526 = 00000000 00000000 00000010 000011 10
+		     POS4     POS3     POS2	POS    TY
+	rec_pos = 3
+	rec_pos2 = 2
+	rec_pos3 = 0
+	rec_pos4 = 0
+
+	res = cur_sp[25]	Succeeds
+	res = res[3]		Succeeds -- probably sets res to 1565
+	res = res[1]		Fails -- badaddr 1565 -- pc 6020224
+	
+special_data = 100
+	SPECIAL_STACK_REC(100[3,2,0,0]) = ???
+
+------------------------------------------------------------------
+May 15 2000
+Bootstrapping the compiler on cuff (/tmp/swasey/ml96):
+
+===== Starting Rename: NumScan                           =====
+===== Starting Optimize1: NumScan                        =====
+===== Starting Vararg: NumScan                           =====
+Proc 0:  Memory error at 3877 with PC = 6020224
+Bus Error
+BUS_ADRALN invalid address alignment
+status=255
+swasey@cuff ; 
+
+
+
+And again:
+
+===== Starting Rename: OS_IO                             =====
+===== Starting Optimize1: OS_IO                          =====
+Proc 0:  Memory error at 1565 with PC = 6020224
+Bus Error
+BUS_ADRALN invalid address alignment
+status=255
+swasey@cuff ; 
+
+
+===== Starting Rename: OS_IO                             =====
+===== Starting Optimize1: OS_IO                          =====
+Proc 0:  Memory error at 1565 with PC = 6020224
+Bus Error
+BUS_ADRALN invalid address alignment
+status=255
+swasey@cuff ; 
+
+
+===== Starting Rename: OS_IO                             =====
+===== Starting Optimize1: OS_IO                          =====
+Proc 0:  Memory error at 1565 with PC = 6020224
+Bus Error
+BUS_ADRALN invalid address alignment
+status=255
+swasey@cuff ; 
+
+
+
+
+===== Starting Rename: OS_IO                             =====
+===== Starting Optimize1: OS_IO                          =====
+Proc 0:  Memory error at 1565 with PC = 6020224
+Bus Error
+BUS_ADRALN invalid address alignment
+status=255
+swasey@cuff ; 

@@ -1,0 +1,75 @@
+Number: 0041
+Title:       Assertion failure when running TILT+wizard.
+Keywords:    Runtime
+Submitter:   Tom Murphy <tom7+@cs.cmu.edu>
+Date:        2/9/01
+Version:     CVS
+System:	     solaris
+Severity:    major
+Problem:
+	Tom's wizard-enabled TILT binary crashes.
+Code:
+Transcript:
+	swasey@cuff ; ./Top.sparc.exe
+	Found 6 active processors: 6  7  10  11  14  15 
+	Using processors  6.
+	thread.c:1074: failed assertion thunk != NULL
+	abort
+	status=sigabrt
+Comments:
+	When I re-compile his compiler from scratch I didn't see the bug.
+	It looks like his Runtime is up to date. (gmake runtime is happy)
+
+	Take a look at thread.c, work(), case StartRequest.
+	This is executing twice.  On entry the first time, th->thread is non-NULL.
+	On entry the second time, th->thread is NULL leading to an assertion
+	failure around line 1074.
+
+	First entry of thread.c, work(), case StartRequest:
+	(gdb) where
+	#0  work (proc=0xeab570) at thread.c:1071
+	#1  0x94321c in proc_go (untypedProc=0xeab570) at thread.c:1151
+
+	Second entry:
+	(gdb) where
+	#0  work (proc=0xeab570) at thread.c:1071
+	#1  0x94327c in schedulerRest (proc=0xeab570) at thread.c:1326
+	#2  0x944540 in scheduler ()
+	#3  0x94417c in GCFromML ()
+
+	This second StartRequest, coming from GCFromML, seems strange.  We have
+	   th->request = 2 <StartRequest>
+	   th->requestInfo = 3
+	   th->saveregs[15 <LINK>] = 0xfa9b8
+	   th->saveregs[4  <ALLOCPTR>]	 = 2
+	   th->saveregs[5  <ALLOCLIMIT>] = 2
+	   th->saveregs[16 <TMP>]        = 30 (so we want to allocate 30-2 = 28 bytes)
+	This link addr is a call to GCFromML in Prelude.
+	(See Firstlude.sml.s label code_7945.)
+
+	Oddity:  GCFromML is supposed to set th->request to 3 yet we see 2 in GCFromMutator.
+	Explaination:
+		GCFromML thinks requestInfo_disp is 408
+		gdb thinks (char*) &Threads[0].requestInfo - (char*) &Threads[0] is 404
+		
+		So something failed to get recompiled and one effect is GCFromML is
+		not really changing th->request so that we see two StartRequests
+		and a crash.
+
+	Does recompiling just TILT work?  No, Tom did purgeAll and rebuilt.
+	Does recompiling just the runtime work?  Yes.
+	Does a full recompile work?  Yes (see above).
+
+	So the assertion failure is a symptom.  The real bug is that
+	the runtime got out of wack.  Gmake failed to recompile
+	something at some point.
+
+	Workaround:
+	       cd Runtime; gmake purge runtime; cd ..
+	        .....  Manager.master "mapfile-all"; .....
+
+	I'm marking this closed, see bug #42.
+Fix:
+Test:
+Owner: swasey
+Status: closed

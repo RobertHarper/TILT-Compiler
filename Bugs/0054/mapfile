@@ -1,0 +1,160 @@
+PvalHelp pvalhelp
+ListHelp listhelp
+BoolHelp boolhelp
+
+// We provide a rudimentary check for each syntactic restriction
+// required by the Definition.  The definition specifies syntactic
+// checks for the bare language while our abstract syntax is closer to
+// the full language (including derived forms).  To come up with test
+// cases for a particular restriction, I scanned our AST.  This means
+// that these tests are not necessarily exhaustive for other
+// compilers.
+// 
+// For each restriction, we have a bunch of test cases.  Each TARGET
+// below corresponds to a single test case.  All of these should fail
+// to elaborate.  To check that syntactic restrictions are being
+// applied, un-comment all the TARGETs.  Then repeat the process of
+// compiling and commenting out the target which fails.  When no
+// target fails (and so the compiler runs to completion), you have
+// found a bug if any targets remain.
+
+/// RESTRICTION: No expression row, pattern row or type-expression row
+///              may bind the same lab twice.
+
+// RecordExp recordexp TARGET
+// RecordPat recordpat TARGET
+// RecordTy recordty TARGET
+
+/// RESTRICTION: No binding valbind, typbind, datbind or exbind may
+///              bind the same identifier twice; this applies also to
+///              value identifiers within a datbind.
+
+// Bind_TuplePat bind_tuplepat TARGET
+// Bind_ListPat bind_listpat TARGET
+// Bind_LayeredPat bind_layeredpat TARGET
+// VectorPat: removed from grammar
+// Bind_ValDec bind_valdec TARGET
+// Bind_ValrecDec bind_valrecdec TARGET
+// Bind_PvalDec bind_pvaldec TARGET
+Bind_FunDec bind_fundec TARGET
+Bind_TypeDec bind_typedec TARGET
+Bind_DatatypeDec bind_datatypedec TARGET
+Bind_DatawithDec bind_datawithdec TARGET
+Bind_DatavalDec bind_datavaldec TARGET
+Bind_AbstypeDec bind_abstypedec TARGET
+Bind_AbswithDec bind_abswithdec TARGET
+Bind_AbsvalDec bind_absvaldec TARGET
+Bind_ExceptionDec bind_exceptiondec TARGET
+
+/// RESTRICTION: No binding strbind, sigbind, or funbind may bind the
+///              same identifier twice.
+///
+/// Note this applies to the derived forms for strbind and funbind in
+/// Figure 18 on page 58.
+
+Bind_StrDec bind_strdec TARGET
+Bind_FctDec bind_fctdec TARGET
+Bind_SigDec bind_sigdec TARGET
+// FsigDec: removed from grammar
+
+/// RESTRICTION: No description valdesc, typdesc, datdesc, exdesc or
+///              strdesc may describe the same identifier twice; this
+///              applies also to value identifiers within a datdesc.
+
+Desc_StrSpec desc_strspec TARGET
+Desc_TycSpec desc_tycspec TARGET
+// FctSpec: removed from grammar
+Desc_ValSpec desc_valspec TARGET
+Desc_DatatypeSpec desc_datatypespec TARGET
+Desc_DatawithSpec desc_datawithspec TARGET
+Desc_DatavalSpec desc_datavalspec TARGET
+Desc_ExceSpec desc_excespec TARGET
+
+/// RESTRICTION: No tyvarseq may contain the same tyvar twice.
+
+// ValDec valdec TARGET
+// ValrecDec valrecdec TARGET
+// PvalDec: No explicit tyvars allowed by grammar.
+//          Implicit tyvars are always fresh.
+// PvalDec pvaldec TARGET
+// FunDec fundec TARGET
+// TypeDec typedec TARGET
+// DatatypeDec datatypedec TARGET
+// DatatypeDb datatypedb TARGET
+// AbstypeDec abstypedec TARGET
+// AbstypeDb abstypedb TARGET
+// TycSpec tycspec TARGET
+// DataSpec dataspec TARGET
+// DataDbSpec datadbspec TARGET
+// WhereSpec wherespec TARGET
+
+/// RESTRICTION: Any tyvar occurring on the right side of a datdesc of
+///              the form tyvarseq tycon = ... must occur in the
+///              tyvarseq; similarly, in signature expressions of the
+///              form sigexp where type tyvarseq longtycon = ty, any
+///              tyvar occurring in ty must occur in tyvarseq.
+
+// Tyvar_WhType tyvar_whtype TARGET
+// Tyvar_TycSpec tyvar_tycspec TARGET
+// Tyvar_DataSpec tyvar_dataspec TARGET
+
+/// RESTRICTION: For each value binding pat = exp within rec, exp must
+///              be of the form fn match.
+///
+/// This restriction is enforced by the grammar.
+
+/// RESTRICTION: No datbind, valbind or exbind may bind true, false,
+///              nil, :: or ref.  No datbind or exbind may bind it.
+
+Illegal_ValDec illegal_valdec TARGET
+Illegal_ValrecDec illegal_valrecdec TARGET
+Illegal_PvalDec illegal_pvaldec TARGET
+Illegal_FunDec illegal_fundec TARGET
+Illegal_DatatypeDec illegal_datatypedec TARGET
+Illegal_AbstypeDec illegal_abstypedec TARGET
+Illegal_ExceptionDec illegal_exceptiondec TARGET
+
+/// RESTRICTION: No datdesc, valdesc or exdesc may describe true,
+///              false, nil, :: or ref.  No datdesc or exdesc may
+///              describe it.
+
+Illegal_ValSpec_true illegal_valspec_true TARGET
+Illegal_ValSpec_false illegal_valspec_false TARGET
+Illegal_ValSpec_nil illegal_valspec_nil TARGET
+Illegal_ValSpec_cons illegal_valspec_cons TARGET
+Illegal_ValSpec_ref illegal_valspec_ref TARGET
+Illegal_DataSpec_true illegal_dataspec_true TARGET
+Illegal_DataSpec_false illegal_dataspec_false TARGET
+Illegal_DataSpec_nil illegal_dataspec_nil TARGET
+Illegal_DataSpec_cons illegal_dataspec_cons TARGET
+Illegal_DataSpec_ref illegal_dataspec_ref TARGET
+Illegal_DataSpec_it illegal_dataspec_it TARGET
+Illegal_ExceSpec_true illegal_excespec_true TARGET
+Illegal_ExceSpec_false illegal_excespec_false TARGET
+Illegal_ExceSpec_nil illegal_excespec_nil TARGET
+Illegal_ExceSpec_cons illegal_excespec_cons TARGET
+Illegal_ExceSpec_ref illegal_excespec_ref TARGET
+Illegal_ExceSpec_it illegal_excespec_it TARGET
+
+/// RESTRICTION: No real constant may occur in a pattern.
+///
+/// This restriction is enforced by the grammar.
+
+// Real_Pat real_pat TARGET
+
+/// RESTRICTION: In a value declaration val tyvarseq valbind, if
+///              valbind contains another declaration val tyvarseq'
+///              valbind' then tyvarseq and tyvarseq' must be
+///              disjoint.  In other words, no type variable may be
+///              scoped by two value declarations of which one occurs
+///              inside the other.  This restriction applies after
+///              tyvarseq and tyvarseq' have been extended to include
+///              implicitly scoped type variables, as explained in
+///              Secion 4.6.
+
+TyvarScope_ValDec tyvarscope_valdec TARGET
+TyvarScope_ValrecDec tyvarscope_valrecdec TARGET
+// PvalDec: No explicit tyvars allowed by grammar.
+//          Implicit tyvars are always fresh.
+// TyvarScope_PvalDec tyvarscope_pvaldec TARGET
+TyvarScope-FunDec tyvarscope_fundec TARGET

@@ -1,0 +1,2727 @@
+Saving: tilt -s
+Date: Sat Aug 26 19:26:14 EDT 2000
+Starting slave pickled.fox.12670.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave received FLUSH_ALL.
+Setting PtrWriteBarrier to true
+Setting FullWriteBarrier to true
+Setting MirrorGlobal to true
+Setting MirrorPtrArray to false
+Setting UptoElaborate to false
+Setting UptoPhasesplit to false
+Setting UptoClosureConvert to false
+Setting UptoRtl to false
+Setting UptoAsm to false
+Setting debug_asm to true
+Setting keep_asm to true
+Setting compress_asm to true
+Setting ManagerChat to true
+Setting ManagerVerbose to true
+Setting TimeEachFile to false
+Setting makeBackups to false
+Setting ShowWrittenContext to false
+Setting WriteUnselfContext to false
+Setting ShowTools to false
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Waiting for /afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/TM/TempCommunication/master-to-pickled.fox.12670#
+Waiting for /afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/TM/TempCommunication/master-to-pickled.fox.12670#
+Waiting for /afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/TM/TempCommunication/master-to-pickled.fox.12670#
+Waiting for /afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/TM/TempCommunication/master-to-pickled.fox.12670#
+Waiting for /afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/TM/TempCommunication/master-to-pickled.fox.12670#
+Waiting for /afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/TM/TempCommunication/master-to-pickled.fox.12670#
+Flushing Bool.
+Slave waiting for master to send work.
+Flushing IMPERATIVE_IO.
+  [Compiling BOOL to assembly]
+  [0 imports of total size 0 were cached.
+   4 imports of total size 24199 were uncached and took 0.3 seconds.]
+  [Added contexts.]
+  [Parsing Basis/General/bool-sig.sml]
+  [Elaborating Basis/General/bool-sig.sml non-constrained]
+  [writing Basis/General/TM/any/bool-sig.sml.il - unnecessary]
+gc_context: 229 items in original context.  6 items in reduced context.
+===== Starting Phasesplit: BOOL                          =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: BOOL                              =====
+===== Starting Optimize1: BOOL                           =====
+===== Starting Vararg: BOOL                              =====
+===== Starting Inline1: BOOL                             =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: BOOL                              =====
+===== Starting Specialize: BOOL                          =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: BOOL                               =====
+Imports Processed
+===== Starting Optimize2: BOOL                           =====
+===== Starting Inline2: BOOL                             =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: BOOL                           =====
+===== Starting Inline3: BOOL                             =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: BOOL                              =====
+===== Starting ClosureConv: BOOL                         =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled BOOL
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing INTEGER.
+Flushing TIME.
+Flushing CHAR.
+Flushing WORD.
+Flushing StringCvt.
+Flushing OS_PRIM_IO.
+Flushing STREAM_IO.
+  [Compiling PRELINK to assembly]
+  [1 imports of total size 15446 were cached.
+   2 imports of total size 5355 were uncached and took 0.15 seconds.]
+  [Added contexts.]
+  [Parsing Top/prelink.sig.sml]
+  [Elaborating Top/prelink.sig.sml non-constrained]
+  [writing Top/TM/any/prelink.sig.sml.il - unnecessary]
+gc_context: 228 items in original context.  3 items in reduced context.
+===== Starting Phasesplit: PRELINK                       =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: PRELINK                           =====
+===== Starting Optimize1: PRELINK                        =====
+===== Starting Vararg: PRELINK                           =====
+===== Starting Inline1: PRELINK                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: PRELINK                           =====
+===== Starting Specialize: PRELINK                       =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: PRELINK                            =====
+Imports Processed
+===== Starting Optimize2: PRELINK                        =====
+===== Starting Inline2: PRELINK                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: PRELINK                        =====
+===== Starting Inline3: PRELINK                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: PRELINK                           =====
+===== Starting ClosureConv: PRELINK                      =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled PRELINK
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing MONO_HASH_TABLE.
+Flushing Delay.
+Flushing ORD_MAP.
+Flushing ORD_SET.
+Flushing ListPair.
+Flushing IO.
+Flushing PRIM_IO.
+  [Compiling List to assembly]
+  [1 imports of total size 15446 were cached.
+   1 imports of total size 4640 were uncached and took 0.2 seconds.]
+  [Added contexts.]
+  [Parsing Basis/Aggregate/list.sml]
+  [Elaborating Basis/Aggregate/list.sml non-constrained]
+  [writing Basis/Aggregate/TM/any/list.sml.il - unnecessary]
+gc_context: 227 items in original context.  17 items in reduced context.
+===== Starting Phasesplit: List                          =====
+  Initial context is phase-split
+Warning: newSplitVar called on alredy existing variable copy_+Elist_INT_2981
+WARNING (xsbnds/BND_MOD):  Duplicate variable found:copy_Empty_2997
+Warning: newSplitVar called on alredy existing variable copy_null_2998
+Warning: newSplitVar called on alredy existing variable copy_hd_3001
+Warning: newSplitVar called on alredy existing variable copy_tl_3004
+Warning: newSplitVar called on alredy existing variable copy_last_3007
+Warning: newSplitVar called on alredy existing variable copy_getItem_3010
+Warning: newSplitVar called on alredy existing variable copy_nth_3013
+Warning: newSplitVar called on alredy existing variable copy_take_3016
+Warning: newSplitVar called on alredy existing variable copy_drop_3019
+Warning: newSplitVar called on alredy existing variable copy_length_3022
+Warning: newSplitVar called on alredy existing variable copy_rev_3025
+Warning: newSplitVar called on alredy existing variable copy_@_3028
+Warning: newSplitVar called on alredy existing variable copy_concat_3031
+Warning: newSplitVar called on alredy existing variable copy_revAppend_3034
+Warning: newSplitVar called on alredy existing variable copy_app_3037
+Warning: newSplitVar called on alredy existing variable copy_map_3041
+Warning: newSplitVar called on alredy existing variable copy_mapPartial_3045
+Warning: newSplitVar called on alredy existing variable copy_find_3049
+Warning: newSplitVar called on alredy existing variable copy_filter_3052
+Warning: newSplitVar called on alredy existing variable copy_partition_3055
+Warning: newSplitVar called on alredy existing variable copy_foldr_3058
+Warning: newSplitVar called on alredy existing variable copy_foldl_3062
+Warning: newSplitVar called on alredy existing variable copy_exists_3066
+Warning: newSplitVar called on alredy existing variable copy_all_3069
+Warning: newSplitVar called on alredy existing variable copy_tabulate_3072
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: List                              =====
+===== Starting Optimize1: List                           =====
+===== Starting Vararg: List                              =====
+===== Starting Inline1: List                             =====
+  7 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: List                              =====
+===== Starting Specialize: List                          =====
+  0 optimizable candidates.
+  4 impure.
+  66 escaping.
+  0 used polymorphically.
+===== Starting Hoist: List                               =====
+Imports Processed
+===== Starting Optimize2: List                           =====
+===== Starting Inline2: List                             =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: List                           =====
+===== Starting Inline3: List                             =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: List                              =====
+===== Starting ClosureConv: List                         =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  71 procedures.  71 recursive components.   Largest component has size 1.
+Slave compiled List
+Slave waiting for master to send work.
+Flushing Option.
+Flushing General.
+Flushing STRING_CVT.
+Flushing POSIX_SYS_DB.
+Flushing OPTION.
+Flushing STRING.
+Flushing PreString.
+  [Compiling GENERAL to assembly]
+  [1 imports of total size 15446 were cached.
+   0 imports of total size 0 were uncached and took 0.0 seconds.]
+  [Added contexts.]
+  [Parsing Basis/General/general.sig.sml]
+  [Elaborating Basis/General/general.sig.sml non-constrained]
+  [writing Basis/General/TM/any/general.sig.sml.il - unnecessary]
+gc_context: 226 items in original context.  2 items in reduced context.
+===== Starting Phasesplit: GENERAL                       =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: GENERAL                           =====
+===== Starting Optimize1: GENERAL                        =====
+===== Starting Vararg: GENERAL                           =====
+===== Starting Inline1: GENERAL                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: GENERAL                           =====
+===== Starting Specialize: GENERAL                       =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: GENERAL                            =====
+Imports Processed
+===== Starting Optimize2: GENERAL                        =====
+===== Starting Inline2: GENERAL                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: GENERAL                        =====
+===== Starting Inline3: GENERAL                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: GENERAL                           =====
+===== Starting ClosureConv: GENERAL                      =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled GENERAL
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing LIST.
+Flushing IEEE.
+Flushing Math64.
+Flushing PreOS.
+Flushing MONO_ARRAY.
+Flushing NumScan.
+Flushing String.
+  [Compiling Char to assembly]
+  [2 imports of total size 17773 were cached.
+   7 imports of total size 17318 were uncached and took 0.08 seconds.]
+  [Added contexts.]
+  [Parsing Basis/Text/char.sml]
+  [Warning: constraints currently coerce.  Not compatible with our notion of freshness.]
+  [Elaborating Basis/Text/char.sml with constraint]
+  [writing Basis/Text/TM/any/char.sml.il]
+gc_context: 234 items in original context.  27 items in reduced context.
+===== Starting Phasesplit: Char                          =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Char                              =====
+===== Starting Optimize1: Char                           =====
+===== Starting Vararg: Char                              =====
+===== Starting Inline1: Char                             =====
+  4 functions inlined once.
+  6 copies of 2 other functions inlined.
+===== Starting Reify1: Char                              =====
+===== Starting Specialize: Char                          =====
+  0 optimizable candidates.
+  5 impure.
+  37 escaping.
+  0 used polymorphically.
+===== Starting Hoist: Char                               =====
+Imports Processed
+===== Starting Optimize2: Char                           =====
+===== Starting Inline2: Char                             =====
+  1 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: Char                           =====
+===== Starting Inline3: Char                             =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: Char                              =====
+===== Starting ClosureConv: Char                         =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  40 procedures.  40 recursive components.   Largest component has size 1.
+Slave compiled Char
+Slave waiting for master to send work.
+Flushing NumFormat.
+Flushing ARRAY.
+Flushing MONO_VECTOR.
+Flushing VECTOR.
+Flushing POSIX_ERROR.
+Flushing Word8Vector.
+Flushing Word8Array.
+Flushing Vector.
+Flushing PrimIOFn.
+Flushing BACKGROUND.
+Flushing STATISTICS.
+Flushing FIFO.
+Flushing RealFormat.
+  [Compiling CharArray to assembly]
+  [10 imports of total size 37204 were cached.
+   8 imports of total size 24471 were uncached and took 0.29 seconds.]
+  [Added contexts.]
+  [Parsing Basis/Aggregate/char-array.sml]
+  [Elaborating Basis/Aggregate/char-array.sml non-constrained]
+  [writing Basis/Aggregate/TM/any/char-array.sml.il - unnecessary]
+gc_context: 243 items in original context.  8 items in reduced context.
+===== Starting Phasesplit: CharArray                     =====
+  Initial context is phase-split
+Warning: newSplitVar called on alredy existing variable copy_foldl_22604
+Warning: newSplitVar called on alredy existing variable copy_foldr_22607
+Warning: newSplitVar called on alredy existing variable copy_foldli_22612
+Warning: newSplitVar called on alredy existing variable copy_foldri_22615
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: CharArray                         =====
+===== Starting Optimize1: CharArray                      =====
+===== Starting Vararg: CharArray                         =====
+===== Starting Inline1: CharArray                        =====
+  4 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: CharArray                         =====
+===== Starting Specialize: CharArray                     =====
+  0 optimizable candidates.
+  0 impure.
+  4 escaping.
+  0 used polymorphically.
+===== Starting Hoist: CharArray                          =====
+Imports Processed
+===== Starting Optimize2: CharArray                      =====
+===== Starting Inline2: CharArray                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: CharArray                      =====
+===== Starting Inline3: CharArray                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: CharArray                         =====
+===== Starting ClosureConv: CharArray                    =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  5 procedures.  5 recursive components.   Largest component has size 1.
+Slave compiled CharArray
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing CharVector.
+Flushing Array.
+Flushing SUBSTRING.
+Flushing CLEAN_UP.
+Flushing POSIX_TTY.
+Flushing REAL.
+Flushing TEXT_IO.
+  [Compiling TEXT_STREAM_IO to assembly]
+  [12 imports of total size 40547 were cached.
+   5 imports of total size 9527 were uncached and took 0.04 seconds.]
+  [Added contexts.]
+  [Parsing Basis/IO/text-stream-io-sig.sml]
+  [Elaborating Basis/IO/text-stream-io-sig.sml non-constrained]
+  [writing Basis/IO/TM/any/text-stream-io-sig.sml.il - unnecessary]
+gc_context: 242 items in original context.  8 items in reduced context.
+===== Starting Phasesplit: TEXT_STREAM_IO                =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: TEXT_STREAM_IO                    =====
+===== Starting Optimize1: TEXT_STREAM_IO                 =====
+===== Starting Vararg: TEXT_STREAM_IO                    =====
+===== Starting Inline1: TEXT_STREAM_IO                   =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: TEXT_STREAM_IO                    =====
+===== Starting Specialize: TEXT_STREAM_IO                =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: TEXT_STREAM_IO                     =====
+Imports Processed
+===== Starting Optimize2: TEXT_STREAM_IO                 =====
+===== Starting Inline2: TEXT_STREAM_IO                   =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: TEXT_STREAM_IO                 =====
+===== Starting Inline3: TEXT_STREAM_IO                   =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: TEXT_STREAM_IO                    =====
+===== Starting ClosureConv: TEXT_STREAM_IO               =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled TEXT_STREAM_IO
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing OS_PATH.
+Flushing Substring.
+Flushing CleanUp.
+Flushing OS_PROCESS.
+Flushing POSIX_Error.
+Flushing TILWORD.
+Flushing OS_Path.
+  [Compiling OS_PathFn to assembly]
+  [14 imports of total size 45699 were cached.
+   5 imports of total size 12333 were uncached and took 0.05 seconds.]
+  [Added contexts.]
+  [Parsing Basis/OS/os-path-fn.sml]
+  [Elaborating Basis/OS/os-path-fn.sml non-constrained]
+  [writing Basis/OS/TM/any/os-path-fn.sml.il - unnecessary]
+gc_context: 244 items in original context.  21 items in reduced context.
+===== Starting Phasesplit: OS_PathFn                     =====
+  Initial context is phase-split
+WARNING (xsbnds/BND_MOD):  Duplicate variable found:copy_Path_26156
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: OS_PathFn                         =====
+===== Starting Optimize1: OS_PathFn                      =====
+===== Starting Vararg: OS_PathFn                         =====
+===== Starting Inline1: OS_PathFn                        =====
+  3 functions inlined once.
+  7 copies of 2 other functions inlined.
+===== Starting Reify1: OS_PathFn                         =====
+===== Starting Specialize: OS_PathFn                     =====
+  1 optimizable candidates.
+  18 impure.
+  32 escaping.
+  0 used polymorphically.
+===== Starting Hoist: OS_PathFn                          =====
+Imports Processed
+===== Starting Optimize2: OS_PathFn                      =====
+===== Starting Inline2: OS_PathFn                        =====
+  0 functions inlined once.
+  16 copies of 6 other functions inlined.
+===== Starting Optimize3: OS_PathFn                      =====
+===== Starting Inline3: OS_PathFn                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: OS_PathFn                         =====
+===== Starting ClosureConv: OS_PathFn                    =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  45 procedures.  45 recursive components.   Largest component has size 1.
+Slave compiled OS_PathFn
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing IO_SIG.
+Flushing CleanIO.
+Flushing CommandLineHelp.
+Flushing COMMAND_LINE.
+Flushing Word31.
+Flushing PLATFORM.
+Flushing CommandLine.
+Flushing SLAVE.
+Flushing UPDATE.
+Flushing STATS.
+Flushing LISTOPS.
+Flushing POSIX_extern.
+  [Compiling POSIX_SIGNAL to assembly]
+  [12 imports of total size 40547 were cached.
+   6 imports of total size 17565 were uncached and took 2.31 seconds.]
+  [Added contexts.]
+  [Parsing Basis/Posix/posix-signal-sig.sml]
+  [Elaborating Basis/Posix/posix-signal-sig.sml non-constrained]
+  [writing Basis/Posix/TM/any/posix-signal-sig.sml.il - unnecessary]
+gc_context: 248 items in original context.  11 items in reduced context.
+===== Starting Phasesplit: POSIX_SIGNAL                  =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: POSIX_SIGNAL                      =====
+===== Starting Optimize1: POSIX_SIGNAL                   =====
+===== Starting Vararg: POSIX_SIGNAL                      =====
+===== Starting Inline1: POSIX_SIGNAL                     =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: POSIX_SIGNAL                      =====
+===== Starting Specialize: POSIX_SIGNAL                  =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: POSIX_SIGNAL                       =====
+Imports Processed
+===== Starting Optimize2: POSIX_SIGNAL                   =====
+===== Starting Inline2: POSIX_SIGNAL                     =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: POSIX_SIGNAL                   =====
+===== Starting Inline3: POSIX_SIGNAL                     =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: POSIX_SIGNAL                      =====
+===== Starting ClosureConv: POSIX_SIGNAL                 =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled POSIX_SIGNAL
+Slave waiting for master to send work.
+Flushing Ieee.
+Flushing UTIL.
+Flushing UTIL_ERROR.
+Flushing LIST_PAIR.
+Flushing LIST_SORT.
+Flushing LIB_BASE.
+Flushing SPLAY_TREE.
+  [Compiling ORD_KEY to assembly]
+  [1 imports of total size 15446 were cached.
+   0 imports of total size 0 were uncached and took 0.0 seconds.]
+  [Added contexts.]
+  [Parsing Basis/Library/ord-key-sig.sml]
+  [Elaborating Basis/Library/ord-key-sig.sml non-constrained]
+  [writing Basis/Library/TM/any/ord-key-sig.sml.il - unnecessary]
+gc_context: 226 items in original context.  1 items in reduced context.
+===== Starting Phasesplit: ORD_KEY                       =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: ORD_KEY                           =====
+===== Starting Optimize1: ORD_KEY                        =====
+===== Starting Vararg: ORD_KEY                           =====
+===== Starting Inline1: ORD_KEY                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: ORD_KEY                           =====
+===== Starting Specialize: ORD_KEY                       =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: ORD_KEY                            =====
+Imports Processed
+===== Starting Optimize2: ORD_KEY                        =====
+===== Starting Inline2: ORD_KEY                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: ORD_KEY                        =====
+===== Starting Inline3: ORD_KEY                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: ORD_KEY                           =====
+===== Starting ClosureConv: ORD_KEY                      =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled ORD_KEY
+Flushing PATHS.
+Slave waiting for master to send work.
+Flushing TARGET.
+Flushing PRETTYPRINT.
+Flushing HASH_TABLE.
+Flushing SEQUENCE.
+Flushing POSIX_FLAGS.
+Flushing TYVAR.
+  [Compiling GRAPHUTIL to assembly]
+  [1 imports of total size 15446 were cached.
+   0 imports of total size 0 were uncached and took 0.0 seconds.]
+  [Added contexts.]
+  [Parsing Util/graphutil.sig.sml]
+  [Elaborating Util/graphutil.sig.sml non-constrained]
+  [writing Util/TM/any/graphutil.sig.sml.il - unnecessary]
+gc_context: 226 items in original context.  1 items in reduced context.
+===== Starting Phasesplit: GRAPHUTIL                     =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: GRAPHUTIL                         =====
+===== Starting Optimize1: GRAPHUTIL                      =====
+===== Starting Vararg: GRAPHUTIL                         =====
+===== Starting Inline1: GRAPHUTIL                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: GRAPHUTIL                         =====
+===== Starting Specialize: GRAPHUTIL                     =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: GRAPHUTIL                          =====
+Imports Processed
+===== Starting Optimize2: GRAPHUTIL                      =====
+===== Starting Inline2: GRAPHUTIL                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: GRAPHUTIL                      =====
+===== Starting Inline3: GRAPHUTIL                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: GRAPHUTIL                         =====
+===== Starting ClosureConv: GRAPHUTIL                    =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled GRAPHUTIL
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing DELAY.
+Flushing HASH_KEY.
+Flushing TOOLS.
+Flushing QUEUE.
+Flushing Word8.
+Flushing Word32.
+Flushing Byte.
+  [Compiling BYTE to assembly]
+  [12 imports of total size 40547 were cached.
+   18 imports of total size 46260 were uncached and took 1.75 seconds.]
+  [Added contexts.]
+  [Parsing Basis/Numeric/byte-sig.sml]
+  [Elaborating Basis/Numeric/byte-sig.sml non-constrained]
+  [writing Basis/Numeric/TM/any/byte-sig.sml.il - unnecessary]
+gc_context: 257 items in original context.  15 items in reduced context.
+===== Starting Phasesplit: BYTE                          =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: BYTE                              =====
+===== Starting Optimize1: BYTE                           =====
+===== Starting Vararg: BYTE                              =====
+===== Starting Inline1: BYTE                             =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: BYTE                              =====
+===== Starting Specialize: BYTE                          =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: BYTE                               =====
+Imports Processed
+===== Starting Optimize2: BYTE                           =====
+===== Starting Inline2: BYTE                             =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: BYTE                           =====
+===== Starting Inline3: BYTE                             =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: BYTE                              =====
+===== Starting ClosureConv: BYTE                         =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled BYTE
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing Int.
+Flushing Timer.
+Flushing POSIX_PROC_ENV.
+  [Compiling POSIX_PROCESS to assembly]
+  [20 imports of total size 60479 were cached.
+   17 imports of total size 63184 were uncached and took 1.86 seconds.]
+!!!Could not find _40049: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Basis/Posix/posix-process-sig.sml]
+  [Elaborating Basis/Posix/posix-process-sig.sml non-constrained]
+  [writing Basis/Posix/TM/any/posix-process-sig.sml.il - unnecessary]
+gc_context: 282 items in original context.  15 items in reduced context.
+===== Starting Phasesplit: POSIX_PROCESS                 =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: POSIX_PROCESS                     =====
+===== Starting Optimize1: POSIX_PROCESS                  =====
+===== Starting Vararg: POSIX_PROCESS                     =====
+===== Starting Inline1: POSIX_PROCESS                    =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: POSIX_PROCESS                     =====
+===== Starting Specialize: POSIX_PROCESS                 =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: POSIX_PROCESS                      =====
+Imports Processed
+===== Starting Optimize2: POSIX_PROCESS                  =====
+===== Starting Inline2: POSIX_PROCESS                    =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: POSIX_PROCESS                  =====
+===== Starting Inline3: POSIX_PROCESS                    =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: POSIX_PROCESS                     =====
+===== Starting ClosureConv: POSIX_PROCESS                =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled POSIX_PROCESS
+Slave waiting for master to send work.
+Flushing POSIX_FILE_SYS.
+Flushing OS_IO_SIG.
+Flushing OS_FILE_SYS.
+Flushing DATE.
+Flushing TIMER.
+Flushing OS_SIG.
+Flushing Statistics.
+Flushing HashTableFn.
+Flushing HashTable.
+Flushing Time.
+Flushing Real64.
+Flushing HashString.
+  [Compiling HashTableRep to assembly]
+  [20 imports of total size 68099 were cached.
+   2 imports of total size 6698 were uncached and took 0.1 seconds.]
+  [Added contexts.]
+  [Parsing Basis/Library/hash-table-rep.sml]
+  [Elaborating Basis/Library/hash-table-rep.sml non-constrained]
+  [writing Basis/Library/TM/any/hash-table-rep.sml.il - unnecessary]
+gc_context: 252 items in original context.  18 items in reduced context.
+===== Starting Phasesplit: HashTableRep                  =====
+  Initial context is phase-split
+Warning: newSplitVar called on alredy existing variable copy_+Ebucket_INT_42651
+Warning: newSplitVar called on alredy existing variable copy_alloc_42670
+Warning: newSplitVar called on alredy existing variable copy_growTable_42674
+Warning: newSplitVar called on alredy existing variable copy_growTableIfNeeded_42678
+Warning: newSplitVar called on alredy existing variable copy_listItems_42682
+Warning: newSplitVar called on alredy existing variable copy_listItemsi_42686
+Warning: newSplitVar called on alredy existing variable copy_appi_42690
+Warning: newSplitVar called on alredy existing variable copy_app_42695
+Warning: newSplitVar called on alredy existing variable copy_mapi_42700
+Warning: newSplitVar called on alredy existing variable copy_map_42705
+Warning: newSplitVar called on alredy existing variable copy_foldi_42710
+Warning: newSplitVar called on alredy existing variable copy_fold_42715
+Warning: newSplitVar called on alredy existing variable copy_filteri_42720
+Warning: newSplitVar called on alredy existing variable copy_filter_42724
+Warning: newSplitVar called on alredy existing variable copy_copy_42728
+Warning: newSplitVar called on alredy existing variable copy_bucketSizes_42731
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: HashTableRep                      =====
+===== Starting Optimize1: HashTableRep                   =====
+===== Starting Vararg: HashTableRep                      =====
+===== Starting Inline1: HashTableRep                     =====
+  9 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: HashTableRep                      =====
+===== Starting Specialize: HashTableRep                  =====
+  0 optimizable candidates.
+  5 impure.
+  56 escaping.
+  0 used polymorphically.
+===== Starting Hoist: HashTableRep                       =====
+Imports Processed
+===== Starting Optimize2: HashTableRep                   =====
+===== Starting Inline2: HashTableRep                     =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: HashTableRep                   =====
+===== Starting Inline3: HashTableRep                     =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: HashTableRep                      =====
+===== Starting ClosureConv: HashTableRep                 =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  66 procedures.  66 recursive components.   Largest component has size 1.
+Slave compiled HashTableRep
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing POSIX_Sys_DB.
+Flushing Date.
+Flushing POSIX_FileSys.
+Flushing POSIX_IO_SIG.
+Flushing BIN_IO.
+Flushing TextPrimIO.
+Flushing BinPrimIO.
+Flushing POSIX.
+Flushing BinIOFn.
+Flushing POSIX_Signal.
+Flushing POSIX_IO.
+  [Compiling POSIX_ProcEnv to assembly]
+  [23 imports of total size 77519 were cached.
+   31 imports of total size 109389 were uncached and took 2.76 seconds.]
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Basis/Posix/posix-procenv.sml]
+  [Warning: constraints currently coerce.  Not compatible with our notion of freshness.]
+  [Elaborating Basis/Posix/posix-procenv.sml with constraint]
+  [writing Basis/Posix/TM/any/posix-procenv.sml.il]
+gc_context: 408 items in original context.  53 items in reduced context.
+===== Starting Phasesplit: POSIX_ProcEnv                 =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: POSIX_ProcEnv                     =====
+===== Starting Optimize1: POSIX_ProcEnv                  =====
+===== Starting Vararg: POSIX_ProcEnv                     =====
+===== Starting Inline1: POSIX_ProcEnv                    =====
+  3 functions inlined once.
+  5 copies of 1 other functions inlined.
+===== Starting Reify1: POSIX_ProcEnv                     =====
+===== Starting Specialize: POSIX_ProcEnv                 =====
+  0 optimizable candidates.
+  2 impure.
+  21 escaping.
+  0 used polymorphically.
+===== Starting Hoist: POSIX_ProcEnv                      =====
+Imports Processed
+===== Starting Optimize2: POSIX_ProcEnv                  =====
+===== Starting Inline2: POSIX_ProcEnv                    =====
+  0 functions inlined once.
+  2 copies of 1 other functions inlined.
+===== Starting Optimize3: POSIX_ProcEnv                  =====
+===== Starting Inline3: POSIX_ProcEnv                    =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: POSIX_ProcEnv                     =====
+===== Starting ClosureConv: POSIX_ProcEnv                =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  22 procedures.  22 recursive components.   Largest component has size 1.
+Slave compiled POSIX_ProcEnv
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing POSIX_Tty.
+Flushing POSIX_Process.
+Flushing OS_IO.
+Flushing OS_Process.
+  [Compiling OS_FileSys to assembly]
+  [55 imports of total size 189370 were cached.
+   18 imports of total size 113972 were uncached and took 2.72 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Basis/Unix/os-filesys.sml]
+  [Elaborating Basis/Unix/os-filesys.sml non-constrained]
+  [writing Basis/Unix/TM/any/os-filesys.sml.il - unnecessary]
+gc_context: 427 items in original context.  40 items in reduced context.
+===== Starting Phasesplit: OS_FileSys                    =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: OS_FileSys                        =====
+===== Starting Optimize1: OS_FileSys                     =====
+===== Starting Vararg: OS_FileSys                        =====
+===== Starting Inline1: OS_FileSys                       =====
+  1 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: OS_FileSys                        =====
+===== Starting Specialize: OS_FileSys                    =====
+  0 optimizable candidates.
+  5 impure.
+  11 escaping.
+  0 used polymorphically.
+===== Starting Hoist: OS_FileSys                         =====
+Imports Processed
+===== Starting Optimize2: OS_FileSys                     =====
+===== Starting Inline2: OS_FileSys                       =====
+  0 functions inlined once.
+  2 copies of 1 other functions inlined.
+===== Starting Optimize3: OS_FileSys                     =====
+===== Starting Inline3: OS_FileSys                       =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: OS_FileSys                        =====
+===== Starting ClosureConv: OS_FileSys                   =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  16 procedures.  16 recursive components.   Largest component has size 1.
+Slave compiled OS_FileSys
+Slave waiting for master to send work.
+Flushing Posix.
+Slave waiting for master to send work.
+Flushing BINIOUTIL.
+Flushing CRC.
+  [Compiling BinIO to assembly]
+  [74 imports of total size 305863 were cached.
+   24 imports of total size 123446 were uncached and took 1.7 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Basis/Unix/posix-bin-io.sml]
+  [Warning: constraints currently coerce.  Not compatible with our notion of freshness.]
+  [Elaborating Basis/Unix/posix-bin-io.sml with constraint]
+  [writing Basis/Unix/TM/any/posix-bin-io.sml.il]
+gc_context: 452 items in original context.  31 items in reduced context.
+===== Starting Phasesplit: BinIO                         =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: BinIO                             =====
+===== Starting Optimize1: BinIO                          =====
+===== Starting Vararg: BinIO                             =====
+===== Starting Inline1: BinIO                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: BinIO                             =====
+===== Starting Specialize: BinIO                         =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: BinIO                              =====
+Imports Processed
+===== Starting Optimize2: BinIO                          =====
+===== Starting Inline2: BinIO                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: BinIO                          =====
+===== Starting Inline3: BinIO                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: BinIO                             =====
+===== Starting ClosureConv: BinIO                        =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled BinIO
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing PosixBinPrimIO.
+Flushing PosixPrimIOFn.
+Flushing TextIOFn.
+Flushing DIRS.
+Flushing OS.
+Flushing PosixTextPrimIO.
+Flushing UPDATE_HELP.
+Flushing COMPILER.
+  [Compiling MASTER to assembly]
+  [99 imports of total size 434656 were cached.
+   11 imports of total size 38453 were uncached and took 1.28 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Top/master.sig.sml]
+  [Elaborating Top/master.sig.sml non-constrained]
+No eq expression available for CON_VAR state_102896 at label +Estate_INT.  Perhaps due to shadowing
+No eq expression available for CON_VAR state_102896 at label +Estate_INT.  Perhaps due to shadowing
+No eq expression available for CON_VAR state_102896 at label +Estate_INT.  Perhaps due to shadowing
+No eq expression available for CON_VAR state_102896 at label +Estate_INT.  Perhaps due to shadowing
+No eq expression available for CON_VAR state_102896 at label +Estate_INT.  Perhaps due to shadowing
+No eq expression available for CON_VAR state_102896 at label +Estate_INT.  Perhaps due to shadowing
+  [writing Top/TM/any/master.sig.sml.il - unnecessary]
+gc_context: 492 items in original context.  8 items in reduced context.
+===== Starting Phasesplit: MASTER                        =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: MASTER                            =====
+===== Starting Optimize1: MASTER                         =====
+===== Starting Vararg: MASTER                            =====
+===== Starting Inline1: MASTER                           =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: MASTER                            =====
+===== Starting Specialize: MASTER                        =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: MASTER                             =====
+Imports Processed
+===== Starting Optimize2: MASTER                         =====
+===== Starting Inline2: MASTER                           =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: MASTER                         =====
+===== Starting Inline3: MASTER                           =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: MASTER                            =====
+===== Starting ClosureConv: MASTER                       =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled MASTER
+Slave waiting for master to send work.
+Flushing UNIT_ENVIRONMENT.
+Flushing FILECACHE.
+Flushing MANAGER.
+Flushing Crc.
+Flushing BinaryMapFn.
+Flushing Stream.
+Flushing BinarySetFn.
+  [Compiling Queue to assembly]
+  [102 imports of total size 449108 were cached.
+   3 imports of total size 6835 were uncached and took 0.14 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Basis/Library/queue.sml]
+  [Elaborating Basis/Library/queue.sml non-constrained]
+  [writing Basis/Library/TM/any/queue.sml.il - unnecessary]
+gc_context: 487 items in original context.  5 items in reduced context.
+===== Starting Phasesplit: Queue                         =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Queue                             =====
+===== Starting Optimize1: Queue                          =====
+===== Starting Vararg: Queue                             =====
+===== Starting Inline1: Queue                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: Queue                             =====
+===== Starting Specialize: Queue                         =====
+  0 optimizable candidates.
+  0 impure.
+  32 escaping.
+  0 used polymorphically.
+===== Starting Hoist: Queue                              =====
+Imports Processed
+===== Starting Optimize2: Queue                          =====
+===== Starting Inline2: Queue                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: Queue                          =====
+===== Starting Inline3: Queue                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: Queue                             =====
+===== Starting ClosureConv: Queue                        =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  34 procedures.  34 recursive components.   Largest component has size 1.
+Slave compiled Queue
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing Fifo.
+Flushing POPEN.
+Flushing GRAPH.
+Flushing TextIO.
+Flushing INTSTRMAP.
+Flushing YaccBase.
+Flushing GraphUtil.
+Flushing TopLevelHelp.
+Flushing TopLevel.
+Flushing RUN.
+Flushing Trace.
+Flushing Fixity.
+  [Compiling StrgHash to assembly]
+  [102 imports of total size 449108 were cached.
+   0 imports of total size 0 were uncached and took 0.0 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Parser/strghash.sml]
+  [Elaborating Parser/strghash.sml non-constrained]
+  [writing Parser/TM/any/strghash.sml.il - unnecessary]
+gc_context: 484 items in original context.  13 items in reduced context.
+===== Starting Phasesplit: StrgHash                      =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: StrgHash                          =====
+===== Starting Optimize1: StrgHash                       =====
+===== Starting Vararg: StrgHash                          =====
+===== Starting Inline1: StrgHash                         =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: StrgHash                          =====
+===== Starting Specialize: StrgHash                      =====
+  0 optimizable candidates.
+  2 impure.
+  1 escaping.
+  0 used polymorphically.
+===== Starting Hoist: StrgHash                           =====
+Imports Processed
+===== Starting Optimize2: StrgHash                       =====
+===== Starting Inline2: StrgHash                         =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: StrgHash                       =====
+===== Starting Inline3: StrgHash                         =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: StrgHash                          =====
+===== Starting ClosureConv: StrgHash                     =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  4 procedures.  4 recursive components.   Largest component has size 1.
+Slave compiled StrgHash
+Slave waiting for master to send work.
+Flushing PATHNAMES.
+Flushing CONTROL.
+Flushing LrParser.
+Flushing Platform.
+Flushing Run.
+Flushing IntStrMap.
+Flushing PathNames.
+  [Compiling Control to assembly]
+  [102 imports of total size 449108 were cached.
+   1 imports of total size 3610 were uncached and took 0.03 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Parser/control.sml]
+  [Warning: constraints currently coerce.  Not compatible with our notion of freshness.]
+  [Elaborating Parser/control.sml with constraint]
+  [writing Parser/TM/any/control.sml.il]
+gc_context: 488 items in original context.  23 items in reduced context.
+===== Starting Phasesplit: Control                       =====
+  Initial context is phase-split
+WARNING (xsbnds/BND_MOD):  Duplicate variable found:copy_MC_STR_110859
+WARNING (xsbnds/BND_MOD):  Duplicate variable found:copy_CG_STR_110944
+WARNING (xsbnds/BND_MOD):  Duplicate variable found:copy_Print_STR_110954
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Control                           =====
+===== Starting Optimize1: Control                        =====
+===== Starting Vararg: Control                           =====
+===== Starting Inline1: Control                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: Control                           =====
+===== Starting Specialize: Control                       =====
+  0 optimizable candidates.
+  0 impure.
+  4 escaping.
+  0 used polymorphically.
+===== Starting Hoist: Control                            =====
+Imports Processed
+===== Starting Optimize2: Control                        =====
+===== Starting Inline2: Control                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: Control                        =====
+===== Starting Inline3: Control                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: Control                           =====
+===== Starting ClosureConv: Control                      =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  5 procedures.  5 recursive components.   Largest component has size 1.
+Slave compiled Control
+Slave waiting for master to send work.
+Flushing PpQueue.
+Flushing SOURCEMAP.
+Flushing UtilError.
+Flushing FORMATTER.
+Flushing SourceMap.
+Flushing Listops.
+Flushing Popen.
+Flushing Background.
+Flushing Util.
+Flushing SYMBOL.
+Flushing SplayTree.
+Flushing Join.
+Flushing PRINTUTIL.
+Flushing ENV.
+Flushing LrTable.
+Flushing MAIN.
+Flushing LibBase.
+Flushing BinIoUtil.
+Flushing GETOPT.
+Flushing Source.
+  [Compiling SOURCE to assembly]
+  [104 imports of total size 456376 were cached.
+   5 imports of total size 11226 were uncached and took 0.17 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Parser/source.sig.sml]
+  [Elaborating Parser/source.sig.sml non-constrained]
+  [writing Parser/TM/any/source.sig.sml.il - unnecessary]
+gc_context: 495 items in original context.  20 items in reduced context.
+===== Starting Phasesplit: SOURCE                        =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: SOURCE                            =====
+===== Starting Optimize1: SOURCE                         =====
+===== Starting Vararg: SOURCE                            =====
+===== Starting Inline1: SOURCE                           =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: SOURCE                            =====
+===== Starting Specialize: SOURCE                        =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: SOURCE                             =====
+Imports Processed
+===== Starting Optimize2: SOURCE                         =====
+===== Starting Inline2: SOURCE                           =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: SOURCE                         =====
+===== Starting Inline3: SOURCE                           =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: SOURCE                            =====
+===== Starting ClosureConv: SOURCE                       =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled SOURCE
+Slave waiting for master to send work.
+Flushing Getopt.
+Flushing ListMergeSort.
+Flushing SplaySetFn.
+Flushing SplayMapFn.
+Flushing PrettyPrint.
+Flushing Blaster.
+Flushing Formatter.
+  [Compiling TilWord64 to assembly]
+  [102 imports of total size 449108 were cached.
+   12 imports of total size 61668 were uncached and took 1.31 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Util/tilword64.sml]
+  [Elaborating Util/tilword64.sml non-constrained]
+  [writing Util/TM/any/tilword64.sml.il - unnecessary]
+gc_context: 496 items in original context.  32 items in reduced context.
+===== Starting Phasesplit: TilWord64                     =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: TilWord64                         =====
+===== Starting Optimize1: TilWord64                      =====
+===== Starting Vararg: TilWord64                         =====
+===== Starting Inline1: TilWord64                        =====
+  8 functions inlined once.
+  9 copies of 3 other functions inlined.
+===== Starting Reify1: TilWord64                         =====
+===== Starting Specialize: TilWord64                     =====
+  2 optimizable candidates.
+  9 impure.
+  51 escaping.
+  1 used polymorphically.
+===== Starting Hoist: TilWord64                          =====
+Imports Processed
+===== Starting Optimize2: TilWord64                      =====
+===== Starting Inline2: TilWord64                        =====
+  0 functions inlined once.
+  11 copies of 3 other functions inlined.
+===== Starting Optimize3: TilWord64                      =====
+===== Starting Inline3: TilWord64                        =====
+  3 functions inlined once.
+  5 copies of 1 other functions inlined.
+===== Starting Reify2: TilWord64                         =====
+===== Starting ClosureConv: TilWord64                    =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  58 procedures.  58 recursive components.   Largest component has size 1.
+Slave compiled TilWord64
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing Stats.
+Flushing PrintUtil.
+Flushing NAME.
+Flushing Graph.
+Flushing TilWord32.
+Flushing Symbol.
+Flushing ErrorMsg.
+Flushing ERRORMSG.
+Flushing Prelink.
+Flushing INFO.
+Flushing UnitEnvironment.
+Flushing Sequence.
+Flushing TopHelp.
+Flushing Annotation.
+Flushing ASTHELP.
+  [Compiling TVClose to assembly]
+  [117 imports of total size 521932 were cached.
+   18 imports of total size 128843 were uncached and took 1.9 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Parser/tvclose.sml]
+  [Elaborating Parser/tvclose.sml non-constrained]
+  [writing Parser/TM/any/tvclose.sml.il - unnecessary]
+gc_context: 526 items in original context.  32 items in reduced context.
+===== Starting Phasesplit: TVClose                       =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: TVClose                           =====
+===== Starting Optimize1: TVClose                        =====
+===== Starting Vararg: TVClose                           =====
+===== Starting Inline1: TVClose                          =====
+  2 functions inlined once.
+  2 copies of 1 other functions inlined.
+===== Starting Reify1: TVClose                           =====
+===== Starting Specialize: TVClose                       =====
+  1 optimizable candidates.
+  16 impure.
+  46 escaping.
+  0 used polymorphically.
+===== Starting Hoist: TVClose                            =====
+Imports Processed
+===== Starting Optimize2: TVClose                        =====
+===== Starting Inline2: TVClose                          =====
+  1 functions inlined once.
+  3 copies of 1 other functions inlined.
+===== Starting Optimize3: TVClose                        =====
+===== Starting Inline3: TVClose                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: TVClose                           =====
+===== Starting ClosureConv: TVClose                      =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  61 procedures.  61 recursive components.   Largest component has size 1.
+Slave compiled TVClose
+Slave waiting for master to send work.
+Flushing FRONTEND.
+Flushing ASTUTIL.
+Flushing NamedForm.
+Flushing VarGraph.
+Flushing TokenTable.
+Flushing Ast.
+Flushing NAMEBLAST.
+Flushing Tyvar.
+Flushing PRIM.
+Flushing ML_TOKENS.
+Flushing AstUtil.
+Flushing AstHelp.
+Flushing ANNOTATION.
+Flushing TRACEINFO.
+Flushing RTL.
+Flushing MLLexFun.
+  [Compiling AST to assembly]
+  [133 imports of total size 559158 were cached.
+   0 imports of total size 0 were uncached and took 0.0 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Parser/ast.sig.sml]
+  [Elaborating Parser/ast.sig.sml non-constrained]
+  [writing Parser/TM/any/ast.sig.sml.il - unnecessary]
+gc_context: 524 items in original context.  18 items in reduced context.
+===== Starting Phasesplit: AST                           =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: AST                               =====
+===== Starting Optimize1: AST                            =====
+===== Starting Vararg: AST                               =====
+===== Starting Inline1: AST                              =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: AST                               =====
+===== Starting Specialize: AST                           =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: AST                                =====
+Imports Processed
+===== Starting Optimize2: AST                            =====
+===== Starting Inline2: AST                              =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: AST                            =====
+===== Starting Inline3: AST                              =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: AST                               =====
+===== Starting ClosureConv: AST                          =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled AST
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing Name.
+Flushing MLLrValsFun.
+Flushing Info.
+  [Compiling RTLTAGS to assembly]
+  [131 imports of total size 552785 were cached.
+   25 imports of total size 184412 were uncached and took 6.77 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Rtl/tags.sig.sml]
+  [Elaborating Rtl/tags.sig.sml non-constrained]
+  [writing Rtl/TM/any/tags.sig.sml.il - unnecessary]
+gc_context: 550 items in original context.  23 items in reduced context.
+===== Starting Phasesplit: RTLTAGS                       =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: RTLTAGS                           =====
+===== Starting Optimize1: RTLTAGS                        =====
+===== Starting Vararg: RTLTAGS                           =====
+===== Starting Inline1: RTLTAGS                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: RTLTAGS                           =====
+===== Starting Specialize: RTLTAGS                       =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: RTLTAGS                            =====
+Imports Processed
+===== Starting Optimize2: RTLTAGS                        =====
+===== Starting Inline2: RTLTAGS                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: RTLTAGS                        =====
+===== Starting Inline3: RTLTAGS                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: RTLTAGS                           =====
+===== Starting ClosureConv: RTLTAGS                      =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled RTLTAGS
+Slave waiting for master to send work.
+Flushing PPPRIM.
+Flushing IL.
+Flushing PRIMUTIL.
+Flushing PRIMUTILPARAM.
+Flushing Rtl.
+Flushing CORE.
+Flushing LINKASM.
+Flushing RTLTOASM.
+  [Compiling TraceInfo to assembly]
+  [152 imports of total size 655696 were cached.
+   1 imports of total size 1400 were uncached and took 0.13 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Nil/traceinfo.sml]
+  [Elaborating Nil/traceinfo.sml non-constrained]
+  [writing Nil/TM/any/traceinfo.sml.il - unnecessary]
+gc_context: 545 items in original context.  17 items in reduced context.
+===== Starting Phasesplit: TraceInfo                     =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: TraceInfo                         =====
+===== Starting Optimize1: TraceInfo                      =====
+===== Starting Vararg: TraceInfo                         =====
+===== Starting Inline1: TraceInfo                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: TraceInfo                         =====
+===== Starting Specialize: TraceInfo                     =====
+  0 optimizable candidates.
+  0 impure.
+  3 escaping.
+  0 used polymorphically.
+===== Starting Hoist: TraceInfo                          =====
+Imports Processed
+===== Starting Optimize2: TraceInfo                      =====
+===== Starting Inline2: TraceInfo                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: TraceInfo                      =====
+===== Starting Inline3: TraceInfo                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: TraceInfo                         =====
+===== Starting ClosureConv: TraceInfo                    =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  4 procedures.  4 recursive components.   Largest component has size 1.
+Slave compiled TraceInfo
+Slave waiting for master to send work.
+WARNING: channel disappeared in the middle of exists
+Slave waiting for master to send work.
+Flushing Prim.
+Flushing RECURSION.
+Flushing NameBlast.
+  [Compiling NILCONTEXTPRE to assembly]
+  [157 imports of total size 669469 were cached.
+   8 imports of total size 135412 were uncached and took 1.91 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Nil/nilcontextpre.sig.sml]
+  [Elaborating Nil/nilcontextpre.sig.sml non-constrained]
+  [writing Nil/TM/any/nilcontextpre.sig.sml.il - unnecessary]
+gc_context: 557 items in original context.  32 items in reduced context.
+===== Starting Phasesplit: NILCONTEXTPRE                 =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: NILCONTEXTPRE                     =====
+===== Starting Optimize1: NILCONTEXTPRE                  =====
+===== Starting Vararg: NILCONTEXTPRE                     =====
+===== Starting Inline1: NILCONTEXTPRE                    =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: NILCONTEXTPRE                     =====
+===== Starting Specialize: NILCONTEXTPRE                 =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: NILCONTEXTPRE                      =====
+Imports Processed
+===== Starting Optimize2: NILCONTEXTPRE                  =====
+===== Starting Inline2: NILCONTEXTPRE                    =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: NILCONTEXTPRE                  =====
+===== Starting Inline3: NILCONTEXTPRE                    =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: NILCONTEXTPRE                     =====
+===== Starting ClosureConv: NILCONTEXTPRE                =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled NILCONTEXTPRE
+Slave waiting for master to send work.
+Flushing NILSUBST.
+Flushing ALPHA.
+Flushing NILREWRITE.
+Flushing DecAlpha.
+Flushing DIVMULT.
+Flushing CALLCONV.
+Flushing NILERROR.
+Flushing PPNIL.
+Flushing OPTIMIZE.
+  [Compiling DECALPHA to assembly]
+  [154 imports of total size 662136 were cached.
+   7 imports of total size 151824 were uncached and took 2.61 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Alpha/decalpha.sig.sml]
+  [Elaborating Alpha/decalpha.sig.sml non-constrained]
+  [writing Alpha/TM/any/decalpha.sig.sml.il - unnecessary]
+gc_context: 555 items in original context.  25 items in reduced context.
+===== Starting Phasesplit: DECALPHA                      =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: DECALPHA                          =====
+===== Starting Optimize1: DECALPHA                       =====
+===== Starting Vararg: DECALPHA                          =====
+===== Starting Inline1: DECALPHA                         =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: DECALPHA                          =====
+===== Starting Specialize: DECALPHA                      =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: DECALPHA                           =====
+Imports Processed
+===== Starting Optimize2: DECALPHA                       =====
+===== Starting Inline2: DECALPHA                         =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: DECALPHA                       =====
+===== Starting Inline3: DECALPHA                         =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: DECALPHA                          =====
+===== Starting ClosureConv: DECALPHA                     =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled DECALPHA
+Slave waiting for master to send work.
+Flushing VARARG.
+Flushing TOCLOSURE.
+Flushing REIFY.
+Flushing LINEARIZE.
+Flushing EXPTABLE.
+  [Compiling Labelgraph to assembly]
+  [161 imports of total size 813960 were cached.
+   6 imports of total size 18861 were uncached and took 0.92 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Backend/labelgraph.sml]
+  [Elaborating Backend/labelgraph.sml non-constrained]
+  [writing Backend/TM/any/labelgraph.sml.il - unnecessary]
+gc_context: 564 items in original context.  30 items in reduced context.
+===== Starting Phasesplit: Labelgraph                    =====
+  Initial context is phase-split
+Warning: newSplitVar called on alredy existing variable copy_insert_198886
+Warning: newSplitVar called on alredy existing variable copy_find_198889
+Warning: newSplitVar called on alredy existing variable copy_make_198892
+Warning: newSplitVar called on alredy existing variable copy_copy_198895
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Labelgraph                        =====
+===== Starting Optimize1: Labelgraph                     =====
+===== Starting Vararg: Labelgraph                        =====
+===== Starting Inline1: Labelgraph                       =====
+  1 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: Labelgraph                        =====
+===== Starting Specialize: Labelgraph                    =====
+  0 optimizable candidates.
+  0 impure.
+  6 escaping.
+  0 used polymorphically.
+===== Starting Hoist: Labelgraph                         =====
+Imports Processed
+===== Starting Optimize2: Labelgraph                     =====
+===== Starting Inline2: Labelgraph                       =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: Labelgraph                     =====
+===== Starting Inline3: Labelgraph                       =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: Labelgraph                        =====
+===== Starting ClosureConv: Labelgraph                   =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  7 procedures.  7 recursive components.   Largest component has size 1.
+Slave compiled Labelgraph
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing PASS.
+Slave waiting for master to send work.
+Flushing INLINE.
+Flushing ANALYZE.
+Flushing HOIST.
+Flushing SPECIALIZE.
+Flushing IFGRAPH.
+  [Compiling TRACKSTORAGE to assembly]
+  [160 imports of total size 809644 were cached.
+   0 imports of total size 0 were uncached and took 0.0 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Backend/trackstorage.sig.sml]
+  [Elaborating Backend/trackstorage.sig.sml non-constrained]
+  [writing Backend/TM/any/trackstorage.sig.sml.il - unnecessary]
+gc_context: 554 items in original context.  25 items in reduced context.
+===== Starting Phasesplit: TRACKSTORAGE                  =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: TRACKSTORAGE                      =====
+===== Starting Optimize1: TRACKSTORAGE                   =====
+===== Starting Vararg: TRACKSTORAGE                      =====
+===== Starting Inline1: TRACKSTORAGE                     =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: TRACKSTORAGE                      =====
+===== Starting Specialize: TRACKSTORAGE                  =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: TRACKSTORAGE                       =====
+Imports Processed
+===== Starting Optimize2: TRACKSTORAGE                   =====
+===== Starting Inline2: TRACKSTORAGE                     =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: TRACKSTORAGE                   =====
+===== Starting Inline3: TRACKSTORAGE                     =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: TRACKSTORAGE                      =====
+===== Starting ClosureConv: TRACKSTORAGE                 =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled TRACKSTORAGE
+Flushing NILSTATIC.
+Flushing TRAIL.
+Flushing MEASURE.
+Flushing INFIXPARSE.
+Flushing EQUAL.
+Flushing MACHINEUTILS.
+  [Compiling SIGNATURE to assembly]
+  [154 imports of total size 662136 were cached.
+   8 imports of total size 125276 were uncached and took 1.4 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Elaborator/signature.sig.sml]
+  [Elaborating Elaborator/signature.sig.sml non-constrained]
+  [writing Elaborator/TM/any/signature.sig.sml.il - unnecessary]
+gc_context: 555 items in original context.  32 items in reduced context.
+===== Starting Phasesplit: SIGNATURE                     =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: SIGNATURE                         =====
+===== Starting Optimize1: SIGNATURE                      =====
+===== Starting Vararg: SIGNATURE                         =====
+===== Starting Inline1: SIGNATURE                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: SIGNATURE                         =====
+===== Starting Specialize: SIGNATURE                     =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: SIGNATURE                          =====
+Imports Processed
+===== Starting Optimize2: SIGNATURE                      =====
+===== Starting Inline2: SIGNATURE                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: SIGNATURE                      =====
+===== Starting Inline3: SIGNATURE                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: SIGNATURE                         =====
+===== Starting ClosureConv: SIGNATURE                    =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled SIGNATURE
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing ERROR.
+Flushing DATATYPE.
+Flushing PAT.
+Flushing TOIL.
+Flushing BASIS.
+Flushing CallConv.
+  [Compiling ILCONTEXT to assembly]
+  [162 imports of total size 787412 were cached.
+   0 imports of total size 0 were uncached and took 0.0 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Elaborator/ilcontext.sig.sml]
+  [Elaborating Elaborator/ilcontext.sig.sml non-constrained]
+  [writing Elaborator/TM/any/ilcontext.sig.sml.il - unnecessary]
+gc_context: 555 items in original context.  32 items in reduced context.
+===== Starting Phasesplit: ILCONTEXT                     =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: ILCONTEXT                         =====
+===== Starting Optimize1: ILCONTEXT                      =====
+===== Starting Vararg: ILCONTEXT                         =====
+===== Starting Inline1: ILCONTEXT                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: ILCONTEXT                         =====
+===== Starting Specialize: ILCONTEXT                     =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: ILCONTEXT                          =====
+Imports Processed
+===== Starting Optimize2: ILCONTEXT                      =====
+===== Starting Inline2: ILCONTEXT                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: ILCONTEXT                      =====
+===== Starting Inline3: ILCONTEXT                        =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: ILCONTEXT                         =====
+===== Starting ClosureConv: ILCONTEXT                    =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled ILCONTEXT
+Flushing ILCONTEXTEQ.
+Flushing ILSTATIC.
+Flushing PPIL.
+Flushing IlPrimUtilParam.
+Flushing PrimUtil.
+Flushing DivMult.
+Flushing DecAlphaUtils.
+Flushing TRACETABLE.
+  [Compiling ILUTIL to assembly]
+  [162 imports of total size 787412 were cached.
+   0 imports of total size 0 were uncached and took 0.0 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Elaborator/ilutil.sig.sml]
+  [Elaborating Elaborator/ilutil.sig.sml non-constrained]
+  [writing Elaborator/TM/any/ilutil.sig.sml.il - unnecessary]
+gc_context: 555 items in original context.  32 items in reduced context.
+===== Starting Phasesplit: ILUTIL                        =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: ILUTIL                            =====
+===== Starting Optimize1: ILUTIL                         =====
+===== Starting Vararg: ILUTIL                            =====
+===== Starting Inline1: ILUTIL                           =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: ILUTIL                            =====
+===== Starting Specialize: ILUTIL                        =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: ILUTIL                             =====
+Imports Processed
+===== Starting Optimize2: ILUTIL                         =====
+===== Starting Inline2: ILUTIL                           =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: ILUTIL                         =====
+===== Starting Inline3: ILUTIL                           =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: ILUTIL                            =====
+===== Starting ClosureConv: ILUTIL                       =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled ILUTIL
+Flushing Nil.
+Slave waiting for master to send work.
+Flushing MACHINE.
+Flushing NIL.
+  [Compiling LINKIL to assembly]
+  [163 imports of total size 795753 were cached.
+   14 imports of total size 132943 were uncached and took 3.19 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Elaborator/linkil.sig.sml]
+  [Elaborating Elaborator/linkil.sig.sml non-constrained]
+  [writing Elaborator/TM/any/linkil.sig.sml.il - unnecessary]
+gc_context: 570 items in original context.  56 items in reduced context.
+===== Starting Phasesplit: LINKIL                        =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: LINKIL                            =====
+===== Starting Optimize1: LINKIL                         =====
+===== Starting Vararg: LINKIL                            =====
+===== Starting Inline1: LINKIL                           =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: LINKIL                            =====
+===== Starting Specialize: LINKIL                        =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: LINKIL                             =====
+Imports Processed
+===== Starting Optimize2: LINKIL                         =====
+===== Starting Inline2: LINKIL                           =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: LINKIL                         =====
+===== Starting Inline3: LINKIL                           =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: LINKIL                            =====
+===== Starting ClosureConv: LINKIL                       =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled LINKIL
+Slave waiting for master to send work.
+Flushing IfGraph.
+Flushing TORTL.
+Flushing PPRTL.
+Flushing Rtltags.
+Flushing Core.
+Flushing Pprtl.
+Flushing Il.
+Flushing TORTLBASE.
+Flushing NILCONTEXT.
+Flushing LINKRTL.
+Flushing Alpha.
+Flushing NilRewrite.
+Flushing TONIL.
+Flushing TrackStorage.
+  [157 imports of total size 709327 were cached.
+   11 imports of total size 119737 were uncached and took 0.88 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Nil/measure.sml]
+  [Elaborating Nil/measure.sml non-constrained]
+  [writing Nil/TM/any/measure.sml.il - unnecessary]
+gc_context: 560 items in original context.  50 items in reduced context.
+Sending ACK_INTERFACE: interface took 2.968 seconds 
+  [Compiling Measure to assembly]
+===== Starting Phasesplit: Measure                       =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Measure                           =====
+===== Starting Optimize1: Measure                        =====
+===== Starting Vararg: Measure                           =====
+===== Starting Inline1: Measure                          =====
+  5 functions inlined once.
+  7 copies of 3 other functions inlined.
+===== Starting Reify1: Measure                           =====
+===== Starting Specialize: Measure                       =====
+  4 optimizable candidates.
+  1 impure.
+  27 escaping.
+  1 used polymorphically.
+===== Starting Hoist: Measure                            =====
+Imports Processed
+===== Starting Optimize2: Measure                        =====
+===== Starting Inline2: Measure                          =====
+  5 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: Measure                        =====
+===== Starting Inline3: Measure                          =====
+  1 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: Measure                           =====
+===== Starting ClosureConv: Measure                      =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  20 procedures.  20 recursive components.   Largest component has size 1.
+Slave compiled Measure
+Slave waiting for master to send work.
+Flushing NILRENAME.
+Flushing Ppprim.
+Flushing SparcUtils.
+Flushing Sparc.
+Flushing SPARC.
+Flushing TOASM.
+Flushing PRINTUTILS.
+Flushing INTRAPROC.
+Flushing Recursion.
+Flushing RtlToAsm.
+  [Compiling Bblock to assembly]
+  [154 imports of total size 662136 were cached.
+   10 imports of total size 162108 were uncached and took 1.57 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Backend/bblock.sml]
+  [Elaborating Backend/bblock.sml non-constrained]
+  [writing Backend/TM/any/bblock.sml.il - unnecessary]
+gc_context: 558 items in original context.  48 items in reduced context.
+===== Starting Phasesplit: Bblock                        =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Bblock                            =====
+===== Starting Optimize1: Bblock                         =====
+===== Starting Vararg: Bblock                            =====
+===== Starting Inline1: Bblock                           =====
+  7 functions inlined once.
+  6 copies of 3 other functions inlined.
+===== Starting Reify1: Bblock                            =====
+===== Starting Specialize: Bblock                        =====
+  3 optimizable candidates.
+  9 impure.
+  23 escaping.
+  1 used polymorphically.
+===== Starting Hoist: Bblock                             =====
+Imports Processed
+===== Starting Optimize2: Bblock                         =====
+===== Starting Inline2: Bblock                           =====
+  2 functions inlined once.
+  9 copies of 3 other functions inlined.
+===== Starting Optimize3: Bblock                         =====
+===== Starting Inline3: Bblock                           =====
+  3 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: Bblock                            =====
+===== Starting ClosureConv: Bblock                       =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  36 procedures.  36 recursive components.   Largest component has size 1.
+Slave compiled Bblock
+Slave waiting for master to send work.
+Flushing Error.
+Flushing NilPrimUtilParam.
+Flushing Tracetable.
+Flushing BBLOCK.
+Flushing COLOR.
+Flushing PrintUtils.
+Flushing Chaitin.
+Flushing ToAlpha.
+  [Compiling IlUtil to assembly]
+  [162 imports of total size 787412 were cached.
+   11 imports of total size 30599 were uncached and took 0.24 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Elaborator/ilutil.sml]
+  [Elaborating Elaborator/ilutil.sml non-constrained]
+  [writing Elaborator/TM/any/ilutil.sml.il - unnecessary]
+gc_context: 566 items in original context.  76 items in reduced context.
+===== Starting Phasesplit: IlUtil                        =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: IlUtil                            =====
+===== Starting Optimize1: IlUtil                         =====
+===== Starting Vararg: IlUtil                            =====
+===== Starting Inline1: IlUtil                           =====
+  53 functions inlined once.
+  32 copies of 11 other functions inlined.
+===== Starting Reify1: IlUtil                            =====
+===== Starting Specialize: IlUtil                        =====
+  15 optimizable candidates.
+  30 impure.
+  208 escaping.
+  20 used polymorphically.
+===== Starting Hoist: IlUtil                             =====
+Imports Processed
+===== Starting Optimize2: IlUtil                         =====
+===== Starting Inline2: IlUtil                           =====
+  15 functions inlined once.
+  20 copies of 9 other functions inlined.
+===== Starting Optimize3: IlUtil                         =====
+===== Starting Inline3: IlUtil                           =====
+  1 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: IlUtil                            =====
+===== Starting ClosureConv: IlUtil                       =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  238 procedures.  238 recursive components.   Largest component has size 1.
+Slave compiled IlUtil
+Slave waiting for master to send work.
+Flushing SparcCallConv.
+Flushing InfixParse.
+Flushing PpnilHtml.
+Flushing Ppil.
+Flushing Ppnil.
+Flushing ExpTable.
+Flushing SparcTrackStorage.
+Flushing NilError.
+Flushing ToSparc.
+Flushing Color.
+Flushing NilRename.
+Flushing NilSubst.
+Flushing NILUTIL.
+Flushing IlContextEq.
+  [Compiling IlContext to assembly]
+  [174 imports of total size 830138 were cached.
+   1 imports of total size 4222 were uncached and took 0.02 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Elaborator/ilcontext.sml]
+  [Elaborating Elaborator/ilcontext.sml non-constrained]
+  [writing Elaborator/TM/any/ilcontext.sml.il - unnecessary]
+gc_context: 569 items in original context.  67 items in reduced context.
+===== Starting Phasesplit: IlContext                     =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: IlContext                         =====
+===== Starting Optimize1: IlContext                      =====
+===== Starting Vararg: IlContext                         =====
+===== Starting Inline1: IlContext                        =====
+  17 functions inlined once.
+  23 copies of 9 other functions inlined.
+===== Starting Reify1: IlContext                         =====
+===== Starting Specialize: IlContext                     =====
+  11 optimizable candidates.
+  14 impure.
+  113 escaping.
+  2 used polymorphically.
+===== Starting Hoist: IlContext                          =====
+Imports Processed
+===== Starting Optimize2: IlContext                      =====
+===== Starting Inline2: IlContext                        =====
+  11 functions inlined once.
+  14 copies of 7 other functions inlined.
+===== Starting Optimize3: IlContext                      =====
+===== Starting Inline3: IlContext                        =====
+  2 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: IlContext                         =====
+===== Starting ClosureConv: IlContext                    =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  106 procedures.  106 recursive components.   Largest component has size 1.
+Slave compiled IlContext
+Slave waiting for master to send work.
+Flushing NilUtil.
+Flushing NilContextPre.
+Flushing Analyze.
+Flushing Hoist.
+Flushing Trail.
+Flushing LINKPARSE.
+Flushing FrontEnd.
+Flushing NORMALIZE.
+Flushing Inline.
+Flushing LinkParse.
+Flushing Normalize.
+Flushing LINKNIL.
+Flushing NilContext.
+Flushing Linearize.
+Flushing TortlBase.
+Flushing ToClosure.
+Flushing BOUNDCHECK.
+Flushing TRACEOPS.
+Flushing Specialize.
+  [174 imports of total size 830138 were cached.
+   30 imports of total size 203129 were uncached and took 2.31 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Nil/traceops.sml]
+  [Elaborating Nil/traceops.sml non-constrained]
+  [writing Nil/TM/any/traceops.sml.il - unnecessary]
+gc_context: 600 items in original context.  50 items in reduced context.
+Sending ACK_INTERFACE: interface took 4.058 seconds 
+  [Compiling TraceOps to assembly]
+===== Starting Phasesplit: TraceOps                      =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: TraceOps                          =====
+===== Starting Optimize1: TraceOps                       =====
+===== Starting Vararg: TraceOps                          =====
+===== Starting Inline1: TraceOps                         =====
+  1 functions inlined once.
+  7 copies of 2 other functions inlined.
+===== Starting Reify1: TraceOps                          =====
+===== Starting Specialize: TraceOps                      =====
+  2 optimizable candidates.
+  0 impure.
+  11 escaping.
+  0 used polymorphically.
+===== Starting Hoist: TraceOps                           =====
+Imports Processed
+===== Starting Optimize2: TraceOps                       =====
+===== Starting Inline2: TraceOps                         =====
+  6 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: TraceOps                       =====
+===== Starting Inline3: TraceOps                         =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: TraceOps                          =====
+===== Starting ClosureConv: TraceOps                     =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  5 procedures.  5 recursive components.   Largest component has size 1.
+Slave compiled TraceOps
+Flushing BoundCheck.
+Slave waiting for master to send work.
+Flushing TORTLSUM.
+Flushing TORTLARRAY.
+Flushing Reify.
+  [203 imports of total size 1032299 were cached.
+   8 imports of total size 103315 were uncached and took 1.01 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Rtl/tortl-record.sig.sml]
+  [Elaborating Rtl/tortl-record.sig.sml non-constrained]
+  [writing Rtl/TM/any/tortl-record.sig.sml.il - unnecessary]
+gc_context: 609 items in original context.  36 items in reduced context.
+Sending ACK_INTERFACE: interface took 2.218 seconds 
+  [Compiling TORTLRECORD to assembly]
+===== Starting Phasesplit: TORTLRECORD                   =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: TORTLRECORD                       =====
+===== Starting Optimize1: TORTLRECORD                    =====
+===== Starting Vararg: TORTLRECORD                       =====
+===== Starting Inline1: TORTLRECORD                      =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: TORTLRECORD                       =====
+===== Starting Specialize: TORTLRECORD                   =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: TORTLRECORD                        =====
+Imports Processed
+===== Starting Optimize2: TORTLRECORD                    =====
+===== Starting Inline2: TORTLRECORD                      =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: TORTLRECORD                    =====
+===== Starting Inline3: TORTLRECORD                      =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: TORTLRECORD                       =====
+===== Starting ClosureConv: TORTLRECORD                  =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+Slave compiled TORTLRECORD
+Slave waiting for master to send work.
+Flushing NilStatic.
+Flushing Vararg.
+  [212 imports of total size 1137019 were cached.
+   0 imports of total size 0 were uncached and took 0.01 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Rtl/tortl-record.sml]
+  [Elaborating Rtl/tortl-record.sml non-constrained]
+  [writing Rtl/TM/any/tortl-record.sml.il - unnecessary]
+gc_context: 610 items in original context.  70 items in reduced context.
+Sending ACK_INTERFACE: interface took 3.848 seconds 
+  [Compiling TortlRecord to assembly]
+===== Starting Phasesplit: TortlRecord                   =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: TortlRecord                       =====
+===== Starting Optimize1: TortlRecord                    =====
+===== Starting Vararg: TortlRecord                       =====
+===== Starting Inline1: TortlRecord                      =====
+  2 functions inlined once.
+  6 copies of 3 other functions inlined.
+===== Starting Reify1: TortlRecord                       =====
+===== Starting Specialize: TortlRecord                   =====
+  1 optimizable candidates.
+  10 impure.
+  13 escaping.
+  2 used polymorphically.
+===== Starting Hoist: TortlRecord                        =====
+Imports Processed
+===== Starting Optimize2: TortlRecord                    =====
+===== Starting Inline2: TortlRecord                      =====
+  0 functions inlined once.
+  5 copies of 2 other functions inlined.
+===== Starting Optimize3: TortlRecord                    =====
+===== Starting Inline3: TortlRecord                      =====
+  3 functions inlined once.
+  2 copies of 1 other functions inlined.
+===== Starting Reify2: TortlRecord                       =====
+===== Starting ClosureConv: TortlRecord                  =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  22 procedures.  22 recursive components.   Largest component has size 1.
+Slave compiled TortlRecord
+Slave waiting for master to send work.
+Flushing TortlArray.
+Flushing TortlSum.
+  [203 imports of total size 1032299 were cached.
+   14 imports of total size 38780 were uncached and took 0.86 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Nil/optimize.sml]
+  [Elaborating Nil/optimize.sml non-constrained]
+  [writing Nil/TM/any/optimize.sml.il - unnecessary]
+gc_context: 613 items in original context.  93 items in reduced context.
+Sending ACK_INTERFACE: interface took 16.382 seconds 
+  [Compiling Optimize to assembly]
+===== Starting Phasesplit: Optimize                      =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Optimize                          =====
+===== Starting Optimize1: Optimize                       =====
+===== Starting Vararg: Optimize                          =====
+===== Starting Inline1: Optimize                         =====
+  29 functions inlined once.
+  48 copies of 16 other functions inlined.
+===== Starting Reify1: Optimize                          =====
+===== Starting Specialize: Optimize                      =====
+  16 optimizable candidates.
+  75 impure.
+  100 escaping.
+  5 used polymorphically.
+===== Starting Hoist: Optimize                           =====
+Imports Processed
+===== Starting Optimize2: Optimize                       =====
+===== Starting Inline2: Optimize                         =====
+  11 functions inlined once.
+  74 copies of 25 other functions inlined.
+===== Starting Optimize3: Optimize                       =====
+===== Starting Inline3: Optimize                         =====
+  0 functions inlined once.
+  9 copies of 3 other functions inlined.
+===== Starting Reify2: Optimize                          =====
+===== Starting ClosureConv: Optimize                     =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  143 procedures.  143 recursive components.   Largest component has size 1.
+Slave compiled Optimize
+Slave waiting for master to send work.
+Flushing Tortl.
+Flushing Equal.
+Flushing Signature.
+Flushing Datatype.
+Flushing ToNil.
+Flushing IlStatic.
+Flushing Basis.
+  [Compiling Toil to assembly]
+  [174 imports of total size 830138 were cached.
+   33 imports of total size 173552 were uncached and took 3.63 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Elaborator/toil.sml]
+  [Elaborating Elaborator/toil.sml non-constrained]
+Warning: top-level unresolved tyvar -- setting to type unit
+Warning: top-level unresolved tyvar -- setting to type unit
+Warning: top-level unresolved tyvar -- setting to type unit
+Warning: top-level unresolved tyvar -- setting to type unit
+Warning: top-level unresolved tyvar -- setting to type unit
+Warning: top-level unresolved tyvar -- setting to type unit
+Warning: top-level unresolved tyvar -- setting to type unit
+Warning: top-level unresolved tyvar -- setting to type unit
+Warning: top-level unresolved tyvar -- setting to type unit
+  [writing Elaborator/TM/any/toil.sml.il - unnecessary]
+gc_context: 603 items in original context.  101 items in reduced context.
+===== Starting Phasesplit: Toil                          =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Toil                              =====
+===== Starting Optimize1: Toil                           =====
+===== Starting Vararg: Toil                              =====
+===== Starting Inline1: Toil                             =====
+  50 functions inlined once.
+  44 copies of 17 other functions inlined.
+===== Starting Reify1: Toil                              =====
+===== Starting Specialize: Toil                          =====
+  14 optimizable candidates.
+  80 impure.
+  223 escaping.
+  6 used polymorphically.
+===== Starting Hoist: Toil                               =====
+Imports Processed
+===== Starting Optimize2: Toil                           =====
+===== Starting Inline2: Toil                             =====
+  4 functions inlined once.
+  66 copies of 26 other functions inlined.
+===== Starting Optimize3: Toil                           =====
+===== Starting Inline3: Toil                             =====
+  0 functions inlined once.
+  3 copies of 1 other functions inlined.
+===== Starting Reify2: Toil                              =====
+===== Starting ClosureConv: Toil                         =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  271 procedures.  271 recursive components.   Largest component has size 1.
+Slave compiled Toil
+Slave waiting for master to send work.
+WARNING: channel disappeared in the middle of exists
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing Pat.
+Flushing Linknil.
+Flushing LinkIl.
+  [237 imports of total size 1208373 were cached.
+   81 imports of total size 409924 were uncached and took 10.11 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Rtl/linkrtl.sml]
+  [Warning: constraints currently coerce.  Not compatible with our notion of freshness.]
+  [Elaborating Rtl/linkrtl.sml with constraint]
+  [writing Rtl/TM/any/linkrtl.sml.il]
+gc_context: 730 items in original context.  63 items in reduced context.
+Sending ACK_INTERFACE: interface took 11.987 seconds 
+  [Compiling Linkrtl to assembly]
+===== Starting Phasesplit: Linkrtl                       =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Linkrtl                           =====
+===== Starting Optimize1: Linkrtl                        =====
+===== Starting Vararg: Linkrtl                           =====
+===== Starting Inline1: Linkrtl                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: Linkrtl                           =====
+===== Starting Specialize: Linkrtl                       =====
+  0 optimizable candidates.
+  0 impure.
+  2 escaping.
+  0 used polymorphically.
+===== Starting Hoist: Linkrtl                            =====
+Imports Processed
+===== Starting Optimize2: Linkrtl                        =====
+===== Starting Inline2: Linkrtl                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: Linkrtl                        =====
+===== Starting Inline3: Linkrtl                          =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: Linkrtl                           =====
+===== Starting ClosureConv: Linkrtl                      =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  3 procedures.  3 recursive components.   Largest component has size 1.
+Slave compiled Linkrtl
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing Linkalpha.
+Flushing Linksparc.
+Flushing Target.
+  [319 imports of total size 1620788 were cached.
+   3 imports of total size 3271 were uncached and took 0.2 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Top/paths.sml]
+  [Elaborating Top/paths.sml non-constrained]
+  [writing Top/TM/any/paths.sml.il - unnecessary]
+gc_context: 734 items in original context.  39 items in reduced context.
+Sending ACK_INTERFACE: interface took 1.022 seconds 
+  [Compiling Paths to assembly]
+===== Starting Phasesplit: Paths                         =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Paths                             =====
+===== Starting Optimize1: Paths                          =====
+===== Starting Vararg: Paths                             =====
+===== Starting Inline1: Paths                            =====
+  0 functions inlined once.
+  9 copies of 3 other functions inlined.
+===== Starting Reify1: Paths                             =====
+===== Starting Specialize: Paths                         =====
+  0 optimizable candidates.
+  5 impure.
+  24 escaping.
+  0 used polymorphically.
+===== Starting Hoist: Paths                              =====
+Imports Processed
+===== Starting Optimize2: Paths                          =====
+===== Starting Inline2: Paths                            =====
+  4 functions inlined once.
+  6 copies of 2 other functions inlined.
+===== Starting Optimize3: Paths                          =====
+===== Starting Inline3: Paths                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: Paths                             =====
+===== Starting ClosureConv: Paths                        =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  20 procedures.  20 recursive components.   Largest component has size 1.
+Slave compiled Paths
+Slave waiting for master to send work.
+Flushing Dirs.
+Flushing FileCache.
+  [323 imports of total size 1625285 were cached.
+   8 imports of total size 23008 were uncached and took 1.33 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Top/tools.sml]
+  [Elaborating Top/tools.sml non-constrained]
+  [writing Top/TM/any/tools.sml.il - unnecessary]
+gc_context: 744 items in original context.  61 items in reduced context.
+Sending ACK_INTERFACE: interface took 3.124 seconds 
+  [Compiling Tools to assembly]
+===== Starting Phasesplit: Tools                         =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Tools                             =====
+===== Starting Optimize1: Tools                          =====
+===== Starting Vararg: Tools                             =====
+===== Starting Inline1: Tools                            =====
+  3 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: Tools                             =====
+===== Starting Specialize: Tools                         =====
+  0 optimizable candidates.
+  3 impure.
+  8 escaping.
+  0 used polymorphically.
+===== Starting Hoist: Tools                              =====
+Imports Processed
+===== Starting Optimize2: Tools                          =====
+===== Starting Inline2: Tools                            =====
+  1 functions inlined once.
+  5 copies of 2 other functions inlined.
+===== Starting Optimize3: Tools                          =====
+===== Starting Inline3: Tools                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: Tools                             =====
+===== Starting ClosureConv: Tools                        =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  9 procedures.  9 recursive components.   Largest component has size 1.
+Slave compiled Tools
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing Compiler.
+  [332 imports of total size 1648597 were cached.
+   62 imports of total size 371717 were uncached and took 5.44 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Top/updatehelp.sml]
+  [Elaborating Top/updatehelp.sml non-constrained]
+  [writing Top/TM/any/updatehelp.sml.il - unnecessary]
+gc_context: 810 items in original context.  62 items in reduced context.
+Sending ACK_INTERFACE: interface took 8.937 seconds 
+  [Compiling UpdateHelp to assembly]
+===== Starting Phasesplit: UpdateHelp                    =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: UpdateHelp                        =====
+===== Starting Optimize1: UpdateHelp                     =====
+===== Starting Vararg: UpdateHelp                        =====
+===== Starting Inline1: UpdateHelp                       =====
+  23 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: UpdateHelp                        =====
+===== Starting Specialize: UpdateHelp                    =====
+  1 optimizable candidates.
+  3 impure.
+  14 escaping.
+  0 used polymorphically.
+===== Starting Hoist: UpdateHelp                         =====
+Imports Processed
+===== Starting Optimize2: UpdateHelp                     =====
+===== Starting Inline2: UpdateHelp                       =====
+  1 functions inlined once.
+  7 copies of 2 other functions inlined.
+===== Starting Optimize3: UpdateHelp                     =====
+===== Starting Inline3: UpdateHelp                       =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: UpdateHelp                        =====
+===== Starting ClosureConv: UpdateHelp                   =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  15 procedures.  15 recursive components.   Largest component has size 1.
+Slave compiled UpdateHelp
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing Update.
+Flushing COMMUNICATION.
+Flushing Communication.
+Flushing Slave.
+  [395 imports of total size 2024532 were cached.
+   15 imports of total size 23959 were uncached and took 2.16 seconds.]
+!!!Could not find _53306: probably bug with SplayMapFn.unionWithi
+!!!Could not find _892: probably bug with SplayMapFn.unionWithi
+  [Added contexts.]
+  [Parsing Top/master.sml]
+  [Elaborating Top/master.sml non-constrained]
+  [writing Top/TM/any/master.sml.il - unnecessary]
+gc_context: 827 items in original context.  123 items in reduced context.
+Sending ACK_INTERFACE: interface took 11.454 seconds 
+  [Compiling Master to assembly]
+===== Starting Phasesplit: Master                        =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Master                            =====
+===== Starting Optimize1: Master                         =====
+===== Starting Vararg: Master                            =====
+===== Starting Inline1: Master                           =====
+  44 functions inlined once.
+  6 copies of 3 other functions inlined.
+===== Starting Reify1: Master                            =====
+===== Starting Specialize: Master                        =====
+  4 optimizable candidates.
+  34 impure.
+  76 escaping.
+  2 used polymorphically.
+===== Starting Hoist: Master                             =====
+Imports Processed
+===== Starting Optimize2: Master                         =====
+===== Starting Inline2: Master                           =====
+  7 functions inlined once.
+  34 copies of 11 other functions inlined.
+===== Starting Optimize3: Master                         =====
+===== Starting Inline3: Master                           =====
+  6 functions inlined once.
+  2 copies of 1 other functions inlined.
+===== Starting Reify2: Master                            =====
+===== Starting ClosureConv: Master                       =====
+===== Translating to RTL             =====
+
+===== Translating to TIL-Sparc assembly      =====
+  87 procedures.  87 recursive components.   Largest component has size 1.
+Slave compiled Master
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Flushing Manager.
+Slave waiting for master to send work.
+Flushing Main.
+Flushing Top.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.
+Slave waiting for master to send work.

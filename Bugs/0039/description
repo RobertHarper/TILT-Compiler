@@ -1,0 +1,20 @@
+Number: 0039
+Title:       Problems with our treatment of reals.
+Keywords:    Elaborator, Basis
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        12/21/00
+Version:     CVS
+System:	     all
+Severity:    major
+Problem:
+	The elaborator does not do any range checks on floating point
+	literals (see make_float_overload).  The basis structures
+	Real, Math, and IEEEReal are buggy and incomplete.
+Code:
+Transcript:
+Comments:
+	See also bug 12.
+Fix:
+Test:
+Owner: swasey
+Status: open

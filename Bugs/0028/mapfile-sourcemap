@@ -1,0 +1,3 @@
+#include mapfile-basis
+SOURCEMAP ../../../Parser/sourcemap.sig
+BugSourcemap bug-sourcemap

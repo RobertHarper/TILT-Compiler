@@ -1,0 +1,21 @@
+Number: 0010
+Title:       Want a separate stack for signal handlers on alpha.
+Keywords:    alpha,runtime
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        7/17/00
+Version:     CVS
+System:	     alpha
+Severity:    cosmetic
+Problem:
+	Have we considered using sigaltstack() (or sigstack()) to set
+	aside some stack space for signal handler execution?  I think
+	its possible to have the runtime's signal handler correctly
+	diagnose stack overflows.  The alternative is to let the OS
+	do it (killing off the process).
+Code:	     
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

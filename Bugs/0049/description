@@ -1,0 +1,130 @@
+Number: 0049
+Title:       Datatype optimizer problems.
+Keywords:    Optimizer, datatypes
+Submitter:   Tom Murphy <tom7+@cs.cmu.edu>
+Date:        6/28/2000
+Version:     CVS
+System:	     all
+Severity:    major
+Problem:
+	The simplest source code which leads to the bug is
+
+	datatype 'a foo = A of 'a bar
+	     and 'a bar = B of 'a foo
+
+	For the record, the bug occurs in inhabited types too.
+
+	If you compile this code with the flags showOptimize1, showVararg, and
+	doTypecheckBetweenOpts all true, you'll see
+		1. The module after Optimize1.
+		2. A successful typecheck.
+		3. The module after Vararg.
+		4. A failed typecheck.
+Code:
+Transcript:
+Comments:
+	The binding which fails to typecheck is the equality function for
+	bar.  Here it is:
+
+	     1	*          /LEAF\poly+Ebar_INT_r_1106
+	     2	*            (mpoly_var_c_1107 :: REC_K{'a > 'a_1109 :  TYPE} ;; mpoly_var_r_1108 : Unknown : DEP_RECORD[ ] ;; )
+	     3	*          =>LET  type_1220 = ALLARROW(Open; PARTIAL; (); 
+	     4	*                                (APP(_1086,(mpoly_var_c_1107.'a)), APP(_1086,(mpoly_var_c_1107.'a))); 0; 
+	     5	*                                LET  type_1218 = MU_NR((_1115=SUM(2,2)(CREC{})))
+	     6	*                                     type_1219 = type_1218.1
+	     7	*                                IN   type_1219
+	     8	*                                END)
+	     9	*            IN   type_1220
+	    10	*            END =
+	    11	*          Let  _1210 : Unknown = App_Open(_bar_foo_eq_r_1038;  mpoly_var_c_1107; mpoly_var_r_1108;  )
+	    12	*               v1_1211 : Unknown = select[1][](_1210)
+	    13	*          In   v1_1211
+	    14	*          End,
+
+	The free variables here have to do with the type 'a bar and the actual
+	equality function for 'a foo and 'a bar:
+
+	           _1035 =  FUN('a_1032 ::  TYPE) = MU((vdt_bar_1033=SUM(0,1)(vdt_foo_1034), vdt_foo_1034=SUM(0,1)(vdt_bar_1033))),
+	*          _1086 =  FUN('a_1085 ::  TYPE) = PROJ(APP(_1035,('a_1085)),1),
+	*          /LEAF\_bar_foo_eq_r_1038
+	*            (mpoly_var_c_1039 :: REC_K{'a > 'a_1041 :  TYPE} ;; mpoly_var_r_1040 : Unknown : DEP_RECORD[ ] ;; )
+	*          => [...] = [...]
+
+	The typechecker wants to check that the body in lines 11-14 has the type
+	c in lines 3-10.  To do this it synthesizes a type c' for the body and
+	verifies that c' is a subtype of c.  It is this last step which fails.
+
+	The synthesized type c' looks like
+
+	          ALLARROW(Open; PARTIAL; (); 
+	*            (PROJ(MU((vdt_bar_1437=SUM(0,1)(vdt_foo_1438), vdt_foo_1438=SUM(0,1)(vdt_bar_1437))),1),
+	*             PROJ(MU((vdt_bar_1439=SUM(0,1)(vdt_foo_1440), vdt_foo_1440=SUM(0,1)(vdt_bar_1439))),1)); 0; 
+	*            LET  type_1441 = MU_NR((_1083=SUM(2,2)(CREC{})))
+	*                 type_1442 = type_1441.1
+	*            IN   type_1442
+	*            END)
+
+	When checking that c' is a subtype of c, the compare loop in con_equiv
+	invokes context_beta_reduce on PROJ(MU(...),1) which fails.
+
+	As far as I can tell, the code as modified by Vararg is correct, the
+	synthesized type c' is correct, and the type-checking strategy being
+	employed matches the TR.
+Fix:
+	Dave - 
+
+	I have checked in the fix to the bug.  The context_beta_reduce code
+	had a bug in it.  I have tested it with a bootstrap of the compiler -
+	let me know if you run into problems with it anywhere else.
+
+	Not surprised you couldn't figure out the bug - it's small, subtle,
+	and kind of dumb.  The worst kind.  :)
+
+	The problem is with the boolean flag returned by context_beta_reduce.
+	This flag indicates whether or not the result is a path or not, so
+	that we know whether we should bother carrying out the alpha renaming, 
+	and looking in the context for an equation.  For this purpose, a mu or 
+	a projection from a mu is not a path, and hence these two cases returned 
+	false for the flag.
+
+		 | (Mu_c _)              => (state,constructor,false)
+
+		 | (Proj_c (Mu_c _,lab)) => (state,constructor,false)
+
+	Internally however, context_beta_reduce also uses this flag to
+	determine whether the result of a recursive call is something that can 
+	be reduced if it appears in an elim position.  In particular, the
+	Proj_c case for a non-mu expected that if the flag returned from the
+	recursive call was false, then the result must be a syntactic record,
+	and it should be able to beta-reduce it.  This is of course not true
+	when the projectee is a mu.  In particular, your example generated
+	code that looked like the following:
+
+	Proj_c((/\a::k.mu_c(...)) c,lbl)
+
+	The Proj_c case beta reduced (/\a::k.mu_c(...)) c to mu_c(...)[c/a]
+	and then noticed that the result was not a path, and tried to project
+	out a field.  This probably did not arise before, because we were
+	being less smart, and always inlining the mu_c directly, so it got
+	caught by the special case Proj_c(Mu_c _,lbl) which I have now
+	eliminated.
+
+	There were two possible fixes to this, as far as I can tell.  One is
+	to have Mu_c return true for the flag.  I think this is sound, but
+	means that you will carry out substitutions and try to look up
+	equations unnecessarily.  
+
+	The other solution, which I used, is simply to change the Proj_c case
+	to not raise an error if it the projectee is not a record.  If we
+	wanted extra error checking code there, I suppose we could actually
+	check to make sure that the thing in question was a mu_c, if not
+	actually a record, but I didn't do so.
+
+	Let me know if you have any questions, or if you find any bugs in my
+	bug fix.
+
+	Cheers,
+	Leaf
+Test:
+Owner: leaf
+Status: closed

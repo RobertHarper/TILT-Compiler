@@ -1,0 +1,58 @@
+Number: 0027
+Title:       Compile fails on trivial source.
+Keywords:    type_of, Nil
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        10/16/00
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	Compilation terminates with nonexhaustive match failure.  The source
+	is trivial:
+		val _ = TiltPrim.igt(0,0)
+	Related problem with this source:
+		val _ = if ~2147483648 > 0
+		        then print "BAD min_int\n"
+			else ()
+Code:
+	See mapfile.
+Transcript:
+Comments:
+	tilt -fshowPhasesplit -fshowOptimize1 -fdoTypecheckBetweenOpts mapfile
+
+	The optimizer (Nil/optimize.sml) is evaluating the comparison
+	via NilPrimUtil (Elaborator/primutil.sml) which calls
+	NilPrimUtilParam.bool2exp (Nil/nilprimutilparam.sml) to get
+	the Nil.exp representation of false.
+
+	The problem is exp_false in nilprimutilparam.sml is malformed.
+	It has the form (inject_known_0 c) where c is not a sum:
+ 
+	 	val con_bool = 
+	 	    Proj_c(Mu_c(false,
+	 			Sequence.fromList
+	 			[(Name.fresh_named_var "nil_con_bool",
+	 			  Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[Crecord_c[]]))]),
+	 		   IlUtil.generate_tuple_label 1)
+	 	val false_exp = Prim_e(NilPrimOp (inject_known 0w0),[con_bool],[])
+
+	One attemped fix is to make false_exp and true_exp more closely match
+	what you'd get from ``datatype bool = false | true'':
+
+		val con_bool_sum = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=NONE},[Crecord_c[]])
+		val con_bool = 
+		    Proj_c(Mu_c(false,
+				Sequence.fromList
+				[(Name.fresh_named_var "nil_con_bool",
+				  con_bool_sum)]),
+			   IlUtil.generate_tuple_label 1)
+		val false_exp = Prim_e(NilPrimOp roll, [con_bool],
+				       [Prim_e(NilPrimOp (inject_known 0w0), [con_bool_sum], [])])
+
+	This doesn't work because the optimizer expects the roll argument to be
+	a value.  It wants either a Var_e or a Const_e in place of the Prim_e.
+	Perry suggested wrapping the roll argument up with Let_e.  This worked.
+Fix:
+Test:
+Owner: swasey
+Status: closed

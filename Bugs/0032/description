@@ -1,0 +1,93 @@
+Number: 0032
+Title:       Overloading of word constants and default overloading does not work.
+Keywords:    Elaborator, overloading.
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        11/24/00
+Version:     CVS
+System:	     all
+Severity:    major
+Problem:
+	See appendix E of the Definition.
+
+	The standard requires that special constants be overloaded.
+	For TILT, this means that word constants like 0w0 must work at
+	types uint8 and uint32.
+
+	The standard requires that overloaded operators and special
+	constants default to a specific type (one of int, real, word,
+	char, or string).  TILT fails to provide defaults, aborting
+	with "cannot blastOut unresolved CON_TYVAR" or with
+	"overloaded type: none of the constraints are satisfied".
+Code:
+	tilt -fUptoElaborate mapfile
+Transcript:
+Comments:
+	To fix special constant overloading, toil now has functions
+	make_X_overload, where X can be int, float, uint, string,
+	char.  In general, these take a literal and construct an IL
+	overloaded expression supporting each type which is large
+	enough to contain the literal.  Most of these don't do any
+	overloading since we don't support multiple sizes of ints,
+	chars, strings, or reals.
+
+	There are three facets to supporting defaults:
+	(1) how they are specified in overload declarations,
+	(2) how they are represented in the IL, and
+	(3) at what points are they applied.
+
+	For (1) I considered several options:
+	(i)   extend the syntax of overload declarations to include an
+	      explicit default
+	(ii)  make the order of overload declarations matter (and pick,
+	      say, the first expression as the default)
+	(iii) when an overloaded identifier is declared, scan the possible
+	      types using the rules on p. 72 of the Definition.  That
+	      is, for /, the default is the type which contains the
+	      name real and for all others the default is the type which
+	      contains the name int.
+	(iv)  when an overloaded identifier is used, scan the possible
+	      types as in (iii).
+
+	Both (i) and (iii) require that IL contexts maintain an
+	explict default for each overloaded identifier.  The problem
+	with (iv) is its slightly inefficient and very ugly.  The
+	problem with (ii) is it doesn't interact well with the
+	treatment of import lists.  The order of imports is
+	irrelevant.  When two units provide overloads for the same
+	identifier (eg, Prelude and TopLevel) you can't predict which
+	batch of overloads are added first.  I chose to implement
+	(iii).
+
+	With (1) settled, (2) became clear.  IL contexts used to store
+	a (con * exp) list for each overloaded identifier.  This has
+	been augmented with an int option indicating which choice is
+	the default.  Type Tyvar.ocon, which does the book-keeping for
+	an overloaded constructor, now supports a default.  There is a
+	new operation Tvar.ocon_constrain_default : ('ctxt,'con,'exp)
+	ocon -> int which behaves like ocon_constrain except when more
+	than one constraint is satisfied and the default is one of
+	those.  In this case, the default is taken.
+
+	For (3), the standard provides some guidance.  It says "for
+	this purpose, the surrounding text is no larger than the
+	smallest enclosing structure-level declaration."  We now are
+	applying defaults to under-constrained, overloaded
+	constructors after each structure and functor binding is
+	translated and after the entire compilation unit is
+	translated.
+
+	While working on this, I fixed some unrelated bugs:
+
+	* Changed IlContextEq to distinguish between contexts with
+	  different fixity or overload information.
+
+	* Eliminated code that maintained the order of overload
+	  entries for an identifier.  I added this several months ago
+	  when I thought (ii) would eventually be implemented.
+
+	* Added range checks on word and integer constants.  Errors
+	  like "val w : Word32.word = 0wx1FFFFFFFF" are caught early.
+Fix:
+Test: 
+Owner: swasey
+Status: closed

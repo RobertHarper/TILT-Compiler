@@ -1,0 +1,23 @@
+Number: 0080
+Title:       Phase splitting fails on some files.
+Keywords:    Phase splitter, frontend
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        6/19/02
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	There exists a sequence of compilation units (part of the Basis)
+	which compile fine in isolation but fail to compile when concatenated.
+	The phase splitter raises an exception.
+Code:
+	See PhasesplitBug.tar.gz
+Transcript:
+Comments:
+	I handed this off to Leaf and Mark.
+
+	They punted on it.
+Fix:
+Test:
+Owner: swasey
+Status: open

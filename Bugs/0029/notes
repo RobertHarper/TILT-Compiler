@@ -1,0 +1,161 @@
+Graph => Util/TM/any/graph.sml.il
+HashTable => Basis/Library/TM/any/hash-table.sml.il
+
+       ===== Starting Optimize1: Graph                          =====
+       lookup_cproj could not find hash_table  among node  +OopenlblHashTable  
+       tilt: optimize.sml: lookup_cproj: could not find label
+
+With -fdoTypecheckAfterPhasesplit:
+	
+	===== Starting TypecheckAfterPhasesplit: Graph           =====
+	  Done checking context
+	  Done validating imports
+	attempted to project label hash_table from 
+	strbindvar_c_17341
+	 which has labelsnode,  +OopenlblHashTable
+	TYPE ERROR: Problem with constructor
+	Ill-formed projection
+	strbindvar_c_17341.hash_table
+	WITH MINIMAL CONTEXT AS
+	
+	 Constructor variables, kinds, and equations are :
+	strbindvar_c_17341 = CREC{node = node_17343, +OopenlblHashTable = openvar_c_17345}::          REC_K{node > con_valid_record_18927 :  SINGLE_TYPE(node_17343),
+	*               +OopenlblHashTable > con_valid_record_18928 : 
+	*               REC_K{hiddenThinModule > _c_16033 : 
+	*                     REC_K{+OopenlblKey > _c_16035 : 
+	*                           REC_K{hash_key > _16037 : 
+	*                                 SINGLE_TYPE(openvar_c_17345.hiddenThinModule.
+	*                                                             +OopenlblKey.
+	*                                                             hash_key)},
+	*                           HTRep > _c_16038 : 
+	*                           REC_K{table > _16046 : 
+	*                                 Arrow_k(Open; _16040 : TYPE, _16041 : TYPE; 
+	*         +1   SINGLE_TYPE(APP(openvar_c_17345.hiddenThinModule. HTRep. table,(_16040, _16041))))},
+	*                           hash_table > _16050 : 
+	*                           Arrow_k(Open; _16047 : TYPE; SINGLE_TYPE(
+	*         +1   APP(openvar_c_17345.hiddenThinModule. hash_table,
+	*         +1     (_16047))))},
+	*                     Key > _c_16051 : 
+	*                     REC_K{hash_key > _16053 : 
+	*                           SINGLE_TYPE(openvar_c_17345.Key. hash_key)},
+	*                     hash_table > _16065 : 
+	*                     Arrow_k(Open; _16056 : TYPE; SINGLE_TYPE(
+	*         +1   APP(openvar_c_17345.hash_table,
+	*         +1     (_16056))))}}
+	openvar_c_17345 = APP(_c_16026,(coerced_HashKey_c_17336))::          REC_K{hiddenThinModule > _c_16033 : 
+	*               REC_K{+OopenlblKey > _c_16035 : 
+	*                     REC_K{hash_key > _16037 : 
+	*                           SINGLE_TYPE(strbindvar_c_17334.hiddenThinModule.
+	*                                                          +OopenlblKey.
+	*                                                          hash_key)},
+	*                     HTRep > _c_16038 : 
+	*                     REC_K{table > _16046 : 
+	*                           Arrow_k(Open; _16040 : TYPE, _16041 : TYPE; 
+	*         +1   SINGLE_TYPE(APP(strbindvar_c_17334.hiddenThinModule. HTRep. table,
+	*         +1                 (_16040, _16041))))},
+	*                     hash_table > _16050 : 
+	*                     Arrow_k(Open; _16047 : TYPE; SINGLE_TYPE(
+	*         +1   APP(strbindvar_c_17334.hiddenThinModule. hash_table,
+	*         +1     (_16047))))},
+	*               Key > _c_16051 : 
+	*               REC_K{hash_key > _16053 :  SINGLE_TYPE(strbindvar_c_17334.Key. hash_key)},
+	*               hash_table > _16065 : 
+	*               Arrow_k(Open; _16056 : TYPE; SINGLE_TYPE(APP(
+	*         +1   strbindvar_c_17334.hash_table,
+	*                                                          (_16056))))}
+	node_17343 = VECTOR(_14458)::SINGLE_TYPE(_14518)
+	strbindvar_c_17334 = APP(_c_16026,(coerced_HashKey_c_17336))::          REC_K{hiddenThinModule > _c_16033 : 
+	*               REC_K{+OopenlblKey > _c_16035 : 
+	*                     REC_K{hash_key > _16037 : 
+	*                           SINGLE_TYPE(PROJ(PROJ(PROJ(APP(_c_16026,
+	*                                                        (coerced_HashKey_c_17336)),hiddenThinModule),+OopenlblKey),hash_key))},
+	*                     HTRep > _c_16038 : 
+	*                     REC_K{table > _16046 : 
+	*                           Arrow_k(Open; _16040 : TYPE, _16041 : TYPE; 
+	*         +1   SINGLE_TYPE(APP(PROJ(PROJ(PROJ(APP(_c_16026,(coerced_HashKey_c_17336)),hiddenThinModule),HTRep),table),
+	*         +1                 (_16040, _16041))))},
+	*                     hash_table > _16050 : 
+	*                     Arrow_k(Open; _16047 : TYPE; SINGLE_TYPE(
+	*         +1   APP(PROJ(PROJ(APP(_c_16026,(coerced_HashKey_c_17336)),hiddenThinModule),hash_table),
+	*         +1     (_16047))))},
+	*               Key > _c_16051 : 
+	*               REC_K{hash_key > _16053 : 
+	*                     SINGLE_TYPE(PROJ(PROJ(APP(_c_16026,(coerced_HashKey_c_17336)),Key),hash_key))},
+	*               hash_table > _16065 : 
+	*               Arrow_k(Open; _16056 : TYPE; SINGLE_TYPE(APP(
+	*         +1   PROJ(APP(_c_16026,(coerced_HashKey_c_17336)),hash_table),
+	*                                                          (_16056))))}
+	coerced_HashKey_c_17336 = CREC{hash_key = copy_hash_key_TYC_17338}::REC_K{hash_key > con_valid_record_18926 :  SINGLE_TYPE(copy_hash_key_TYC_17338)}
+	_c_16026::          Arrow_k(Open; _c_16028 : REC_K{hash_key > _16030 :  TYPE}; 
+	*         +1   REC_K{hiddenThinModule > _c_16033 : 
+	*         +1         REC_K{+OopenlblKey > _c_16035 : 
+	*         +1               REC_K{hash_key > _16037 :  SINGLE_TYPE(_c_16028.hash_key)},
+	*         +1               HTRep > _c_16038 : 
+	*         +1               REC_K{table > _16046 : 
+	*         +1                     Arrow_k(Open; _16040 : TYPE, _16041 : TYPE; 
+	*         +2   SINGLE_TYPE(APP(_14463,
+	*         +2                 (APP(_c_15863.hiddenThinModule. bucket,(_16040, _16041))))))},
+	*         +1               hash_table > _16050 : 
+	*         +1               Arrow_k(Open; _16047 : TYPE; SINGLE_TYPE(
+	*         +2   PROJ(MU_NR((_16048=SUM(0,1)
+	*         +2                        (RECORD[table, not_found, n_items]
+	*         +2                           (APP(_14467,
+	*         +2                              (APP(_c_16038.table,(_c_16035.hash_key, _16047)))),
+	*         +2                            _14459,
+	*         +2                            APP(_14467,(_14454)))))),1)))},
+	*         +1         Key > _c_16051 : 
+	*         +1         REC_K{hash_key > _16053 :  SINGLE_TYPE(_c_16028.hash_key)},
+	*         +1         hash_table > _16065 : 
+	*         +1         Arrow_k(Open; _16056 : TYPE; SINGLE_TYPE(PROJ(
+	*         +2   MU_NR((_16057=SUM(0,1)
+	*         +2                   (RECORD[table, not_found, n_items]
+	*         +2                      (APP(_14467,
+	*         +2                         (APP(_c_16033.HTRep. table,
+	*         +2                            (_c_16033.+OopenlblKey. hash_key, _16056)))),
+	*         +2                       _14459,
+	*         +2                       APP(_14467,(_14454)))))),1)))})
+	copy_hash_key_TYC_17338 = PROJ(CREC{hash_key = hash_key_17330},hash_key)::SINGLE_TYPE(strbindvar_c_17328.hash_key)
+	_c_15863::          REC_K{hiddenThinModule > _c_15865 : 
+	*               REC_K{bucket > _15871 : 
+	*                     Arrow_k(Open; _15867 : TYPE, _15868 : TYPE; 
+	*         +1   SINGLE_TYPE(PROJ(MU((_15869=SUM(1,2)
+	*         +1                                 (RECORD[1, 2, 3, 4]
+	*         +1                                    (_14457, _15867, _15868, _15869)))),1))),
+	*                     bucket_sumarg > _15875 : 
+	*                     Arrow_k(Open; _15872 : TYPE, _15873 : TYPE; 
+	*         +1   SINGLE_TYPE(RECORD[1, 2, 3, 4]
+	*         +1                 (_14457, _15872, _15873, APP(_15871,(_15872, _15873))))),
+	*                     bucket_sum > _15879 : 
+	*                     Arrow_k(Open; _15876 : TYPE, _15877 : TYPE; 
+	*         +1   SINGLE_TYPE(SUM(1,2)(APP(_15875,(_15876, _15877)))))},
+	*               bucket > _15884 : 
+	*               Arrow_k(Open; _15880 : TYPE, _15881 : TYPE; 
+	*         +1   SINGLE_TYPE(PROJ(MU((_15882=SUM(1,2)
+	*         +1                                 (RECORD[1, 2, 3, 4]
+	*         +1                                    (_14457, _15880, _15881, _15882)))),1))),
+	*               bucket_sumarg > _15888 : 
+	*               Arrow_k(Open; _15885 : TYPE, _15886 : TYPE; 
+	*         +1   SINGLE_TYPE(RECORD[1, 2, 3, 4]
+	*         +1                 (_14457, _15885, _15886, APP(_c_15865.bucket,(_15885, _15886))))),
+	*               bucket_sum > _15893 : 
+	*               Arrow_k(Open; _15889 : TYPE, _15890 : TYPE; 
+	*         +1   SINGLE_TYPE(SUM(1,2)(APP(_c_15865.bucket_sumarg,(_15889, _15890))))),
+	*               table > _15909 : 
+	*               Arrow_k(Open; _15906 : TYPE, _15907 : TYPE; 
+	*         +1   SINGLE_TYPE(APP(_14463,(APP(_c_15865.bucket,(_15906, _15907))))))}
+	_14467::Arrow_k(Open; _14465 : TYPE; SINGLE_TYPE(ARRAY(_14465)))
+	_14459::SINGLE_TYPE(EXN)
+	_14454 = INT32::SINGLE_TYPE(INT32)
+	strbindvar_c_17328 = CREC{hash_key = hash_key_17330}::REC_K{hash_key > con_valid_record_18925 :  SINGLE_TYPE(hash_key_17330)}
+	_14463::Arrow_k(Open; _14461 : TYPE; SINGLE_TYPE(ARRAY(_14461)))
+	_14457 = INT32::SINGLE_TYPE(INT32)
+	hash_key_17330 = VECTOR(_14458)::SINGLE_TYPE(_14518)
+	_14518 = VECTOR(_14458)::SINGLE_TYPE(APP(_14517,(_14458)))
+	_14517::Arrow_k(Open; _14515 : TYPE; SINGLE_TYPE(VECTOR(_14515)))
+	_14458 = INT8::SINGLE_TYPE(INT8)
+	
+	 Expression variables and constructors are :
+	Error while calling module_valid
+	tilt: Ill-formed projection
+	
+	Compilation exited abnormally with code 1 at Wed Nov 15 10:57:56

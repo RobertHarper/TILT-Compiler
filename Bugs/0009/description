@@ -1,0 +1,116 @@
+Number: 0009
+Title:       Stack overflow segv on alpha
+Keywords:    alpha,runtime
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        7/17/00
+Version:     CVS
+System:	     alpha
+Severity:    major
+Problem:     "tilt -v" segfalts.
+Code:	     
+	To reproduce you can try
+		setenv TILT_LIBDIR $fox/member/swasey/tilt/b
+		$fox/member/swasey/ml96/Top.nomirror.alpha.exe -v
+Transcript:
+	From shell:
+		swasey@tcl ; tiltb -v
+		Defaulting to model DEC3000_500
+		  Scanning for free variables
+		  Computing transitive closure of close funs
+		  Rewriting imports, bindings, exports
+		Alpha detected.  Using Til-Alpha
+		main
+		calling run
+		TILT version 0.1 (alpha8)
+		(Using basis from Stack overflow: pid 14138, proc Top.nomirror.alp, addr 0x1816172c, pc 0x8106444
+		segmentation violation
+		status=sigsegv
+	From dbx:
+		(Using basis from thread 0x9 signal Segmentation fault at   [OS_FileSys_fullPath_code_89439:1037 ,0x8106444]  Source not available
+		(dbx) wi
+		  [OS_FileSys_fullPath_code_89439:1033, 0x8106430]      ldah    gp, 532(r27) <0xa246430> <r27=0x8106430,gp=0xa245840>
+		  [OS_FileSys_fullPath_code_89439:1033, 0x8106434]      lda     gp, -3056(gp) <0xa244c50> <gp=0xa245840>
+		  [OS_FileSys_fullPath_code_89439:1034, 0x8106438]      ldl     r0, 8(r15) <0x20008ac8> <r0=0x20008e3c,r15=0x20008ac0>
+		  [OS_FileSys_fullPath_code_89439:1035, 0x810643c]      ldl     r15, 12(r15) <0x20008acc> <r15=0x20008ac0>
+		  [OS_FileSys_fullPath_code_89439:1036, 0x8106440]      ldl     r25, 0(r0) <0x20008e3c> <r0=0x20008e3c,r25=0x20008c6c>
+		>*[OS_FileSys_fullPath_code_89439:1037, 0x8106444]      stl     r25, 12(sp) <0x1816172c> <r25=0x20008c6c,sp=0x18161720>
+		  [OS_FileSys_fullPath_code_89439:1038, 0x8106448]      stl     r26, 8(sp) <0x18161728> <r26=0x20008dbc,sp=0x18161720>
+		  [OS_FileSys_fullPath_code_89439:1040, 0x810644c]      ldq     r1, -15736(gp) <0xa241ac8> <r1=0x100,gp=0xa245840>
+		  [OS_FileSys_fullPath_code_89439:1041, 0x8106450]      ldl     r0, 1092(r12) <0xa4aec44> <r0=0x20008e3c,r12=0xa4ae800>
+		  [OS_FileSys_fullPath_code_89439:1042, 0x8106454]      addl    r1, r0, r0      <r0=0x20008e3c,r1=0x100>
+
+	Addr and pc of segv agree for the two runs.
+
+	The (possibly unrelated) value of Threads[0].saveregs[30] is
+	0x1001be20, which is much smaller than the current value of sp.
+
+	The assembler source is in os-filesys.alpha.s, with SEGV marking
+	the offending line.  [This is not the problem.]
+
+	Note a break in raise_exception_raw, followed by single-stepping
+	shows that this is the runtime routine which transfers control
+	(with the bad sp) to os-filesys.alpha.s.  Here is a stackdump
+	at that breakpoint.
+	break in raise_exception_raw
+	
+	(dbx) where
+	>  0 raise_exception_raw() ["service_alpha_osf_asm.s":215, 0x86dc67c]
+	   1 raise_exn(exnname = 0x20008ee8, exnstamp = 536907516, exnarg = 125, argPointer = 0) ["exn.c":64, 0x86d8128]
+	   2 runtime_error(e = 172681216) ["posix.c":223, 0x86ca324]
+	   3 posix_filesys_lstat(name = 0xa4ae800) ["posix.c":1149, 0x86cd858]
+	   4 POSIX_FileSys_lstat_code_105893() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Posix/posix-filesys.alpha.s":3792, 0x80e9aac]
+	   5 Prelude_anonfun_code_5654() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Firstlude.alpha.s":1526, 0x80ac55c]
+	   6 OS_FileSys_walkPath_code_89414() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Unix/os-filesys.alpha.s":315, 0x8105d1c]
+	   7 OS_FileSys_fullPath_code_89439() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Unix/os-filesys.alpha.s":993, 0x81063b4]
+	   8 Dirs_anonfun_code_216209() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/dirs.alpha.s":1018, 0x869543c]
+	   9 List_f_code_13707() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":5191, 0x80c66a8]
+	  10 Dirs_from_code_216204() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/dirs.alpha.s":2311, 0x86960b0]
+	  11 Delay_force_inner_code_170560() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/delay.alpha.s":477, 0x869489c]
+	  12 Main_runCmd_code_1751093() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/main.alpha.s":184, 0x86c10dc]
+	  13 List_a2_code_13776() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":5870, 0x80c6c20]
+	  14 Main_main_inner_code_1751152() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/main.alpha.s":2152, 0x86c2420]
+	  15 Run_run_code_208437() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/run.alpha.s":88, 0x8122b60]
+	  16 Top_main() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/top.alpha.s":50, 0x86c3498]
+	  17 LINKUNIT_main() ["link_Top.nomirror.alpha.exe.alpha.s":8257, 0x86c9354]
+	  18 start_client() ["service_alpha_osf_asm.s":108, 0x86dc578]
+	(dbx) 0x20008ee8/s
+	0000000020008ee8: "VAL$RuntimeError^Y^D"
+
+	Hmm.  OK it looks like there is only one stacklet right now.
+	Threads[0].stack->used = Threads[0].stack->cursor = 1.  So the
+	addresses which are valid $sp are whetever is valid for this
+	stacklet:
+
+	Threads[0].stack->stacklets[0].baseBottom = 0x10002000
+	Threads[0].stack->stacklets[0].baseTop    = 0x1001bf80 
+
+	Now my problem does not look like a genuine stack overflow because 
+	$r30 is above baseTop, not below baseBottom:
+	
+	        $r30 = 0x18161720
+
+	Note 4(EXNPTR_REG) (saved sp) = 0x1001be70 which is valid for
+	this stacklet.
+
+	I suspect the problem is either in raise_exception_raw (which
+	calculates sp before jumping to the exn handler code) or in
+	the data that routine is using.
+
+	Now look at primaryStackletOffset.  I'm stopped at the
+	        lda     ASMTMP2_REG, primaryStackletOffset
+	        ldl     ASMTMP2_REG, (ASMTMP2_REG)
+	instructions in raise_exception_raw.
+	I have   $r25 = 0xa1deb64		(r25 is ASMTMP2_REG)
+	   but   &primaryStackletOffset = 0xa278dd8
+
+	Note   primaryStackletOffset = 0 but after the second load above, I have
+	$r25 = 081458b0   NOT   0.
+
+	The problem is that the earlier call to load_regs_MLtoC
+	trashed $gp.  The fix was to restore $gp prior to loading the
+	address of primaryStackOffset.
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: closed

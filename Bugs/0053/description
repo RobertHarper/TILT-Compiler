@@ -1,0 +1,161 @@
+Number: 0053
+Title:       Nil bool2exp violating bound variable invariant.
+Keywords:    Nil
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        5/18/2001
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	The compiler fails to compile ``val test2 = fn () => (1, 2) = (1, 2)''.
+Code:
+Transcript:
+	cd /usr0/swasey/ml96/Local/Bugs/0053/
+	tilt -fshowClosureConv mapfile
+	Warning: setting TILT_LIBDIR to /usr0/swasey/ml96
+	Starting compilation           : Fri May 18 09:47:23 2001   0.0 sec
+	Warning: only compiling to assembly because non-native
+	Mapfile mapfile with 1 units processed.
+	Imports read.
+	Dependency graph computed: 1 nodes and 0 edges.
+	Not reducing dependency graph.
+	Creating directories.
+	1 necessary units:   BugSimple
+	Start compiling files          : Fri May 18 09:47:23 2001   0.15 sec
+	Starting slave grilled.fox.1233.
+	  [Plan for BugSimple:   elaborate  generate  cleanup]
+	  [Sending FLUSH_ALL to grilled.fox.1233]
+	  [Calling grilled.fox.1233 to compile BugSimple]
+	Slave received FLUSH_ALL.
+	Setting PtrWriteBarrier to true
+	Setting FullWriteBarrier to true
+	Setting MirrorGlobal to true
+	Setting MirrorPtrArray to false
+	Setting BranchingTraps to true
+	Setting UptoElaborate to false
+	Setting UptoPhasesplit to false
+	Setting UptoClosureConvert to false
+	Setting UptoRtl to false
+	Setting UptoAsm to true
+	Setting debug_asm to true
+	Setting keep_asm to true
+	Setting compress_asm to true
+	Setting ManagerChat to true
+	Setting ManagerVerbose to true
+	Setting TimeEachFile to false
+	Setting makeBackups to false
+	Setting ShowWrittenContext to false
+	Setting WriteUnselfContext to false
+	Setting ShowTools to false
+	  [0 imports of total size 0 were cached.
+	   0 imports of total size 0 were uncached and took 0.0 seconds.]
+	  [Added contexts.]
+	  [Parsing bug_simple.sml]
+	  [Elaborating bug_simple.sml non-constrained]
+	gc_context: 17 items in original context.  0 items in reduced context.
+	  [writing TM/any/bug_simple.sml.il]
+	  [Compiling BugSimple to assembly]
+	===== Starting Phasesplit: BugSimple                     =====
+	  Initial context is phase-split
+	  Bindings are phase-split
+	  Imports are computed
+	  Exports are phase-split
+	===== Starting Rename: BugSimple                         =====
+	===== Starting Optimize1: BugSimple                      =====
+	===== Starting Vararg: BugSimple                         =====
+	===== Starting Inline1: BugSimple                        =====
+	  1 functions inlined once.
+	  0 copies of 0 other functions inlined.
+	===== Starting Reify1: BugSimple                         =====
+	===== Starting Specialize: BugSimple                     =====
+	  0 optimizable candidates.
+	  0 impure.
+	  1 escaping.
+	  0 used polymorphically.
+	===== Starting Hoist: BugSimple                          =====
+	Imports Processed
+	===== Starting Rename2: BugSimple                        =====
+	===== Starting Optimize2: BugSimple                      =====
+	===== Starting Inline2: BugSimple                        =====
+	  0 functions inlined once.
+	  0 copies of 0 other functions inlined.
+	===== Starting Optimize3: BugSimple                      =====
+	===== Starting Inline3: BugSimple                        =====
+	  0 functions inlined once.
+	  0 copies of 0 other functions inlined.
+	===== Starting Reify2: BugSimple                         =====
+	===== Starting ClosureConv: BugSimple                    =====
+	PASS: ClosureConv
+	ClosureConv
+	
+	          [STATIC type_998 = MU_NR((_937=SUM(2,2)(CREC{}))),
+	*          STATIC type_999 = type_998.1,
+	*          STATIC type_1002 = MU_NR((_939=SUM(2,2)(CREC{}))),
+	*          STATIC type_1003 = type_1002.1,
+	*          STATIC type_1004 = CREC{},
+	*          STATIC type_1005 = SUM(2,2)(type_1004),
+	*          STATIC type_1007 = MU_NR((_946=SUM(2,2)(CREC{}))),
+	*          STATIC type_1008 = type_1007.1,
+	*          STATIC type_1010 = MU_NR((_934=SUM(2,2)(CREC{}))),
+	*          STATIC type_1011 = type_1010.1,
+	*          _1013 : Trace = inject_known_0[type_1005](),
+	*          false_1014 : Trace = roll[type_1003](_1013),
+	*          _1025 : Trace = Let  _264 : Trace = inject_known_1[SUM(2,2)(CREC{})]()
+	*                          In   roll[PROJ(MU_NR((_262=SUM(2,2)(CREC{}))),1)](_264)
+	*                          End,
+	*          _1026 : Trace = unroll[type_1008](_1025),
+	*          _1029 : Trace = Let  _264 : Trace = inject_known_1[SUM(2,2)(CREC{})]()
+	*                          In   roll[PROJ(MU_NR((_262=SUM(2,2)(CREC{}))),1)](_264)
+	*                          End,
+	*          STATIC anonfun_type_1040 = ALLARROW(Closure; PARTIAL; (); (); 0; type_1011),
+	*          /NORECUR-CODE\anonfun_code_1041
+	*            (anonfun_cEnv_1043 :: SINGLE(CREC{}) ;; anonfun_eEnv_1044 : Trace : UNIT ;; )
+	*          ->type_1011 =
+	*          Let  _1030 : Trace = 
+	*                 SUM_SWITCH(_1026: SUM(2,2)(CREC{}), 
+	*                      unused_947, 
+	*                      0: Trace:: false_1014
+	*                      1: Trace:: _1029
+	*                      NODEFAULT) : type_999
+	*          In   _1030
+	*          End,
+	*          anonfun_932 : anonfun_type_1040 = (anonfun_code_1041,CREC{},record())]
+	*         IMPORTS:
+	*         
+	*         EXPORTS:
+	*         test2 = anonfun_932
+	*         
+	===== Translating to RTL             =====
+	tilt: tortl-base.sml: varmap already contains _264
+
+	Compilation exited abnormally with code 1 at Fri May 18 09:47:23
+Comments:
+	Optimize3 is reducing primitive expressions like "eqI32[](1,1)" to the Nil.exp for true.  This expression
+	includes a bound variable.  This same bound variable occurs more than once.
+
+	Code before Optimize3:	
+	*          _1027 : Unknown = eqI32[](1, 1),
+	*          _1028 : Unknown = unroll[type_1010](_1027),
+	*          _1031 : Unknown = eqI32[](2, 2),
+
+	Code after Optimize3:
+	*          _1027 : Unknown = Let  _264 : Unknown = inject_known_1[SUM(2,2)(CREC{})]()
+	*                            In   roll[PROJ(MU_NR((_262=SUM(2,2)(CREC{}))),1)](_264)
+	*                            End,
+	*          _1028 : Unknown = unroll[type_1010](_1027),
+	*          _1031 : Unknown = Let  _264 : Unknown = inject_known_1[SUM(2,2)(CREC{})]()
+	*                            In   roll[PROJ(MU_NR((_262=SUM(2,2)(CREC{}))),1)](_264)
+	*                            End,
+
+	I considered three possible fixes:
+	(1) Make optimize rename all bound variables in expressions returned from NilPrimUtil.apply.
+	(2) Make NilPrimUtilParam.bool2exp rename the boolean bound variable at each application.
+	(3) Make false/true not use a bound variable.
+
+	(3) is out because we may only apply ROLL to a value.  (Perhaps we could simplify bool then reevaulate this
+	decision.)  We choose (3) over (1) since it automatically covers any other uses of true and false in the
+	optimizer.
+Fix:
+Test:
+Owner: swasey
+Status: closed

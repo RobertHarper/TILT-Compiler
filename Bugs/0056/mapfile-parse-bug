@@ -1,0 +1,60 @@
+// include the basis and NJ library
+#include    ../Util/mapfile-util
+
+// ------------ Parser directory ----------------
+
+CONTROL control.sig
+Control control
+StrgHash strghash
+PpQueue ppqueue
+PRETTYPRINT pp.sig
+PrettyPrint pp
+SOURCEMAP sourcemap.sig
+SourceMap sourcemap
+PATHNAMES pathnames.sig
+PathNames pathnames
+SOURCE   source.sig
+Source   source
+
+ERRORMSG errormsg.sig
+ErrorMsg errormsg
+
+SYMBOL symbol.sig
+ENV    env.sig
+Symbol  env
+// Symbol symbol
+// FastSymbol fastsymbol
+Fixity fixity
+AST    ast.sig
+Ast    ast
+
+
+ASTHELP asthelp.sig
+AstHelp asthelp
+
+PRINTUTIL printutil.sig
+PrintUtil printutil
+
+ASTUTIL astutil.sig
+AstUtil astutil
+
+NAME    name.sig
+Name    name
+NAMEBLAST    nameblast.sig
+NameBlast    nameblast
+TVClose    tvclose
+NamedForm  namedform
+
+INTSTRMAP intstrmap.sig
+IntStrMap intstrmap
+
+YaccBase   base.sig
+ML_TOKENS  ml.grm.sig
+
+TokenTable tokentable
+MLLexFun   ml.lex
+
+
+Stream   stream
+LrTable  lrtable
+LrParserBug parser2-bug

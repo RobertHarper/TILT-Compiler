@@ -1,0 +1,24 @@
+Number: 0022
+Title:       TILT doesn't distinguish between errors in source programs and compiler errors.
+Keywords:    
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        9/7/00
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	The types returned by the parser and elaborator should
+	reflect whether the source was ilformed.
+
+	The error/BUG exception mechanism should only be used
+	for compiler errors.
+
+	True slaves (as opposed to "self" slaves) should continue
+	to run if they encounter a user program error.
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

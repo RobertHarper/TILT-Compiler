@@ -1,0 +1,45 @@
+Number: 0045
+Title:       Bug in equality for datatypes.
+Keywords:    Elaborator, datatypes, equality
+Submitter:   Leaf Petersen <leaf+@cs.cmu.edu>
+Date:        2/20/2001
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	There seems to be a bug in equality for datatypes.  The following code 
+	fails at the equality check.
+
+	(*$import *)
+
+	signature S_dt = 
+	  sig 
+	    datatype foo = FOO
+	  end
+
+	functor F (structure A : S_dt
+		   structure B : S_dt
+		     sharing type A.foo = B.foo) = 
+	  struct
+	    val y = A.FOO = B.FOO
+	  end
+Code:
+Transcript:
+Comments:
+	(Derek)
+	I just tested this code on my implementation of opaque datatypes, and so
+	long as (for some reason) you import the Prelude, which we are making an
+	assumption, it now seems to compile fine.  So I think we can check it
+	off.  Considering the way we're implementing structure sharing though,
+	I'm not sure why this wouldn't have typechecked under the transparent
+	interpretation.  Perhaps not importing the Prelude was the problem?
+
+	(Dave)
+	You're right--this typechecks under the transparent interpretation.
+
+	FYI, the important bit of Prelude is "infix 4 =" to make A.FOO = B.FOO
+	parse as =(A.FOO, B.FOO) rather than A.FOO(=, B.FOO).
+Fix:
+Test:
+Owner: swasey
+Status: closed

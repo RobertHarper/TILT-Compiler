@@ -1,0 +1,93 @@
+Number: 0021
+Title:       Regenerated partial contexts are not considered equal.
+Keywords:    Elaborator,NamedForm
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        9/6/00
+Version:     CVS
+System:	     alpha
+Severity:    major
+Problem:
+	While building mapfile-twelf-server with up to date interfaces,
+	we get a NOT_EQUAL exception.
+
+	Bug0: The exception NOT_EQUAL should not escape IlContextEq.
+
+	Bug1: The counter used by Parser/namedform.sml is global.
+
+	Bug2: Local structure labels can matter.
+
+	NonBug3: The counter used to hide local structure labels
+	that get shadowed is not global.
+
+	NonBug4: Irrelevant because we are ignoring AST's higher order
+	functor support.  Namedform names the strexps of a higher
+	order functor in parallel --- as a single strbind rather than
+	sequence of strdecs --- so that conflicts with user structure
+	names are avoided.
+
+	More on Bug1: Imagine that you have a functor application with
+	an unnamed structure argument
+
+		structure A = F(strexp)
+		
+	namedform converts this to
+	
+		local structure fresh = strexp in structure A = F(fresh) end
+
+	The new label fresh is based on A and a global counter.  The
+	problem is this label may need to be exported.  Since it can
+	be different for different runs of the compiler, we get two
+	partial contexts which are not equal.
+Code:
+	See Bug1, Bug2.
+Transcript:
+	  [Compiling RedBlackStructs to assembly]
+	  [0 imports of total size 0 were cached.
+	   103 imports of total size 450903 were uncached and took 14.3 seconds.]
+	!!!Could not find _1975: probably bug with SplayMapFn.unionWithi
+	!!!Could not find _878: probably bug with SplayMapFn.unionWithi
+	  [Added contexts.]
+	  [Parsing src/table/redblack.sml]
+	  [Elaborating src/table/redblack.sml non-constrained]
+	  [writing src/table/TM/any/redblack.sml.illabel local_IntRedBlackTree_Named_Structure1_INT not found in c'
+	tilt: NOT_EQUAL
+Comments:
+	Back to the twelf source:
+		The code is redblack.sml.
+		The first il file is original.ildump.
+		The second il file is evil.ildump.
+
+	The problem is the functor argument structure around line 184
+	of the ildumps.  It's label matters and it shouldn't.
+	(Another local structure at line 108 would probably cause the
+	same problem.)
+
+	The label matters in the final fold of ilcontexteq.sml:extend_vm_context.
+
+	The label is not created while doing toil.sml:xstrexp because
+	the functor argument is already in named form by this time.
+
+	The AST produced by namification for
+		structure IntRedBlackTree =
+		  RedBlackTree (type key' = int
+				val compare = Int.compare) 
+	is basically
+		local
+		    structure IntRedBlackTree_Named_Structure<N> =
+		    struct
+		        type key' = int
+			val compare = Int.compare
+		    end
+		in
+		    structure IntRedBlackTree = RedBlackTree (IntRedBlackTree_Named_Structure<N>)
+		end
+
+	Then toil.sml:xdec handles the local and generates the label that
+	shouldn't be causing us problems:  local_IntRedBlackTree_Named_Structure3_INT.
+Fix:
+	Fix0: IlContextEq now catches all NOT_EQUAL exceptions (ilcontexteq.sml).
+	Fix1: The counter is now reset to 0 at each invocation of namedForm (nameform.sml).
+	Fix2: Now using the unit name as part of the label (toil.sml,toil.sig.sml,linkil.sig.sml,linkil.sml, compiler.sml).
+Test:
+Owner: swasey
+Status: closed

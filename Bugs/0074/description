@@ -1,0 +1,32 @@
+Number: 0074
+Title:       Manager not parallelizing enough.
+Keywords:    manager
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        5/1/02
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	The manager sometimes waits for (IL) interfaces that it knows
+	are up to date and so will not change.
+
+	For example:
+		- Build the compiler, keeping all droppings.
+		- Delete the Toil assembler file.
+		- Touch the Manager's Compiler unit.
+		- Rebuild the compiler.
+
+	The manager's plan will be
+
+		plan for Toil : generate
+			(ie, interfaces & object file up to date)
+
+	But compilation of Compiler will not proceed until
+	the interfaces of Toil are completed by the slave.
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

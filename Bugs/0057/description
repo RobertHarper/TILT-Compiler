@@ -1,0 +1,88 @@
+Number: 0057
+Title:       Coercion compilation not alpha-varying correctly.
+Keywords:    elaborator,coercion compilation
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        9/17/01
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:     The code below fails to elaborate.
+Code:
+	(*$import Prelude TopLevel *)
+
+	(* VARIANT 1---tilt: ilstatic.sml: MOD_VAR strbindvar_8384 not bound *)
+	(*
+	signature PARSER_DATA =
+	sig
+	    structure A : sig
+			      type state
+			  end
+	    val actions : A.state -> unit
+	end
+
+	structure MLLrVals : PARSER_DATA =
+	struct
+	    structure A =
+		struct
+		    type state = unit
+		end 
+	    val actions = fn (stack) => ()
+	end
+	*)
+
+	(* VARIANT 2---tilt: ilstatic.sml: Normalize: CON_VAR state_8383 not bound *)
+	signature PARSER_DATA =
+	sig
+	    type state
+	    val actions : state -> unit
+	end
+
+	structure MLLrVals : PARSER_DATA =
+	struct
+	    type state = unit
+	    val actions = fn (stack) => ()
+	end
+
+	functor JoinWithArg(structure X : PARSER_DATA) =
+	struct
+	end
+
+	structure MLP = JoinWithArg(structure X = MLLrVals)
+Transcript:
+Comments:
+	Derek and I determined that the problem is that xcoerce in
+	signature.sml generates new names for bound variables without
+	doing the substitutions necessary for alpha-varying.  Thus we
+	are adding decs like the following into the context (and later
+	barfing):
+
+	**        +1                  SELF_SIG = [hiddenThinModule_INT > thinModule_8415 : 
+	***       +1                                 SIGS_SELF(strbindvar_8382.hiddenThinModule_INT, 
+	***       +1                                 UNSELF_SIG = NONE
+	***       +1                                 SELF_SIG = [state_TYC > state_8383 : TYPE = UNIT, 
+	***       +1                                             +Estate_INT > _8393 : 
+	****      +1                                                ({UNIT *
+	****      +1                                                  UNIT} -> CON_MU(/-\(_259)(SUM[(false, true); 2; ()]))#0)]
+	***       +1                                 ), 
+	**        +1                              state_TYC > copy_state_TYC_8411 : 
+	***       +1                                 TYPE = 
+	***       +1                                    CON_PATH(strbindvar_8382.hiddenThinModule_INT. state_TYC), 
+	**        +1                              actions > copy_actions_8412 : (state_8383 -> UNIT)]
+
+	Note the type of actions has a free variable state_8383 which is
+	not in scope.
+Fix:
+	We considered two fixes:
+	(1) don't alpha vary so that the type for state_TYC looks like
+		    state_TYC > state_8383 : TYPE = ...
+	    rather than
+		    state_TYC > copy_state_TYC_8411 : TYPE = ...
+
+	(2) fix the alpha variance by threading a substitution through
+            the xcoerce computation
+
+	We chose (1) because it was simpler to implement and it
+	matches whats in Harper/Stone.
+Test:
+Owner: swasey
+Status: closed

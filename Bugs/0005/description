@@ -1,0 +1,64 @@
+Number: 0005
+Title:       Possible code generation error.
+Keywords:    toalpha,tosolaris,rtl
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        7/6/00
+Version:     CVS
+System:	     alpha,solaris
+Severity:    major
+Problem:
+	The translation of (Rtl.NEEDMUTATE 22) includes an add with
+	immediate operand of 264, which is too large for the 8-bit
+	slot available in the instruction.  This comes up while
+	bootstrapping.
+Code:	     
+Transcript:
+	Starting translation to TIL-Alpha assembly
+	 There are 59 procedures and  59 recursive components with the largest being of size 1
+	exn raised during translation of Rtl instruction:
+	  needmutate 22
+	tilt: alpha/toalpha.sml: immediate out of range: 264
+Comments:
+Fix:
+	Check with Perry to make sure (NEEDMUTATE 22) is sane.  If so,
+	change that arm of Toalpha.translate (file Alpha/toalpha.sml
+	around lines 1064-1081) to generate different code if the
+	immediate values needed are bigger than 8 bits.
+
+	Perry says:
+	>NEEDMUTATE 22 is a valid instruction.  The translation is faulty 
+	>though if, as you said, it turns it into a too large immediate.
+	>I suspect that the same bug exists in the sparc too so can you fix
+	>both versions?
+	>
+	>Incidentally, NEEDMUTATE 22 means that space in the write buffer for
+	>22 mutations is required.  Each mutation entry is 3 words or 12 bytes.
+	>And hence, 22 * 12 = 264 bytes.
+
+	Fixed in both Alpha/toalpha.sml and Sparc/tosparc.sml.
+Test:
+	On the alpha, Basis/Library/hash-table-fn.sml uses both kinds of
+	NEEDMUTATE code.  The generated code for small values looks like:
+			ldl     $0, 1076($12)
+			ldl     $1, 1080($12)
+			addl    $0, 12, $0
+			cmple   $0, $1, $0
+			bne     $0, afterMutateCheck_15460
+		code_15462:
+			subl    $13, 12, $at
+			jsr     $26, GCFromML
+		afterMutateCheck_15460:
+	For large values it looks like:
+			ldl     $2, 1076($12)
+			ldl     $1, 1080($12)
+			lda     $0, 264($31)
+			addl    $2, $0, $0
+			cmple   $0, $1, $0
+			bne     $0, afterMutateCheck_16225
+		code_16227:
+			lda     $at, 264($31)
+			subl    $13, $at, $at
+			jsr     $26, GCFromML
+		afterMutateCheck_16225:
+Owner: swasey
+Status: closed

@@ -1,0 +1,25 @@
+Number: 0042
+Title:       Runtime not being made up-to-date.
+Keywords:    Runtime,gmake
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        2/16/01
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	Every now and again "gmake runtime" will fail to compile
+	something which needs to be compiled.  The runtime gets out of
+	wack and eventually causes strange problems when used as part
+	of an executable.
+
+	I'm saving bad Runtime directories.  Eventually we need to
+	rip them open and find out whats wrong.
+
+	   tom.tar.gz		GCFromML() and work() disagree about request_disp (offset of th->request)
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

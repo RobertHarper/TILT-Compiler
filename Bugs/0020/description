@@ -1,0 +1,40 @@
+Number: 0020
+Title:       Runtime reading extra characters at end of some files.
+Keywords:    runtime,TextIO
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        8/27/00
+Version:     CVS
+System:	     solaris
+Severity:    major
+Problem:
+	When bootstrapping, the TILT-generated compiler mistakenly complains
+	about a corrupt .info file.
+Code:
+	tiltb mapfile-all
+	or
+	Test/test.sml
+Transcript:
+	tilt: info.sml: Sparc/TM/any/sparc.sig.sml.info:172 malformed record
+Comments:
+	At the end of the file, TextIO.inputLine is returning garbage,
+	not the empty string.
+
+	Updated TextIOFn to no effect.
+
+	With Test/test.sml, the problem occurs (its not the manager).
+
+	The file's size is 8190 (4096 + 4094).
+	The following read calls are made:
+
+	posix_io_read(5,4096)	lines 1-88
+	posix_io_read(5,4096)	lines 89-171
+	posix_io_read(5,4096)	crap after line 171
+	posix_io_read(5,4096)	crap after line 171
+
+	adjust_stringlen() isn't setting the new tag value when the word length
+	is unchanged.
+Fix:
+	Fixed adjust_stringlen.
+Test:
+Owner: swasey
+Status: closed

@@ -1,0 +1,1000 @@
+slot   29:    537308612d  TRACE_YES
+slot   30:    548305104d  TRACE_YES
+slot   31:            1d  TRACE_YES
+slot   36:    538232404d  TRACE_NO
+slot   37:    538370132d  TRACE_NO
+slot   38:    538335688d  TRACE_NO
+slot   39:    538232388d  TRACE_YES
+slot   40:    538335672d  TRACE_NO
+slot   41:      8067100d  TRACE_YES
+slot   42:      8056260d  TRACE_NO
+slot   43:      8056284d  TRACE_NO
+==========================================================
+SP = 270507072   RA = 1515184   FrameSize = 32 words
+slot   24:    538413484d  TRACE_YES
+slot   25:    548307052d  TRACE_YES
+slot   26:    537308648d  TRACE_YES
+slot   27:    537314136d  TRACE_YES
+==========================================================
+SP = 270506960   RA = 2377796   FrameSize = 28 words
+slot   24:      8067100d  TRACE_YES
+slot   25:    537308612d  TRACE_YES
+slot   26:    548307040d  TRACE_YES
+slot   27:      5979988d  TRACE_NO
+==========================================================
+SP = 270506832   RA = 2375104   FrameSize = 32 words
+slot   24:      8067100d  TRACE_YES
+slot   25:    537314668d  TRACE_NO
+slot   26:    537315008d  TRACE_NO
+slot   27:    537314836d  TRACE_NO
+==========================================================
+SP = 270506688   RA = 2372244   FrameSize = 36 words
+slot   24:    537314604d  TRACE_NO
+slot   25:      8067100d  TRACE_YES
+slot   26:    548307908d  TRACE_NO
+slot   27:        10007d  TRACE_NO
+slot   28:    538232468d  TRACE_YES
+slot   29:    538232388d  TRACE_NO
+slot   30:    537315080d  TRACE_YES
+slot   31:      8067100d  TRACE_NO
+slot   32:    537308768d  TRACE_SPECIAL(10, 96)  - SPECIAL_STACK_REC(96[2,0,0,0]) = 8067100 - YES
+slot   33:      8056600d  TRACE_NO
+slot   34:    548307360d  TRACE_NO
+slot   35:      2630680d  TRACE_NO
+==========================================================
+SP = 270506576   RA = 2367172   FrameSize = 28 words
+slot   24:      8067100d  TRACE_NO
+slot   25:    537315080d  TRACE_YES
+slot   26:    548307908d  TRACE_YES
+slot   27:      2372188d  TRACE_NO
+==========================================================
+SP = 270506384   RA = 2381440   FrameSize = 48 words
+slot   24:    537315368d  TRACE_NO
+slot   25:      8067100d  TRACE_NO
+slot   26:    538287960d  TRACE_NO
+slot   27:    548308588d  TRACE_YES
+slot   28:    537315512d  TRACE_YES
+slot   29:    548308600d  TRACE_NO
+slot   30:    537315352d  TRACE_NO
+slot   31:    537315304d  TRACE_NO
+==========================================================
+SP = 270506256   RA = 2358976   FrameSize = 32 words
+slot   24:    538232140d  TRACE_NO
+slot   25:    537316120d  TRACE_YES
+slot   26:    538394248d  TRACE_NO
+slot   27:    537316056d  TRACE_NO
+slot   28:    537315512d  TRACE_YES
+slot   29:      8067100d  TRACE_NO
+slot   30:    538413388d  TRACE_NO
+slot   31:    548308600d  TRACE_YES
+==========================================================
+SP = 270506112   RA = 949028   FrameSize = 36 words
+slot   24:    538432620d  TRACE_YES
+slot   25:    538232404d  TRACE_NO
+slot   26:    538232388d  TRACE_NO
+slot   27:    538335672d  TRACE_NO
+slot   28:            0d  TRACE_YES
+slot   29:      8067100d  TRACE_NO
+slot   30:      8056260d  TRACE_NO
+slot   31:    537316248d  TRACE_NO
+==========================================================
+SP = 270506000   RA = 2367148   FrameSize = 28 words
+slot   24:      8067100d  TRACE_NO
+slot   25:    537316120d  TRACE_YES
+slot   26:    548308900d  TRACE_YES
+slot   27:      8056284d  TRACE_NO
+==========================================================
+SP = 270505792   RA = 2388032   FrameSize = 52 words
+slot   24:    538335324d  TRACE_YES
+slot   25:    537316372d  TRACE_YES
+slot   26:    537316324d  TRACE_YES
+slot   27:    538370148d  TRACE_YES
+slot   28:    538370132d  TRACE_YES
+slot   29:    538288008d  TRACE_YES
+slot   30:    538287960d  TRACE_YES
+slot   31:    538119716d  TRACE_YES
+slot   32:    538370116d  TRACE_YES
+slot   33:    538370100d  TRACE_NO
+slot   34:    538232452d  TRACE_YES
+slot   35:      8068372d  TRACE_YES
+slot   36:    538335688d  TRACE_YES
+slot   37:    538232404d  TRACE_YES
+slot   38:    538232388d  TRACE_YES
+slot   39:    538335672d  TRACE_YES
+slot   40:      8067100d  TRACE_YES
+slot   41:      8067100d  TRACE_YES
+slot   42:      8056260d  TRACE_YES
+slot   43:      8056284d  TRACE_YES
+slot   44:      8056292d  TRACE_YES
+slot   45:      8056300d  TRACE_YES
+slot   46:    538370080d  TRACE_YES
+slot   47:    538370064d  TRACE_YES
+slot   48:    537316220d  TRACE_SPECIAL(30, 96)  - SPECIAL_STACK_REC(96[7,0,0,0]) = 8067100 - YES
+slot   49:    537313980d  TRACE_NO
+slot   50:    537313380d  TRACE_NO
+slot   51:    548308888d  TRACE_NO
+Register 1 with value 549648364 is a ROOT
+Register 8 with value 537316420 is a ROOT
+0: top = 270516224   curSP = 270507584  curRA = 5981904     nextSP = 270507680 nextRA = 2374944
+1: top = 270516224   curSP = 270507680  curRA = 2374944     nextSP = 270507808 nextRA = 2376712
+2: top = 270516224   curSP = 270507808  curRA = 2376712     nextSP = 270507968 nextRA = 2377772
+3: top = 270516224   curSP = 270507968  curRA = 2377772     nextSP = 270508080 nextRA = 1515184
+4: top = 270516224   curSP = 270508080  curRA = 1515184     nextSP = 270508208 nextRA = 2383636
+5: top = 270516224   curSP = 270508208  curRA = 2383636     nextSP = 270508400 nextRA = 2367172
+6: top = 270516224   curSP = 270508400  curRA = 2367172     nextSP = 270508512 nextRA = 2377236
+7: top = 270516224   curSP = 270508512  curRA = 2377236     nextSP = 270508640 nextRA = 1515184
+8: top = 270516224   curSP = 270508640  curRA = 1515184     nextSP = 270508768 nextRA = 2380144
+9: top = 270516224   curSP = 270508768  curRA = 2380144     nextSP = 270508960 nextRA = 2367172
+10: top = 270516224   curSP = 270508960  curRA = 2367172     nextSP = 270509072 nextRA = 950016
+11: top = 270516224   curSP = 270509072  curRA = 950016     nextSP = 270509216 nextRA = 950108
+12: top = 270516224   curSP = 270509216  curRA = 950108     nextSP = 270509360 nextRA = 950108
+13: top = 270516224   curSP = 270509360  curRA = 950108     nextSP = 270509504 nextRA = 950108
+14: top = 270516224   curSP = 270509504  curRA = 950108     nextSP = 270509648 nextRA = 950108
+15: top = 270516224   curSP = 270509648  curRA = 950108     nextSP = 270509792 nextRA = 950108
+16: top = 270516224   curSP = 270509792  curRA = 950108     nextSP = 270509936 nextRA = 950108
+17: top = 270516224   curSP = 270509936  curRA = 950108     nextSP = 270510080 nextRA = 2358976
+18: top = 270516224   curSP = 270510080  curRA = 2358976     nextSP = 270510208 nextRA = 2385844
+19: top = 270516224   curSP = 270510208  curRA = 2385844     nextSP = 270510400 nextRA = 2363632
+20: top = 270516224   curSP = 270510400  curRA = 2363632     nextSP = 270510528 nextRA = 3181204
+21: top = 270516224   curSP = 270510528  curRA = 3181204     nextSP = 270510624 nextRA = 3096168
+22: top = 270516224   curSP = 270510624  curRA = 3096168     nextSP = 270510736 nextRA = 5979996
+23: top = 270516224   curSP = 270510736  curRA = 5979996     nextSP = 270510848 nextRA = 3186332
+24: top = 270516224   curSP = 270510848  curRA = 3186332     nextSP = 270510960 nextRA = 3039804
+25: top = 270516224   curSP = 270510960  curRA = 3039804     nextSP = 270511072 nextRA = 3170772
+26: top = 270516224   curSP = 270511072  curRA = 3170772     nextSP = 270511216 nextRA = 3166292
+27: top = 270516224   curSP = 270511216  curRA = 3166292     nextSP = 270511360 nextRA = 3181204
+28: top = 270516224   curSP = 270511360  curRA = 3181204     nextSP = 270511456 nextRA = 3096168
+29: top = 270516224   curSP = 270511456  curRA = 3096168     nextSP = 270511568 nextRA = 5979996
+30: top = 270516224   curSP = 270511568  curRA = 5979996     nextSP = 270511680 nextRA = 3186332
+31: top = 270516224   curSP = 270511680  curRA = 3186332     nextSP = 270511792 nextRA = 3039804
+32: top = 270516224   curSP = 270511792  curRA = 3039804     nextSP = 270511904 nextRA = 3637376
+33: top = 270516224   curSP = 270511904  curRA = 3637376     nextSP = 270512016 nextRA = 3702856
+34: top = 270516224   curSP = 270512016  curRA = 3702856     nextSP = 270512208 nextRA = 1515184
+35: top = 270516224   curSP = 270512208  curRA = 1515184     nextSP = 270512336 nextRA = 3699324
+36: top = 270516224   curSP = 270512336  curRA = 3699324     nextSP = 270512448 nextRA = 3688996
+37: top = 270516224   curSP = 270512448  curRA = 3688996     nextSP = 270512608 nextRA = 3693592
+38: top = 270516224   curSP = 270512608  curRA = 3693592     nextSP = 270512752 nextRA = 949028
+39: top = 270516224   curSP = 270512752  curRA = 949028     nextSP = 270512896 nextRA = 3697108
+40: top = 270516224   curSP = 270512896  curRA = 3697108     nextSP = 270513056 nextRA = 3702584
+41: top = 270516224   curSP = 270513056  curRA = 3702584     nextSP = 270513248 nextRA = 1515184
+42: top = 270516224   curSP = 270513248  curRA = 1515184     nextSP = 270513376 nextRA = 3699324
+43: top = 270516224   curSP = 270513376  curRA = 3699324     nextSP = 270513488 nextRA = 3688996
+44: top = 270516224   curSP = 270513488  curRA = 3688996     nextSP = 270513648 nextRA = 3698192
+45: top = 270516224   curSP = 270513648  curRA = 3698192     nextSP = 270513808 nextRA = 949028
+46: top = 270516224   curSP = 270513808  curRA = 949028     nextSP = 270513952 nextRA = 3707232
+47: top = 270516224   curSP = 270513952  curRA = 3707232     nextSP = 270514144 nextRA = 1515184
+48: top = 270516224   curSP = 270514144  curRA = 1515184     nextSP = 270514272 nextRA = 3699324
+49: top = 270516224   curSP = 270514272  curRA = 3699324     nextSP = 270514384 nextRA = 3709872
+50: top = 270516224   curSP = 270514384  curRA = 3709872     nextSP = 270514512 nextRA = 1556420
+51: top = 270516224   curSP = 270514512  curRA = 1556420     nextSP = 270514672 nextRA = 5736876
+52: top = 270516224   curSP = 270514672  curRA = 5736876     nextSP = 270514816 nextRA = 5740456
+53: top = 270516224   curSP = 270514816  curRA = 5740456     nextSP = 270515024 nextRA = 5836744
+54: top = 270516224   curSP = 270515024  curRA = 5836744     nextSP = 270515136 nextRA = 5899104
+55: top = 270516224   curSP = 270515136  curRA = 5899104     nextSP = 270515312 nextRA = 5945076
+56: top = 270516224   curSP = 270515312  curRA = 5945076     nextSP = 270515440 nextRA = 5945816
+57: top = 270516224   curSP = 270515440  curRA = 5945816     nextSP = 270515552 nextRA = 957476
+58: top = 270516224   curSP = 270515552  curRA = 957476     nextSP = 270515664 nextRA = 957476
+59: top = 270516224   curSP = 270515664  curRA = 957476     nextSP = 270515776 nextRA = 5973268
+60: top = 270516224   curSP = 270515776  curRA = 5973268     nextSP = 270515888 nextRA = 1271572
+61: top = 270516224   curSP = 270515888  curRA = 1271572     nextSP = 270516000 nextRA = 5975228
+62: top = 270516224   curSP = 270516000  curRA = 5975228     nextSP = 270516096 nextRA = 6048352
+==========================================================
+SP = 270516000   RA = 5975228   FrameSize = 24 words
+==========================================================
+SP = 270515888   RA = 1271572   FrameSize = 28 words
+==========================================================
+SP = 270515776   RA = 5973268   FrameSize = 28 words
+slot   24:    537204696d  TRACE_NO
+slot   25:            0d  TRACE_YES
+slot   26:            0d  TRACE_NO
+slot   27:      1271452d  TRACE_NO
+==========================================================
+SP = 270515664   RA = 957476   FrameSize = 28 words
+slot   24:      8392884d  TRACE_NO
+slot   25:            0d  TRACE_YES
+slot   26:      8393204d  TRACE_YES
+slot   27:      5973152d  TRACE_NO
+==========================================================
+SP = 270515552   RA = 957476   FrameSize = 28 words
+slot   24:      7916192d  TRACE_NO
+slot   25:            0d  TRACE_YES
+slot   26:      8391168d  TRACE_YES
+slot   27:       957564d  TRACE_NO
+==========================================================
+SP = 270515440   RA = 5945816   FrameSize = 28 words
+==========================================================
+SP = 270515312   RA = 5945076   FrameSize = 32 words
+slot   24:            0d  TRACE_YES
+slot   25:            0d  TRACE_YES
+slot   26:    537997060d  TRACE_YES
+slot   27:    537997048d  TRACE_YES
+slot   28:    537997036d  TRACE_YES
+slot   29:    537997024d  TRACE_YES
+slot   30:    672221452d  TRACE_NO
+slot   31:      5945628d  TRACE_NO
+==========================================================
+SP = 270515136   RA = 5899104   FrameSize = 44 words
+slot   36:    537996760d  TRACE_NO
+slot   37:    537996748d  TRACE_NO
+slot   38:    537996736d  TRACE_NO
+slot   39:    537996664d  TRACE_YES
+slot   40:    537996652d  TRACE_YES
+slot   41:    537996640d  TRACE_YES
+slot   42:    674674996d  TRACE_NO
+slot   43:      1241628d  TRACE_NO
+==========================================================
+SP = 270515024   RA = 5836744   FrameSize = 28 words
+slot   24:    537996652d  TRACE_YES
+slot   25:    537996664d  TRACE_YES
+slot   26:   1078067200d  TRACE_NO
+slot   27:      5899060d  TRACE_NO
+==========================================================
+SP = 270514816   RA = 5740456   FrameSize = 52 words
+slot   24:    536884276d  TRACE_NO
+slot   25:    546820608d  TRACE_YES
+slot   26:    546820592d  TRACE_YES
+slot   27:    546820576d  TRACE_YES
+slot   28:    546820560d  TRACE_YES
+slot   29:    546820544d  TRACE_YES
+slot   30:    546820528d  TRACE_YES
+slot   31:    546820512d  TRACE_YES
+slot   32:    546820496d  TRACE_YES
+slot   33:    546820480d  TRACE_YES
+slot   34:    546820464d  TRACE_YES
+slot   35:    546820448d  TRACE_YES
+slot   36:    546820432d  TRACE_YES
+slot   37:    546820416d  TRACE_YES
+slot   38:    546820400d  TRACE_YES
+slot   39:    546820384d  TRACE_YES
+slot   40:    546820368d  TRACE_YES
+slot   41:    546820352d  TRACE_YES
+slot   42:    546820336d  TRACE_YES
+slot   43:    546820320d  TRACE_NO
+==========================================================
+SP = 270514672   RA = 5736876   FrameSize = 36 words
+slot   24:    546823340d  TRACE_NO
+slot   25:    536884988d  TRACE_NO
+slot   26:      8366408d  TRACE_YES
+slot   27:    537919676d  TRACE_YES
+slot   28:    537997160d  TRACE_NO
+slot   29:    537996652d  TRACE_YES
+slot   30:      8052036d  TRACE_NO
+slot   31:    536884276d  TRACE_NO
+==========================================================
+SP = 270514512   RA = 1556420   FrameSize = 40 words
+slot   24:    538187956d  TRACE_NO
+slot   25:    548696596d  TRACE_SPECIAL(259, 7982328)  - SPECIAL_GLOBAL_REC(7982328[0,1,0,0]) = 7982276 - YES
+slot   26:    548696588d  TRACE_SPECIAL(515, 7982328)  - SPECIAL_GLOBAL_REC(7982328[0,2,0,0]) = 7982300 - YES
+slot   27:    536884796d  TRACE_NO
+slot   28:    536884276d  TRACE_NO
+slot   29:      7931796d  TRACE_YES
+slot   30:      7931796d  TRACE_YES
+slot   31:      7931796d  TRACE_YES
+slot   32:      7931796d  TRACE_YES
+slot   33:            0d  TRACE_NO
+slot   34:      7982896d  TRACE_YES
+slot   35:            1d  TRACE_YES
+slot   36:    548696580d  TRACE_YES
+slot   37:    548696572d  TRACE_YES
+slot   38:    536884796d  TRACE_NO
+slot   39:      5736844d  TRACE_NO
+==========================================================
+SP = 270514384   RA = 3709872   FrameSize = 32 words
+slot   28:    536895752d  TRACE_NO
+slot   29:    549504244d  TRACE_YES
+slot   30:    548696548d  TRACE_YES
+slot   31:           46d  TRACE_NO
+==========================================================
+SP = 270514272   RA = 3699324   FrameSize = 28 words
+==========================================================
+SP = 270514144   RA = 1515184   FrameSize = 32 words
+slot   24:      8152036d  TRACE_YES
+slot   25:    549548684d  TRACE_YES
+slot   26:    549504220d  TRACE_YES
+slot   27:    549601392d  TRACE_YES
+==========================================================
+SP = 270513952   RA = 3707232   FrameSize = 48 words
+slot   32:    537311952d  TRACE_NO
+slot   33:    549601364d  TRACE_YES
+slot   34:      8156940d  TRACE_NO
+slot   35:      8157220d  TRACE_NO
+==========================================================
+SP = 270513808   RA = 949028   FrameSize = 36 words
+slot   24:    538132168d  TRACE_YES
+slot   25:      8156904d  TRACE_NO
+slot   26:    537292596d  TRACE_NO
+slot   27:      3706940d  TRACE_NO
+slot   28:            0d  TRACE_YES
+slot   29:            0d  TRACE_NO
+slot   30:    537308992d  TRACE_NO
+slot   31:    537313064d  TRACE_NO
+==========================================================
+SP = 270513648   RA = 3698192   FrameSize = 40 words
+slot   24:    548565228d  TRACE_NO
+slot   25:    549601336d  TRACE_YES
+slot   26:    549601324d  TRACE_YES
+slot   27:            0d  TRACE_YES
+slot   28:    548565240d  TRACE_YES
+slot   29:      8157020d  TRACE_NO
+slot   30:      8157220d  TRACE_YES
+slot   31:      8157268d  TRACE_NO
+slot   32:            0d  TRACE_YES
+slot   33:            0d  TRACE_YES
+slot   34:            0d  TRACE_YES
+slot   35:            0d  TRACE_YES
+==========================================================
+SP = 270513488   RA = 3688996   FrameSize = 40 words
+slot   28:    548567000d  TRACE_NO
+slot   29:      8156904d  TRACE_NO
+slot   30:    548567012d  TRACE_YES
+slot   31:            1d  TRACE_YES
+slot   32:      8151528d  TRACE_NO
+slot   33:            0d  TRACE_NO
+slot   34:    537315444d  TRACE_NO
+slot   35:      8157020d  TRACE_YES
+==========================================================
+SP = 270513376   RA = 3699324   FrameSize = 28 words
+==========================================================
+SP = 270513248   RA = 1515184   FrameSize = 32 words
+slot   24:      8152036d  TRACE_YES
+slot   25:            0d  TRACE_YES
+slot   26:    549601300d  TRACE_YES
+slot   27:    549648764d  TRACE_YES
+==========================================================
+SP = 270513056   RA = 3702584   FrameSize = 48 words
+slot   32:    548568100d  TRACE_NO
+slot   33:    549648736d  TRACE_YES
+slot   34:      8156940d  TRACE_NO
+slot   35:      8157220d  TRACE_NO
+slot   40:      8156840d  TRACE_NO
+slot   41:            0d  TRACE_YES
+slot   42:    549648708d  TRACE_YES
+slot   43:        10920d  TRACE_NO
+==========================================================
+SP = 270512896   RA = 3697108   FrameSize = 40 words
+slot   24:    536894000d  TRACE_NO
+slot   25:    548452232d  TRACE_YES
+slot   26:    549648696d  TRACE_YES
+slot   27:    536893972d  TRACE_NO
+slot   28:    549648684d  TRACE_YES
+slot   29:    549648668d  TRACE_YES
+slot   30:            0d  TRACE_YES
+slot   31:    548570412d  TRACE_NO
+==========================================================
+SP = 270512752   RA = 949028   FrameSize = 36 words
+slot   24:    538132320d  TRACE_YES
+slot   25:    536885900d  TRACE_NO
+slot   26:    548515872d  TRACE_NO
+slot   27:            1d  TRACE_NO
+slot   28:            0d  TRACE_YES
+slot   29:    536888216d  TRACE_NO
+slot   30:    536874528d  TRACE_NO
+slot   31:    536896124d  TRACE_NO
+==========================================================
+SP = 270512608   RA = 3693592   FrameSize = 36 words
+slot   24:            0d  TRACE_YES
+slot   25:    536896216d  TRACE_NO
+slot   26:      8156840d  TRACE_NO
+slot   27:            0d  TRACE_NO
+==========================================================
+SP = 270512448   RA = 3688996   FrameSize = 40 words
+slot   28:    548571584d  TRACE_NO
+slot   29:      8156904d  TRACE_NO
+slot   30:    548571596d  TRACE_YES
+slot   31:            1d  TRACE_YES
+slot   32:      8151452d  TRACE_NO
+slot   33:            0d  TRACE_NO
+slot   34:    536898348d  TRACE_NO
+slot   35:      8157020d  TRACE_YES
+==========================================================
+SP = 270512336   RA = 3699324   FrameSize = 28 words
+==========================================================
+SP = 270512208   RA = 1515184   FrameSize = 32 words
+slot   24:      8152036d  TRACE_YES
+slot   25:    549657296d  TRACE_YES
+slot   26:    549648644d  TRACE_YES
+slot   27:    536940024d  TRACE_YES
+==========================================================
+SP = 270512016   RA = 3702856   FrameSize = 48 words
+slot   40:    536942368d  TRACE_YES
+slot   41:            0d  TRACE_YES
+slot   42:    536940396d  TRACE_YES
+slot   43:        10853d  TRACE_NO
+==========================================================
+SP = 270511904   RA = 3637376   FrameSize = 28 words
+slot   24:            0d  TRACE_YES
+slot   25:    536942304d  TRACE_YES
+slot   26:    536942392d  TRACE_YES
+slot   27:      8157220d  TRACE_NO
+==========================================================
+SP = 270511792   RA = 3039804   FrameSize = 28 words
+slot   24:      8097644d  TRACE_YES
+slot   25:    536939388d  TRACE_YES
+slot   26:    536940068d  TRACE_NO
+slot   27:      3637368d  TRACE_NO
+==========================================================
+SP = 270511680   RA = 3186332   FrameSize = 28 words
+==========================================================
+SP = 270511568   RA = 5979996   FrameSize = 28 words
+==========================================================
+SP = 270511456   RA = 3096168   FrameSize = 28 words
+==========================================================
+SP = 270511360   RA = 3181204   FrameSize = 24 words
+==========================================================
+SP = 270511216   RA = 3166292   FrameSize = 36 words
+slot   24:    544563896d  TRACE_YES
+slot   25:    536943008d  TRACE_NO
+slot   26:    536942840d  TRACE_NO
+slot   27:      8110016d  TRACE_NO
+slot   28:    536942932d  TRACE_NO
+slot   29:    536942900d  TRACE_YES
+slot   30:    536942868d  TRACE_NO
+slot   31:      8103724d  TRACE_NO
+slot   32:    536938796d  TRACE_NO
+slot   33:            0d  TRACE_NO
+slot   34:    547730028d  TRACE_NO
+slot   35:    536936568d  TRACE_SPECIAL(1283, 8097360)  - SPECIAL_GLOBAL_REC(8097360[0,5,0,0]) = 8097308 - YES
+==========================================================
+SP = 270511072   RA = 3170772   FrameSize = 36 words
+==========================================================
+SP = 270510960   RA = 3039804   FrameSize = 28 words
+slot   24:      8097644d  TRACE_YES
+slot   25:    536932832d  TRACE_YES
+slot   26:      7916136d  TRACE_NO
+slot   27:      3170764d  TRACE_NO
+==========================================================
+SP = 270510848   RA = 3186332   FrameSize = 28 words
+==========================================================
+SP = 270510736   RA = 5979996   FrameSize = 28 words
+==========================================================
+SP = 270510624   RA = 3096168   FrameSize = 28 words
+==========================================================
+SP = 270510528   RA = 3181204   FrameSize = 24 words
+==========================================================
+SP = 270510400   RA = 2363632   FrameSize = 32 words
+slot   28:    538232116d  TRACE_YES
+slot   29:    548281796d  TRACE_SPECIAL(526, 100)  - SPECIAL_STACK_REC(100[3,2,0,0]) = 8050480 - YES
+slot   30:      8050480d  TRACE_NO
+slot   31:    548281796d  TRACE_NO
+==========================================================
+SP = 270510208   RA = 2385844   FrameSize = 48 words
+slot   24:    536948412d  TRACE_NO
+slot   25:      8067100d  TRACE_NO
+slot   26:      8067100d  TRACE_NO
+slot   27:    536948556d  TRACE_YES
+slot   28:    548283472d  TRACE_NO
+slot   29:    548283460d  TRACE_YES
+slot   30:    536948396d  TRACE_NO
+slot   31:    536948348d  TRACE_NO
+==========================================================
+SP = 270510080   RA = 2358976   FrameSize = 32 words
+slot   24:    538232140d  TRACE_NO
+slot   25:    536948740d  TRACE_YES
+slot   26:    538394248d  TRACE_NO
+slot   27:    536948676d  TRACE_NO
+slot   28:    536948556d  TRACE_YES
+slot   29:      8067100d  TRACE_NO
+slot   30:    538413388d  TRACE_NO
+slot   31:    548283472d  TRACE_YES
+==========================================================
+SP = 270509936   RA = 950108   FrameSize = 36 words
+slot   24:    538432620d  TRACE_YES
+slot   25:    548195820d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   26:    548196484d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   27:    548197220d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   28:    548197992d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   29:    548285908d  TRACE_NO
+slot   30:    548196484d  TRACE_NO
+slot   31:    536948868d  TRACE_NO
+==========================================================
+SP = 270509792   RA = 950108   FrameSize = 36 words
+slot   24:    538432620d  TRACE_YES
+slot   25:    548238952d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   26:    548192908d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   27:    548194068d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   28:    548195000d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   29:    548288520d  TRACE_NO
+slot   30:    548192908d  TRACE_NO
+slot   31:    536948868d  TRACE_NO
+==========================================================
+SP = 270509648   RA = 950108   FrameSize = 36 words
+slot   24:    538432620d  TRACE_YES
+slot   25:    548234908d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   26:    548235884d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   27:    548236888d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   28:    548237920d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   29:    548291868d  TRACE_NO
+slot   30:    548235884d  TRACE_NO
+slot   31:    536948868d  TRACE_NO
+==========================================================
+SP = 270509504   RA = 950108   FrameSize = 36 words
+slot   24:    538432620d  TRACE_YES
+slot   25:    548231432d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   26:    548232196d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   27:    548233028d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   28:    548233940d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   29:    548294828d  TRACE_NO
+slot   30:    548232196d  TRACE_NO
+slot   31:    536948868d  TRACE_NO
+==========================================================
+SP = 270509360   RA = 950108   FrameSize = 36 words
+slot   24:    538432620d  TRACE_YES
+slot   25:    548228784d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   26:    548229396d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   27:    548230052d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   28:    548230740d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   29:    548296832d  TRACE_NO
+slot   30:    548229396d  TRACE_NO
+slot   31:    536948868d  TRACE_NO
+==========================================================
+SP = 270509216   RA = 950108   FrameSize = 36 words
+slot   24:    538432620d  TRACE_YES
+slot   25:    548226268d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   26:    548226944d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   27:    548227516d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   28:    548228152d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   29:    548297892d  TRACE_NO
+slot   30:    548226944d  TRACE_NO
+slot   31:    536948868d  TRACE_NO
+==========================================================
+SP = 270509072   RA = 950016   FrameSize = 36 words
+slot   24:    538432620d  TRACE_YES
+slot   25:    548265588d  TRACE_SPECIAL(2, 96)  - SPECIAL_STACK_REC(96[0,0,0,0]) = 8050480 - YES
+slot   26:    537093940d  TRACE_NO
+slot   27:    548266964d  TRACE_NO
+slot   28:    548267616d  TRACE_SPECIAL(6, 96)  - SPECIAL_STACK_REC(96[1,0,0,0]) = 8050480 - YES
+slot   29:    548298816d  TRACE_YES
+slot   30:    548266276d  TRACE_SPECIAL(2, 96)  - SPECIAL_STACK_REC(96[0,0,0,0]) = 8050480 - YES
+slot   31:    536948868d  TRACE_YES
+slot   32:    536948884d  TRACE_YES
+slot   33:    536948740d  TRACE_NO
+slot   34:    548226268d  TRACE_NO
+slot   35:    538232388d  TRACE_NO
+==========================================================
+SP = 270508960   RA = 2367172   FrameSize = 28 words
+slot   24:      8067100d  TRACE_NO
+slot   25:    536948740d  TRACE_YES
+slot   26:    548266964d  TRACE_YES
+slot   27:    538232388d  TRACE_NO
+==========================================================
+SP = 270508768   RA = 2380144   FrameSize = 48 words
+slot   28:    538119716d  TRACE_NO
+slot   29:            0d  TRACE_YES
+slot   30:    537307056d  TRACE_YES
+slot   31:    548268200d  TRACE_YES
+slot   32:            0d  TRACE_NO
+slot   33:    548268212d  TRACE_YES
+slot   34:            0d  TRACE_YES
+slot   35:            0d  TRACE_YES
+slot   36:            2d  TRACE_YES
+slot   37:    538370132d  TRACE_NO
+slot   38:    538335688d  TRACE_NO
+slot   39:    538232388d  TRACE_YES
+slot   40:    538335672d  TRACE_NO
+slot   41:      8067100d  TRACE_YES
+slot   42:      8056260d  TRACE_NO
+slot   43:      8056284d  TRACE_NO
+==========================================================
+SP = 270508640   RA = 1515184   FrameSize = 32 words
+slot   24:    538413452d  TRACE_YES
+slot   25:            0d  TRACE_YES
+slot   26:    537307748d  TRACE_YES
+slot   27:            0d  TRACE_YES
+==========================================================
+SP = 270508512   RA = 2377236   FrameSize = 32 words
+slot   24:      8067100d  TRACE_YES
+slot   25:    537307700d  TRACE_YES
+slot   26:    548269412d  TRACE_NO
+slot   27:            0d  TRACE_YES
+slot   28:    537307684d  TRACE_YES
+slot   29:    537307592d  TRACE_NO
+slot   30:      8067100d  TRACE_NO
+slot   31:    537307868d  TRACE_SPECIAL(6, 100)  - SPECIAL_STACK_REC(100[1,0,0,0]) = 8067100 - YES
+==========================================================
+SP = 270508400   RA = 2367172   FrameSize = 28 words
+slot   24:      8067100d  TRACE_NO
+slot   25:    537307056d  TRACE_YES
+slot   26:    548269412d  TRACE_YES
+slot   27:      2377180d  TRACE_NO
+==========================================================
+SP = 270508208   RA = 2383636   FrameSize = 48 words
+slot   24:    537308192d  TRACE_NO
+slot   25:      8067100d  TRACE_NO
+slot   26:    538287960d  TRACE_NO
+slot   27:    548270408d  TRACE_YES
+slot   28:    538119716d  TRACE_NO
+slot   29:    537308336d  TRACE_YES
+slot   30:    548270420d  TRACE_YES
+slot   31:            1d  TRACE_YES
+slot   36:    538232404d  TRACE_NO
+slot   37:    538370132d  TRACE_NO
+slot   38:    538335688d  TRACE_NO
+slot   39:    538232388d  TRACE_YES
+slot   40:    538335672d  TRACE_NO
+slot   41:      8067100d  TRACE_YES
+slot   42:      8056260d  TRACE_NO
+slot   43:      8056284d  TRACE_NO
+==========================================================
+SP = 270508080   RA = 1515184   FrameSize = 32 words
+slot   24:    538413484d  TRACE_YES
+slot   25:            0d  TRACE_YES
+slot   26:    537308372d  TRACE_YES
+slot   27:    537315824d  TRACE_YES
+==========================================================
+SP = 270507968   RA = 2377772   FrameSize = 28 words
+slot   24:      8067100d  TRACE_YES
+slot   25:    537308336d  TRACE_YES
+slot   26:    548272636d  TRACE_YES
+slot   27:      5979988d  TRACE_NO
+==========================================================
+SP = 270507808   RA = 2376712   FrameSize = 40 words
+slot   24:    538176324d  TRACE_YES
+slot   25:    537316064d  TRACE_NO
+slot   26:    537316356d  TRACE_YES
+slot   27:    537316340d  TRACE_YES
+slot   28:    537316276d  TRACE_YES
+slot   29:    538232500d  TRACE_NO
+slot   30:    538232468d  TRACE_NO
+slot   31:    538232436d  TRACE_YES
+slot   32:    538232388d  TRACE_NO
+slot   33:      8067100d  TRACE_YES
+slot   34:      8067100d  TRACE_YES
+slot   35:    538232368d  TRACE_NO
+slot   36:      8056268d  TRACE_YES
+slot   37:      8056276d  TRACE_NO
+slot   38:    537308492d  TRACE_SPECIAL(22, 96)  - SPECIAL_STACK_REC(96[5,0,0,0]) = 8067100 - YES
+slot   39:      2387432d  TRACE_NO
+==========================================================
+SP = 270507680   RA = 2374944   FrameSize = 32 words
+==========================================================
+SP = 270507584   RA = 5981904   FrameSize = 24 words
+Register 1 with value 536943452 is a ROOT
+Register 12 with value 537316460 is a ROOT
+0: top = 270516224   curSP = 270506560  curRA = 5978768     nextSP = 270506656 nextRA = 2376748
+1: top = 270516224   curSP = 270506656  curRA = 2376748     nextSP = 270506816 nextRA = 2377772
+2: top = 270516224   curSP = 270506816  curRA = 2377772     nextSP = 270506928 nextRA = 1515184
+3: top = 270516224   curSP = 270506928  curRA = 1515184     nextSP = 270507056 nextRA = 2383636
+4: top = 270516224   curSP = 270507056  curRA = 2383636     nextSP = 270507248 nextRA = 2367172
+5: top = 270516224   curSP = 270507248  curRA = 2367172     nextSP = 270507360 nextRA = 2377236
+6: top = 270516224   curSP = 270507360  curRA = 2377236     nextSP = 270507488 nextRA = 1515184
+7: top = 270516224   curSP = 270507488  curRA = 1515184     nextSP = 270507616 nextRA = 2380144
+8: top = 270516224   curSP = 270507616  curRA = 2380144     nextSP = 270507808 nextRA = 2367172
+9: top = 270516224   curSP = 270507808  curRA = 2367172     nextSP = 270507920 nextRA = 949028
+10: top = 270516224   curSP = 270507920  curRA = 949028     nextSP = 270508064 nextRA = 950108
+11: top = 270516224   curSP = 270508064  curRA = 950108     nextSP = 270508208 nextRA = 950108
+12: top = 270516224   curSP = 270508208  curRA = 950108     nextSP = 270508352 nextRA = 950108
+13: top = 270516224   curSP = 270508352  curRA = 950108     nextSP = 270508496 nextRA = 950108
+14: top = 270516224   curSP = 270508496  curRA = 950108     nextSP = 270508640 nextRA = 950108
+15: top = 270516224   curSP = 270508640  curRA = 950108     nextSP = 270508784 nextRA = 950108
+16: top = 270516224   curSP = 270508784  curRA = 950108     nextSP = 270508928 nextRA = 950108
+17: top = 270516224   curSP = 270508928  curRA = 950108     nextSP = 270509072 nextRA = 950108
+18: top = 270516224   curSP = 270509072  curRA = 950108     nextSP = 270509216 nextRA = 950108
+19: top = 270516224   curSP = 270509216  curRA = 950108     nextSP = 270509360 nextRA = 950108
+20: top = 270516224   curSP = 270509360  curRA = 950108     nextSP = 270509504 nextRA = 950108
+21: top = 270516224   curSP = 270509504  curRA = 950108     nextSP = 270509648 nextRA = 950108
+22: top = 270516224   curSP = 270509648  curRA = 950108     nextSP = 270509792 nextRA = 950108
+23: top = 270516224   curSP = 270509792  curRA = 950108     nextSP = 270509936 nextRA = 950108
+24: top = 270516224   curSP = 270509936  curRA = 950108     nextSP = 270510080 nextRA = 2358976
+25: top = 270516224   curSP = 270510080  curRA = 2358976     nextSP = 270510208 nextRA = 2385844
+26: top = 270516224   curSP = 270510208  curRA = 2385844     nextSP = 270510400 nextRA = 2363632
+27: top = 270516224   curSP = 270510400  curRA = 2363632     nextSP = 270510528 nextRA = 3181204
+28: top = 270516224   curSP = 270510528  curRA = 3181204     nextSP = 270510624 nextRA = 3096168
+29: top = 270516224   curSP = 270510624  curRA = 3096168     nextSP = 270510736 nextRA = 5979996
+30: top = 270516224   curSP = 270510736  curRA = 5979996     nextSP = 270510848 nextRA = 3186332
+31: top = 270516224   curSP = 270510848  curRA = 3186332     nextSP = 270510960 nextRA = 3039804
+32: top = 270516224   curSP = 270510960  curRA = 3039804     nextSP = 270511072 nextRA = 3170772
+33: top = 270516224   curSP = 270511072  curRA = 3170772     nextSP = 270511216 nextRA = 3166292
+34: top = 270516224   curSP = 270511216  curRA = 3166292     nextSP = 270511360 nextRA = 3181204
+35: top = 270516224   curSP = 270511360  curRA = 3181204     nextSP = 270511456 nextRA = 3096168
+36: top = 270516224   curSP = 270511456  curRA = 3096168     nextSP = 270511568 nextRA = 5979996
+37: top = 270516224   curSP = 270511568  curRA = 5979996     nextSP = 270511680 nextRA = 3186332
+38: top = 270516224   curSP = 270511680  curRA = 3186332     nextSP = 270511792 nextRA = 3039804
+39: top = 270516224   curSP = 270511792  curRA = 3039804     nextSP = 270511904 nextRA = 3637376
+40: top = 270516224   curSP = 270511904  curRA = 3637376     nextSP = 270512016 nextRA = 3702856
+41: top = 270516224   curSP = 270512016  curRA = 3702856     nextSP = 270512208 nextRA = 1515184
+42: top = 270516224   curSP = 270512208  curRA = 1515184     nextSP = 270512336 nextRA = 3699324
+43: top = 270516224   curSP = 270512336  curRA = 3699324     nextSP = 270512448 nextRA = 3688996
+44: top = 270516224   curSP = 270512448  curRA = 3688996     nextSP = 270512608 nextRA = 3693592
+45: top = 270516224   curSP = 270512608  curRA = 3693592     nextSP = 270512752 nextRA = 949028
+46: top = 270516224   curSP = 270512752  curRA = 949028     nextSP = 270512896 nextRA = 3697108
+47: top = 270516224   curSP = 270512896  curRA = 3697108     nextSP = 270513056 nextRA = 3702584
+48: top = 270516224   curSP = 270513056  curRA = 3702584     nextSP = 270513248 nextRA = 1515184
+49: top = 270516224   curSP = 270513248  curRA = 1515184     nextSP = 270513376 nextRA = 3699324
+50: top = 270516224   curSP = 270513376  curRA = 3699324     nextSP = 270513488 nextRA = 3688996
+51: top = 270516224   curSP = 270513488  curRA = 3688996     nextSP = 270513648 nextRA = 3698192
+52: top = 270516224   curSP = 270513648  curRA = 3698192     nextSP = 270513808 nextRA = 949028
+53: top = 270516224   curSP = 270513808  curRA = 949028     nextSP = 270513952 nextRA = 3707232
+54: top = 270516224   curSP = 270513952  curRA = 3707232     nextSP = 270514144 nextRA = 1515184
+55: top = 270516224   curSP = 270514144  curRA = 1515184     nextSP = 270514272 nextRA = 3699324
+56: top = 270516224   curSP = 270514272  curRA = 3699324     nextSP = 270514384 nextRA = 3709872
+57: top = 270516224   curSP = 270514384  curRA = 3709872     nextSP = 270514512 nextRA = 1556420
+58: top = 270516224   curSP = 270514512  curRA = 1556420     nextSP = 270514672 nextRA = 5736876
+59: top = 270516224   curSP = 270514672  curRA = 5736876     nextSP = 270514816 nextRA = 5740456
+60: top = 270516224   curSP = 270514816  curRA = 5740456     nextSP = 270515024 nextRA = 5836744
+61: top = 270516224   curSP = 270515024  curRA = 5836744     nextSP = 270515136 nextRA = 5899104
+62: top = 270516224   curSP = 270515136  curRA = 5899104     nextSP = 270515312 nextRA = 5945076
+63: top = 270516224   curSP = 270515312  curRA = 5945076     nextSP = 270515440 nextRA = 5945816
+64: top = 270516224   curSP = 270515440  curRA = 5945816     nextSP = 270515552 nextRA = 957476
+65: top = 270516224   curSP = 270515552  curRA = 957476     nextSP = 270515664 nextRA = 957476
+66: top = 270516224   curSP = 270515664  curRA = 957476     nextSP = 270515776 nextRA = 5973268
+67: top = 270516224   curSP = 270515776  curRA = 5973268     nextSP = 270515888 nextRA = 1271572
+68: top = 270516224   curSP = 270515888  curRA = 1271572     nextSP = 270516000 nextRA = 5975228
+69: top = 270516224   curSP = 270516000  curRA = 5975228     nextSP = 270516096 nextRA = 6048352
+==========================================================
+SP = 270516000   RA = 5975228   FrameSize = 24 words
+==========================================================
+SP = 270515888   RA = 1271572   FrameSize = 28 words
+==========================================================
+SP = 270515776   RA = 5973268   FrameSize = 28 words
+slot   24:    537204696d  TRACE_NO
+slot   25:            0d  TRACE_YES
+slot   26:            0d  TRACE_NO
+slot   27:      1271452d  TRACE_NO
+==========================================================
+SP = 270515664   RA = 957476   FrameSize = 28 words
+slot   24:      8392884d  TRACE_NO
+slot   25:            0d  TRACE_YES
+slot   26:      8393204d  TRACE_YES
+slot   27:      5973152d  TRACE_NO
+==========================================================
+SP = 270515552   RA = 957476   FrameSize = 28 words
+slot   24:      7916192d  TRACE_NO
+slot   25:            0d  TRACE_YES
+slot   26:      8391168d  TRACE_YES
+slot   27:       957564d  TRACE_NO
+==========================================================
+SP = 270515440   RA = 5945816   FrameSize = 28 words
+==========================================================
+SP = 270515312   RA = 5945076   FrameSize = 32 words
+slot   24:            0d  TRACE_YES
+slot   25:            0d  TRACE_YES
+slot   26:    537997060d  TRACE_YES
+slot   27:    537997048d  TRACE_YES
+slot   28:    537997036d  TRACE_YES
+slot   29:    537997024d  TRACE_YES
+slot   30:    672221452d  TRACE_NO
+slot   31:      5945628d  TRACE_NO
+==========================================================
+SP = 270515136   RA = 5899104   FrameSize = 44 words
+slot   36:    537996760d  TRACE_NO
+slot   37:    537996748d  TRACE_NO
+slot   38:    537996736d  TRACE_NO
+slot   39:    537996664d  TRACE_YES
+slot   40:    537996652d  TRACE_YES
+slot   41:    537996640d  TRACE_YES
+slot   42:    674674996d  TRACE_NO
+slot   43:      1241628d  TRACE_NO
+==========================================================
+SP = 270515024   RA = 5836744   FrameSize = 28 words
+slot   24:    537996652d  TRACE_YES
+slot   25:    537996664d  TRACE_YES
+slot   26:   1078067200d  TRACE_NO
+slot   27:      5899060d  TRACE_NO
+==========================================================
+SP = 270514816   RA = 5740456   FrameSize = 52 words
+slot   24:    536884276d  TRACE_NO
+slot   25:    546820608d  TRACE_YES
+slot   26:    546820592d  TRACE_YES
+slot   27:    546820576d  TRACE_YES
+slot   28:    546820560d  TRACE_YES
+slot   29:    546820544d  TRACE_YES
+slot   30:    546820528d  TRACE_YES
+slot   31:    546820512d  TRACE_YES
+slot   32:    546820496d  TRACE_YES
+slot   33:    546820480d  TRACE_YES
+slot   34:    546820464d  TRACE_YES
+slot   35:    546820448d  TRACE_YES
+slot   36:    546820432d  TRACE_YES
+slot   37:    546820416d  TRACE_YES
+slot   38:    546820400d  TRACE_YES
+slot   39:    546820384d  TRACE_YES
+slot   40:    546820368d  TRACE_YES
+slot   41:    546820352d  TRACE_YES
+slot   42:    546820336d  TRACE_YES
+slot   43:    546820320d  TRACE_NO
+==========================================================
+SP = 270514672   RA = 5736876   FrameSize = 36 words
+slot   24:    546823340d  TRACE_NO
+slot   25:    536884988d  TRACE_NO
+slot   26:      8366408d  TRACE_YES
+slot   27:    537919676d  TRACE_YES
+slot   28:    537997160d  TRACE_NO
+slot   29:    537996652d  TRACE_YES
+slot   30:      8052036d  TRACE_NO
+slot   31:    536884276d  TRACE_NO
+==========================================================
+SP = 270514512   RA = 1556420   FrameSize = 40 words
+slot   24:    538187956d  TRACE_NO
+slot   25:    548696596d  TRACE_SPECIAL(259, 7982328)  - SPECIAL_GLOBAL_REC(7982328[0,1,0,0]) = 7982276 - YES
+slot   26:    548696588d  TRACE_SPECIAL(515, 7982328)  - SPECIAL_GLOBAL_REC(7982328[0,2,0,0]) = 7982300 - YES
+slot   27:    536884796d  TRACE_NO
+slot   28:    536884276d  TRACE_NO
+slot   29:      7931796d  TRACE_YES
+slot   30:      7931796d  TRACE_YES
+slot   31:      7931796d  TRACE_YES
+slot   32:      7931796d  TRACE_YES
+slot   33:            0d  TRACE_NO
+slot   34:      7982896d  TRACE_YES
+slot   35:            1d  TRACE_YES
+slot   36:    548696580d  TRACE_YES
+slot   37:    548696572d  TRACE_YES
+slot   38:    536884796d  TRACE_NO
+slot   39:      5736844d  TRACE_NO
+==========================================================
+SP = 270514384   RA = 3709872   FrameSize = 32 words
+slot   28:    536895752d  TRACE_NO
+slot   29:    549504244d  TRACE_YES
+slot   30:    548696548d  TRACE_YES
+slot   31:           46d  TRACE_NO
+==========================================================
+SP = 270514272   RA = 3699324   FrameSize = 28 words
+==========================================================
+SP = 270514144   RA = 1515184   FrameSize = 32 words
+slot   24:      8152036d  TRACE_YES
+slot   25:    549548684d  TRACE_YES
+slot   26:    549504220d  TRACE_YES
+slot   27:    549601392d  TRACE_YES
+==========================================================
+SP = 270513952   RA = 3707232   FrameSize = 48 words
+slot   32:    537311952d  TRACE_NO
+slot   33:    549601364d  TRACE_YES
+slot   34:      8156940d  TRACE_NO
+slot   35:      8157220d  TRACE_NO
+==========================================================
+SP = 270513808   RA = 949028   FrameSize = 36 words
+slot   24:    538132168d  TRACE_YES
+slot   25:      8156904d  TRACE_NO
+slot   26:    537292596d  TRACE_NO
+slot   27:      3706940d  TRACE_NO
+slot   28:            0d  TRACE_YES
+slot   29:            0d  TRACE_NO
+slot   30:    537308992d  TRACE_NO
+slot   31:    537313064d  TRACE_NO
+==========================================================
+SP = 270513648   RA = 3698192   FrameSize = 40 words
+slot   24:    548565228d  TRACE_NO
+slot   25:    549601336d  TRACE_YES
+slot   26:    549601324d  TRACE_YES
+slot   27:            0d  TRACE_YES
+slot   28:    548565240d  TRACE_YES
+slot   29:      8157020d  TRACE_NO
+slot   30:      8157220d  TRACE_YES
+slot   31:      8157268d  TRACE_NO
+slot   32:            0d  TRACE_YES
+slot   33:            0d  TRACE_YES
+slot   34:            0d  TRACE_YES
+slot   35:            0d  TRACE_YES
+==========================================================
+SP = 270513488   RA = 3688996   FrameSize = 40 words
+slot   28:    548567000d  TRACE_NO
+slot   29:      8156904d  TRACE_NO
+slot   30:    548567012d  TRACE_YES
+slot   31:            1d  TRACE_YES
+slot   32:      8151528d  TRACE_NO
+slot   33:            0d  TRACE_NO
+slot   34:    537315444d  TRACE_NO
+slot   35:      8157020d  TRACE_YES
+==========================================================
+SP = 270513376   RA = 3699324   FrameSize = 28 words
+==========================================================
+SP = 270513248   RA = 1515184   FrameSize = 32 words
+slot   24:      8152036d  TRACE_YES
+slot   25:            0d  TRACE_YES
+slot   26:    549601300d  TRACE_YES
+slot   27:    549648764d  TRACE_YES
+==========================================================
+SP = 270513056   RA = 3702584   FrameSize = 48 words
+slot   32:    548568100d  TRACE_NO
+slot   33:    549648736d  TRACE_YES
+slot   34:      8156940d  TRACE_NO
+slot   35:      8157220d  TRACE_NO
+slot   40:      8156840d  TRACE_NO
+slot   41:            0d  TRACE_YES
+slot   42:    549648708d  TRACE_YES
+slot   43:        10920d  TRACE_NO
+==========================================================
+SP = 270512896   RA = 3697108   FrameSize = 40 words
+slot   24:    536894000d  TRACE_NO
+slot   25:    548452232d  TRACE_YES
+slot   26:    549648696d  TRACE_YES
+slot   27:    536893972d  TRACE_NO
+slot   28:    549648684d  TRACE_YES
+slot   29:    549648668d  TRACE_YES
+slot   30:            0d  TRACE_YES
+slot   31:    548570412d  TRACE_NO
+==========================================================
+SP = 270512752   RA = 949028   FrameSize = 36 words
+slot   24:    538132320d  TRACE_YES
+slot   25:    536885900d  TRACE_NO
+slot   26:    548515872d  TRACE_NO
+slot   27:            1d  TRACE_NO
+slot   28:            0d  TRACE_YES
+slot   29:    536888216d  TRACE_NO
+slot   30:    536874528d  TRACE_NO
+slot   31:    536896124d  TRACE_NO
+==========================================================
+SP = 270512608   RA = 3693592   FrameSize = 36 words
+slot   24:            0d  TRACE_YES
+slot   25:    536896216d  TRACE_NO
+slot   26:      8156840d  TRACE_NO
+slot   27:            0d  TRACE_NO
+==========================================================
+SP = 270512448   RA = 3688996   FrameSize = 40 words
+slot   28:    548571584d  TRACE_NO
+slot   29:      8156904d  TRACE_NO
+slot   30:    548571596d  TRACE_YES
+slot   31:            1d  TRACE_YES
+slot   32:      8151452d  TRACE_NO
+slot   33:            0d  TRACE_NO
+slot   34:    536898348d  TRACE_NO
+slot   35:      8157020d  TRACE_YES
+==========================================================
+SP = 270512336   RA = 3699324   FrameSize = 28 words
+==========================================================
+SP = 270512208   RA = 1515184   FrameSize = 32 words
+slot   24:      8152036d  TRACE_YES
+slot   25:    549657296d  TRACE_YES
+slot   26:    549648644d  TRACE_YES
+slot   27:    549660088d  TRACE_YES
+==========================================================
+SP = 270512016   RA = 3702856   FrameSize = 48 words
+slot   40:    549660076d  TRACE_YES
+slot   41:            0d  TRACE_YES
+slot   42:    549660048d  TRACE_YES
+slot   43:        10853d  TRACE_NO
+==========================================================
+SP = 270511904   RA = 3637376   FrameSize = 28 words
+slot   24:            0d  TRACE_YES
+slot   25:    549660036d  TRACE_YES
+slot   26:    549660020d  TRACE_YES
+slot   27:      8157220d  TRACE_NO
+==========================================================
+SP = 270511792   RA = 3039804   FrameSize = 28 words
+slot   24:      8097644d  TRACE_YES
+slot   25:    549660012d  TRACE_YES
+slot   26:    536940068d  TRACE_NO
+slot   27:      3637368d  TRACE_NO
+==========================================================
+SP = 270511680   RA = 3186332   FrameSize = 28 words
+==========================================================
+SP = 270511568   RA = 5979996   FrameSize = 28 words
+==========================================================
+SP = 270511456   RA = 3096168   FrameSize = 28 words
+==========================================================
+SP = 270511360   RA = 3181204   FrameSize = 24 words
+==========================================================
+SP = 270511216   RA = 3166292   FrameSize = 36 words
+slot   24:    544563896d  TRACE_YES
+slot   25:    536943008d  TRACE_NO
+slot   26:    536942840d  TRACE_NO
+slot   27:      8110016d  TRACE_NO
+slot   28:    536942932d  TRACE_NO
+slot   29:    549659996d  TRACE_YES
+slot   30:    536942868d  TRACE_NO
+slot   31:      8103724d  TRACE_NO
+slot   32:    536938796d  TRACE_NO
+slot   33:            0d  TRACE_NO
+slot   34:    547730028d  TRACE_NO
+slot   35:    549659980d  TRACE_SPECIAL(1283, 8097360)  - SPECIAL_GLOBAL_REC(8097360[0,5,0,0]) = 8097308 - YES
+==========================================================
+SP = 270511072   RA = 3170772   FrameSize = 36 words
+==========================================================
+SP = 270510960   RA = 3039804   FrameSize = 28 words
+slot   24:      8097644d  TRACE_YES
+slot   25:    549659972d  TRACE_YES
+slot   26:      7916136d  TRACE_NO
+slot   27:      3170764d  TRACE_NO
+==========================================================
+SP = 270510848   RA = 3186332   FrameSize = 28 words
+==========================================================
+SP = 270510736   RA = 5979996   FrameSize = 28 words
+==========================================================
+SP = 270510624   RA = 3096168   FrameSize = 28 words
+==========================================================
+SP = 270510528   RA = 3181204   FrameSize = 24 words
+==========================================================
+SP = 270510400   RA = 2363632   FrameSize = 32 words
+slot   28:    538232116d  TRACE_YES
+slot   29:    548281796d  TRACE_SPECIAL(526, 100) Proc 0:  Memory error at 1565 with PC = 6020224
+Bus Error
+BUS_ADRALN invalid address alignment

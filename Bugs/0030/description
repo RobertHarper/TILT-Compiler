@@ -1,0 +1,20 @@
+Number: 0030
+Title:       Where type in signature not allowed.
+Keywords:    signature specs, parser
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        11/20/00
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	The parser doesn't like "include ID where type ..." in signatures.
+Code:
+	(*$import *)
+	signature A = sig type t end
+	signature B = sig include A where type t = unit end
+Transcript:
+Comments:
+Fix:
+Test: 
+Owner: swasey
+Status: closed

@@ -1,0 +1,132 @@
+Number: 0015
+Title:       Large string constant compiles incorrectly on alpha.
+Keywords:    gc,string,alpha
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        7/21/00
+Version:     CVS
+System:	     alpha
+Severity:    major
+Problem:
+	Running the 2nd TILT binary created during a bootstrap
+	always results in a subscript exception.
+Code:
+	tiltc -v
+Transcript:
+	swasey@tcl ; tiltc -v
+	Defaulting to model DEC3000_500
+	  Scanning for free variables
+	  Computing transitive closure of close funs
+	  Rewriting imports, bindings, exports
+	Proc 0: Thread 0 (0): Uncaught exception Subscript
+Comments:
+	We have no way of tracking who raised an exception. [new bug 16]
+
+	This exception originates in FrontEnd_unit.
+
+	global_exnhandler
+		$r13 = ALLOCPTR_REG   = 0x200008b8
+		$r14 = ALLOCLIMIT_REG = 0x2006cccc
+		NumGC = 17
+	returnFromGCFromML
+		RA = 0x866ad8c
+		RA = 0x866ad8c
+		$r13 = 0x20000000
+	So the last GC call before the exn was from
+		MLLrValsFun_anonfun_code_426399:15505		Returns
+		[code_516815, line 15984]
+		[MLLrValsFun_f_code_426441:15919, 0x866b140]
+
+	stop in FrontEnd_main
+		stop in 
+		stop in [MLLrValsFun_f_code_426441:15919, 0x866b140]
+		keep continuing until $r13 = 200008b8
+
+	The series of calls after this point ends with:
+	
+	[MLLrValsFun_f_code_426441:15919, 0x866b140]		string_to_pairlists's f
+	[MLLrValsFun_anonfun_code_426399:15474, 0x866ad18]	string_to_int
+	[String_sub_code_138422:140, 0x80ba6f8]
+	[global_exnhandler:220, 0x873a264]
+
+	See notes2 which contains a trace of the last few instructions
+	prior to the exception, with register values.
+
+	The loop we're looking at corresponds to ml.grm.sml:1345
+		val gotoT=Array.fromList(string_to_table(string_to_pairlist(NT,STATE),gotoT))
+	with gotoT = string_440166 (size 4148, tag 0x81a2).
+
+	The problem is TILT compiled the string gotoT incorrectly.
+	See strings/[AB].s, which contain the corresponding .ascii
+	directives taken from tilt/[ab]/Parser/ml.grm.alpha.s.gz.  A
+	is the version created by the SML/NJ hosted TILT and B is that
+	created by Top.  Re-compiling just the string, under either
+	compiler, creates .ascii directives identical to whats in A.s
+	(see test/[AB]/test.alpha.s).
+
+	Plan
+	     . Verify that recompiling the unit with tiltb
+	       reliably generates the bogus string.
+			The string is still bogus (see strings/C.s).
+	     . Check out latest runtime (Perry just fixed some GC bugs)
+	     . Check if bug 14 still exists
+			Nope.  Bug 14 exhibited itself with
+			MLLrValsFun with the old runtime without
+			@stackletSize.
+	     . Check if bug 15 still exists
+			The string is still bogus (see strings/D.s).
+	     . Change the condition on line 31 of gc_gen.c to always
+	       succeed and check if the bug still exists.
+			The string is correct (see strings/E.s) and
+			"titlc -v" works.
+	     . Check if the bug exists when running with the semispace
+	       collector ('@semi').
+			The string is correct (see strings/F.s) and
+			"tiltc -v" works.
+
+	This is definitely a gc bug.
+
+	The string is over 4K in length, which is significant.  It's
+	being allocated in the large object space (gc_large_alloc).
+
+	The debug code strings/string.c is being called by the runtime
+	in strategic places.  checkObj() is being called after each
+	large object allocation (near the end of AllocBigArray_Gen()).
+	It tracks one large object which could be our string and
+	notices when it changes.  checkBitmap() is being called after
+	each large space gc (from gc_large_endCollect()).  It notices
+	when the portion of the largespace bitmap associated with our
+	object becomes corrupt.
+
+	dbx $m/ml96/Top.nomirror.alpha.exe
+	stop in noticedChange
+	stop in noticedChangedTag
+	stop in noticedBadBit
+	r -fdebug_asm -fkeep_link_asm mapfile-all
+
+	============================================
+	Starting translation to RTL
+	string: 0x30073804 replacing 0x300bec04 as theString
+	string: 0x30073804 has been initialized
+	bitmap 0xa4708c0 byteLen=4152 bytePos=14336 chunkPos=28 chunkLen=9 isset=268435456 i=4
+	thread 0xb stopped at   [noticedBadBit:730 +0x20,0x8746e50]     }
+
+	       allocMap=0xa4708c0 (markMap=0xa470890)
+	       allocMap->lock = 0
+	       allocMap->size = 32768
+	       allocMap->pos  = 37
+	       allocMap->used = 37
+	       allocMap->data[0]:
+	       00 00 00 1F       FF       FF       FF        FF
+		        00011111 11111111 11111111 11111111 11111111
+			   ^   ?    ^
+
+	So IsSet() is incorrectly reporting bit 32 of
+	allocMap->data[0] as clear.  The code for GetBit() was faulty.
+	It attempted to return the actual bit, requiring a 64-bit
+	result, as a 32-bit int.  The fix was to change GetBit to
+	return 0 or 1.  With this fix in place, the string was
+	generated correctly.
+Fix:
+Test:
+Owner: swasey
+Status: closed

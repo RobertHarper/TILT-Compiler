@@ -1,0 +1,66 @@
+Number:	0007
+Title:       Runtime looping on alpha.
+Keywords:    runtime
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        7/10/00
+Version:     CVS
+System:	     alpha
+Severity:    major
+Problem:
+	When executing non-trivial programs (like "tilt -v")
+	the runtime loop around lines 728-733 of thread.c
+	fails to termiante.
+Code:
+Transcript:
+	The output looks like:
+		Warning: Proc 0: could not resume thread 0 after calling GCFromScheduler.  Retrying...
+		Warning: Proc 0: could not resume thread 0 after calling GCFromScheduler.  Retrying...
+Comments:
+	This is occuring during a GCRequestFromML.  We have:
+		th->request	= 3		(GCRequestFromML)
+		th->requestInfo = 4294967284	(bogus, should be -12)
+	(dbx) where
+	>  0 GCSatisfied(proc = 0xa496020, th = 0xa4ae800) ["gc.c":499, 0x86cf6d8]
+	   1 GCFromScheduler(proc = 0xa496020, th = 0xa4ae800) ["gc.c":520, 0x86cf7cc]
+	   2 work(proc = 0xa496020) ["thread.c":731, 0x86d4740]
+	   3 schedulerRest(proc = 0xa496020) ["thread.c":944, 0x86d5208]
+	   4 scheduler() ["service_alpha_osf_asm.s":177, 0x86dc634]
+
+	The ML code return address is
+	(dbx) &Threads[0].saveregs[26]/xx
+	000000000a4ae8d0:  080b8b74
+
+	Which can be mapped to a label and line number by disassembling
+	(dbx) 0x80b8b74?2i
+	  [String_copyPRIME_code_137791:1214, 0x80b8b70]        jsr     r26, (r27), String_scanTok_code_137915+0x1a8(line 3316) <r26=0x86d520c,r27=0x86dc4e0>
+	  [String_copyPRIME_code_137791:1216, 0x80b8b74]        ldl     r3, 1080(r12) <0xa4aec38>       <r3=0xa9d1af0,r12=0xa4ae800>
+	    
+	The call before this address is around line 1214.
+	The unit is String (from Basis/mapfile-basis) so
+	the source is Basis/Text/string.alpha.s.  This happens
+	to be a NEEDMUTATE check.
+
+	Breaking in GCFromML we have
+	(dbx) where
+	>  0 GCFromML() ["gc_alpha_osf_asm.s":224, 0x86c9e50]
+	   1 String_copyPRIME_code_137791() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Text/string.alpha.s":1214, 0x80b8b70]
+	   2 String_copy_code_137786() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Text/string.alpha.s":1347, 0x80b8cd0]
+	   3 String_anonfun_code_137781() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Text/string.alpha.s":1560, 0x80b8efc]
+	   4 Array_tab_code_63225() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/array.alpha.s":1282, 0x80d8c9c]
+	   5 Vector_tabulate_inner_code_97821() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/vector.alpha.s":975, 0x80e0ba0]
+	   6 PrettyPrint_main() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Parser/pp.alpha.s":8922, 0x813ffd8]
+	   7 LINKUNIT_main() ["link_Top.nomirror.alpha.exe.alpha.s":4589, 0x86c664c]
+	   8 start_client() ["service_alpha_osf_asm.s":108, 0x86dc578]
+
+	I think the problem is that GCFromML is storing the requestInfo
+	(-12) as a 4-byte quantity but the C code is accessing it as an
+	8-byte quantity.  So rather than seeing a negative number, the
+	C code sees a very large positive number.
+Fix:
+	Either the runtime C code or runtime assembler code (and possibly
+	generated assembler code) is wrong about the size of that field.
+	Ask Perry and make the two consistent.
+	Also check that access to the other fields is consistent.
+Test: *
+Owner: swasey
+Status: closed

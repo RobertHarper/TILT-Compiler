@@ -1,0 +1,30 @@
+Number: 0031
+Title:       Partially supported language extensions.
+Keywords:    Frontend
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        11/21/00
+Version:     CVS
+System:	     all
+Severity:    minor
+Problem:
+	TILT has partial support for a few extensions.
+
+	* Chris Okasaki's $-extension (Ast.DelayExp, Ast.DelayPat).  We seem
+	to elaborate $-expressions and we have a datatype for suspensions in
+	the Prelude.  The pattern compiler ignores $-patterns.
+
+	* SML/NJ or-patterns (Ast.OrPat).  Again, the pattern compiler ignores
+	them.
+
+	* Abstract structures (Ast.AbsDec).  Toil bails.
+
+	* Functor signatures (Ast.FsigDec).  Toil bails.
+
+	These need to be removed.
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: closed

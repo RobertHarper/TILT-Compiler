@@ -1,0 +1,140 @@
+PosixPrimIOFn_anonfun_code_157476
+asm/posix-prim-io-fn.sml.s:#3721,#6212
+
+Second call made by PosixPrimIOFn_putV_code_157734.
+
+Argument %r8 = 0xeeb937b0 (trace data, see above)
+Argument %r9 = ()
+Argument %r10 = writeVec_114655 (closure, see above)
+
+	.global PosixPrimIOFn_anonfun_code_157476
+ ! arguments : [$157478,$8] [$157479,$9] [$143977,$10] 
+ ! results    : [$162774,$8] 
+PosixPrimIOFn_anonfun_code_157476:
+	.proc   07
+	mov	%sp, %fp
+	sub	%sp, 112, %sp
+	ld	[%r2+800], %r16
+	cmp	%sp, %r16
+	bg	code_162857
+	mov	%sp, %fp
+	... branch taken ...
+code_162857:
+	st	%r15, [%sp+92]
+	mov	%r10, %r12
+code_162842:
+funtop_162730:
+	! Proj_c at label type_154065_INT
+	ld	[%r8], %r16		pds 2
+	st	%r16, [%sp+100]
+	! Proj_c at label type_154064_INT
+	ld	[%r8+4], %r16		pds 0xeeb9377c
+	st	%r16, [%sp+96]
+		0xeeb9377c: 0x5 0x2 0x18d444 0xeeb93764
+		0xeeb9378c: 0x719
+
+	! making closure call
+	pds Global.
+	sethi	%hi(onearg_INT), %r8
+	or	%r8, %lo(onearg_INT), %r9
+	ld	[%r2+804], %r8
+	add	%r9, %r8, %r8		pds %r8 = 0x194e9c
+
+	pds onearg_319 is the closure
+	ld	[%r8], %r9		pds %r9 = 0x194ea8 <onearg_319>
+	ld	[%r9], %r13		pds %r13 = 0xfa668 <LINKUNIT_onearg_code_502>
+	ld	[%r9+4], %r8		pds %r8 = 0x100 ()
+	ld	[%r9+8], %r11		pds %r11 = 0x100 ()
+	ld	[%sp+96], %r9		pds %r9 = 0xeeb9377c
+	jmpl	%r13, %r15
+	ld	[%sp+100], %r10		pds %r10 = 2
+code_162855:
+	mov	%r8, %r10
+
+pds The effect of onearg was to set
+pds %r10 = %r12 = 0x18fb2c = writeVec_114655
+pds See the $ml96/Nil/vararg.sml where onearg is defined.
+
+pds ALLOC check
+
+code_162845:
+	! done making normal call
+	add	%r4, 28, %r16
+	ld	[%r2+20], %r5
+	cmp	%r16, %r5
+	ble	needgc_162846
+	nop
+	... branch taken ...
+needgc_162846:
+	! allocating 1 closures
+
+	pds Record 0xeeb97168 = {trace=2, trace=0xeeb9377c}
+
+	! allocating 2-record
+	or	%r0, 785, %r8
+	st	%r8, [%r4]
+	ld	[%sp+100], %r17		pds 2
+	st	%r17, [%r4+4]
+	ld	[%sp+96], %r17
+	st	%r17, [%r4+8]		pds 0xeeb9377c
+	add	%r4, 4, %r9		pds %r9 = record address
+	add	%r4, 12, %r4
+	! done allocating 2 record
+
+	pds Closure 0xeeb97174 = {
+	pds	notrace=PosixPrimIOFn_anonfun_code_157483,
+	pds	trace = 0xeeb97168 = {trace=2, trace=0xeeb9377c},
+	pds	trace = 0x18fb2c = writeVec_114655
+	pds }
+
+	! allocating 3-record
+	or	%r0, 1561, %r8
+	st	%r8, [%r4]
+	sethi	%hi(PosixPrimIOFn_anonfun_code_157483), %r8
+	or	%r8, %lo(PosixPrimIOFn_anonfun_code_157483), %r8
+	st	%r8, [%r4+4]
+	st	%r9, [%r4+8]
+	st	%r10, [%r4+12]
+	add	%r4, 4, %r12		pds %r12 = closure address
+	add	%r4, 16, %r4
+	! done allocating 3 record
+	! done allocating 1 closures
+
+	! making closure call
+	
+	sethi	%hi(vararg_INT), %r8	pds fetching global vararg_INT
+	or	%r8, %lo(vararg_INT), %r9
+	ld	[%r2+804], %r8
+	add	%r9, %r8, %r8
+	ld	[%r8], %r9		pds %r9 = global vararg_INT = 0x194ec4
+
+	pds Closure 0x194ec4 = {
+	pds	notrace=LINKUNIT_vararg_code_612,
+	pds	trace = 0x100,
+	pds	trace = 0x100
+	pds }
+
+	pds Call LINKUNIT_vararg_code_612 with
+	pds	%r8 = 0x100
+	pds	%r9 = 0xeeb9377c
+	pds	%r10 = 2
+	pds	%r11 = 0x100
+	pds	%r12 = Closure 0xeeb97174
+
+	ld	[%r9], %r13		pds %r13 = LINKUNIT_vararg_code_612
+	ld	[%r9+4], %r8		pds %r8 = 0x100
+	ld	[%r9+8], %r11		pds %r11 = 0x100
+	ld	[%sp+96], %r9
+	jmpl	%r13, %r15
+	ld	[%sp+100], %r10
+code_162856:
+code_162852:
+	! done making normal call
+
+	pds Vararg simply sets %r8 = %r12 = Closure 0xeeb97174
+
+code_162854:
+	ld	[%sp+92], %r15
+	retl
+	add	%sp, 112, %sp
+	.size PosixPrimIOFn_anonfun_code_157476,(.-PosixPrimIOFn_anonfun_code_157476)

@@ -1,0 +1,22 @@
+Number: 0068
+Title:       Representation of sizes in trace table inadequate.
+Keywords:    Backend, GC, trace table
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        1/16/02
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	While compiling MLLrValsFun, the limit on "framesizeword", which
+	describes the size of a stack frame, was exceeded.
+Code:
+Transcript:
+Comments:
+Fix:
+	This 9 bit field was changed to 16 bits.  The related size
+	fields "entrysizeword" and "bytestuffsizeword" were also
+	expanded to 16 bits each.  This change affected thread.h,
+	stack.c, and tracetable.sml.
+Test:
+Owner: swasey
+Status: closed

@@ -1,0 +1,25 @@
+Number: 0047
+Title:       Mishandling ref in patterns.
+Keywords:    Elaborator, patterns, ref
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        12/13/2000 
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	I'm not sure if this is a bug or not.  The pattern fails.
+Code:
+	(*$import *)
+	type 'a myref = 'a ref
+	(* local val a : int myref = ref 0 in val (ref works1) = a end *)
+	val fails : 'a myref = ref 0 (* shouldn't the type be int myref? *)
+Transcript:
+Comments:
+	This is not a bug:  because of the explicit type variable,
+	we must be able to prove 0 : 'a, which is false.
+
+	Our error message could be better, though.
+Fix:
+Test:
+Owner: swasey
+Status: closed

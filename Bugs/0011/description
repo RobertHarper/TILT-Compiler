@@ -1,0 +1,71 @@
+Number: 0011
+Title:       Segv on alpha.
+Keywords:    alpha,runtime,stack
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        7/17/00
+Version:     CVS
+System:	     alpha
+Severity:    major
+Problem:
+	Compiler dies while bootstrapping.  Dies repeatedly while
+	compiling unit BinIOFn, file Basis/IO/bin-io-fn.
+Code:	     
+Transcript:
+	Inside GDB:
+		================================================
+		Starting translation to TIL-Alpha assembly
+		 There are 98 procedures and  98 recursive components with the largest being of size 1
+		function BinIOFn_mkOutstream_code_262822 with 52 labels. liveness analysis took 4 steps
+		function BinIOFn_mkInstream_code_263186 with 65 labels. liveness analysis took 4 steps
+		sendsig: can't grow stack, pid 15236, proc Top.nomirror.alp, sig 11
+
+		Program terminated with signal SIGSEGV, Segmentation fault.
+		The program no longer exists.
+		.gdbinit:19: Error in sourced command file:
+		You can't do that without a process to debug
+		(gdb)
+	From shell:
+		===== Starting Phasesplit: BinIOFn                       =====
+		Stack overflow: pid 16721, proc Top.nomirror.alp, addr 0x10001ff0, pc 0x8176384
+		segmentation violation
+		status=sigsegv
+	Inside DBX:
+		===== Starting Phasesplit: BinIOFn                       =====
+		thread 0x9 signal Segmentation fault at   [SplayTree_adj_code_169426:502 ,0x8176384]     Source not available
+		(dbx) wi
+		  [SplayTree_polyPLUSEsplay_INT_r_code_169401:478, 0x8176370]   ret     r31, (r26), 1   <r26=0x8176778,r31=0>
+		  [SplayTree_polyPLUSEsplay_INT_r_code_169401:490, 0x8176374]   bis     r31, r31, r31   <r31=0>
+		  [SplayTree_adj_code_169426:500, 0x8176378]    ldah    gp, 525(r27) <0xa246378>        <r27=0x8176378,gp=0xa245840>
+		  [SplayTree_adj_code_169426:500, 0x817637c]    lda     gp, -2872(gp) <0xa244d08>       <gp=0xa245840>
+		  [SplayTree_adj_code_169426:501, 0x8176380]    lda     sp, -48(sp) <0x10001fc0>        <sp=0x10001ff0>
+		>*[SplayTree_adj_code_169426:502, 0x8176384]    stq     r26, 0(sp) <0x10001ff0> <r26=0x8176778,sp=0x10001ff0>
+		  [SplayTree_adj_code_169426:503, 0x8176388]    stl     r0, 28(sp) <0x1000200c> <r0=0x20006274,sp=0x10001ff0>
+		  [SplayTree_adj_code_169426:504, 0x817638c]    stl     r1, 24(sp) <0x10002008> <r1=0x20006280,sp=0x10001ff0>
+		  [SplayTree_adj_code_169426:508, 0x8176390]    ldl     r25, 28(sp) <0x1000200c>        <r25=0x2000eb80,sp=0x10001ff0>
+		  [SplayTree_adj_code_169426:509, 0x8176394]    ldl     r0, 0(r25) <0x2000eb80> <r0=0x20006274,r25=0x2000eb80>
+		The stack:
+		Threads[0].stack->used = 1
+		Threads[0].stack->cursor = 1
+		Threads[0].stack->stacklets[0].baseTop    = 0x1001bf80
+		Threads[0].saveregs[30]			  = 0x1001bce0
+		Threads[0].stack->stacklets[0].baseBottom = 0x10002000
+		$r30					  = 0x10001ff0
+		(dbx) $r26?1i
+		  [SplayTree_adj_code_169426:806, 0x8176778]    ldah    gp, 525(r26) <0xa246778>        <r26=0x8176778,gp=0xa245840>
+		Runtime call beforeline 806 is GCToML.
+Comments:
+	We aren't using that much memory.  See mem_usage, which tracks
+	the process under GDB.
+
+	Running with @stackletSize=4096 avoids the problem, which
+	looks like a simple stack overflow.
+
+	Are the ML checks for extending the stack (allocating a new
+	stacklet) implemented on the alpha?  If not, thats the bug.
+Fix:
+	Implemented the ML checks for extending the stack (allocating
+	a new stacklet) on the alpha.  This led to a new bug (#13) which,
+	when fixed, took care of bug # 11.
+Test:
+Owner: swasey
+Status: closed

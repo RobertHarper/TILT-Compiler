@@ -1,0 +1,56 @@
+Number: 0058
+Title:       Elaborator not coercing total arrows to partial arrows correctly.
+Keywords:    Elaborator
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        Oct 24, 2001
+Version:     CVS
+System:	     all
+Severity:    major
+Problem:
+	The following code does not compile
+
+		datatype t = T of int
+		fun f (T _) = g T and g c = (c 3)
+Code
+Transcript:
+Comments:
+	The elaborator was failing to coerce datatype constructors to
+	partial functions.  This coercion is necessary when
+	constructors are not used in an application.
+
+	Bob motivates the coercion as follows: The translation of ML
+	expressions should have ML types.  Since ML has only partial
+	functions, a datatype constructor should translate to a
+	partial function.  We only need to know that datatype
+	constructors are total when they are applied; so an
+	application of a datatype constructor to an argument
+	translates to a HIL application (which has an ML type) of a
+	total function to an argument.
+
+	This bug touches on three issues that I am going to ignore for
+	now.  The 1997 technical report by Harper and Stone did away
+	with constructor subtyping in favor of explict "partialization
+	expressions" which coerce total functions to partial
+	functions.  The implementation differs from HS in that (1) we
+	don't have partialization expressions, (2) we don't have
+	expressions for coercing known sums to sums, and (3) we
+	support constructor subtyping (in place of the "missing"
+	coercions).  I don't know that these issues lead to bugs in
+	the compiler.  I suspect they are harmless.  If I ever have a
+	spare week, I would like to eliminate the unnecessary version
+	skew.
+Fix:
+	The fix was to move the implementation closer to HS.  We now
+	translate paths in one of two ways.  When used as the function
+	part of an application, paths are translated as before.  In
+	other cases, paths are translated as before and then coerced
+	to partial functions.
+
+	How is the coercion implemented given that we don't have an
+	explicit partialization expression?  If the translation of a
+	path has HIL expression e and constructor c => c', we return
+	the same expression e with constructor c -> c'; that is, we
+	rely on subtyping.
+Test:
+Owner: swasey
+Status: closed

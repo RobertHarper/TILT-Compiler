@@ -1,0 +1,54 @@
+Number: 0062
+Title:       Typechecking fails after Optimize2.
+Keywords:    Coercion, Nil, Optimize
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        11/8/01
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	Type-checking after Optimize2 fails with this code:
+		(*$import Prelude *)
+
+		fun find ("" :: r) = find r
+		  | find _ = ()				(* Not necessary but simplifies generated code *)
+Code:
+	tilt -fcheckOptimize2 mapfile-bug
+Transcript:
+Comments:
+	To see the problem, I printed the NIL code after Hoist and
+	before Optimize2.  Compare the files hoist.nil and
+	optimize2.nil.
+	
+	The hoisted code defines and uses reify_1199:
+	
+		[reify_1199 = APP(_c_1018.list,(VECTOR(INT8))),
+		 ...
+		 /\ find_1148
+		 ( ;; mvar_1044 : Compute(reify_1199) : APP(_c_1018.list,(VECTOR(INT8))) ;; )
+		 ->UNIT = ...,
+		 ...]
+
+	The optimized code no longer defines reify_1199:
+
+		[...
+		 /\ find_1148
+		 ( ;; mvar_1044 : Compute(reify_1199) : APP(type_1165,(VECTOR(INT8))) ;; )
+		 ->UNIT = ...,
+		 ...]
+
+	The optimizer was not traversing the trace annotations on a
+	function's term arguments.  In this code, the trace annotation
+	has the only use of reify_1199 and, since the optimizer didn't
+	notice that use, the binding for reify_1199 was eliminated as
+	dead code.
+Fix:
+	The fix was a one-line change to the optimizer (in do_vtrc).
+
+	I checked that the optimizer was correctly handling other
+	trace annotations.  It appears that the same bug existed for
+	the trace annotations on imports.  I fixed it there, too (in
+	do_import).
+Test:
+Owner: swasey
+Status: closed

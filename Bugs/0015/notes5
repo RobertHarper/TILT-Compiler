@@ -1,0 +1,20 @@
+============================================
+Starting translation to RTL
+string: 0x30073804 replacing 0x300bec04 as theString
+string: 0x30073804 has been initialized
+bitmap 0xa4708c0 byteLen=4152 bytePos=14336 chunkPos=28 chunkLen=9 isset=268435456 i=4
+thread 0xb stopped at   [noticedBadBit:730 +0x20,0x8746e50]     }
+
+       allocMap=0xa4708c0 (markMap=0xa470890)
+       allocMap->lock = 0
+       allocMap->size = 32768
+       allocMap->pos  = 37
+       allocMap->used = 37
+       allocMap->data[0]:
+       00 00 00 1F       FF       FF       FF        FF
+	        00011111 11111111 11111111 11111111 11111111
+		   ^   ?    ^
+
+The code for GetBit() was faulty.  It attempted to return the actual
+bit, requiring a 64-bit result, as a 32-bit int.  The fix was to
+change GetBit to return 0 or 1.

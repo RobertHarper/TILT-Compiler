@@ -1,0 +1,46 @@
+Number: 0034
+Title:       Stack chain corruption.
+Keywords:    runtime, stack chain
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        11/29/00
+Version:     CVS
+System:	     solaris,alpha
+Severity:    major
+Problem:
+	While compiling MLLrValsFun on sparc or alpha we see lots of
+	messages like
+		Warning: alloc_space called with no thread mapped
+	followed often by an assertion (newAlloc <= limit) (create.c:57).
+
+	While compiling Join on sparc, we see a failure in
+	getThread().  We have stacklet->parent->thread == NULL.
+	(where stacklet == Stacklets[0]).
+Code:
+Transcript:
+Comments:
+	On the sparc the stack looks something like:
+		Timer.??
+		til_selfusage()
+		alloc_record()
+		alloc_small_record()
+		alloc_space()
+	At this point getThread() = NULL
+	because GetStacklet()->parent->thread = NULL.
+	Perhaps some part of the ML->C interface is broken.
+	Maybe save_regs_MLtoC.
+	-----
+
+	The problem was that a stack chain had a fixed size stacklets
+	array.  NewStacklet was ignoring the limit and pointing cursor
+	beyond the array size.  A subsequent PopStacklet clears a
+	stack chain's thread pointer.
+
+	This definitely led to the second bug.
+
+	A corrupt stackchain very likely contributes to the first bug.
+Fix:
+	StackChain_t.stacklets is now dynamic.  Neither bug exhibits
+	itself anymore.
+Test: 
+Owner: swasey
+Status: closed

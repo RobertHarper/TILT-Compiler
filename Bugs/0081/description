@@ -1,0 +1,91 @@
+Number: 0081
+Title:       Compiled compiler seg faults.
+Keywords:    Runtime, garbage collector
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        7/29/02
+Version:     CVS
+System:	     solaris
+Severity:    major
+Problem:
+	The TILT-compiled compiler crashes with a SEGV
+	while Reifying MLLrValsFun.
+Code:
+Transcript:
+	A compilation log is in ./log
+	A list of mmaps is in ./mmaps
+	A list of stacklet mmaps is in ./mmaps-stk
+Comments:
+	The SEGV occurs at ./asm/splay-set-fn.sml.s:5110.
+	We are trying to write our return address to the stack.
+
+	The write address is A = $sp + 92 = 0xeead1fec.  A
+	lies in memory region RD = [0xeead0000, 0xeeb24000)
+	that was mapped at log:7428.  RD looks like
+
+		RD = primary[172032] replica[172032]
+		primary = guard[8192] C[32768] ML[130944] k[128]
+		replica = guard[8192] C[32768] ML[130944] k[128]
+
+	Address A is at offset 8172 into RD; it lies in the primary
+	guard page.
+
+	The write to A is a stack overflow.
+
+	Our stack limit is L = Threads[0].stackLimit =
+	0xeea7a000.  L lies in the memory region R7 =
+	[0xeea70000, 0xeeac4000) that was mapped at
+	log:7429.
+
+	Addresses A and L do not lie in the same stacklet.
+
+	The top of our stack chain is S =
+	StackChains[0].stacklets[StackChains[0].cursor-1] =
+	0x11ca3f8.  *S describes R7:
+		state = Inconsistent
+		baseExtendedBottom = 0xeea72000 = primary C area
+		baseBottom = 0xeea7a000 = primary ML area
+		baseCursor = 0xeea99f80 = end of primary ML area
+		baseTop = 0xeea99f80 = end of primary ML area
+		retadd = 0x1ea5d4 = ./asm/splay-set-fn.sml.s:5140
+		replicaCursor = 0xeea995f0 = offset 128496 in primary ML
+		replicaRetadd = 0xadeb68
+
+	SP is invalid, meaning it does point into the top
+	stacklet on the current stack chain.
+
+	Consider the function prolog code
+	./asm/splay-set-fn.sml.s:5097,5107.
+	NewStackletFromMutator arranges for both SP and
+	LINK to be updated.  SP does not point into the
+	current stacklet.  LINK = $o7 = 0x1ea5d4 =
+	./asm/splay-set-fn.sml.s:#109242,#109281
+	and not PopStackletFromML.  We conclude
+	NewStackletFromML was not called.  In particular,
+	the prolog did not change SP dramatically and did
+	not change  the stack limit at all.
+
+	SP was invalid when this function began.
+
+	Added some debugging output.  @diag now logs
+	stacklet allocation.  See the new compile in ./log4
+
+	The last stacklet operation (log4:35680) had:
+		caller asm/normalize.sml.s:9349
+		callee asm/normalize.sml.s:8792
+
+	XXX: Try to use watchpoints to notice when the stack chain
+	and SP go out of sync.
+	
+	XXX: Add stack checks after an exception is raised.
+	XXX: Add stack checks and after collections.
+
+	Debug Aid: Write some code to do a stack dump.
+	Output a list of mutator return addresses with |
+	indicating stacklet boundaries.
+
+	Suspicion: There is a signed pointer comparison
+	somewhere in PopStackletFromMutator.
+Fix:
+Test:
+Owner: swasey
+Status: open

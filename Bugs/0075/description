@@ -1,0 +1,55 @@
+Number: 0075
+Title:       Pattern compiler generating incorrect code for exceptions.
+Keywords:    elaborator, pattern compiler, exceptions
+Submitter:   Leaf Eames Petersen <leaf+@cs.cmu.edu>
+Date:        4/11/02
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	Has anyone made any changes to the elaborator recently?  Twelf will
+	not compile due to the following very simple bug, that I have trouble
+	believing has been here all along.
+
+	This program:
+
+	(*$import *)
+
+	fun abortIO (Div) = ()
+
+	Gets elaborated to roughly this HIL code:
+
+	/\ a::T.\x_Div : 'a .exncase(x_Div of Div.stamp => () | _ => raise Match)
+
+	The correct code should be:
+
+	\x_Div : Exn .exncase(x_Div of Div.stamp => () | _ => raise Match)
+
+	Notice that the pattern compiler clearly knows that it is compiling an
+	exception pattern, but for some reason, the type of the formal
+	argument gets incorrectly generalized.
+Code:
+Transcript:
+Comments:
+	This is not a new bug.
+
+	The function exn_case in pat.sml was not unifying the argument
+	type with CON_ANY.
+
+	This bug had another manifestation: TILT was happy with code
+	like
+
+		(*$import *)
+		exception MyDiv
+		val MyDiv = 3
+Fix:
+	The missing code is extremely simple:
+
+	  val _ = if (eq_con(context,exncon,CON_ANY))
+		      then ()
+		  else (error_region();
+			print "exception pattern used on a non-exception argument\n";
+			print "Argument type: "; pp_con exncon; print "\n")
+Test: 
+Owner: swasey
+Status: closed

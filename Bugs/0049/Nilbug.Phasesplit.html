@@ -1,0 +1,122 @@
+Phasesplit
+
+<HTML><BODY><PRE>
+          [<A NAME="_bar_foo_1036">_bar_foo_1036</A> = LET  <A NAME="_1035">_1035</A> = 
+                      FUN_C(<A NAME="'a_1032">'a_1032</A> :: TYPE)
+                            = 
+                           MU_C((<A NAME="vdt_bar_1033">vdt_bar_1033</A>=SUM(0,1)(<A HREF="#vdt_foo_1034">vdt_foo_1034</A>), <A NAME="vdt_foo_1034">vdt_foo_1034</A>=SUM(0,1)(<A HREF="#vdt_bar_1033">vdt_bar_1033</A>)))
+                 IN   <A HREF="#_1035">_1035</A>
+                 END,
+ <A NAME="bar_1087">bar_1087</A> = LET  <A NAME="_1086">_1086</A> =  FUN_C(<A NAME="'a_1085">'a_1085</A> :: TYPE) = APP_C(<A HREF="#_bar_foo_1036">_bar_foo_1036</A>;<A HREF="#'a_1085">'a_1085</A>).1_~48
+            IN   <A HREF="#_1086">_1086</A>
+            END,
+ <A NAME="foo_1090">foo_1090</A> = LET  <A NAME="_1089">_1089</A> =  FUN_C(<A NAME="'a_1088">'a_1088</A> :: TYPE) = APP_C(<A HREF="#_bar_foo_1036">_bar_foo_1036</A>;<A HREF="#'a_1088">'a_1088</A>).2_~48
+            IN   <A HREF="#_1089">_1089</A>
+            END,
+ <A NAME="bar_sumarg_1093">bar_sumarg_1093</A> = LET  <A NAME="_1092">_1092</A> =  FUN_C(<A NAME="'a_1091">'a_1091</A> :: TYPE) = APP_C(<A HREF="#foo_1090">foo_1090</A>;<A HREF="#'a_1091">'a_1091</A>)
+                   IN   <A HREF="#_1092">_1092</A>
+                   END,
+ <A NAME="foo_sumarg_1096">foo_sumarg_1096</A> = LET  <A NAME="_1095">_1095</A> =  FUN_C(<A NAME="'a_1094">'a_1094</A> :: TYPE) = APP_C(<A HREF="#bar_1087">bar_1087</A>;<A HREF="#'a_1094">'a_1094</A>)
+                   IN   <A HREF="#_1095">_1095</A>
+                   END,
+ <A NAME="bar_sum_1101">bar_sum_1101</A> = LET  <A NAME="_1100">_1100</A> =  FUN_C(<A NAME="'a_1097">'a_1097</A> :: TYPE) = SUM(0,1)(APP_C(<A HREF="#bar_sumarg_1093">bar_sumarg_1093</A>;<A HREF="#'a_1097">'a_1097</A>))
+                IN   <A HREF="#_1100">_1100</A>
+                END,
+ <A NAME="foo_sum_1104">foo_sum_1104</A> = LET  <A NAME="_1103">_1103</A> =  FUN_C(<A NAME="'a_1102">'a_1102</A> :: TYPE) = SUM(0,1)(APP_C(<A HREF="#foo_sumarg_1096">foo_sumarg_1096</A>;<A HREF="#'a_1102">'a_1102</A>))
+                IN   <A HREF="#_1103">_1103</A>
+                END,
+ /LEAF\<A NAME="_bar_foo_eq_r_1038">_bar_foo_eq_r_1038</A>
+ (<A NAME="mpoly_var_c_1039">mpoly_var_c_1039</A> ::  {'a_TYV > <A NAME="'a_1041">'a_1041</A> :: TYPE} ;; <A NAME="mpoly_var_r_1040">mpoly_var_r_1040</A> :  {} ;; )
+       -T-> {1_~48 : AllArrow(Open; ; 
+                                   ({1_~48 : MU_C((<A NAME="vdt_bar_1081">vdt_bar_1081</A>=SUM(0,1)(<A HREF="#vdt_foo_1082">vdt_foo_1082</A>),
+                                                   <A NAME="vdt_foo_1082">vdt_foo_1082</A>=SUM(0,1)(<A HREF="#vdt_bar_1081">vdt_bar_1081</A>))).1_~48,
+                                     2_~48 : MU_C((<A NAME="vdt_bar_1079">vdt_bar_1079</A>=SUM(0,1)(<A HREF="#vdt_foo_1080">vdt_foo_1080</A>),
+                                                   <A NAME="vdt_foo_1080">vdt_foo_1080</A>=SUM(0,1)(<A HREF="#vdt_bar_1079">vdt_bar_1079</A>))).1_~48}); 0 -P-> 
+                                   MU_C_NR((<A NAME="_1083">_1083</A>=SUM(2,2)({}))).1_~48),
+             2_~48 : AllArrow(Open; ; 
+                                   ({1_~48 : MU_C((<A NAME="vdt_bar_1076">vdt_bar_1076</A>=SUM(0,1)(<A HREF="#vdt_foo_1077">vdt_foo_1077</A>),
+                                                   <A NAME="vdt_foo_1077">vdt_foo_1077</A>=SUM(0,1)(<A HREF="#vdt_bar_1076">vdt_bar_1076</A>))).2_~48,
+                                     2_~48 : MU_C((<A NAME="vdt_bar_1074">vdt_bar_1074</A>=SUM(0,1)(<A HREF="#vdt_foo_1075">vdt_foo_1075</A>),
+                                                   <A NAME="vdt_foo_1075">vdt_foo_1075</A>=SUM(0,1)(<A HREF="#vdt_bar_1074">vdt_bar_1074</A>))).2_~48}); 0 -P-> 
+                                   MU_C_NR((<A NAME="_1078">_1078</A>=SUM(2,2)({}))).1_~48)} =
+ Let  <A NAME="top_eq_1069">top_eq_1069</A> : Unknown = Let  <A NAME="bool_1043">bool_1043</A> = MU_C_NR((<A NAME="_1042">_1042</A>=SUM(2,2)({}))).1_~48
+                                   <A NAME="name_1048">name_1048</A> = MU_C((<A NAME="vdt_bar_1046">vdt_bar_1046</A>=SUM(0,1)(<A HREF="#vdt_foo_1047">vdt_foo_1047</A>),
+                                                     <A NAME="vdt_foo_1047">vdt_foo_1047</A>=SUM(0,1)(<A HREF="#vdt_bar_1046">vdt_bar_1046</A>)))
+                                   <A NAME="false_1045">false_1045</A> : Unknown = roll[MU_C_NR((<A NAME="_1044">_1044</A>=SUM(2,2)({}))).1_~48](inject_dyn0[SUM(2,2)({})]())
+                                   /\ <A NAME="vars_eq_0_1049">vars_eq_0_1049</A>
+                                   ( ;; <A NAME="arg_pair_1051">arg_pair_1051</A> :  {1_~48 : <A HREF="#name_1048">name_1048</A>.1_~48, 2_~48 : <A HREF="#name_1048">name_1048</A>.1_~48} ;; )
+                                         -T-> <A HREF="#bool_1043">bool_1043</A> =
+                                   Let  <A NAME="expanded_con_0_1054">expanded_con_0_1054</A> = SUM(0,1)(<A HREF="#name_1048">name_1048</A>.2_~48)
+                                        <A NAME="eqargpair_1055">eqargpair_1055</A> : Unknown = {1_~48>unroll[<A HREF="#name_1048">name_1048</A>.1_~48](<A HREF="#arg_pair_1051">arg_pair_1051</A>.1_~48),
+                                                                    2_~48>unroll[<A HREF="#name_1048">name_1048</A>.1_~48](<A HREF="#arg_pair_1051">arg_pair_1051</A>.2_~48)}
+                                        <A NAME="eqarg1_1056">eqarg1_1056</A> : Unknown = <A HREF="#eqargpair_1055">eqargpair_1055</A>.1_~48
+                                        <A NAME="eqarg2_1057">eqarg2_1057</A> : Unknown = <A HREF="#eqargpair_1055">eqargpair_1055</A>.2_~48
+                                   In   SUM_SWITCH(<A HREF="#eqarg1_1056">eqarg1_1056</A>: <A HREF="#expanded_con_0_1054">expanded_con_0_1054</A>, 
+                                             <A HREF="#eqarg1_1058">eqarg1_1058</A>, 
+                                             0: Unknown: SUM_SWITCH(<A HREF="#eqarg2_1057">eqarg2_1057</A>: <A HREF="#expanded_con_0_1054">expanded_con_0_1054</A>, 
+                                                              <A HREF="#eqarg2_1059">eqarg2_1059</A>, 
+                                                              0: Unknown: Let  <A NAME="sumc_1060">sumc_1060</A> = SUM_0(0,1)(<A HREF="#name_1048">name_1048</A>.2_~48)
+                                                                          In   App_Open(<A HREF="#vars_eq_1_1050">vars_eq_1_1050</A>; ; {1_~48>project_dyn0[<A HREF="#sumc_1060">sumc_1060</A>](<A HREF="#eqarg1_1058">eqarg1_1058</A>),
+                                                                                                           2_~48>project_dyn0[<A HREF="#sumc_1060">sumc_1060</A>](<A HREF="#eqarg2_1059">eqarg2_1059</A>)};  )
+                                                                          End
+                                                              DEFAULT = <A HREF="#false_1045">false_1045</A>) : <A HREF="#bool_1043">bool_1043</A>
+                                             NODEFAULT) : <A HREF="#bool_1043">bool_1043</A>
+                                   End
+                                   /\ <A NAME="vars_eq_1_1050">vars_eq_1_1050</A>
+                                   ( ;; <A NAME="arg_pair_1061">arg_pair_1061</A> :  {1_~48 : <A HREF="#name_1048">name_1048</A>.2_~48, 2_~48 : <A HREF="#name_1048">name_1048</A>.2_~48} ;; )
+                                         -T-> <A HREF="#bool_1043">bool_1043</A> =
+                                   Let  <A NAME="expanded_con_1_1062">expanded_con_1_1062</A> = SUM(0,1)(<A HREF="#name_1048">name_1048</A>.1_~48)
+                                        <A NAME="eqargpair_1063">eqargpair_1063</A> : Unknown = {1_~48>unroll[<A HREF="#name_1048">name_1048</A>.2_~48](<A HREF="#arg_pair_1061">arg_pair_1061</A>.1_~48),
+                                                                    2_~48>unroll[<A HREF="#name_1048">name_1048</A>.2_~48](<A HREF="#arg_pair_1061">arg_pair_1061</A>.2_~48)}
+                                        <A NAME="eqarg1_1064">eqarg1_1064</A> : Unknown = <A HREF="#eqargpair_1063">eqargpair_1063</A>.1_~48
+                                        <A NAME="eqarg2_1065">eqarg2_1065</A> : Unknown = <A HREF="#eqargpair_1063">eqargpair_1063</A>.2_~48
+                                   In   SUM_SWITCH(<A HREF="#eqarg1_1064">eqarg1_1064</A>: <A HREF="#expanded_con_1_1062">expanded_con_1_1062</A>, 
+                                             <A HREF="#eqarg1_1066">eqarg1_1066</A>, 
+                                             0: Unknown: SUM_SWITCH(<A HREF="#eqarg2_1065">eqarg2_1065</A>: <A HREF="#expanded_con_1_1062">expanded_con_1_1062</A>, 
+                                                              <A HREF="#eqarg2_1067">eqarg2_1067</A>, 
+                                                              0: Unknown: Let  <A NAME="sumc_1068">sumc_1068</A> = SUM_0(0,1)(<A HREF="#name_1048">name_1048</A>.1_~48)
+                                                                          In   App_Open(<A HREF="#vars_eq_0_1049">vars_eq_0_1049</A>; ; {1_~48>project_dyn0[<A HREF="#sumc_1068">sumc_1068</A>](<A HREF="#eqarg1_1066">eqarg1_1066</A>),
+                                                                                                           2_~48>project_dyn0[<A HREF="#sumc_1068">sumc_1068</A>](<A HREF="#eqarg2_1067">eqarg2_1067</A>)};  )
+                                                                          End
+                                                              DEFAULT = <A HREF="#false_1045">false_1045</A>) : <A HREF="#bool_1043">bool_1043</A>
+                                             NODEFAULT) : <A HREF="#bool_1043">bool_1043</A>
+                                   End
+                              In   {1_~48><A HREF="#vars_eq_0_1049">vars_eq_0_1049</A>, 2_~48><A HREF="#vars_eq_1_1050">vars_eq_1_1050</A>}
+                              End
+      <A NAME="_r_1072">_r_1072</A> : Unknown = <A HREF="#top_eq_1069">top_eq_1069</A>
+ In   <A HREF="#_r_1072">_r_1072</A>
+ End,
+ /LEAF\<A NAME="poly+Ebar_INT_r_1106">poly+Ebar_INT_r_1106</A>
+ (<A NAME="mpoly_var_c_1107">mpoly_var_c_1107</A> ::  {'a_TYV > <A NAME="'a_1109">'a_1109</A> :: TYPE} ;; <A NAME="mpoly_var_r_1108">mpoly_var_r_1108</A> :  {} ;; )
+       -T-> AllArrow(Open; ; 
+                          ({1_~48 : APP_C(<A HREF="#bar_1087">bar_1087</A>;<A HREF="#mpoly_var_c_1107">mpoly_var_c_1107</A>.'a_TYV),
+                            2_~48 : APP_C(<A HREF="#bar_1087">bar_1087</A>;<A HREF="#mpoly_var_c_1107">mpoly_var_c_1107</A>.'a_TYV)}); 0 -P-> 
+                          MU_C_NR((<A NAME="_1115">_1115</A>=SUM(2,2)({}))).1_~48) =
+ Let  <A NAME="+Ebar_INT_1110">+Ebar_INT_1110</A> : Unknown = App_Open(<A HREF="#_bar_foo_eq_r_1038">_bar_foo_eq_r_1038</A>; <A HREF="#mpoly_var_c_1107">mpoly_var_c_1107</A>; <A HREF="#mpoly_var_r_1108">mpoly_var_r_1108</A>;  ).1_~48
+      <A NAME="_r_1113">_r_1113</A> : Unknown = <A HREF="#+Ebar_INT_1110">+Ebar_INT_1110</A>
+ In   <A HREF="#_r_1113">_r_1113</A>
+ End,
+ /LEAF\<A NAME="poly+Efoo_INT_r_1118">poly+Efoo_INT_r_1118</A>
+ (<A NAME="mpoly_var_c_1119">mpoly_var_c_1119</A> ::  {'a_TYV > <A NAME="'a_1121">'a_1121</A> :: TYPE} ;; <A NAME="mpoly_var_r_1120">mpoly_var_r_1120</A> :  {} ;; )
+       -T-> AllArrow(Open; ; 
+                          ({1_~48 : APP_C(<A HREF="#foo_1090">foo_1090</A>;<A HREF="#mpoly_var_c_1119">mpoly_var_c_1119</A>.'a_TYV),
+                            2_~48 : APP_C(<A HREF="#foo_1090">foo_1090</A>;<A HREF="#mpoly_var_c_1119">mpoly_var_c_1119</A>.'a_TYV)}); 0 -P-> 
+                          MU_C_NR((<A NAME="_1127">_1127</A>=SUM(2,2)({}))).1_~48) =
+ Let  <A NAME="+Efoo_INT_1122">+Efoo_INT_1122</A> : Unknown = App_Open(<A HREF="#_bar_foo_eq_r_1038">_bar_foo_eq_r_1038</A>; <A HREF="#mpoly_var_c_1119">mpoly_var_c_1119</A>; <A HREF="#mpoly_var_r_1120">mpoly_var_r_1120</A>;  ).2_~48
+      <A NAME="_r_1125">_r_1125</A> : Unknown = <A HREF="#+Efoo_INT_1122">+Efoo_INT_1122</A>
+ In   <A HREF="#_r_1125">_r_1125</A>
+ End]
+IMPORTS:
+
+EXPORTS:
++Efoo_INT_r_INT = <A HREF="#poly+Efoo_INT_r_1118">poly+Efoo_INT_r_1118</A>
++Ebar_INT_r_INT = <A HREF="#poly+Ebar_INT_r_1106">poly+Ebar_INT_r_1106</A>
+foo_sum_INT = <A HREF="#foo_sum_1104">foo_sum_1104</A>
+bar_sum_INT = <A HREF="#bar_sum_1101">bar_sum_1101</A>
+foo_sumarg_INT = <A HREF="#foo_sumarg_1096">foo_sumarg_1096</A>
+bar_sumarg_INT = <A HREF="#bar_sumarg_1093">bar_sumarg_1093</A>
+foo_TYC = <A HREF="#foo_1090">foo_1090</A>
+bar_TYC = <A HREF="#bar_1087">bar_1087</A>
+_bar_foo_eq_TYC_r_INT = <A HREF="#_bar_foo_eq_r_1038">_bar_foo_eq_r_1038</A>
++Q_bar_foo_INT = <A HREF="#_bar_foo_1036">_bar_foo_1036</A>
+</PRE></BODY></HTML>

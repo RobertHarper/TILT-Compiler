@@ -1,0 +1,392 @@
+head	1.13;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.13
+date	2001.10.30.16.51.01;	author swasey;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2001.10.30.16.44.43;	author swasey;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2001.10.30.10.43.39;	author swasey;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2001.10.30.10.43.19;	author swasey;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2001.10.30.10.42.21;	author swasey;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2001.10.30.10.39.36;	author swasey;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2001.10.30.10.36.32;	author swasey;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2001.10.30.10.35.08;	author swasey;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2001.10.30.10.34.40;	author swasey;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2001.10.30.10.31.44;	author swasey;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2001.10.29.14.19.39;	author swasey;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2001.10.29.14.19.32;	author swasey;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2001.10.29.12.28.15;	author swasey;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.13
+log
+@*** empty log message ***
+@
+text
+@(*$import *)
+
+(* No structures (ie, term) hides the bug. *)
+
+(* One structure (ie, A.term) hides the bug. *)
+
+(* Three structures (ie, A.B.C.term) with where A = Arg.A hides the
+   bug.  Three structures with "where A.B = Arg.A.B" finds the bug
+   again. *)
+
+signature S =
+    sig
+	structure A :
+	    sig
+		structure B :
+		    sig
+			datatype term = T
+		    end
+	    end
+    end
+
+(* Eliminating the ascription or making it transparent hides the bug.
+   Using "where type" in place of "where" hides the bug. *)
+
+functor JoinWithArg (structure Arg : S) :> S where A = Arg.A =
+    struct
+	(* Using "open Arg" also hits the bug. *)
+	structure A = Arg.A
+    end
+@
+
+
+1.12
+log
+@*** empty log message ***
+@
+text
+@d3 7
+a9 1
+(* Making "term" part of "Token" hides the bug. *)
+d13 1
+a13 1
+	structure Token :
+d15 1
+a15 1
+		structure LrTable :
+d25 1
+a25 1
+functor JoinWithArg (structure ParserData : S) :> S where Token = ParserData.Token =
+d27 2
+a28 2
+	(* Using "open ParserData" also hits the bug. *)
+	structure Token = ParserData.Token
+@
+
+
+1.11
+log
+@*** empty log message ***
+@
+text
+@d11 1
+a11 1
+			datatype term = T of int
+@
+
+
+1.10
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+(*$import Prelude TopLevel *)
+@
+
+
+1.9
+log
+@*** empty log message ***
+@
+text
+@d19 5
+a23 6
+functor JoinWithArg(structure ParserData : S)
+		 :> S where Token = ParserData.Token
+		=
+struct
+    structure Token = ParserData.Token
+end
+@
+
+
+1.8
+log
+@*** empty log message ***
+@
+text
+@d3 2
+d16 2
+a17 2
+(* The ascription is necessary and must be opaque.  The use of
+   ``where'' is necessary (``where type'' hides the bug).  *)
+@
+
+
+1.7
+log
+@*** empty log message ***
+@
+text
+@d14 3
+@
+
+
+1.6
+log
+@*** empty log message ***
+@
+text
+@d3 1
+a3 6
+signature LR_TABLE =
+    sig
+	datatype term = T of int
+    end
+
+signature TOKEN =
+d5 7
+a11 6
+	structure LrTable : LR_TABLE
+    end
+
+signature S =
+   sig
+	structure Token : TOKEN
+@
+
+
+1.5
+log
+@*** empty log message ***
+@
+text
+@a10 1
+        datatype ('a,'b) token = TOKEN of LrTable.term * ('a * 'b * 'b)
+d23 1
+a23 1
+end;
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@a4 2
+        datatype ('a,'b) pairlist = EMPTY | PAIR of 'a * 'b * ('a,'b) pairlist
+	datatype state = STATE of int
+a5 6
+	datatype nonterm = NT of int
+	datatype action = SHIFT of state
+			| REDUCE of int
+			| ACCEPT
+			| ERROR
+	type table
+d14 1
+a14 1
+signature PARSER_DATA =
+d19 2
+a20 7
+signature ARG_PARSER = 
+    sig
+        structure Token : TOKEN
+    end
+
+functor JoinWithArg(structure ParserData: PARSER_DATA)
+		 :> ARG_PARSER  where Token = ParserData.Token
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+(*$import YaccBase TopLevel *)
+d3 12
+a14 4
+functor JoinWithArg(structure ParserData: PARSER_DATA
+		    structure LrParser : LR_PARSER
+		    structure Lex : ARG_LEXER
+			where type ('a,'b) UserDeclarations.token = ('a,'b) ParserData.Token.token
+d16 17
+a32 4
+		    sharing ParserData.LrTable = LrParser.LrTable
+		    sharing ParserData.Token = LrParser.Token
+		    sharing type Lex.UserDeclarations.svalue = ParserData.svalue
+		    sharing type Lex.UserDeclarations.pos = ParserData.pos)
+a36 29
+    structure Stream = LrParser.Stream
+
+    exception ParseError = LrParser.ParseError
+
+    type arg = ParserData.arg
+    type lexarg = Lex.UserDeclarations.arg
+    type pos = ParserData.pos
+    type result = ParserData.result
+    type svalue = ParserData.svalue
+
+    val makeLexer = fn s => fn arg =>
+		 LrParser.Stream.streamify (Lex.makeLexer s arg)
+    val parse = fn (lookahead,lexer,error,arg) =>
+	(fn (a,b) => (ParserData.Actions.extract a,b))
+     (LrParser.parse {table = ParserData.table,
+	        lexer=lexer,
+		lookahead=lookahead,
+		saction = ParserData.Actions.actions,
+		arg=arg,
+		void= ParserData.Actions.void,
+	        ec = {is_keyword = ParserData.EC.is_keyword,
+		      noShift = ParserData.EC.noShift,
+		      preferred_change = ParserData.EC.preferred_change,
+		      errtermvalue = ParserData.EC.errtermvalue,
+		      error=error,
+		      showTerminal = ParserData.EC.showTerminal,
+		      terms = ParserData.EC.terms}}
+      )
+    val sameToken = Token.sameToken
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@a2 41
+(* ML-Yacc Parser Generator (c) 1989 Andrew W. Appel, David R. Tarditi 
+ *
+ * $Log$
+# Revision 1.1  2002/08/07  21:17:39  swasey_tilt
+# *** empty log message ***
+# 
+# Revision 1.1  2001/10/29  12:28:15  swasey
+# Initial revision
+# 
+# Revision 1.5  99/02/12  22:22:05  pscheng
+# *** empty log message ***
+# 
+# Revision 1.4  1998/02/01  01:28:00  pscheng
+# Changes to facilitate bootstrapping:
+#   Added ascription in various places
+#   Split up files into signature and code
+#
+# Revision 1.3  1998/01/21  20:40:20  pscheng
+# moved the .sig files to .sig.sml file
+#
+# Revision 1.2  1997/10/24  21:36:26  cstone
+# update to 109.32 & NT
+#
+# Revision 1.1.1.1  1997/01/14  01:38:04  george
+#   Version 109.24
+#
+ * Revision 1.1.1.1  1996/01/31  16:01:42  george
+ * Version 109
+ * 
+ *)
+
+(* functor Join creates a user parser by putting together a Lexer structure,
+   an LrValues structure, and a polymorphic parser structure.  Note that
+   the Lexer and LrValues structure must share the type pos (i.e. the type
+   of line numbers), the type svalues for semantic values, and the type
+   of tokens.
+*)
+
+
+(* functor JoinWithArg creates a variant of the parser structure produced 
+   above.  In this case, the makeLexer take an additional argument before
+   yielding a value of type unit -> (svalue,pos) token
+ *)
+
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d5 4
+a8 1
+ * $Log$
+# Revision 1.1  2002/08/07  21:17:39  swasey_tilt
+# *** empty log message ***
+# 
+a52 1
+
+a53 6
+				where Stream = LrParser.Stream
+				where type svalue = ParserData.svalue
+				where type result = ParserData.result
+				where type pos = ParserData.pos
+				where type arg = ParserData.arg
+				where type lexarg = Lex.UserDeclarations.arg
+@

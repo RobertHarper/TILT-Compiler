@@ -1,0 +1,156 @@
+Number: 0035
+Title:       Runtime error (Proc_t data getting trashed) on sparc.
+Keywords:    solaris,runtime
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        11/30/00
+Version:     CVS
+System:	     solaris
+Severity:    major
+Problem:
+	While bootstrapping, the compiler aborts with
+		  [Parsing Parser/join.sml]
+		  [Elaborating Parser/join.sml non-constrained]
+		xsig_sharing_structure_fast calling slow version
+		xsig_sharing_structure_fast succeeded
+		thread->proc  0  13378168
+
+		Program received signal SIGSEGV, Segmentation fault.
+		0x7e0624 in getThread () at thread.c:345
+	It turns out that in getThread() we have
+		stacklet != NULL
+		thread != NULL
+		proc2 = NULL != thread->proc
+Code:
+Transcript:
+Comments:
+	Procs[0].pthread should never change.
+
+	Its changed after
+		NumMajorGC = 6
+		NumGC = 1295
+
+		#0  checkProcPthread () at thread.c:1273
+		#1  0x7d53d4 in GCFromScheduler (proc=0xcc3170, th=0xc9c1f8) at gc.c:659
+		#2  0x7e2710 in work (proc=0xcc3170) at thread.c:1013
+		#3  0x7e3b10 in schedulerRest (proc=0xcc3170) at thread.c:1249
+		#4  0x7e4e20 in scheduler ()
+		#5  0x7e4a5c in GCFromML ()
+
+	(gdb) p/x Threads[0].saveregs[15]	(LINK)
+	$3 = 0x4c3cc4
+	(gdb) p/x Threads[0].saveregs[14]	(SP)
+	$4 = 0x10028630
+
+	This LINK address is in IlStatic_anonfun_code_1365649.  The code surrounding the GC call is
+			.align 8
+			.global IlStatic_anonfun_code_1365649
+		 ! arguments : [$1365651,$8] [$1365652,$9] [$1304914,$10] 
+		 ! results    : [$1387627,$8] 
+		 ! destroys   :  $f58 $f56 $f54 $f52 $f50 $f48 $f46 $f44 $f42 $f40 $f38 $f36 $f34 $f32 $f30 $f28 $f26 $f24 $f22 $f20 $f18 $f16 $f14 $f12 $f10 $f8 $f6 $f4 $f2 $f0 $31 $29 $28 $27 $26 $25 $24 $23 $22 $21 $20 $19 $18 $13 $12 $11 $10 $9 $8
+		 ! modifies   :  $f58 $f56 $f54 $f52 $f50 $f48 $f46 $f44 $f42 $f40 $f38 $f36 $f34 $f32 $f30 $f28 $f26 $f24 $f22 $f20 $f18 $f16 $f14 $f12 $f10 $f8 $f6 $f4 $f2 $f0 $31 $29 $28 $27 $26 $25 $24 $23 $22 $21 $20 $19 $18 $13 $12 $11 $10 $9 $8
+		IlStatic_anonfun_code_1365649:
+			.proc   07
+			mov	%sp, %fp
+			sub	%sp, 144, %sp
+			ld	[%r2+800], %r16
+			cmp	%sp, %r16
+			bg	code_1414516
+			mov	%sp, %fp
+			add	%sp, 144, %sp
+			or	%r0, 0, %r16
+			mov	%r15, %r17
+			call	NewStackletFromML ! delay slot empty
+			nop
+			sub	%sp, 144, %sp
+		code_1414516:
+			st	%r15, [%sp+92]
+		code_1414434:
+		funtop_1387594:
+			ld	[%r9], %r17
+			st	%r17, [%sp+104]
+			ld	[%r9+4], %r17
+			st	%r17, [%sp+100]
+			ld	[%r9+8], %r17
+			st	%r17, [%sp+132]
+			ld	[%r9+12], %r17
+			st	%r17, [%sp+128]
+			ld	[%r9+16], %r11
+			ld	[%r9+20], %r17
+			st	%r17, [%sp+96]
+			ld	[%r9+24], %r17
+			st	%r17, [%sp+124]
+			ld	[%r9+28], %r17
+			st	%r17, [%sp+120]
+		sumarm_1387622:
+			cmp	%r10, 0
+			bne	sumarm_1387623
+			nop
+		code_1414435:
+			ba	after_sum_1387619
+			or	%r0, 0, %r8
+		sumarm_1387623:
+			ld	[%r10], %r8
+			ld	[%r10+4], %r17
+			st	%r17, [%sp+116]
+		sumarm_1387657:
+			ld	[%r8], %r17
+			st	%r17, [%sp+112]
+			ld	[%r8+4], %r17
+			st	%r17, [%sp+108]
+			! making closure call 
+			sethi	%hi(openvar_r_eq_label_1313093), %r8
+			or	%r8, %lo(openvar_r_eq_label_1313093), %r9
+			ld	[%r2+804], %r8
+			add	%r9, %r8, %r8
+			ld	[%r8], %r9
+			ld	[%r9], %r12
+			ld	[%r9+4], %r8
+			ld	[%r9+8], %r9
+			jmpl	%r12, %r15
+			ld	[%sp+112], %r10
+		code_1414515:
+		code_1414439:
+			! done making normal call
+			add	%r4, 236, %r16
+			ld	[%r2+20], %r5
+			cmp	%r16, %r5
+			ble	needgc_1414440
+			nop
+		code_1414441:
+			call	GCFromML ! delay slot empty	XXX: Here's where we notice bug
+			nop
+
+	? CacheCursor			
+	downtrace_stacklet
+	thread_root_scan
+	GCCollect_Gen
+	GC_Gen
+
+	Check out CacheCursor in stack.c (around line 206).
+
+	The code that matters is:
+
+	     1	      if (!IS_TRACE_NO(trace)) {
+	     2		cursor->slot[cursor->slotCount] = i;
+	     3		cursor->trace[cursor->slotCount] = trace;
+	     4		cursor->slotCount++;
+	     5		if (cursor->slotCount > (sizeof(cursor->slot) / sizeof(int))) {
+	     6		  cursor->slotCount = -4;
+	     7		  return 0;
+	     8		}
+	     9	      }
+
+	the problem is this code can be executed when
+
+		cursor->slotCount == (sizeof(cursor->slot) / sizeof(int))
+
+	so that the assignment in line 2 trashes cursor->trace[0] and that in
+	line 3 trashes the next bit of memory after the cursor structure.
+
+	In particular, when cursor is &Proc[0].lastCallinfoCursor, the assignment
+	in line 3 trashes Proc[0].pthread.
+Fix:
+	I changed line 5 to use >=, tested, and checked in.
+Test:
+Owner: swasey
+Status: closed

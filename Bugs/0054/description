@@ -1,0 +1,61 @@
+Number: 0054
+Title:       TILT not enforcing syntactic restrictions.
+Keywords:    Elaborator, Parser
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        6/6/01
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	(1) TILT is not checking all the syntactic restrictions listed
+	    on pages 8, 9, and 12 of the Definition.
+
+	(2) TILT may be ignoring the restrictions on pages 27 and 28
+	    of the Definition.
+
+	(3) The syntax for recursive value declarations is wrong.  We accept
+		VAL REC tyvarseq rvb
+	    which should be
+	        VAL tyvarseq REC rvb
+
+	(4) The parser is not generating enough MarkPat expressions.
+	    Try compiling the targets Bind_TuplePat, Bind_ListPat, and
+	    Bind_LayeredPat from (1)'s mapfile.
+Code:
+Transcript:
+Comments:
+	Performing syntactic checks in a new pass (distinct from
+	elaboration) is nontrivial.  We end up duplicating a lot of
+	the machinery of the elaborator.  To detect duplicate variable
+	bindings (as in fun (x,x) = 3), we need to track which
+	identifiers are datatype constructors.  To track identifier
+	status, we need to deal with the ambient context (from
+	imported units), open declarations, include specifications,
+	and datatype replication.  This alone seems like too much.
+	While such context management is not difficult, any
+	re-implementation is likely to be error-prone.
+
+	We may want to implement the type variable scoping restriction
+	as part of the TVClose pass.
+
+	For (1) see mapfile and the associated files.
+
+	------
+Notes for FunDec:
+
+  and dec = ...
+	  | FunDec of fb list * tyvar list ref		(* recursive functions *)
+
+  and fb = Fb of clause list
+	 | MarkFb of fb * region
+
+  (* CLAUSE: a definition for a single pattern in a function binding *)
+  and clause = Clause of {pats: pat fixitem list, resultty: ty option, exp:exp}
+
+* the function's name is embedded in the first pattern of each fb.
+* fb, pat, and fixitem have associated region information.
+	
+Fix:
+Test:
+Owner: swasey
+Status: open

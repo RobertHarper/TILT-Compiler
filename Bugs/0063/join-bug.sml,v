@@ -1,0 +1,284 @@
+head	1.10;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.10
+date	2001.11.14.10.20.52;	author swasey;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2001.11.14.10.17.35;	author swasey;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2001.11.14.10.17.28;	author swasey;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2001.11.14.10.15.27;	author swasey;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2001.11.14.10.14.36;	author swasey;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2001.11.14.10.10.41;	author swasey;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2001.11.14.10.07.09;	author swasey;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2001.11.14.10.05.29;	author swasey;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2001.11.14.10.04.32;	author swasey;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2001.11.14.10.04.11;	author swasey;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.10
+log
+@*** empty log message ***
+@
+text
+@(*$import *)
+
+signature LR_TABLE =
+    sig
+        datatype 'a pairlist = EMPTY
+    end
+functor JoinWithArg (structure ParserData: LR_TABLE) =
+struct
+    (* these fail, perhaps for different reasons *)
+    (* structure LrTable = ParserData *)
+    datatype 'a pairlist = datatype ParserData.pairlist
+    
+    (* these work, and should continue to work *)
+    (* type 'a pairlist = 'a ParserData.pairlist *)
+    (* structure LrTable = struct type 'a pairlist = 'a ParserData.pairlist end *)
+end
+@
+
+
+1.9
+log
+@*** empty log message ***
+@
+text
+@d5 1
+a5 1
+        datatype ('a,'b) pairlist = EMPTY
+d9 1
+a9 1
+    (* fails *)
+d11 1
+d13 3
+a15 5
+    (* fails *)
+    datatype ('a,'b) pairlist = datatype ParserData.pairlist
+	
+    (* works type ('a,'b) pairlist = ('a,'b) ParserData.pairlist *)
+    (* works structure LrTable = struct type ('a,'b) pairlist = ('a,'b) ParserData.pairlist end *)
+@
+
+
+1.8
+log
+@*** empty log message ***
+@
+text
+@d5 1
+a5 1
+        datatype ('a,'b) pairlist = EMPTY | PAIR of 'a * 'b * ('a,'b) pairlist (* XXX *)
+@
+
+
+1.7
+log
+@*** empty log message ***
+@
+text
+@d9 8
+a16 2
+    structure LrTable = ParserData
+    (* Works type ('a,'b) pairlist = ('a,'b) ParserData.Token.LrTable.pairlist *)
+@
+
+
+1.6
+log
+@*** empty log message ***
+@
+text
+@d7 1
+a7 5
+signature PARSER_DATA =
+   sig
+	structure LrTable : LR_TABLE
+    end
+functor JoinWithArg (structure ParserData: PARSER_DATA) =
+d9 1
+a9 1
+    structure LrTable = ParserData.LrTable
+@
+
+
+1.5
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+(*$import Prelude TopLevel *)
+a5 27
+	datatype state = STATE of int
+	datatype term = T of int
+	datatype nonterm = NT of int
+	datatype action = SHIFT of state
+			| REDUCE of int
+			| ACCEPT
+			| ERROR
+	type table
+	
+	val numStates : table -> int
+	val numRules : table -> int
+	val describeActions : table -> state ->
+				(term,action) pairlist * action
+	val describeGoto : table -> state -> (nonterm,state) pairlist
+	val action : table -> state * term -> action
+	val goto : table -> state * nonterm -> state
+	val initialState : table -> state
+	exception Goto of state * nonterm
+
+	val mkLrTable : {actions : ((term,action) pairlist * action) array,
+			 gotos : (nonterm,state) pairlist array,
+			 numStates : int, numRules : int,
+			 initialState : state} -> table
+    end
+signature TOKEN =
+    sig
+	structure LrTable : LR_TABLE
+a9 2
+	structure Token : TOKEN
+	sharing Token.LrTable = LrTable
+d13 2
+a14 1
+    structure Token = ParserData.Token
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+(*$import YaccBase TopLevel *)
+d3 37
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d3 1
+a3 10
+functor JoinWithArg(structure ParserData: PARSER_DATA
+		    structure LrParser : LR_PARSER
+		    structure Lex : ARG_LEXER
+			where type ('a,'b) UserDeclarations.token = ('a,'b) ParserData.Token.token
+
+		    sharing ParserData.LrTable = LrParser.LrTable
+		    sharing ParserData.Token = LrParser.Token
+		    sharing type Lex.UserDeclarations.svalue = ParserData.svalue
+		    sharing type Lex.UserDeclarations.pos = ParserData.pos)
+    		=
+d6 1
+a6 4
+    structure Stream = LrParser.Stream
+
+    exception ParseError = LrParser.ParseError
+end;
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@a17 26
+
+    type arg = ParserData.arg
+    type lexarg = Lex.UserDeclarations.arg
+    type pos = ParserData.pos
+    type result = ParserData.result
+    type svalue = ParserData.svalue
+
+    val makeLexer = fn s => fn arg =>
+		 LrParser.Stream.streamify (Lex.makeLexer s arg)
+    val parse = fn (lookahead,lexer,error,arg) =>
+	(fn (a,b) => (ParserData.Actions.extract a,b))
+     (LrParser.parse {table = ParserData.table,
+	        lexer=lexer,
+		lookahead=lookahead,
+		saction = ParserData.Actions.actions,
+		arg=arg,
+		void= ParserData.Actions.void,
+	        ec = {is_keyword = ParserData.EC.is_keyword,
+		      noShift = ParserData.EC.noShift,
+		      preferred_change = ParserData.EC.preferred_change,
+		      errtermvalue = ParserData.EC.errtermvalue,
+		      error=error,
+		      showTerminal = ParserData.EC.showTerminal,
+		      terms = ParserData.EC.terms}}
+      )
+    val sameToken = Token.sameToken
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d12 1
+a12 9
+
+(*		 :> ARG_PARSER  where Token = ParserData.Token
+				where Stream = LrParser.Stream
+				where type svalue = ParserData.svalue
+				where type result = ParserData.result
+				where type pos = ParserData.pos
+				where type arg = ParserData.arg
+				where type lexarg = Lex.UserDeclarations.arg *)
+		=
+@

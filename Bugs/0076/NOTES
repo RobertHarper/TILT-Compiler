@@ -1,0 +1,103 @@
+rm Elaborator/TM/sparc/toil.sml.s; TILT_LIBDIR=`pwd ./Top/Top.sparc.exe -fShowTimestamps -fUptoAsm -rcompress_asm -m Elaborator/mapfile-elaborate-bug -p
+
+rm Elaborator/TM/sparc/toil.sml.s; tilt -fDoChaitinTimer -fUptoAsm -rcompress_asm -m Elaborator/mapfile-elaborate-bug -p
+
+---- possible backend improvements ----
+What is the deal with add_stack (tosparc.sml) and
+stack_resident (chaitin.sml, color1.sml)?
+
+
+---- trying to speed up coloring ----
+Initial
+	chaitin_buildGraph	132.29 (0.33 total)
+	TOTAL CPU TIME		398.59
+
+(a) Changed app insert_edges to insert_edges. [bad idea]
+	chaitin_buildGraph	137.57 (1.03 initial) (0.33 total)
+	TOTAL CPU TIME		413.17 (1.03 initial)
+
+(b) Eliminated message computations when flag is off. [bad idea]
+	chaitin_buildGraph	133.48 (1.00 initial) (0.33 total)
+	TOTAL CPU TIME		395.49 (0.99 initial)
+
+(c) Changed insert_edges to app insert_edges. [bad idea]
+	chaitin_buildGraph	161.84
+	TOTAL CPU TIME		426.73
+
+---- trying to speed up coloring ----
+Initial
+       To Sparc ASM		258.60 (0.61 total)
+       chaitin_color		70.75  (0.16 total)
+       simplify graph		33.65  (0.08 total)
+       color: delete_nodes	33.18  (0.07 total)
+       Total CPU time		418.91
+       
+(a) Deleted unnecessary invariant check in simplify.
+       To Sparc ASM		246.30 (0.95 initial) (0.61 total)
+       chaitin_color		61.33  (0.86 initial) (0.15 total)
+       simplify graph		24.59  (0.73 initial) (0.06 total)
+       color: delete_nodes	24.03  (0.72 initial) (0.05 total)
+       Total CPU time		401.40 (0.95 initial)
+
+(b) Using List.concat instead of sequence of appends in simplify in addition to (a).
+       To Sparc ASM		239.71 (0.92 initial) (0.61 total)
+       chaitin_color		58.99  (0.83 initial) (0.15 total)
+       simplify graph		23.41  (0.69 initial) (0.05 total)
+       color: delete_nodes	22.97  (0.69 initial) (0.05 total)
+       Total CPU time		391.64 (0.93 initial)
+
+(c) Baseline: Trivial delete_nodes in addition to (b)
+       To Sparc ASM		244.49
+       chaitin_color		61.33
+       simplify graph		24.65
+       color: delete_nodes	24.26
+       Total CPU time		402.40
+
+(d) Elaborate delete_nodes in addition to (b) [bad idea]
+       To Sparc ASM		481.77
+       chaitin_color		304.24
+       simplify graph		267.89
+       color: delete_nodes	267.60
+       Total CPU time		630.22
+
+---- trying to speed up interference graph ----
+
+Initial
+       buildGraph_insert_edges	188.61 (0.20 total)
+       To Sparc ASM		380.78 (0.40 total)
+       Total CPU time		930.45
+       
+(a) Switch Regset from BinarySetFn to SplaySetFn
+       buildGraph_insert_edges	134.53 (0.71 initial) (0.18 total)
+       To Sparc ASM		288.94 (0.75 initial) (0.38 total)
+       Total CPU time		744.05 (0.79 initial)
+
+(b) Switch Labelset from BinarySetFn to SplaySetFn in additon to (a) [no change]
+       buildGraph_insert_edges	122.47 (0.64 initial) (0.16 total)
+       To Sparc ASM		295.13 (0.77 initial) (0.39 total)
+       Total CPU time		755.56 (0.81 initial)
+
+(c) Switch Regmap from BinaryMapFn to SplayMapFn in additon to (a)
+       buildGraph_insert_edges	121.84 (0.64 initial) (0.17 total)
+       To Sparc ASM		273.61 (0.71 initial) (0.38 total)
+       Total CPU time		711.72 (0.76 initial)
+
+(d) Switch Labelmap from BinaryMapFn to SplayMapFn in additon to (c)
+       buildGraph_insert_edges	121.95 (0.64 initial) (0.17 total)
+       To Sparc ASM		272.64 (0.71 initial) (0.38 total)
+       Total CPU time		707.29 (0.76 initial)
+
+(e) sparctrackstorage.sml: Switch IntSet from BinarySetFn(Intkey) to IntBinarySet in additon to (d)
+       buildGraph_insert_edges	118.41 (0.62 initial) (0.16 total)
+       To Sparc ASM		270.25 (0.70 initial) (0.38 total)
+       Total CPU time		699.88 (0.75 initial)
+
+(f) sparctrackstorage.sml: Switch IntSet from BinarySetFn(Intkey) to SplaySetFn(Intkey) in additon to (d)
+       buildGraph_insert_edges	118.74 (0.62 initial) (0.17 total)
+       To Sparc ASM		264.64 (0.69 initial) (0.38 total)
+       Total CPU time		687.74 (0.73 initial)
+
+(g) Elaborator/iltable.sml: Switch Conmap from BinaryMapFn to SplayMapFn in addition to (f)
+       buildGraph_insert_edges	130.14 (0.68 initial) (0.18 total)
+       To Sparc ASM		270.85 (0.71 initial) (0.38 total)
+       Total CPU time		702.08 (0.75 initial)

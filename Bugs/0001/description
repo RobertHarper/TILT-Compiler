@@ -1,0 +1,27 @@
+Number: 0001
+Title:       Parser fails on seemingly OK file.
+Keywords:    parser
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        6/29/00
+Version:     CVS
+System:	     solaris
+Severity:    minor
+Problem:
+	While bootstrapping, TILT complained with the following
+	error:
+		[Parsing /afs/cs.cmu.edu/project/fox-28/member/swasey/ml96/Rtl/pprtl.sml]
+		/afs/cs.cmu.edu/project/fox-28/member/swasey/ml96/Rtl/pprtl.sml:385.1 Error: non-Ascii character
+		tilt: linkparse.sml: File /afs/cs.cmu.edu/project/fox-28/member/swasey/ml96/Rtl/pprtl.sml could not be parsed as an implementation file
+
+	The file pprtp.sml has spaces on the last line.  Deleting this last
+	line allowed the parse to continue.  Deleting all but the last line
+	allowed the parse to continue.
+Code:	     pprtl.sml
+Transcript:  
+Comments:
+	No longer able to reproduce.
+	Closing.
+Fix:
+Test: *
+Owner: *
+Status: closed

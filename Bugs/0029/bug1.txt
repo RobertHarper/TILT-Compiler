@@ -1,0 +1,284 @@
+cd ~/ml96/Local/Bugs/tmp/
+tilt -fshowHIL -fshowPhasesplit -fUptoPhasesplit -fdoTypecheckAfterPhasesplit mapfile
+Starting compilation           : Thu Nov 16 17:37:55 2000   0.0 sec
+Warning: flags prevent full compile
+Mapfile mapfile with 1 units processed.
+Imports read.
+Dependency graph computed: 1 nodes and 0 edges.
+Not reducing dependency graph.
+Creating directories.
+1 necessary units:   Bug
+Start compiling files          : Thu Nov 16 17:37:55 2000   0.05 sec
+Starting slave grilled.fox.13878.
+  [Plan for Bug:   generate]
+  [Sending FLUSH_ALL to grilled.fox.13878]
+  [Calling grilled.fox.13878 to compile Bug]
+Slave received FLUSH_ALL.
+Setting PtrWriteBarrier to true
+Setting FullWriteBarrier to true
+Setting MirrorGlobal to true
+Setting MirrorPtrArray to false
+Setting UptoElaborate to false
+Setting UptoPhasesplit to true
+Setting UptoClosureConvert to false
+Setting UptoRtl to false
+Setting UptoAsm to false
+Setting debug_asm to true
+Setting keep_asm to true
+Setting compress_asm to true
+Setting ManagerChat to true
+Setting ManagerVerbose to true
+Setting TimeEachFile to false
+Setting makeBackups to false
+Setting ShowWrittenContext to false
+Setting WriteUnselfContext to false
+Setting ShowTools to false
+  [Compiling Bug to assembly]
+  [0 imports of total size 0 were cached.
+   0 imports of total size 0 were uncached and took 0.0 seconds.]
+  [Added contexts.]
+  [Parsing graph.sml]
+  [Elaborating graph.sml non-constrained]
+SBNDS:
+          [ref_TYC > ref_898 = /-\('a_897)REF('a_897), 
+*          +Eref_INT > _902 = 
+**             $POLY$ FUNC(varpoly_899: [''a_TYV > _900 : TYPE]=>
+**                    STR[it_INT > _903 = EQ_REF[CON_PATH(varpoly_899.''a_TYV)]]
+**                    : 
+**                    [it_INT > _903 : 
+***                       ({REF(CON_PATH(varpoly_899.''a_TYV)) *
+***                         REF(CON_PATH(varpoly_899.''a_TYV))} ->
+***                       CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0)]), 
+*          GraphFn_FCT > functor_var_914 = 
+**            FUNC(funct_arg_911: NODE_904->
+**            STR[graph_TYC > graph_912 = 
+***                  CON_APP(CON_PATH(funct_arg_911.hash_table_TYC); INT32)]
+**            : 
+**            [graph_TYC > graph_912 : 
+***               TYPE = CON_APP(CON_PATH(funct_arg_911.hash_table_TYC); INT32)]), 
+*          HashTable_STR > strbindvar_915 = 
+**            STR[hash_table_TYC > hash_table_917 = /-\('a_916)UNIT, 
+**                +Ehash_table_INT > _925 = 
+***                   $POLY$ FUNC(varpoly_918: [''a_TYV > _919 : TYPE]=>
+***                          STR[it_INT > _926 = 
+****                                /TOTALNONRECUR\anonfun_924
+****                                      (_921 : {UNIT *
+****                                               UNIT})
+****                                      : CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0 =
+****                                LET _922 = (_921)#1_~48
+****                                    _923 = (_921)#2_~48
+****                                IN  ROLL(CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0,INJ(1, SUM[
+****      +1             (false,
+****      +1              true);
+****      +1             2;
+****      +1             ()]))
+****                                END]
+***                          : 
+***                          [it_INT > _926 : 
+****                             ({UNIT *
+****                               UNIT} ->
+****                             CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0)])], 
+*          Node_STR > strbindvar_927 = 
+**            STR[+OopenlblHashTable_INT > openvar_928 = strbindvar_915], 
+*          Graph_STR > strbindvar_929 = 
+**            MOD_LET coerced_Node_930 = STR[hash_table_TYC > copy_hash_table_TYC_931 = 
+***                                             CON_PATH(strbindvar_927.
+***       +1   +OopenlblHashTable_INT.
+***       +1   hash_table_TYC)]
+**            IN  MAPP(functor_var_914,  coerced_Node_930)
+**            END, 
+*          -X+Crefresh__INT > cluster_947 = 
+**            /\refresh_935
+**                  (mvar_936 : CON_APP(ref_898; CON_PATH(strbindvar_929.graph_TYC)))
+**                  : CON_APP(CON_PATH(strbindvar_927.hash_table_TYC); INT32) =
+**            LET shortResultType_939 = 
+**                   CON_APP(CON_PATH(strbindvar_927.hash_table_TYC); INT32)
+**            IN  DEREF[CON_APP(CON_PATH(strbindvar_927.hash_table_TYC); INT32)][mvar_936]
+**            END, 
+*          refresh > refresh_935 = cluster_947]
+ENTRIES:
+CONTEXT_SDEC: ref_TYC > ref_898 : KIND(1 -> TYPE) = /-\('a_897)REF('a_897)
+          CONTEXT_SDEC: +Eref_INT > _902 : 
+**                          $POLY$ SIGF(varpoly_899, [''a_TYV > _900 : TYPE] =>
+**                                         [it_INT > _903 : 
+***                                            ({REF(CON_PATH(varpoly_899.''a_TYV)) *
+***                                              REF(CON_PATH(varpoly_899.''a_TYV))} ->
+***                                            CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0)])
+          CONTEXT_SIGNAT: NODE_SIG > NODE_904 = [hash_table_TYC > hash_table_905 : 
+**                                                  KIND(1 -> TYPE)]
+          CONTEXT_SDEC: GraphFn_FCT > functor_var_914 : 
+**                         SIGF(funct_arg_911, NODE_904 ->
+**                                 [graph_TYC > graph_912 : 
+***                                    TYPE = CON_APP(CON_PATH(
+***       +1   funct_arg_911.hash_table_TYC);
+***                                           INT32)])
+          CONTEXT_SDEC: HashTable_STR > strbindvar_915 : 
+**                         [hash_table_TYC > hash_table_917 : 
+***                            KIND(1 -> TYPE) = /-\('a_916)UNIT, 
+**                          +Ehash_table_INT > _925 : 
+***                             $POLY$ SIGF(varpoly_918, [''a_TYV > _919 : TYPE] =>
+***                                            [it_INT > _926 : 
+****                                               ({UNIT *
+****                                                 UNIT} ->
+****                                               CON_MU(/-\(_259)(SUM[
+****                                                                (false, true);
+****                                                                2;
+****                                                                ()]))#0)])]
+          CONTEXT_SDEC: Node_STR > strbindvar_927 : 
+**                         [+OopenlblHashTable_INT > openvar_928 : SIGS_OF(strbindvar_915)]
+          CONTEXT_SDEC: Graph_STR > strbindvar_929 : 
+**                         [graph_TYC > graph_912 : 
+***                            TYPE = CON_APP(CON_PATH(strbindvar_927.hash_table_TYC);
+***                                   INT32)]
+          CONTEXT_SDEC: -X+Crefresh__INT > cluster_947 : 
+**                         (CON_APP(ref_898; CON_PATH(strbindvar_929.graph_TYC)) ->
+**                         CON_APP(CON_PATH(strbindvar_927.hash_table_TYC); INT32))
+          CONTEXT_SDEC: refresh > refresh_935 : 
+**                         (CON_APP(ref_898; CON_PATH(strbindvar_929.graph_TYC)) ->
+**                         CON_APP(CON_PATH(strbindvar_927.hash_table_TYC); INT32))
+
+gc_context: 9 items in original context.  0 items in reduced context.
+  [writing TM/any/graph.sml.il - unnecessary]
+===== Starting Phasesplit: Bug                           =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+PASS: Phasesplit
+Phasesplit
+
+          [ref_975 = LET  _974 =  FUN('a_973 ::  TYPE) = ARRAY('a_973)
+*                    IN   _974
+*                    END,
+*          functor_var_c_995 = 
+*          FUN(funct_arg_c_997 ::  REC_K{hash_table > hash_table_1000 : 
+*                                        Arrow_k(Open; _999 : TYPE; TYPE)})
+*              = LET  graph_1002 = APP(funct_arg_c_997.hash_table,(INT32))
+*                IN   CREC{graph = graph_1002}
+*                END,
+*          hash_table_1010 = LET  _1009 =  FUN('a_1008 ::  TYPE) = UNIT
+*                            IN   _1009
+*                            END,
+*          strbindvar_c_1006 = CREC{hash_table = hash_table_1010},
+*          openvar_c_1031 = strbindvar_c_1006,
+*          strbindvar_c_1029 = CREC{+OopenlblHashTable = openvar_c_1031},
+*          copy_hash_table_TYC_1040 = strbindvar_c_1029.+OopenlblHashTable. hash_table,
+*          coerced_Node_c_1035 = CREC{hash_table = copy_hash_table_TYC_1040},
+*          strbindvar_c_1033 = APP(functor_var_c_995,(coerced_Node_c_1035)),
+*          /LEAF\_r_977
+*            (varpoly_c_978 :: REC_K{''a > _980 :  TYPE} ;; 
+*             varpoly_r_979 : Unknown : DEP_RECORD[ ] ;; 
+*             )
+*          =>ALLARROW(Open; PARTIAL; (); 
+*               (RECORD[1, 2](ARRAY(varpoly_c_978.''a), ARRAY(varpoly_c_978.''a))); 0; 
+*               PROJ(MU_NR((_993=SUM(2,2)(CREC{}))),1)) =
+*          Let  _988 : Unknown = 
+*                 Let  /NORECUR\anonfun_985
+*                        ( ;; 
+*                         _986 : 
+*                           Unknown : 
+*                           RECORD[1, 2]
+*                             (ARRAY(varpoly_c_978.''a), ARRAY(varpoly_c_978.''a)) ;; 
+*                         )
+*                      ->PROJ(MU_NR((_987=SUM(2,2)(CREC{}))),1) =
+*                      equal_unknownArray[varpoly_c_978.''a](select[1][](_986),
+*                                                            select[2][](_986))
+*                 In   anonfun_985
+*                 End
+*               _r_991 : Unknown = _988
+*          In   _r_991
+*          End,
+*          /LEAF\DEPfunctor_var_r_996
+*            (funct_arg_c_997 :: 
+*               REC_K{hash_table > hash_table_1000 :  Arrow_k(Open; _999 : TYPE; TYPE)} ;; 
+*             funct_arg_r_998 : Unknown : DEP_RECORD[ ] ;; 
+*             )
+*          ->LET  graph_1002 = APP(funct_arg_c_997.hash_table,(INT32))
+*                 _c_1004 = CREC{graph = graph_1002}
+*            IN   DEP_RECORD[ ]
+*            END =
+*          Let  graph_1002 = APP(funct_arg_c_997.hash_table,(INT32))
+*               _c_1004 = CREC{graph = graph_1002}
+*               _r_1005 : Unknown = record()
+*          In   _r_1005
+*          End,
+*          /LEAF\_r_1012
+*            (varpoly_c_1013 :: REC_K{''a > _1015 :  TYPE} ;; 
+*             varpoly_r_1014 : Unknown : DEP_RECORD[ ] ;; 
+*             )
+*          =>ALLARROW(Open; PARTIAL; (); 
+*               (RECORD[1, 2](UNIT, UNIT)); 0; 
+*               PROJ(MU_NR((_1027=SUM(2,2)(CREC{}))),1)) =
+*          Let  _1022 : Unknown = 
+*                 Let  /NORECUR\anonfun_1016
+*                        ( ;; _1017 : Unknown : RECORD[1, 2](UNIT, UNIT) ;; )
+*                      =>PROJ(MU_NR((_1018=SUM(2,2)(CREC{}))),1) =
+*                      Let  _1019 : Unknown = select[1][](_1017)
+*                           _1020 : Unknown = select[2][](_1017)
+*                      In   roll[PROJ(MU_NR((_1021=SUM(2,2)(CREC{}))),1)]
+*         +1   (inject_dyn1[SUM(2,2)(CREC{})]())
+*                      End
+*                 In   anonfun_1016
+*                 End
+*               _r_1025 : Unknown = _1022
+*          In   _r_1025
+*          End,
+*          strbindvar_r_1007 : Unknown = record(+Ehash_table>_r_1012),
+*          openvar_r_1032 : Unknown = strbindvar_r_1007,
+*          strbindvar_r_1030 : Unknown = record(+OopenlblHashTable>openvar_r_1032),
+*          coerced_Node_r_1036 : Unknown = record(),
+*          strbindvar_r_1034 : Unknown = 
+*            App_Open(functor_var_r_996;  coerced_Node_c_1035; coerced_Node_r_1036;  ),
+*          /\ refresh_1041
+*            ( ;; mvar_1042 : Unknown : APP(ref_975,(strbindvar_c_1033.graph)) ;; )
+*          ->APP(strbindvar_c_1029.hash_table,(INT32)) =
+*          Let  shortResultType_1043 = APP(strbindvar_c_1029.hash_table,(INT32))
+*          In   sub_unknownArray[APP(strbindvar_c_1029.hash_table,(INT32))](mvar_1042, 0)
+*          End]
+*         IMPORTS:
+*         
+*         EXPORTS:
+*         refresh = refresh_1041
+*         Graph_STR_c = strbindvar_c_1033
+*         Graph_STR_r = strbindvar_r_1034
+*         Node_STR_c = strbindvar_c_1029
+*         Node_STR_r = strbindvar_r_1030
+*         HashTable_STR_c = strbindvar_c_1006
+*         HashTable_STR_r = strbindvar_r_1007
+*         GraphFn_FCT_c = functor_var_c_995
+*         GraphFn_FCT_r = functor_var_r_996
+*         +Eref_INT_r = _r_977
+*         ref = ref_975
+*         
+===== Starting TypecheckAfterPhasesplit: Bug             =====
+  Done checking context
+  Done validating imports
+attempted to project label hash_table from 
+strbindvar_c_1029
+ which has labels+OopenlblHashTable
+TYPE ERROR: Problem with constructor
+Ill-formed projection
+strbindvar_c_1029.hash_table
+WITH MINIMAL CONTEXT AS
+
+ Constructor variables, kinds, and equations are :
+strbindvar_c_1029 = CREC{+OopenlblHashTable = openvar_c_1031}::          REC_K{+OopenlblHashTable > con_valid_record_1046 : 
+*               REC_K{hash_table > con_valid_record_1045 : 
+*                     Arrow_k(Open; 'a_1008 : TYPE; SINGLE_TYPE(
+*         +1   APP(openvar_c_1031.hash_table,
+*         +1     ('a_1008))))}}
+openvar_c_1031 = strbindvar_c_1006::          REC_K{hash_table > con_valid_record_1045 : 
+*               Arrow_k(Open; 'a_1008 : TYPE; SINGLE_TYPE(APP(
+*         +1   strbindvar_c_1006.hash_table,
+*                                                           ('a_1008))))}
+strbindvar_c_1006 = CREC{hash_table = hash_table_1010}::          REC_K{hash_table > con_valid_record_1045 : 
+*               Arrow_k(Open; 'a_1008 : TYPE; SINGLE_TYPE(APP(hash_table_1010,('a_1008))))}
+hash_table_1010 =           LET  _1009 =  FUN('a_1008 ::  TYPE) = UNIT
+*         IN   _1009
+*         END::Arrow_k(Open; 'a_1008 : TYPE; SINGLE_TYPE(UNIT))
+
+ Expression variables and constructors are :
+Error while calling module_valid
+tilt: Ill-formed projection
+
+Compilation exited abnormally with code 1 at Thu Nov 16 17:37:55

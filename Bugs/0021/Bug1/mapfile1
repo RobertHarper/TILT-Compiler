@@ -1,0 +1,5 @@
+#include mapfile-basis
+
+setup setup
+bug1 bug1 TARGET
+bug2 bug2 TARGET

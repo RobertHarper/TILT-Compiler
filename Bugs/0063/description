@@ -1,0 +1,43 @@
+Number: 0063
+Title:       Typechecking fails after Phasesplit.
+Keywords:    Elaborator, datatype replication, phase-splitter
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        11/14/01
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	Type-checking after phase-splitting fails with this code:
+		(*$import *)
+		signature LR_TABLE =
+		    sig
+		        datatype 'a pairlist = EMPTY
+		    end
+		functor JoinWithArg (structure ParserData: LR_TABLE) =
+		struct
+		    datatype 'a pairlist = datatype ParserData.pairlist
+		end
+Code:
+	tilt -fcheckPhasesplit mapfile-bug
+Transcript:
+Comments:
+	You'll find some compiler output in the file `dump'.
+	Constructor equivalence was failing to equate
+
+                COERCION[ 'a_1078 ](APP(funct_arg_c_1043.ParserData. pairlist_sum,('a_1078)),
+                                    APP(funct_arg_c_1043.ParserData. pairlist,('a_1078)))
+
+	and
+
+		COERCION[ 'a_1055 ](APP(funct_arg_c_1043.ParserData. pairlist_sum,('a_1055)),
+		                    APP(funct_arg_c_1043.ParserData. pairlist,('a_1055)))
+
+	When structurally comparing two coercion constructors, we were
+	not properly alpha-varying the from- and to-types.
+Fix:
+	The problem was in the Coercion_c case of IlStatic's
+	con_structural_equiv: We forgot to use the renaming
+	substitution that we so carefully calculated.
+Test:
+Owner: swasey
+Status: closed

@@ -1,0 +1,971 @@
+head	1.32;
+access;
+symbols;
+locks; strict;
+comment	@# @;
+
+
+1.32
+date	2002.02.27.14.31.08;	author swasey;	state Exp;
+branches;
+next	1.31;
+
+1.31
+date	2002.02.27.14.29.05;	author swasey;	state Exp;
+branches;
+next	1.30;
+
+1.30
+date	2002.02.27.14.27.08;	author swasey;	state Exp;
+branches;
+next	1.29;
+
+1.29
+date	2002.02.27.14.20.05;	author swasey;	state Exp;
+branches;
+next	1.28;
+
+1.28
+date	2002.02.27.14.17.55;	author swasey;	state Exp;
+branches;
+next	1.27;
+
+1.27
+date	2002.02.27.14.15.15;	author swasey;	state Exp;
+branches;
+next	1.26;
+
+1.26
+date	2002.02.27.14.10.34;	author swasey;	state Exp;
+branches;
+next	1.25;
+
+1.25
+date	2002.02.27.13.58.16;	author swasey;	state Exp;
+branches;
+next	1.24;
+
+1.24
+date	2002.02.27.13.44.35;	author swasey;	state Exp;
+branches;
+next	1.23;
+
+1.23
+date	2002.02.27.13.43.28;	author swasey;	state Exp;
+branches;
+next	1.22;
+
+1.22
+date	2002.02.27.13.07.23;	author swasey;	state Exp;
+branches;
+next	1.21;
+
+1.21
+date	2002.02.27.13.05.59;	author swasey;	state Exp;
+branches;
+next	1.20;
+
+1.20
+date	2002.02.27.13.02.15;	author swasey;	state Exp;
+branches;
+next	1.19;
+
+1.19
+date	2002.02.27.13.00.58;	author swasey;	state Exp;
+branches;
+next	1.18;
+
+1.18
+date	2002.02.27.13.00.03;	author swasey;	state Exp;
+branches;
+next	1.17;
+
+1.17
+date	2002.02.27.12.57.02;	author swasey;	state Exp;
+branches;
+next	1.16;
+
+1.16
+date	2002.02.27.12.54.28;	author swasey;	state Exp;
+branches;
+next	1.15;
+
+1.15
+date	2002.02.27.12.50.44;	author swasey;	state Exp;
+branches;
+next	1.14;
+
+1.14
+date	2002.02.27.12.49.43;	author swasey;	state Exp;
+branches;
+next	1.13;
+
+1.13
+date	2002.02.27.12.42.38;	author swasey;	state Exp;
+branches;
+next	1.12;
+
+1.12
+date	2002.02.27.12.40.59;	author swasey;	state Exp;
+branches;
+next	1.11;
+
+1.11
+date	2002.02.26.16.16.39;	author swasey;	state Exp;
+branches;
+next	1.10;
+
+1.10
+date	2002.02.26.16.09.35;	author swasey;	state Exp;
+branches;
+next	1.9;
+
+1.9
+date	2002.02.26.15.15.31;	author swasey;	state Exp;
+branches;
+next	1.8;
+
+1.8
+date	2002.02.26.15.13.43;	author swasey;	state Exp;
+branches;
+next	1.7;
+
+1.7
+date	2002.02.26.15.08.42;	author swasey;	state Exp;
+branches;
+next	1.6;
+
+1.6
+date	2002.02.26.15.02.38;	author swasey;	state Exp;
+branches;
+next	1.5;
+
+1.5
+date	2002.02.26.15.01.23;	author swasey;	state Exp;
+branches;
+next	1.4;
+
+1.4
+date	2002.02.20.17.32.09;	author swasey;	state Exp;
+branches;
+next	1.3;
+
+1.3
+date	2002.02.20.17.28.01;	author swasey;	state Exp;
+branches;
+next	1.2;
+
+1.2
+date	2002.02.20.16.47.24;	author swasey;	state Exp;
+branches;
+next	1.1;
+
+1.1
+date	2002.02.20.16.32.11;	author swasey;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.32
+log
+@*** empty log message ***
+@
+text
+@(*$import *)
+
+extern raise_an_exception : (exn, unit) -->
+extern my_openf : (word, unit) -->
+
+datatype open_mode = O_RDWR
+
+fun omodeToWord O_RDWR = 0w0
+
+fun safe_openf () = Ccall(my_openf,0w0)
+
+fun unsafe_openf () = Ccall (my_openf,omodeToWord O_RDWR)
+
+fun die () =
+    let
+
+	(* The exception must be raised from the runtime.  Replacing
+	   "Ccall(raise_an_exception, Div)" with "(raise Div) : unit"
+	   avoids the error.
+
+	   The identity of the exception does not seem to matter.  The
+	   error occurs with Div, Overflow, and SysErr constructed by
+	   the runtime and with Div and TiltExn.SysErr constructed in
+	   ML.
+	*)
+	val _ = (Ccall(raise_an_exception, Div)
+		 handle _ => ())
+
+	val _ = unsafe_openf ()		(* illegal instruction *)
+(*
+	val _ = safe_openf ()		(* no illegal instruction *)
+*)
+
+    in
+	()
+    end
+
+val _ = die()
+@
+
+
+1.31
+log
+@*** empty log message ***
+@
+text
+@d4 1
+a4 1
+extern my_openf : (word, int) -->
+d29 1
+a29 1
+	val fd = unsafe_openf ()	(* illegal instruction *)
+d31 1
+a31 1
+	val fd = safe_openf ()		(* no illegal instruction *)
+d33 1
+@
+
+
+1.30
+log
+@*** empty log message ***
+@
+text
+@d6 1
+a6 3
+structure Mode =
+  struct
+    datatype open_mode = O_RDWR
+d8 1
+a8 2
+    fun omodeToWord O_RDWR = 0w0
+  end
+d12 1
+a12 1
+fun unsafe_openf () = Ccall (my_openf,Mode.omodeToWord Mode.O_RDWR)
+a13 2
+(* We use "link; openf", arranging for link to raise an exception.
+   This causes an illegal instruction trap. *)
+@
+
+
+1.29
+log
+@*** empty log message ***
+@
+text
+@d6 1
+a6 1
+structure my_FileSys =
+a10 2
+
+    fun openf omode = Ccall (my_openf,omodeToWord omode)
+d13 1
+a13 14
+signature S =
+sig
+    val openf : unit -> int
+end
+
+structure RuntimeS :> S =
+struct
+    fun openf () = Ccall(my_openf,0w0)
+end
+
+structure PosixS :> S =
+struct
+    fun openf () = my_FileSys.openf my_FileSys.O_RDWR
+end
+d15 1
+a15 4
+structure S = PosixS			(* illegal instruction *)
+(*
+structure S = RuntimeS			(* no illegal instruction *)
+*)
+d33 5
+a37 1
+	val fd = S.openf ()
+@
+
+
+1.28
+log
+@*** empty log message ***
+@
+text
+@d12 1
+a12 2
+    fun openf (fname : string, omode) =
+          Ccall (my_openf,omodeToWord omode)
+d17 1
+a17 1
+    val openf : string -> int
+d22 1
+a22 1
+    fun openf file = Ccall(my_openf,0w0)
+d27 1
+a27 1
+    fun openf file = my_FileSys.openf(file,my_FileSys.O_RDWR)
+d51 1
+a51 1
+	val fd = S.openf "/dev/null"
+@
+
+
+1.27
+log
+@*** empty log message ***
+@
+text
+@d4 1
+a4 1
+extern my_openf : (string, word, int) -->
+d13 1
+a13 1
+          Ccall (my_openf,fname, omodeToWord omode)
+d23 1
+a23 1
+    fun openf file = Ccall(my_openf,file,0w0)
+@
+
+
+1.26
+log
+@*** empty log message ***
+@
+text
+@d4 1
+a4 1
+extern my_openf : (string, word, word, int) -->
+d13 1
+a13 1
+          Ccall (my_openf,fname, omodeToWord omode, 0w0)
+d23 1
+a23 1
+    fun openf file = Ccall(my_openf,file,0w0,0w0)
+@
+
+
+1.25
+log
+@*** empty log message ***
+@
+text
+@a3 2
+extern posix_filesys_num : (string, word) -->
+extern posix_filesys_openf : (string, word, word, int) -->
+d10 1
+a10 3
+    val o_rdwr = Ccall(posix_filesys_num,"O_RDWR")
+
+    fun omodeToWord O_RDWR = o_rdwr
+d23 1
+a23 2
+    val O_RDWR = Ccall(posix_filesys_num,"O_RDWR")
+    fun openf file = Ccall(my_openf,file,O_RDWR,0w0)
+@
+
+
+1.24
+log
+@*** empty log message ***
+@
+text
+@d6 1
+d17 1
+a17 1
+          Ccall (posix_filesys_openf,fname, omodeToWord omode, 0w0)
+d28 1
+a28 1
+    fun openf file = Ccall(posix_filesys_openf,file,O_RDWR,0w0)
+@
+
+
+1.23
+log
+@*** empty log message ***
+@
+text
+@d11 1
+a11 3
+    fun w_osval (str : string) : word = Ccall(posix_filesys_num,str)
+
+    val o_rdwr = w_osval "O_RDWR"
+@
+
+
+1.22
+log
+@*** empty log message ***
+@
+text
+@d9 1
+a9 1
+    datatype open_mode = O_RDONLY | O_WRONLY | O_RDWR
+a12 2
+    val o_rdonly = w_osval "O_RDONLY"
+    val o_wronly = w_osval "O_WRONLY"
+d15 1
+a15 3
+    fun omodeToWord O_RDONLY = o_rdonly
+      | omodeToWord O_WRONLY = o_wronly
+      | omodeToWord O_RDWR = o_rdwr
+@
+
+
+1.21
+log
+@*** empty log message ***
+@
+text
+@a8 2
+    type file_desc = int
+
+d27 1
+a27 2
+    type fd
+    val openf : string -> fd
+a31 1
+    type fd = int
+a37 1
+    type fd = my_FileSys.file_desc
+@
+
+
+1.20
+log
+@*** empty log message ***
+@
+text
+@d9 2
+a10 2
+    datatype file_desc = FD of {fd : int}
+    fun fd fd = FD{fd=fd}
+d24 1
+a24 1
+          fd(Ccall (posix_filesys_openf,fname, omodeToWord omode, 0w0))
+@
+
+
+1.19
+log
+@*** empty log message ***
+@
+text
+@d7 4
+a10 2
+structure MyPrePosix =
+struct
+a21 1
+end    
+a22 5
+structure my_FileSys =
+  struct
+    datatype file_desc = FD of {fd : int}
+    fun fd fd = FD{fd=fd}
+    datatype open_mode = datatype MyPrePosix.open_mode
+d24 1
+a24 1
+          fd(Ccall (posix_filesys_openf,fname, MyPrePosix.omodeToWord omode, 0w0))
+@
+
+
+1.18
+log
+@*** empty log message ***
+@
+text
+@d7 1
+a7 7
+signature MY_PRE_POSIX =
+sig
+    datatype open_mode = O_RDONLY | O_WRONLY | O_RDWR
+    val omodeToWord : open_mode -> word
+end
+	
+structure MyPrePosix :> MY_PRE_POSIX =
+@
+
+
+1.17
+log
+@*** empty log message ***
+@
+text
+@d1 2
+a2 1
+(*$import PrePosix *)
+d7 21
+d32 1
+a32 1
+    datatype open_mode = datatype PrePosix.open_mode
+d34 1
+a34 1
+          fd(Ccall (posix_filesys_openf,fname, PrePosix.omodeToWord omode, 0w0))
+@
+
+
+1.16
+log
+@*** empty log message ***
+@
+text
+@d1 4
+a4 1
+(*$import Firstlude TiltPrim Prelude PrePosix Position Word SysWord PreOS POSIX_extern List Time POSIX_FILE_SYS String *)
+a13 2
+
+extern raise_an_exception : (exn, unit) -->
+@
+
+
+1.15
+log
+@*** empty log message ***
+@
+text
+@a4 10
+    val int32touint32 = TiltPrim.int32touint32
+    val op^ = String.^
+	
+    val ++ = Word.orb
+    val & = Word.andb
+    infix ++ &
+
+    type uid = PrePosix.uid
+    type gid = PrePosix.gid
+	
+a5 1
+    fun intOf (FD{fd,...}) = fd
+a6 7
+    fun fdToWord (FD{fd,...}) = Word.fromInt fd
+    fun wordToFD fd = FD{fd = Word.toInt fd}
+
+  (* conversions between OS.IO.iodesc values and Posix file descriptors. *)
+    fun fdToIOD (FD{fd,...}) = PreOS.IO.IODesc fd
+    fun iodToFD (PreOS.IO.IODesc fd) = SOME(FD{fd = fd})
+
+a7 94
+	
+    type c_dirstream = int   (* the underlying C DIRSTREAM - which is a DIR pointer *)
+
+    datatype dirstream = DS of {
+	dirStrm : c_dirstream,
+	isOpen : bool ref
+      }
+
+    val opendir' (* : string -> c_dirstream  *) = fn arg => Ccall(posix_filesys_opendir,arg)
+    val readdir' (* : c_dirstream -> string  *) = fn arg => Ccall(posix_filesys_readdir,arg)
+    val rewinddir' (* : c_dirstream -> unit  *) = fn arg => Ccall(posix_filesys_rewinddir,arg)
+    val closedir' (* : c_dirstream -> unit   *) = fn arg => Ccall(posix_filesys_closedir,arg)
+    fun opendir path = DS{
+	    dirStrm = opendir' path,
+	    isOpen = ref true
+	  }
+    fun readdir (DS{dirStrm, isOpen = ref false}) =
+	  raise TiltExn.LibFail "readdir on closed directory stream"
+	  (* PreOS.error "readdir on closed directory stream" ??? *)
+      | readdir (DS{dirStrm, ...}) = readdir' dirStrm
+    fun rewinddir (DS{dirStrm, isOpen = ref false}) =
+	  raise TiltExn.LibFail "rewinddir on closed directory stream"
+	  (* PreOS.error "rewinddir on closed directory stream" ??? *)
+      | rewinddir (DS{dirStrm, ...}) = rewinddir' dirStrm
+    fun closedir (DS{dirStrm, isOpen = ref false}) = ()
+      | closedir (DS{dirStrm, isOpen}) = (
+	  isOpen := false;
+	  closedir' dirStrm)
+
+    fun chdir  (s : string) : unit = Ccall(posix_filesys_chdir, s)
+    fun getcwd () : string = Ccall(posix_filesys_getcwd,())
+
+    val stdin  = fd 0
+    val stdout = fd 1
+    val stderr = fd 2
+
+    fun w_osval (str : string) : word = Ccall(posix_filesys_num,str)
+    val o_wronly = w_osval "O_WRONLY"
+	 
+    structure S =
+      struct
+        datatype flags = MODE of word
+        type mode = flags
+
+        fun wordTo w = MODE w
+        fun toWord (MODE w) = w
+
+        fun flags ms = MODE(List.foldl (fn (MODE m,acc) => m ++ acc) 0w0 ms)
+        fun anySet (MODE m, MODE m') = (m & m') <> 0w0
+        fun allSet (MODE m, MODE m') = (m & m') = m
+
+        val irwxu = MODE(w_osval "irwxu")
+        val irusr = MODE(w_osval "irusr")
+        val iwusr = MODE(w_osval "iwusr")
+        val ixusr = MODE(w_osval "ixusr")
+        val irwxg = MODE(w_osval "irwxg")
+        val irgrp = MODE(w_osval "irgrp")
+        val iwgrp = MODE(w_osval "iwgrp")
+        val ixgrp = MODE(w_osval "ixgrp")
+        val irwxo = MODE(w_osval "irwxo")
+        val iroth = MODE(w_osval "iroth")
+        val iwoth = MODE(w_osval "iwoth")
+        val ixoth = MODE(w_osval "ixoth")
+        val isuid = MODE(w_osval "isuid")
+        val isgid = MODE(w_osval "isgid")
+
+      end
+
+    structure O =
+      struct
+        datatype flags = OFL of word
+
+        fun wordTo w = OFL w
+        fun toWord (OFL w) = w
+
+        fun flags ms = OFL(List.foldl (fn (OFL m,acc) => m ++ acc) 0w0 ms)
+        fun anySet (OFL m, OFL m') = (m & m') <> 0w0
+        fun allSet (OFL m, OFL m') = (m & m') = m
+
+        val append   = OFL(w_osval "O_APPEND")
+        val dsync    = OFL(w_osval "O_DSYNC")
+        val excl     = OFL(w_osval "O_EXCL")
+        val noctty   = OFL(w_osval "O_NOCTTY")
+        val nonblock = OFL(w_osval "O_NONBLOCK")
+        val rsync    = OFL(w_osval "O_RSYNC")
+        val sync     = OFL(w_osval "O_SYNC")
+        val o_trunc  = w_osval "O_TRUNC"
+        val trunc    = OFL o_trunc
+        val o_creat  = w_osval "O_CREAT"
+        val crflags  = o_wronly ++ o_creat ++ o_trunc
+
+      end
+
+
+@
+
+
+1.14
+log
+@*** empty log message ***
+@
+text
+@d120 2
+a121 2
+    fun openf (fname : string, omode, O.OFL flags) =
+          fd(Ccall (posix_filesys_openf,fname, flags ++ (PrePosix.omodeToWord omode), 0w0))
+d142 1
+a142 1
+    fun openf file = my_FileSys.openf(file,my_FileSys.O_RDWR,my_FileSys.O.flags[])
+@
+
+
+1.13
+log
+@*** empty log message ***
+@
+text
+@d1 122
+a122 1
+(*$import POSIX_FileSys *)
+a124 2
+extern posix_filesys_num : (string, word) -->
+extern posix_filesys_openf : (string, word, word, int) -->
+d141 2
+a142 2
+    type fd = POSIX_FileSys.file_desc
+    fun openf file = POSIX_FileSys.openf(file,POSIX_FileSys.O_RDWR,POSIX_FileSys.O.flags[])
+@
+
+
+1.12
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+(*$import Posix *)
+d22 2
+a23 2
+    type fd = Posix.FileSys.file_desc
+    fun openf file = Posix.FileSys.openf(file,Posix.FileSys.O_RDWR,Posix.FileSys.O.flags[])
+@
+
+
+1.11
+log
+@*** empty log message ***
+@
+text
+@d2 25
+d28 1
+a28 4
+extern posix_filesys_link : (string, string, unit) -->
+extern posix_filesys_openf : (string, word, word, int) -->
+extern posix_io_close : (int, unit) -->
+extern posix_filesys_mkdir : (string, word, unit) -->
+d31 1
+a31 1
+(* We use "mkdir; openf", arranging for mkdir to raise an exception.
+d35 11
+a45 3
+	val dir = "/"
+	val file = "/dev/null"
+	val _ = (Posix.FileSys.mkdir (dir, Posix.FileSys.S.irwxu)
+d47 1
+a47 1
+	val fd = Posix.FileSys.openf (file, Posix.FileSys.O_RDWR, Posix.FileSys.O.flags [])
+@
+
+
+1.10
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+(*$import Posix OS *)
+d13 2
+a14 6
+	val dir = "myDir"
+	val file = "myDir/myFile"
+
+	(* This setup could happen prior to running the test *)
+	val status = OS.Process.system ("rm -rf "^dir^"; mkdir "^dir)
+
+@
+
+
+1.9
+log
+@*** empty log message ***
+@
+text
+@d1 24
+a24 9
+(*$import Posix *)
+structure S =				(* so that names like "mkdir" don't conflict with the C library *)
+struct
+    (* lockFile : string * string -> unit *)
+    fun lockFile (old, new) =
+	(Posix.FileSys.link {old=old, new=new}
+	 handle _ => let val fd = Posix.FileSys.openf (old, Posix.FileSys.O_RDWR, Posix.FileSys.O.flags [])
+		     in  ()
+		     end)
+d26 1
+a26 25
+    (* zeroFile : string -> unit *)
+    fun zeroFile file =
+	let val fd = Posix.FileSys.openf (file, Posix.FileSys.O_RDWR, Posix.FileSys.O.flags [])
+	in  Posix.IO.close fd
+	end
+
+    (* mkdir : string -> unit *)
+    fun mkdir dir = if ((Posix.FileSys.ST.isDir (Posix.FileSys.stat dir))
+			handle _ => false)
+			then ()
+		    else Posix.FileSys.mkdir (dir, Posix.FileSys.S.irwxu)
+
+    val myDir = "myTM"
+    fun myFileName s = myDir ^ "/" ^ s
+    val file = myFileName "lock"
+    val myFile = myFileName "recvLock"
+
+    fun setup () = (mkdir myDir;
+		    zeroFile myFile;
+		    zeroFile file)
+
+    fun die () = lockFile (myFile, file)
+end
+
+val _ = (S.setup(); S.die())
+@
+
+
+1.8
+log
+@*** empty log message ***
+@
+text
+@d4 7
+a15 5
+
+    (* lockFile : string * string -> unit *)
+    fun lockFile (old, new) =
+	(Posix.FileSys.link {old=old, new=new}
+	 handle _ => zeroFile old)
+@
+
+
+1.7
+log
+@*** empty log message ***
+@
+text
+@d12 2
+a13 7
+	let
+	    fun createLink () = (Posix.FileSys.link {old=old, new=new}
+				 handle _ => ())
+	in
+	    createLink();
+	    zeroFile old
+	end
+d30 1
+a30 3
+    fun die () = let val unlock = lockFile (myFile, file)
+		 in  print "got lock ... \n"
+		 end
+@
+
+
+1.6
+log
+@*** empty log message ***
+@
+text
+@d13 5
+a17 10
+	    fun createLink () = ((Posix.FileSys.link {old=old, new=new}; true)
+				 handle _ => false)
+	    fun loop try =
+		if createLink() then ()
+		else
+		    let val _ = if try = 1 then zeroFile old else ()
+		    in  loop (try + 1)
+		    end
+	    val _ = loop 1
+	in ()
+@
+
+
+1.5
+log
+@*** empty log message ***
+@
+text
+@d18 1
+a18 3
+		    let val _ = if try = 1 then zeroFile old else () (* Avoid race where master deletes old. *)
+			val _ = if try mod 3 = 0 then print ("Waiting for " ^ new ^ "\n")
+				else ()
+d21 1
+a21 1
+	    val _ = loop 1		(* acquire lock *)
+@
+
+
+1.4
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+(*$import Posix Time *)
+a3 2
+    fun platform_sleep duration = Posix.Process.sleep (Time.fromReal duration)
+
+a20 1
+			val _ = platform_sleep 1.0
+@
+
+
+1.3
+log
+@*** empty log message ***
+@
+text
+@d12 1
+a12 10
+    (* removeFile : string -> unit *)
+    (* On AFS it is a lot faster to do access() on a non-existent
+     * file than remove().
+     *)
+    fun removeFile file = if (Posix.FileSys.access (file, []) andalso
+			      Posix.FileSys.access (file, [Posix.FileSys.A_WRITE]))
+			      then Posix.FileSys.unlink file handle _ => ()
+			  else ()
+			      
+    (* lockFile : string * string -> (unit -> unit) *)
+d27 1
+a27 2
+	    fun unlock () = removeFile new
+	in  unlock
+d46 1
+a46 2
+		 in  print "got lock ... unlocking\n";
+		     unlock()
+@
+
+
+1.2
+log
+@*** empty log message ***
+@
+text
+@d1 1
+a1 1
+(*$import OS Posix Time *)
+d4 1
+a4 14
+    fun platform_sleep duration = (OS.IO.poll([], SOME (Time.fromReal duration)); ())
+
+(*
+    (* zeroFile : string -> unit *)
+    fun zeroFile file = TextIO.closeOut (TextIO.openOut file)
+*)
+
+(* No bug.
+    (* zeroFile : string -> unit *)
+    fun zeroFile file =
+	let val fd = Posix.FileSys.creat (file, Posix.FileSys.S.irwxu)
+	in  Posix.IO.close fd
+	end
+*)
+d16 3
+a18 3
+    fun removeFile file = if (OS.FileSys.access (file, []) andalso
+			      OS.FileSys.access (file, [OS.FileSys.A_WRITE]))
+			      then OS.FileSys.remove file handle _ => ()
+d41 1
+a41 1
+    fun mkdir dir = if (OS.FileSys.isDir dir
+d44 1
+a44 1
+		    else OS.FileSys.mkDir dir
+d47 1
+a47 1
+    fun myFileName s = OS.Path.joinDirFile{dir=myDir,file=s}
+@
+
+
+1.1
+log
+@Initial revision
+@
+text
+@d1 1
+a1 1
+(*$import OS TextIO Posix Time *)
+d6 1
+d9 1
+d11 13
+a23 8
+    (* fileExists : string -> bool *)
+    fun fileExists filename = ((OS.FileSys.access (filename, nil) andalso
+				OS.FileSys.access (filename, [OS.FileSys.A_READ, OS.FileSys.A_WRITE]))
+			       handle _ => false)
+	
+    (* fileNonempty : string -> bool option *)
+    fun fileNonempty filename = (SOME (OS.FileSys.fileSize filename > 0)
+				 handle _ => NONE)
+@

@@ -1,0 +1,53 @@
+Number: 0055
+Title:       Unresolved tyvars breaking elaborator and phase-splitter.
+Keywords:    Elaborator, phase-splitter, type inference
+Submitter:   Tom Murphy <twm@andrew.cmu.edu>
+Date:        6/21/01
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	This code doesn't elaborate:
+
+	val (a, b) = raise Bind
+
+	  [Elaborating Bench/bug.sml non-constrained]
+	gc_context: 347 items in original context.  1 items in reduced context.
+	  [writing Bench/TM/any/bug.sml.ilError: ilcontexteq.sml: cannot
+	simplify unresolved CON_TYVAR
+
+	This code doesn't phasesplit:
+
+	fun f () =
+	   let val (a, b) = raise Bind
+	   in ()
+	   end
+
+	===== Starting Phasesplit: bug                           =====
+	  Initial context is phase-split
+	Error: tonil.sml: (derefTyvar)  tyvar unset
+	uncaught exception in xfbnds
+
+	uncaught exception BUG
+	  raised at: Util/util-error.sml:14.14-14.21
+		     Nil/tonil.sml:1441.14
+		     Nil/tonil.sml:1441.14
+		     Nil/tonil.sml:1441.14
+		     Nil/tonil.sml:1013.14
+		     Nil/tonil.sml:1013.14
+		     ...
+Code:
+Transcript:
+Comments:
+	Regarding Tom's bug report.  I agree both of these are bugs and will
+	look into fixing them later.  Note that the related programs
+
+		val a = raise Bind
+		fun f () = let val a = raise Bind in () end
+
+	compile fine.  I think TILT should behave the same way no matter what
+	form of pattern appears on the left.
+Fix:
+Test:
+Owner: swasey
+Status: open

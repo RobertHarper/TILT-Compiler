@@ -1,0 +1,433 @@
+cd ~/t/ExnTest/
+tilt -fshowHIL -fshowPhasesplit -fshowClosureConv -fshowRtl -m mapfile
+Warning: setting TILT_LIBDIR to /usr5/swasey/t
+Starting compilation           : Mon Jan 28 18:01:17 2002   0.0 sec
+Mapfile mapfile with 137 units processed.
+Imports read.
+Dependency graph computed: 137 nodes and 794 edges.
+Not reducing dependency graph.
+Creating directories.
+114 necessary units:   Firstlude  TiltPrim  Prelude  POSIX_SYS_DB  PreWord  PreInt  OPTION  STRING_CVT  PreString
+        StringCvt  WORD  PreReal  CHAR  STRING  General_extern  GENERAL  General  NumFormat  Char  String  Option
+        NumScan  Word32  SysWord  POSIX_FLAGS  POSIX_TTY  PreTime  TIME  LIST  List  RealFormat  IEEE_REAL  INTEGER
+        Int32  Int  IEEEReal  MATH  REAL  Math64  BOOL  Bool  Real64  Real  Time  POSIX_PROC_ENV  POSIX_SIGNAL  Word8
+        POSIX_PROCESS  PreOS  Position  POSIX_FILE_SYS  MONO_VECTOR  VECTOR  ARRAY  Array  Vector  Word8Vector
+        MONO_ARRAY  Word8Array  POSIX_IO  POSIX_ERROR  POSIX  POSIX_extern  PrePosix  Word  POSIX_FileSys  POSIX_Sys_DB
+        SysInt  POSIX_Signal  POSIX_Process  SUBSTRING  Substring  BYTE  Byte  POSIX_Tty  POSIX_ProcEnv  POSIX_IO_Str
+        POSIX_Error  Posix  OS_IO  OS_IO_Str  CLEAN_UP  CleanUp  OS_PROCESS  OS_Process  OS_PATH  OS_PathFn  OS_Path
+        OS_FILE_SYS  OS_FileSys  OS_SIG  OS  PRIM_IO  PrimIOFn  BinPrimIO  OS_PRIM_IO  IO_SIG  IO  PosixPrimIOFn
+        PosixBinPrimIO  CharArray  CharVector  TextPrimIO  PosixTextPrimIO  CleanIO  STREAM_IO  TEXT_STREAM_IO  TEXT_IO
+        TextIOFn  TextIO  Word31  TopLevel  raise  handle
+Start compiling files          : Mon Jan 28 18:01:18 2002   1.18 sec
+Starting slave cuff.link.21582.
+  [Plan for raise:   elaborate  generate  prepare  assemble  cleanup]
+  [These files are up-to-date already:  Firstlude  TiltPrim  Prelude  MATH  CleanIO  IO_SIG  OS_PROCESS  CLEAN_UP
+        POSIX_ERROR  ARRAY  VECTOR  MONO_VECTOR  PreOS  IEEE_REAL  LIST  PreTime  GENERAL  General_extern  PreReal
+        PreString  OPTION  PreInt  PreWord  POSIX_SYS_DB  STRING_CVT  General  Option  List  Math64  MONO_ARRAY  PRIM_IO
+        IO  STREAM_IO  OS_PRIM_IO  PrimIOFn  CleanUp  Array  StringCvt  WORD  CHAR  NumFormat  TIME  INTEGER  BOOL
+        Vector  Word8Vector  Bool  Char  STRING  String  Word8Array  SUBSTRING  CharVector  CharArray  Substring
+        RealFormat  NumScan  Word32  Int32  Word8  OS_PATH  TEXT_STREAM_IO  Word31  TEXT_IO  OS_PathFn  BYTE  SysInt
+        Word  Position  Int  SysWord  POSIX_FLAGS  IEEEReal  POSIX_SIGNAL  POSIX_extern  Byte  OS_Path  BinPrimIO
+        TextPrimIO  POSIX_Error  POSIX_Signal  PrePosix  POSIX_IO  REAL  POSIX_TTY  Real64  Real  Time  OS_FILE_SYS
+        OS_IO  POSIX_FILE_SYS  POSIX_PROCESS  POSIX_PROC_ENV  POSIX  POSIX_FileSys  POSIX_Process  OS_SIG  POSIX_IO_Str
+        POSIX_ProcEnv  POSIX_Tty  POSIX_Sys_DB  Posix  OS_FileSys  OS_Process  OS_IO_Str  OS  TextIOFn  PosixPrimIOFn
+        PosixBinPrimIO  PosixTextPrimIO  TextIO  TopLevel  handle]
+  [Sending FLUSH_ALL to cuff.link.21582]
+  [Calling cuff.link.21582 to compile raise]
+Slave received FLUSH_ALL.
+Setting PtrWriteBarrier to true
+Setting FullWriteBarrier to true
+Setting MirrorGlobal to true
+Setting MirrorPtrArray to false
+Setting BranchingTraps to true
+Setting UptoElaborate to false
+Setting UptoPhasesplit to false
+Setting UptoClosureConvert to false
+Setting UptoRtl to false
+Setting UptoAsm to false
+Setting debug_asm to true
+Setting keep_asm to true
+Setting compress_asm to true
+Setting ManagerChat to true
+Setting ManagerVerbose to true
+Setting TimeEachFile to false
+Setting makeBackups to false
+Setting ShowWrittenContext to false
+Setting WriteUnselfContext to false
+Setting ShowTools to false
+Setting Typecheck to false
+Setting WTypecheck to false
+  [0 imports of total size 0 were cached.
+   111 imports of total size 180802 were uncached.]
+  [Elaboration context took 2.35 seconds.]
+  [Parsing raise.sml]
+  [Elaborating raise.sml non-constrained]
+SBNDS:
+          [mkExn > mkExn_8225 = MPROJ(_1041,SysErr).mk_INT, 
+*          test > test_8236 = 
+**            APP(MPROJ(_1041,SysErr).mk_INT,
+**                ("msg", LET _935 = 2989
+**                        IN  COERCE(_911.+Noption_in_INT, [INT32], INJ(1, CON_APP(CON_PATH(_911.option_sum_INT); INT32), _935))
+**                        END))]
+ENTRIES:
+          CONTEXT_SDEC: mkExn > mkExn_8225 : ({_983 *
+**                                             CON_APP(CON_PATH(_911.option_TYC); INT32)} -> ANY)
+CONTEXT_SDEC: test > test_8236 : ANY
+
+gc_context: 359 items in original context.  26 items in reduced context.
+  [writing TM/any/raise.sml.il - unnecessary]
+Sending ACK_INTERFACE: interface took 2.430 seconds 
+  [Compiling raise to assembly]
+===== Starting Phasesplit: raise                         =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+PASS: Phasesplit
+Phasesplit
+
+          [mkExn_8286 : Unknown = select[mk][](Let  _c_8284 = _c_8273.SysErr
+*                                                   _r_8285 : Unknown = select[SysErr][](_r_8274)
+*                                              In   _r_8285
+*                                              End),
+*          test_8291 : Unknown = 
+*            App_Open(select[mk][](Let  _c_8288 = _c_8273.SysErr
+*                                       _r_8289 : Unknown = select[SysErr][](_r_8274)
+*                                  In   _r_8289
+*                                  End); 
+*            ; record(1>"msg",
+*                     2>Let  _8290 : Unknown = 2989
+*                       In   COERCE( select[+Noption_in][](_r_8252)[INT32],inject_dyn1[APP(_c_8251.option_sum,(INT32))](_8290) )
+*                       End);  )]
+*         IMPORTS:
+*         +O_bool_INT_c = _c_8243 : REC_K{bool > _8245 :  TYPE,
+*                                         bool_sumarg > _8246 :  SINGLE(CREC{}),
+*                                         bool_sum > _8247 :  SINGLE(SUM(2,2)(_8246))}
+*         +O_bool_INT_r > _r_8244 : Unknown : DEP_RECORD[ +Nbool_in > _8248, +Nbool_out > _8249, +Ebool > _8250]
+*                                               (COERCION[  ](_c_8243.bool_sum,_c_8243.bool),
+*                                                COERCION[  ](_c_8243.bool,_c_8243.bool_sum),
+*                                                ALLARROW(Open; PARTIAL; (); 
+*                                                   (RECORD[1, 2](_c_8243.bool, _c_8243.bool)); 0; 
+*                                                   _c_8243.bool))
+*         +O_option_INT_c = _c_8251 : REC_K{option > _8254 :  Arrow_k(Open; _8253 : TYPE; TYPE),
+*                                           option_sumarg > _8257 :  SINGLE(LET  _8256 =  FUN(_8255 ::  TYPE) = _8255
+*                                                                           IN   _8256
+*                                                                           END),
+*                                           option_sum > _8260 : 
+*                                           SINGLE(LET  _8259 =  FUN(_8258 ::  TYPE) = SUM(1,2)(APP(_8257,(_8258)))
+*                                                  IN   _8259
+*                                                  END)}
+*         +O_option_INT_r > _r_8252 : Unknown : DEP_RECORD[ +Noption_in > _8262, +Noption_out > _8264, +Eoption > _r_8266]
+*                                                 (COERCION[ _8261 ](APP(_c_8251.option_sum,(_8261)),APP(_c_8251.option,(_8261))),
+*                                                  COERCION[ _8263 ](APP(_c_8251.option,(_8263)),APP(_c_8251.option_sum,(_8263))),
+*                                                  ALLARROW(Open; TOTAL; (_c_8267 :: REC_K{'a > _8269 :  TYPE}); 
+*                                                     (_r_8268 :: DEP_RECORD[ +E'a > _8270]
+*                                                                   (ALLARROW(Open; PARTIAL; (); 
+*                                                                       (RECORD[1, 2](_c_8267.'a, _c_8267.'a)); 0; 
+*                                                                       _c_8243.bool))); 0; 
+*                                                     ALLARROW(Open; PARTIAL; (); 
+*                                                        (RECORD[1, 2]
+*                                                           (APP(_c_8251.option,(_c_8267.'a)), APP(_c_8251.option,(_c_8267.'a)))); 0; 
+*                                                        _c_8243.bool)))
+*         string = _8272 : SINGLE(VECTOR(INT8))
+*         TiltExn_STR_c = _c_8273 : REC_K{SysErr > _c_8275 :  REC_K{},
+*                                         LibFail > _c_8279 :  REC_K{}}
+*         TiltExn_STR_r > _r_8274 : Unknown : DEP_RECORD[ SysErr > _r_8276, LibFail > _r_8280]
+*                                               (DEP_RECORD[ stamp > _8277, mk > _8278]
+*                                                  (EXNTAG(RECORD[1, 2](_8272, APP(_c_8251.option,(INT32)))),
+*                                                   ALLARROW(Open; TOTAL; (); 
+*                                                      (RECORD[1, 2](_8272, APP(_c_8251.option,(INT32)))); 0; 
+*                                                      EXN)),
+*                                                DEP_RECORD[ stamp > _8281, mk > _8282]
+*                                                  (EXNTAG(_8272), ALLARROW(Open; TOTAL; (); (_8272); 0; EXN)))
+*         EXPORTS:
+*         test = test_8291
+*         mkExn = mkExn_8286
+*         
+===== Starting Rename: raise                             =====
+===== Starting Optimize1: raise                          =====
+===== Starting Vararg: raise                             =====
+===== Starting Inline1: raise                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: raise                             =====
+===== Starting Specialize: raise                         =====
+  0 optimizable candidates.
+  0 impure.
+  0 escaping.
+  0 used polymorphically.
+===== Starting Hoist: raise                              =====
+Imports Processed
+===== Starting Optimize2: raise                          =====
+===== Starting Inline2: raise                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: raise                          =====
+===== Starting Inline3: raise                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: raise                             =====
+===== Starting ClosureConv: raise                        =====
+PASS: ClosureConv
+ClosureConv
+
+          [STATIC type_8333 = _c_8251.option_sum,
+*          STATIC type_8334 = APP(type_8333,(INT32)),
+*          STATIC type_8359 = _c_8251.option,
+*          STATIC type_8360 = APP(type_8359,(INT32)),
+*          STATIC reify_8358 = type_8360,
+*          SysErr_8326 : Trace = select[SysErr][](_r_8274),
+*          mk_8327 : Trace = select[mk][](SysErr_8326),
+*          funarg_1_8331 : Trace = "msg",
+*          +Noption_in_8332 : Int = select[+Noption_in][](_r_8252),
+*          _8335 : Trace = inject_known_1[type_8334](2989),
+*          reify_8374 = LET  type_8375 = _c_8251.option
+*                            type_8376 = APP(type_8375,(INT32))
+*                       IN   type_8376
+*                       END,
+*          funarg_2_8336 : Compute(reify_8374) = COERCE( +Noption_in_8332[INT32],_8335 ),
+*          test_8348 : Trace = App_Closure(mk_8327;  ; funarg_1_8331, funarg_2_8336;  )]
+*         IMPORTS:
+*         +O_bool_INT_c = _c_8243 : REC_K{bool > _8245 :  TYPE,
+*                                         bool_sumarg > _8246 :  SINGLE(CREC{}),
+*                                         bool_sum > _8247 :  SINGLE(SUM(2,2)(_8246))}
+*         +O_bool_INT_r > _r_8244 : Trace : DEP_RECORD[ +Nbool_in > _8248, +Nbool_out > _8249, +Ebool > _8250]
+*                                             (COERCION[  ](_c_8243.bool_sum,_c_8243.bool),
+*                                              COERCION[  ](_c_8243.bool,_c_8243.bool_sum),
+*                                              ALLARROW(Closure; PARTIAL; (); (_c_8243.bool, _c_8243.bool); 0; _c_8243.bool))
+*         +O_option_INT_c = _c_8251 : REC_K{option > _8254 :  Arrow_k(Closure; _8253 : TYPE; TYPE),
+*                                           option_sumarg > _8257 : 
+*                                           SINGLE(LET  _code_8384 = CODE(_cEnv_8386 ::  REC_K{}, _8255 ::  TYPE) = LET  
+*                                                                                                                   IN   _8255
+*                                                                                                                   END
+*                                                       _8256 = CLOSURE(_code_8384,CREC{})
+*                                                  IN   _8256
+*                                                  END),
+*                                           option_sum > _8260 : 
+*                                           SINGLE(LET  _code_8389 = 
+*                                                            CODE(_cEnv_8391 ::  REC_K{}, _8258 ::  TYPE)
+*                                                           = LET  
+*                                                             IN   SUM(1,2)(APP(_8257,(_8258)))
+*                                                             END
+*                                                       _8259 = CLOSURE(_code_8389,CREC{})
+*                                                  IN   _8259
+*                                                  END)}
+*         +O_option_INT_r > _r_8252 : Trace : DEP_RECORD[ +Noption_in > _8262, +Noption_out > _8264, +Eoption > _r_8266]
+*                                               (COERCION[ _8261 ](LET  type_8300 = _c_8251.option_sum
+*                                                                       type_8301 = APP(type_8300,(_8261))
+*                                                                  IN   type_8301
+*                                                                  END,
+*         +1   LET  type_8302 = _c_8251.option
+*         +1        type_8303 = APP(type_8302,(_8261))
+*         +1   IN   type_8303
+*         +1   END),
+*                                                COERCION[ _8263 ](LET  type_8304 = _c_8251.option
+*                                                                       type_8305 = APP(type_8304,(_8263))
+*                                                                  IN   type_8305
+*                                                                  END,
+*         +1   LET  type_8306 = _c_8251.option_sum
+*         +1        type_8307 = APP(type_8306,(_8263))
+*         +1   IN   type_8307
+*         +1   END),
+*                                                ALLARROW(Closure; TOTAL; (_c_8267 :: REC_K{'a > _8269 :  TYPE}); 
+*                                                   (_r_8268 :: DEP_RECORD[ +E'a > _8270]
+*                                                                 (ALLARROW(Closure; PARTIAL; (); 
+*                                                                     (_c_8267.'a, _c_8267.'a); 0; 
+*                                                                     _c_8243.bool))); 0; 
+*                                                   ALLARROW(Closure; PARTIAL; (); 
+*                                                      (APP(_c_8251.option,(_c_8267.'a)), APP(_c_8251.option,(_c_8267.'a))); 0; 
+*                                                      _c_8243.bool)))
+*         string = _8272 : SINGLE(VECTOR(INT8))
+*         TiltExn_STR_c = _c_8273 : REC_K{SysErr > _c_8275 :  REC_K{},
+*                                         LibFail > _c_8279 :  REC_K{}}
+*         TiltExn_STR_r > _r_8274 : Trace : DEP_RECORD[ SysErr > _r_8276, LibFail > _r_8280]
+*                                             (DEP_RECORD[ stamp > _8277, mk > _8278]
+*                                                (EXNTAG(RECORD[1, 2](_8272, APP(_c_8251.option,(INT32)))),
+*                                                 ALLARROW(Closure; TOTAL; (); (_8272, APP(_c_8251.option,(INT32))); 0; EXN)),
+*                                              DEP_RECORD[ stamp > _8281, mk > _8282]
+*                                                (EXNTAG(_8272), ALLARROW(Closure; TOTAL; (); (_8272); 0; EXN)))
+*         EXPORTS:
+*         test = test_8348
+*         mkExn = mk_8327
+*         
+===== Translating to RTL             =====
+RTL code:
+
+main = ML raise_unit
+
+ML raise_main
+     args = []
+     ret = _8399(NOTRACE_CODE)
+     results = [_8464(TRACE)]
+
+{
+LCfuntop_8397:
+     li         0, _8398(NOTRACE_INT)
+     call_C_NORMALML AssertMirrorPtrArray arguments = ([_8398(NOTRACE_INT)] results = ([] }
+     needalloc  0
+     laddr      0(ML TiltExn_STR_r_INT), _8403(NOTRACE_LABEL)
+     mirror_global_offset_8404(NOTRACE_INT)
+     ldw        _8402(TRACE), (_8403(NOTRACE_LABEL)+_8404(NOTRACE_INT))
+     ldw        _8405(TRACE), 0(_8402(TRACE))
+     ldw        _8407(TRACE), 4(_8405(TRACE))
+     li         111, _8408(NOTRACE_INT)
+     stw        _8408(NOTRACE_INT), ~4(ML mkExn)
+     needmutate 1
+     laddr      0(ML mkExn), _8409(NOTRACE_LABEL)
+     mirror_global_offset_8410(NOTRACE_INT)
+     storemutate(_8409(NOTRACE_LABEL)+_8410(NOTRACE_INT)),ptrMutate
+     stw        _8407(TRACE), (_8409(NOTRACE_LABEL)+_8410(NOTRACE_INT))
+     laddr      0(ML +O_option_INT_r_INT), _8417(NOTRACE_LABEL)
+     mirror_global_offset_8418(NOTRACE_INT)
+     ldw        _8416(TRACE), (_8417(NOTRACE_LABEL)+_8418(NOTRACE_INT))
+     ldw        _8419(NOTRACE_INT), 0(_8416(TRACE))
+     ### allocating 1-record
+     ### done allocating 1 record
+     laddr      0(ML +O_option_INT_c_INT), _8439(NOTRACE_LABEL)
+     mirror_global_offset_8440(NOTRACE_INT)
+     ldw        _8438(TRACE), (_8439(NOTRACE_LABEL)+_8440(NOTRACE_INT))
+     ### Proj_c at label option_TYC
+     ldw        _8437(TRACE), 0(_8438(TRACE))
+     ### start making constructor call
+     li         2, _8443(TRACE)
+     ldw        _8444(NOTRACE_CODE), 0(_8437(TRACE))
+     ldw        _8445(TRACE), 4(_8437(TRACE))
+     call_ML_NORMAL_8444(NOTRACE_CODE) arguments = ([_8445(TRACE), _8443(TRACE)] results = ([_8446(TRACE)] }
+     needalloc  0
+     ### done making constructor call
+     laddr      0(LDstring_8414), _8449(NOTRACE_LABEL)
+     laddr      0(LDrecord_8433), _8451(NOTRACE_LABEL)
+     ### making closure call
+     laddr      0(ML mkExn), _8454(NOTRACE_LABEL)
+     mirror_global_offset_8455(NOTRACE_INT)
+     ldw        _8453(TRACE), (_8454(NOTRACE_LABEL)+_8455(NOTRACE_INT))
+     ldw        funreg_8456(NOTRACE_CODE), 0(_8453(TRACE))
+     ldw        creg_8457(TRACE), 4(_8453(TRACE))
+     ldw        ereg_8458(TRACE), 8(_8453(TRACE))
+     call_ML_NORMALfunreg_8456(NOTRACE_CODE)
+                    arguments = ([creg_8457(TRACE), ereg_8458(TRACE), _8449(NOTRACE_LABEL), _8451(NOTRACE_LABEL)]
+                    results = ([_8459(TRACE)]
+                    }
+     ### done making normal call
+     needalloc  0
+     li         111, _8460(NOTRACE_INT)
+     stw        _8460(NOTRACE_INT), ~4(ML test)
+     needmutate 1
+     laddr      0(ML test), _8461(NOTRACE_LABEL)
+     mirror_global_offset_8462(NOTRACE_INT)
+     storemutate(_8461(NOTRACE_LABEL)+_8462(NOTRACE_INT)),ptrMutate
+     stw        _8459(TRACE), (_8461(NOTRACE_LABEL)+_8462(NOTRACE_INT))
+     li         256, _8464(TRACE)
+     mv         _8464(TRACE), _8464(TRACE)
+     return     _8399(NOTRACE_CODE)
+}
+data objects = 
+[ML raise_unit_GLOBALS_BEGIN_VAL:,
+     ### Global,
+     .long 55,
+ML mkExn:,
+     .long 258,
+     .long 258,
+     .long 26,
+LDstring_8414:,
+     ### string size = 3,
+     .ascii "msg",
+     ### static record tag,
+     .long 9,
+LDrecord_8433:,
+     .long 2989,
+     ### Global,
+     .long 55,
+ML test:,
+     .long 258,
+     .long 258,
+     ### Module closure,
+     .long 1561,
+ML raise_unit_closure:,
+     .data ML raise_main,
+     .long 0,
+     .long 0,
+     .long 785,
+ML raise_unit:,
+     .data ML raise_unit_closure,
+     .data ML raise_unit_closure,
+ML raise_unit_GLOBALS_END_VAL:,
+     .long 0]
+global = [ML test, ML mkExn]
+
+
+
+===== Translating to TIL-Sparc assembly      =====
+  1 procedures.  1 recursive components.   Largest component has size 1.
+  [Assembling raise to object file.]
+  [Compressing TM/sparc/raise.sml.s]
+  [cuff.link.21582 compiled interface of raise in 3.42 seconds]
+  [cuff.link.21582 compiled raise in 3.46 seconds]
+------- Times to compile files -------
+1 of  114 units needed compilation.
+  Unit work times (in seconds): min 3.46 max 3.46 mean 3.46 absdev 0.0 (n=1)
+  Unit wait times (in seconds): min 0.13 max 0.13 mean 0.13 absdev 0.0 (n=1)
+  Slave work times (in seconds): min 3.46 max 3.46 mean 3.46 absdev 0.0 (n=1)
+  Slave idle times (in seconds): min 0.0 max 0.04 mean 0.02 absdev 0.01 (n=2)
+0 files under 1.0 second.
+1 files from 1.0 to 10.0 seconds.
+0 files from 10.0 to 30.0 seconds:  
+0 files over 30.0 seconds:
+Start linking on raise         : Mon Jan 28 18:01:23 2002   6.37 sec
+  [Checking that unit environments match up.]
+  [Generating startup code.]
+
+===== Translating to TIL-Sparc assembly      =====
+  24 procedures.  24 recursive components.   Largest component has size 1.
+  [Assembling startup code.]
+Manager calling linker with:   Firstlude  Prelude  POSIX_SYS_DB  PreWord  PreInt  OPTION  STRING_CVT  PreString
+        StringCvt  WORD  PreReal  CHAR  STRING  General_extern  GENERAL  General  NumFormat  Char  String  Option
+        NumScan  Word32  SysWord  POSIX_FLAGS  POSIX_TTY  PreTime  TIME  LIST  List  RealFormat  IEEE_REAL  INTEGER
+        Int32  Int  IEEEReal  MATH  REAL  Math64  BOOL  Bool  Real64  Real  Time  POSIX_PROC_ENV  POSIX_SIGNAL  Word8
+        POSIX_PROCESS  PreOS  Position  POSIX_FILE_SYS  MONO_VECTOR  VECTOR  ARRAY  Array  Vector  Word8Vector
+        MONO_ARRAY  Word8Array  POSIX_IO  POSIX_ERROR  POSIX  POSIX_extern  PrePosix  Word  POSIX_FileSys  POSIX_Sys_DB
+        SysInt  POSIX_Signal  POSIX_Process  SUBSTRING  Substring  BYTE  Byte  POSIX_Tty  POSIX_ProcEnv  POSIX_IO_Str
+        POSIX_Error  Posix  OS_IO  OS_IO_Str  CLEAN_UP  CleanUp  OS_PROCESS  OS_Process  OS_PATH  OS_PathFn  OS_Path
+        OS_FILE_SYS  OS_FileSys  OS_SIG  OS  PRIM_IO  PrimIOFn  BinPrimIO  OS_PRIM_IO  IO_SIG  IO  PosixPrimIOFn
+        PosixBinPrimIO  CharArray  CharVector  TextPrimIO  PosixTextPrimIO  CleanIO  STREAM_IO  TEXT_STREAM_IO  TEXT_IO
+        TextIOFn  TextIO  Word31  TopLevel  raise
+ld: warning: symbol `ceil' has differing types:
+	(file /usr5/swasey/t/Basis/TM/sparc/toplevel.sml.o type=NOTY; file /usr/lib/libm.so type=FUNC);
+	/usr5/swasey/t/Basis/TM/sparc/toplevel.sml.o definition taken
+ld: warning: symbol `floor' has differing types:
+	(file /usr5/swasey/t/Basis/TM/sparc/toplevel.sml.o type=NOTY; file /usr/lib/libm.so type=FUNC);
+	/usr5/swasey/t/Basis/TM/sparc/toplevel.sml.o definition taken
+Start linking on handle        : Mon Jan 28 18:01:29 2002   12.46 sec
+  [Checking that unit environments match up.]
+  [Generating startup code.]
+
+===== Translating to TIL-Sparc assembly      =====
+  24 procedures.  24 recursive components.   Largest component has size 1.
+  [Assembling startup code.]
+Manager calling linker with:   Firstlude  Prelude  POSIX_SYS_DB  PreWord  PreInt  OPTION  STRING_CVT  PreString
+        StringCvt  WORD  PreReal  CHAR  STRING  General_extern  GENERAL  General  NumFormat  Char  String  Option
+        NumScan  Word32  SysWord  POSIX_FLAGS  POSIX_TTY  PreTime  TIME  LIST  List  RealFormat  IEEE_REAL  INTEGER
+        Int32  Int  IEEEReal  MATH  REAL  Math64  BOOL  Bool  Real64  Real  Time  POSIX_PROC_ENV  POSIX_SIGNAL  Word8
+        POSIX_PROCESS  PreOS  Position  POSIX_FILE_SYS  MONO_VECTOR  VECTOR  ARRAY  Array  Vector  Word8Vector
+        MONO_ARRAY  Word8Array  POSIX_IO  POSIX_ERROR  POSIX  POSIX_extern  PrePosix  Word  POSIX_FileSys  POSIX_Sys_DB
+        SysInt  POSIX_Signal  POSIX_Process  SUBSTRING  Substring  BYTE  Byte  POSIX_Tty  POSIX_ProcEnv  POSIX_IO_Str
+        POSIX_Error  Posix  OS_IO  OS_IO_Str  CLEAN_UP  CleanUp  OS_PROCESS  OS_Process  OS_PATH  OS_PathFn  OS_Path
+        OS_FILE_SYS  OS_FileSys  OS_SIG  OS  PRIM_IO  PrimIOFn  BinPrimIO  OS_PRIM_IO  IO_SIG  IO  PosixPrimIOFn
+        PosixBinPrimIO  CharArray  CharVector  TextPrimIO  PosixTextPrimIO  CleanIO  STREAM_IO  TEXT_STREAM_IO  TEXT_IO
+        TextIOFn  TextIO  Word31  TopLevel  handle
+ld: warning: symbol `ceil' has differing types:
+	(file /usr5/swasey/t/Basis/TM/sparc/toplevel.sml.o type=NOTY; file /usr/lib/libm.so type=FUNC);
+	/usr5/swasey/t/Basis/TM/sparc/toplevel.sml.o definition taken
+ld: warning: symbol `floor' has differing types:
+	(file /usr5/swasey/t/Basis/TM/sparc/toplevel.sml.o type=NOTY; file /usr/lib/libm.so type=FUNC);
+	/usr5/swasey/t/Basis/TM/sparc/toplevel.sml.o definition taken
+Finished compilation           : Mon Jan 28 18:01:33 2002   16.1 sec
+
+
+Starting compilation           : Mon Jan 28 18:01:17 2002   0.0 sec
+Start compiling files          : Mon Jan 28 18:01:18 2002   1.18 sec
+Start linking on raise         : Mon Jan 28 18:01:23 2002   6.37 sec
+Start linking on handle        : Mon Jan 28 18:01:29 2002   12.46 sec
+Finished compilation           : Mon Jan 28 18:01:33 2002   16.1 sec
+
+Compilation finished at Mon Jan 28 18:01:33

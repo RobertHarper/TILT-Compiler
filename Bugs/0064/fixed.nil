@@ -1,0 +1,46 @@
+===== Starting Reify1: Graph                             =====
+reify_con_rt APP(_c_990.A,(INT32))
+free_cvars = _c_990 
+PASS: Reify1
+Reify1
+
+          [test_1027 : Trace = 
+*            Handle[UNIT] Let  _1022 : Trace = record()
+*                         In   _1022
+*                         End
+*            With handle_exn_1016: EXN = 
+*                 Let  STATIC shortResultType_1017 = UNIT
+*                      _1026 : Trace = 
+*                        Let  reify_1034 = APP(_c_990.A,(INT32))
+*                        In   EXN_SWITCH(handle_exn_1016: EXN, 
+*                                  exnarg_var_1018, 
+*                                  Let  stamp_1023 : Int = select[stamp][](_r_1012)
+*                                  In   stamp_1023
+*                                  End: Compute(reify_1034): Let  _1024 : Trace = 
+*                                                                                                                record()
+*                                                                                                         In   _1024
+*                                                                                                         End
+*                                  DEFAULT = Let  _1025 : Trace = Raise(handle_exn_1016,shortResultType_1017)
+*                                            In   _1025
+*                                            End) : shortResultType_1017
+*                        End
+*                 In   _1026
+*                 End]
+*         IMPORTS:
+*         +O_A_INT_c = _c_990 : REC_K{A > _993 :  Arrow_k(Open; _992 : TYPE; TYPE),
+*                                     A_sumarg > _996 :  SINGLE(LET  _995 =  FUN(_994 ::  TYPE) = CREC{}
+*                                                               IN   _995
+*                                                               END),
+*                                     A_sum > _999 :  SINGLE(LET  _998 =  FUN(_997 ::  TYPE) = SUM(1,1)(APP(_996,(_997)))
+*                                                            IN   _998
+*                                                            END)}
+*         Cycle_c = _c_1011 : REC_K{}
+*         Cycle_r > _r_1012 : Trace : DEP_RECORD[ stamp > _1013, mk > _1014]
+*                                       (EXNTAG(APP(_c_990.A,(INT32))),
+*                                        VARARG[Open=>](LET  type_1032 = _c_990.A
+*                                                            type_1033 = APP(type_1032,(INT32))
+*                                                       IN   type_1033
+*                                                       END, EXN))
+*         EXPORTS:
+*         test = test_1027
+*         

@@ -1,0 +1,284 @@
+Number: 0029
+Title:       Generating invalid IL code when applying functor.
+Keywords:    Elaborator, functor application, open.
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        11/17/00
+Version:     CVS
+System:	     all
+Severity:    major
+Problem:
+	Bad IL code is generated for the functor application below.
+	The compiler can be made to fail during Nil phases (eg, use -fdoTypecheckAfterPhasesplit)
+	with the code below.
+Code:
+	(*$import *)
+	type 'a myref = 'a ref
+	signature NODE = sig type 'a hash_table end
+	functor GraphFn(A : NODE) = struct type graph = int A.hash_table end
+	structure HashTable = struct type 'a hash_table = unit end
+	structure Node = struct open HashTable end
+	structure Graph = GraphFn(Node)
+	fun refresh (reverse : Graph.graph myref) = !reverse
+Transcript:
+	Saving: tiltu -fshowHIL -fdoTypecheckAfterPhasesplit mapfile2
+	Date: Fri Nov 17 10:54:39 EST 2000
+	Starting compilation           : Fri Nov 17 10:54:40 2000   0.0 sec
+	Warning: only compiling to assembly because non-native
+	Mapfile mapfile2 with 1 units processed.
+	Imports read.
+	Dependency graph computed: 1 nodes and 0 edges.
+	Not reducing dependency graph.
+	Creating directories.
+	1 necessary units:   Bug2
+	Start compiling files          : Fri Nov 17 10:54:40 2000   0.04 sec
+	Starting slave grilled.fox.15610.
+	  [Plan for Bug2:   elaborate  generate  cleanup]
+	  [Sending FLUSH_ALL to grilled.fox.15610]
+	  [Calling grilled.fox.15610 to compile Bug2]
+	Slave received FLUSH_ALL.
+	Setting PtrWriteBarrier to true
+	Setting FullWriteBarrier to true
+	Setting MirrorGlobal to true
+	Setting MirrorPtrArray to false
+	Setting UptoElaborate to false
+	Setting UptoPhasesplit to false
+	Setting UptoClosureConvert to false
+	Setting UptoRtl to false
+	Setting UptoAsm to true
+	Setting debug_asm to true
+	Setting keep_asm to true
+	Setting compress_asm to true
+	Setting ManagerChat to true
+	Setting ManagerVerbose to true
+	Setting TimeEachFile to false
+	Setting makeBackups to false
+	Setting ShowWrittenContext to false
+	Setting WriteUnselfContext to false
+	Setting ShowTools to false
+	  [0 imports of total size 0 were cached.
+	   0 imports of total size 0 were uncached and took 0.0 seconds.]
+	  [Added contexts.]
+	  [Parsing bug2.sml]
+	  [Elaborating bug2.sml non-constrained]
+	SBNDS:
+	          [myref_TYC > myref_899 = /-\('a_898)REF('a_898), 
+	*          +Emyref_INT > _903 = 
+	**             $POLY$ FUNC(varpoly_900: ['a_TYV > _901 : TYPE, 
+	**                                       +E'a_INT > _902 : 
+	***                                         ({_901 *
+	***                                           _901} ->
+	***                                         CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0)]=>
+	**                    STR[it_INT > _904 = EQ_REF[CON_PATH(varpoly_900.'a_TYV)]]
+	**                    : 
+	**                    [it_INT > _904 : 
+	***                       ({REF(CON_PATH(varpoly_900.'a_TYV)) *
+	***                         REF(CON_PATH(varpoly_900.'a_TYV))} ->
+	***                       CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0)]), 
+	*          GraphFn_FCT > functor_var_915 = 
+	**            FUNC(funct_arg_912: NODE_905->
+	**            STR[graph_TYC > graph_913 = 
+	***                  CON_APP(CON_PATH(funct_arg_912.hash_table_TYC); INT32)]
+	**            : 
+	**            [graph_TYC > graph_913 : 
+	***               TYPE = CON_APP(CON_PATH(funct_arg_912.hash_table_TYC); INT32)]), 
+	*          HashTable_STR > strbindvar_916 = 
+	**            STR[hash_table_TYC > hash_table_918 = /-\('a_917)UNIT, 
+	**                +Ehash_table_INT > _926 = 
+	***                   $POLY$ FUNC(varpoly_919: ['a_TYV > _920 : TYPE, 
+	***                                             +E'a_INT > _921 : 
+	****                                               ({_920 *
+	****                                                 _920} ->
+	****                                               CON_MU(/-\(_259)(SUM[
+	****                                                                (false, true);
+	****                                                                2;
+	****                                                                ()]))#0)]=>
+	***                          STR[it_INT > _927 = 
+	****                                /TOTALNONRECUR\anonfun_925
+	****                                      (_922 : {UNIT *
+	****                                               UNIT})
+	****                                      : CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0 =
+	****                                LET _923 = (_922)#1_~48
+	****                                    _924 = (_922)#2_~48
+	****                                IN  ROLL(CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0,INJ(1, SUM[
+	****      +1             (false,
+	****      +1              true);
+	****      +1             2;
+	****      +1             ()]))
+	****                                END]
+	***                          : 
+	***                          [it_INT > _927 : 
+	****                             ({UNIT *
+	****                               UNIT} ->
+	****                             CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0)])], 
+	*          Node_STR > strbindvar_928 = 
+	**            STR[+OopenlblHashTable_INT > openvar_929 = strbindvar_916], 
+	*          Graph_STR > strbindvar_930 = 
+	**            MOD_LET coerced_Node_931 = STR[hash_table_TYC > copy_hash_table_TYC_932 = 
+	***                                             CON_PATH(strbindvar_928.
+	***       +1   +OopenlblHashTable_INT.
+	***       +1   hash_table_TYC)]
+	**            IN  MAPP(functor_var_915,  coerced_Node_931)
+	**            END, 
+	*          -X+Crefresh__INT > cluster_943 = 
+	**            /\refresh_936
+	**                  (mvar_937 : CON_APP(myref_899; CON_PATH(strbindvar_930.graph_TYC)))
+	**                  : CON_APP(CON_PATH(strbindvar_928.hash_table_TYC); INT32) =
+	**            LET shortResultType_940 = 
+	**                   CON_APP(CON_PATH(strbindvar_928.hash_table_TYC); INT32)
+	**            IN  DEREF[CON_APP(CON_PATH(strbindvar_928.hash_table_TYC); INT32)][mvar_937]
+	**            END, 
+	*          refresh > refresh_936 = cluster_943]
+	ENTRIES:
+	CONTEXT_SDEC: myref_TYC > myref_899 : KIND(1 -> TYPE) = /-\('a_898)REF('a_898)
+	          CONTEXT_SDEC: +Emyref_INT > _903 : 
+	**                          $POLY$ SIGF(varpoly_900, ['a_TYV > _901 : TYPE, 
+	**                                                    +E'a_INT > _902 : 
+	***                                                      ({_901 *
+	***                                                        _901} ->
+	***                                                      CON_MU(/-\(_259)(SUM[
+	***                                                                       (false, true);
+	***                                                                       2;
+	***                                                                       ()]))#0)] =>
+	**                                         [it_INT > _904 : 
+	***                                            ({REF(CON_PATH(varpoly_900.'a_TYV)) *
+	***                                              REF(CON_PATH(varpoly_900.'a_TYV))} ->
+	***                                            CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0)])
+	          CONTEXT_SIGNAT: NODE_SIG > NODE_905 = [hash_table_TYC > hash_table_906 : 
+	**                                                  KIND(1 -> TYPE)]
+	          CONTEXT_SDEC: GraphFn_FCT > functor_var_915 : 
+	**                         SIGF(funct_arg_912, NODE_905 ->
+	**                                 [graph_TYC > graph_913 : 
+	***                                    TYPE = CON_APP(CON_PATH(
+	***       +1   funct_arg_912.hash_table_TYC);
+	***                                           INT32)])
+	          CONTEXT_SDEC: HashTable_STR > strbindvar_916 : 
+	**                         [hash_table_TYC > hash_table_918 : 
+	***                            KIND(1 -> TYPE) = /-\('a_917)UNIT, 
+	**                          +Ehash_table_INT > _926 : 
+	***                             $POLY$ SIGF(varpoly_919, ['a_TYV > _920 : TYPE, 
+	***                                                       +E'a_INT > _921 : 
+	****                                                         
+	****      +1   ({_920 *
+	****      +1     _920} ->
+	****      +1   CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0)] =>
+	***                                            [it_INT > _927 : 
+	****                                               ({UNIT *
+	****                                                 UNIT} ->
+	****                                               CON_MU(/-\(_259)(SUM[
+	****                                                                (false, true);
+	****                                                                2;
+	****                                                                ()]))#0)])]
+	          CONTEXT_SDEC: Node_STR > strbindvar_928 : 
+	**                         [+OopenlblHashTable_INT > openvar_929 : SIGS_OF(strbindvar_916)]
+	          CONTEXT_SDEC: Graph_STR > strbindvar_930 : 
+	**                         [graph_TYC > graph_913 : 
+	***                            TYPE = CON_APP(CON_PATH(strbindvar_928.hash_table_TYC);
+	***                                   INT32)]
+	          CONTEXT_SDEC: -X+Crefresh__INT > cluster_943 : 
+	**                         (CON_APP(myref_899; CON_PATH(strbindvar_930.graph_TYC)) ->
+	**                         CON_APP(CON_PATH(strbindvar_928.hash_table_TYC); INT32))
+	          CONTEXT_SDEC: refresh > refresh_936 : 
+	**                         (CON_APP(myref_899; CON_PATH(strbindvar_930.graph_TYC)) ->
+	**                         CON_APP(CON_PATH(strbindvar_928.hash_table_TYC); INT32))
+	
+	gc_context: 95 items in original context.  0 items in reduced context.
+	  [writing TM/any/bug2.sml.il - unnecessary]
+	  [Compiling Bug2 to assembly]
+	===== Starting Phasesplit: Bug2                          =====
+	  Initial context is phase-split
+	  Bindings are phase-split
+	  Imports are computed
+	  Exports are phase-split
+	===== Starting TypecheckAfterPhasesplit: Bug2            =====
+	  Done checking context
+	  Done validating imports
+	attempted to project label hash_table from 
+	strbindvar_c_1032
+	 which has labels+OopenlblHashTable
+	TYPE ERROR: Problem with constructor
+	Ill-formed projection
+	strbindvar_c_1032.hash_table
+	WITH MINIMAL CONTEXT AS
+
+	 Constructor variables, kinds, and equations are :
+	strbindvar_c_1032 = CREC{+OopenlblHashTable = openvar_c_1034}::          REC_K{+OopenlblHashTable > con_valid_record_1049 : 
+	*               REC_K{hash_table > con_valid_record_1048 : 
+	*                     Arrow_k(Open; 'a_1009 : TYPE; SINGLE_TYPE(
+	*         +1   APP(openvar_c_1034.hash_table,
+	*         +1     ('a_1009))))}}
+	openvar_c_1034 = strbindvar_c_1007::          REC_K{hash_table > con_valid_record_1048 : 
+	*               Arrow_k(Open; 'a_1009 : TYPE; SINGLE_TYPE(APP(
+	*         +1   strbindvar_c_1007.hash_table,
+	*                                                           ('a_1009))))}
+	strbindvar_c_1007 = CREC{hash_table = hash_table_1011}::          REC_K{hash_table > con_valid_record_1048 : 
+	*               Arrow_k(Open; 'a_1009 : TYPE; SINGLE_TYPE(APP(hash_table_1011,('a_1009))))}
+	hash_table_1011 =           LET  _1010 =  FUN('a_1009 ::  TYPE) = UNIT
+	*         IN   _1010
+	*         END::Arrow_k(Open; 'a_1009 : TYPE; SINGLE_TYPE(UNIT))
+	
+	 Expression variables and constructors are :
+	Error while calling module_valid
+	tilt: Ill-formed projection
+Comments:
+	I think the problem is introduced by the case xstrexp(_, Ast.AppStr _, _) in toil.sml.
+	The substitution
+		val sig_result = sig_subst(sig2,subst_add_modvar(empty_subst,var1,argmod))
+	with free variables similar to
+		var1 = funct_arg_911
+		sig2 = [graph_TYC > graph_912 :  TYPE = CON_APP(CON_PATH(funct_arg_911.hash_table_TYC); INT32)]
+		argmod = strbindvar_927
+	yields
+		sig_result = [graph_TYC > graph_912 : TYPE = CON_APP(CON_PATH(strbindvar_927.hash_table_TYC); INT32)]
+	but we really want
+		sig_result = [graph_TYC > graph_912 : TYPE =
+		                    CON_APP(CON_PATH(strbindvar_927.+OopenlblHashTable_INT.hash_table_TYC); INT32)]
+	because strbindvar_927 is
+	*         Node_STR --> strbindvar_927 : PC_MOD(strbindvar_927: 
+	*         +1   SIGS_SELF(strbindvar_927, 
+	*         +1   UNSELF_SIG = NONE
+	*         +1   SELF_SIG = [+OopenlblHashTable_INT > openvar_928 : 
+	**        +1                  SIGS_SELF(strbindvar_927.+OopenlblHashTable_INT, 
+	**        +1                  UNSELF_SIG = SIGS_OF(strbindvar_915)
+	**        +1                  SELF_SIG = [hash_table_TYC > hash_table_917 : 
+	***       +1                                 KIND(1 -> TYPE) = /-\('a_916)UNIT, 
+	**        +1                              +Ehash_table_INT > _925 : 
+	***       +1                                  $POLY$ SIGS_SELF(strbindvar_915.+Ehash_table_INT, 
+	***       +1                                         UNSELF_SIG = NONE
+	***       +1                                         SELF_SIG = SIGF(varpoly_918, 
+	***       +2   [''a_TYV > _919 : TYPE] =>
+	***       +1                                                            
+	***       +2   [it_INT > _926 : ({UNIT *
+	****      +2                      UNIT} -> CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0)])
+	***       +1                                         )]
+	**        +1                  )]
+	*         +1   ))
+	Note that the module generated by Signature.xcoerce_functor is correct in how it handles the
+	open label.  We end up with
+	mod_result =           MOD_LET coerced_Node_930 = STR[hash_table_TYC > copy_hash_table_TYC_931 = 
+	**                                          CON_PATH(strbindvar_927.
+	**        +1   +OopenlblHashTable_INT.
+	**        +1   hash_table_TYC)]
+	*         IN  MAPP(functor_var_914,  coerced_Node_930)
+	*         END
+Fix:
+	Cleaning up the result signature with
+	      fun sig_elim_open (context, signat) =
+		  let val vpaths = Name.PathSet.listItems (findPathsInSig signat)
+		      fun mapper p = (case Context_Lookup_Path_Open (context, p)
+					of SOME (p', pc) => SOME (p, p', pc)
+					 | NONE => NONE)
+		      val paths = List.mapPartial (mapper o PATH) vpaths
+		      fun folder ((p, p', pc), subst) =
+			  (case pc
+			     of PHRASE_CLASS_EXP _ => subst_add_exppath (subst, p, path2exp p')
+			      | PHRASE_CLASS_CON _ => subst_add_conpath (subst, p, path2con p')
+			      | PHRASE_CLASS_MOD _ => subst_add_modpath (subst, p, path2mod p')
+			      | _ => subst)
+		      val subst = foldl folder empty_subst paths
+		      val signat' = sig_subst (signat, subst)
+		  in  signat'
+		  end
+	Checked with Perry that this is reasonable.
+Test:
+Owner: swasey
+Status: closed

@@ -1,0 +1,261 @@
+Saving: tilt -fSignatureDebug mapfile
+Host: pickled.fox.cs.cmu.edu
+Pwd: /afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Local/Bugs/0040
+Date: Sat Apr 14 14:22:31 EDT 2001
+Warning: setting TILT_LIBDIR to /afs/cs.cmu.edu/project/fox-20/member/swasey/ml96
+Starting compilation           : Sat Apr 14 14:22:32 2001   0.0 sec
+Warning: only compiling to assembly because non-native
+Mapfile mapfile with 1 units processed.
+Imports read.
+Dependency graph computed: 1 nodes and 0 edges.
+Not reducing dependency graph.
+Creating directories.
+1 necessary units:   Bug
+Start compiling files          : Sat Apr 14 14:22:33 2001   1.32 sec
+Starting slave pickled.fox.12738.
+  [Plan for Bug:   elaborate  generate  cleanup]
+  [Sending FLUSH_ALL to pickled.fox.12738]
+  [Calling pickled.fox.12738 to compile Bug]
+Slave received FLUSH_ALL.
+Setting PtrWriteBarrier to true
+Setting FullWriteBarrier to true
+Setting MirrorGlobal to true
+Setting MirrorPtrArray to false
+Setting BranchingTraps to true
+Setting UptoElaborate to false
+Setting UptoPhasesplit to false
+Setting UptoClosureConvert to false
+Setting UptoRtl to false
+Setting UptoAsm to true
+Setting debug_asm to true
+Setting keep_asm to true
+Setting compress_asm to true
+Setting ManagerChat to true
+Setting ManagerVerbose to true
+Setting TimeEachFile to false
+Setting makeBackups to false
+Setting ShowWrittenContext to false
+Setting WriteUnselfContext to false
+Setting ShowTools to false
+  [0 imports of total size 0 were cached.
+   0 imports of total size 0 were uncached and took 0.0 seconds.]
+  [Added contexts.]
+  [Parsing bug.sml]
+  [Elaborating bug.sml non-constrained]
+
+
+-------xcoerce_structure------
+sdecs_actual = 
+          [D_TYC > D_940 : TYPE = Y_910, 
+*          D_sumarg_INT > D_sumarg_942 : KIND(0) = Y_sumarg_915, 
+*          D_sum_INT > D_sum_941 : TYPE = Y_sum_916, 
+*          +ED_INT > eqfun_943 : 
+**            ({Y_910 *
+**              Y_910} -> CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0), 
+*          +O+DD_INT > dt_944 : 
+**            SIGS_SELF(strbindvar_939.+O+DD_INT, 
+**            UNSELF_SIG = NONE
+**            SELF_SIG = [D_INT > copy_Y_912 : TYPE == Y_910, 
+**                        expose_INT > exposer_933 : 
+***                          (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+***                                                        (exposee_920 : Y_910)
+***                                                        : Y_sum_916 =
+***                                                  UNROLL(Y_910,Y_sum_916,exposee_920), 
+**                        A > _935 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]
+**            )]
+sdecs_actual_self = 
+          [D_TYC > D_940 : TYPE = Y_910, 
+*          D_sumarg_INT > D_sumarg_942 : KIND(0) = Y_sumarg_915, 
+*          D_sum_INT > D_sum_941 : TYPE = Y_sum_916, 
+*          +ED_INT > eqfun_943 : 
+**            ({Y_910 *
+**              Y_910} -> CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0), 
+*          +O+DD_INT > dt_944 : 
+**            SIGS_SELF(strbindvar_939.+O+DD_INT, 
+**            UNSELF_SIG = NONE
+**            SELF_SIG = [D_INT > copy_Y_912 : TYPE == Y_910, 
+**                        expose_INT > exposer_933 : 
+***                          (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+***                                                        (exposee_920 : Y_910)
+***                                                        : Y_sum_916 =
+***                                                  UNROLL(Y_910,Y_sum_916,exposee_920), 
+**                        A > _935 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]
+**            )]
+sdecs_target = 
+          [D_TYC > D_940 : TYPE = CON_MU(/-\(vdt_D_955)(SUM[ (A); 1; ()]))#0, 
+*          D_sumarg_INT > D_sumarg_942 : KIND(0) = (), 
+*          D_sum_INT > D_sum_941 : TYPE = SUM[ (A); 1; D_sumarg_942], 
+*          +ED_INT > eqfun_943 : 
+**            ({D_940 *
+**              D_940} -> CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0), 
+*          +O+DD_INT > dt_944 : 
+**            [D_INT > copy_D_949 : TYPE == D_940, 
+**             expose_INT > exposer_970 : 
+***               (D_940 => D_sum_941) == /TOTALNONRECUR\anonfun_958
+***                                             (exposee_957 : D_940)
+***                                             : D_sum_941 =
+***                                       UNROLL(D_940,D_sum_941,exposee_957), 
+**             A > _972 : D_940 == ROLL(D_940,INJ(0, D_sum_941))]]
+xcoerce_help' working on SDEC with label = D_TYC
+xcoerce_help' working on SDEC with label = D_sumarg_INT
+xcoerce_help' working on SDEC with label = D_sum_INT
+xcoerce_help' working on SDEC with label = +ED_INT
+xcoerce_help' working on SDEC with label = +O+DD_INT
+
+
+-------xcoerce_structure------
+sdecs_actual = 
+          [D_INT > copy_Y_912 : TYPE == Y_910, 
+*          expose_INT > exposer_933 : 
+**            (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+**                                          (exposee_920 : Y_910)
+**                                          : Y_sum_916 =
+**                                    UNROLL(Y_910,Y_sum_916,exposee_920), 
+*          A > _935 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]
+sdecs_actual_self = 
+          [D_INT > copy_Y_912 : TYPE == Y_910, 
+*          expose_INT > exposer_933 : 
+**            (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+**                                          (exposee_920 : Y_910)
+**                                          : Y_sum_916 =
+**                                    UNROLL(Y_910,Y_sum_916,exposee_920), 
+*          A > _935 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]
+sdecs_target = 
+          [D_INT > copy_Y_912 : TYPE == CON_PATH(origModule_977.D_TYC), 
+*          expose_INT > exposer_933 : 
+**            (CON_PATH(origModule_977.D_TYC) => CON_PATH(origModule_977.D_sum_INT)) == 
+**        +1   /TOTALNONRECUR\anonfun_958
+**        +1         (exposee_957 : CON_PATH(origModule_977.D_TYC))
+**        +1         : CON_PATH(origModule_977.D_sum_INT) =
+**        +1   UNROLL(CON_PATH(origModule_977.D_TYC),CON_PATH(origModule_977.D_sum_INT),exposee_957), 
+*          A > _935 : 
+**            CON_PATH(origModule_977.D_TYC) == ROLL(CON_PATH(origModule_977.D_TYC),
+**        +1   INJ(0, CON_PATH(origModule_977.D_sum_INT)))]
+xcoerce_help' working on SDEC with label = D_INT
+xcoerce_help' working on SDEC with label = expose_INT
+xcoerce_help' working on SDEC with label = A
+
+
+-------xcoerce_structure------
+Returning mod = 
+MPROJ(origModule_977,+O+DD_INT)
+Returning sig = 
+          [D_INT > copy_Y_912 : TYPE == Y_910, 
+*          expose_INT > exposer_933 : 
+**            (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+**                                          (exposee_920 : Y_910)
+**                                          : Y_sum_916 =
+**                                    UNROLL(Y_910,Y_sum_916,exposee_920), 
+*          A > _935 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]
+
+
+
+-------xcoerce_structure------
+Returning mod = 
+origModule_977
+Returning sig = 
+          [D_TYC > D_940 : TYPE = Y_910, 
+*          D_sumarg_INT > D_sumarg_942 : KIND(0) = Y_sumarg_915, 
+*          D_sum_INT > D_sum_941 : TYPE = Y_sum_916, 
+*          +ED_INT > eqfun_943 : 
+**            ({Y_910 *
+**              Y_910} -> CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0), 
+*          +O+DD_INT > dt_944 : 
+**            SIGS_SELF(strbindvar_939.+O+DD_INT, 
+**            UNSELF_SIG = NONE
+**            SELF_SIG = [D_INT > copy_Y_912 : TYPE == Y_910, 
+**                        expose_INT > exposer_933 : 
+***                          (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+***                                                        (exposee_920 : Y_910)
+***                                                        : Y_sum_916 =
+***                                                  UNROLL(Y_910,Y_sum_916,exposee_920), 
+**                        A > _935 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]
+**            )]
+
+coerced to mod_coerced = 
+origModule_977
+coerced to sig_coerced = 
+          [D_TYC > D_940 : TYPE = Y_910, 
+*          D_sumarg_INT > D_sumarg_942 : KIND(0) = Y_sumarg_915, 
+*          D_sum_INT > D_sum_941 : TYPE = Y_sum_916, 
+*          +ED_INT > eqfun_943 : 
+**            ({Y_910 *
+**              Y_910} -> CON_MU(/-\(_259)(SUM[ (false, true); 2; ()]))#0), 
+*          +O+DD_INT > dt_944 : 
+**            SIGS_SELF(strbindvar_939.+O+DD_INT, 
+**            UNSELF_SIG = NONE
+**            SELF_SIG = [D_INT > copy_Y_912 : TYPE == Y_910, 
+**                        expose_INT > exposer_933 : 
+***                          (Y_910 => Y_sum_916) == /TOTALNONRECUR\anonfun_921
+***                                                        (exposee_920 : Y_910)
+***                                                        : Y_sum_916 =
+***                                                  UNROLL(Y_910,Y_sum_916,exposee_920), 
+**                        A > _935 : Y_910 == ROLL(Y_910,INJ(0, Y_sum_916))]
+**            )]
+gc_context: 17 items in original context.  0 items in reduced context.
+  [writing TM/any/bug.sml.il]
+  [Compiling Bug to assembly]
+===== Starting Phasesplit: Bug                           =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Bug                               =====
+===== Starting Optimize1: Bug                            =====
+===== Starting Vararg: Bug                               =====
+===== Starting Inline1: Bug                              =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: Bug                               =====
+===== Starting Specialize: Bug                           =====
+  0 optimizable candidates.
+  0 impure.
+  1 escaping.
+  0 used polymorphically.
+===== Starting Hoist: Bug                                =====
+Imports Processed
+===== Starting Optimize2: Bug                            =====
+===== Starting Inline2: Bug                              =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: Bug                            =====
+===== Starting Inline3: Bug                              =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: Bug                               =====
+===== Starting ClosureConv: Bug                          =====
+===== Translating to RTL             =====
+
+================================================
+Starting translation to TIL-Alpha assembly
+  2 procedures.  2 recursive components.   Largest component has size 1.
+Generation of TIL-Alpha assembly files complete
+  [Compressing TM/alpha/bug.sml.s]
+  [pickled.fox.12738 compiled Bug in 0.67 seconds]
+------- Times to compile files -------
+1 of  1 units needed compilation.
+  Unit work times (in seconds): min 0.67 max 0.67 mean 0.67 absdev 0.0 (n=1)
+  Unit wait times (in seconds): min 0.27 max 0.27 mean 0.27 absdev 0.0 (n=1)
+  Slave work times (in seconds): min 0.67 max 0.67 mean 0.67 absdev 0.0 (n=1)
+  Slave idle times (in seconds): min 0.0 max 0.06 mean 0.03 absdev 0.03 (n=2)
+1 files under 1.0 second.
+0 files from 1.0 to 10.0 seconds.
+0 files from 10.0 to 30.0 seconds:  
+0 files over 30.0 seconds:
+Start linking on Bug           : Sat Apr 14 14:22:34 2001   2.3 sec
+  [Checking that unit environments match up.]
+  [Generating startup code.]
+
+================================================
+Starting translation to TIL-Alpha assembly
+  24 procedures.  24 recursive components.   Largest component has size 1.
+Generation of TIL-Alpha assembly files complete
+Finished compilation           : Sat Apr 14 14:22:35 2001   3.19 sec
+
+
+Starting compilation           : Sat Apr 14 14:22:32 2001   0.0 sec
+Start compiling files          : Sat Apr 14 14:22:33 2001   1.32 sec
+Start linking on Bug           : Sat Apr 14 14:22:34 2001   2.3 sec
+Finished compilation           : Sat Apr 14 14:22:35 2001   3.19 sec
+1.00user 1.67system 0:03.60elapsed 74%CPU (0avgtext+0avgdata 0maxresident)k
+0inputs+0outputs (375major+2927minor)pagefaults 0swaps

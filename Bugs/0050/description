@@ -1,0 +1,100 @@
+Number: 0050
+Title:       Type abbreviations in signatures are handled poorly.
+Keywords:    Elaborator
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        4/24/2001
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	We don't follow a consistent policy wrt the export of equality functions.  Equality functions are created at
+	every type abbreviation and datatype declaration which admits equality.  These are exported when the type is at
+	the top-level.  These are hidden by signature ascription unless "saved" by an eqtype spec.
+
+	Lets adopt the following:
+	* type abbreviations don't invoke the equality compiler
+	* datatype declarations invoke the equality compiler (since we are moving to an opaque interpretation)
+	* ascription against an eqtype specification invokes the equality compiler
+	* use of equality invokes the equality compiler
+	* a unit exports an equality function for every datatype which admits equality and for every eqtype spec
+	* the map from types to already-compiled equality functions is maintained on a per-unit basis
+	----
+	(1) The IL translation of the spec
+	
+		type tyvarseq tycon = ty
+		
+	    never includes an sdec for an equality function.  However,
+	    this sdec should be included if when each var in tyvarseq
+	    admits equality, ty admits equality.  (That is, if the
+	    type function in rule (64) admits equality according to
+	    pgs 17-18 of the Definition.)
+
+	(2) Once (1) is fixed, our "eqtype abbreviation" extension is
+            unnecessary.
+	----
+	If a signature specifies a type abbreviation which admits
+	equality, the corresponding IL signature should include an
+	equality function sdec.
+
+	For example, the signature
+
+	        sig type a = int end
+
+	is translated to (roughly)
+
+	        [a > a' : TYPE = int]
+
+	With this translation, signature ascription and functor application
+	discard equality functions.  I think a better translation is
+
+	        [a > a' : TYPE = int,
+	         +Ea > eq : a' * a' -> bool]
+	----
+	According to the Definition, type abbreviations in signatures can admit
+	equality.  For example, the spec
+
+	        type tyvarseq tycon = ty
+
+	is (p. 59) a derived form for the spec
+
+	        include sig type tyvarseq tycon end
+	                where type tyvarseq tycon = ty
+
+	The type realizer in rule (64) maps the type name t for tycon (which
+	does not admit equality) to a type function which can admit equality.
+
+	This makes our "eqtype abbreviation" extension unnecessary, I think, and
+	points out a bug in our elaboration of type abbreviations.  The extension
+	is that we accept specs of the form
+
+	        eqtype tyvarseq tycon = ty
+
+	whose IL translation always includes an sdec for an equality function.
+	The bug is that the translation of
+
+	        type tyvarseq tycon = ty
+
+	never includes one.
+Code:
+	Equality at A2.a is being re-written and not simply invoked to
+	implement equality at notok and alsonotok.  Once the bug is
+	fixed, we will only see one non-trivial equality function.
+
+		structure A = struct type a = int * int * int * int end
+		signature A2 = sig type a = int * int * int * int end
+		structure A2 : A2 = A
+
+		type ok = A.a
+
+		type notok = A2.a
+
+		functor alsoNotOk(A' : A2) =
+		struct
+		    type alsonotok = A'.a
+		end
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

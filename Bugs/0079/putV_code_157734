@@ -1,0 +1,112 @@
+PosixPrimIOFn_putV_code_157734
+asm/posix-prim-io-fn.sml.s:#119404,#122457
+$ml96/Basis/Unix/posix-prim-io-fn.sml:#4299,#4358
+
+	.global PosixPrimIOFn_putV_code_157734
+ ! arguments : [$157736,$8] [$157737,$9] [$154913,$10] [$154914,$11] 
+PosixPrimIOFn_putV_code_157734:
+	.proc   07
+	mov	%sp, %fp
+	sub	%sp, 112, %sp
+	ld	[%r2+800], %r16
+	cmp	%sp, %r16
+	bg	code_163622
+	mov	%sp, %fp		delay slot (separate bug, fixed)
+	... branch taken ...
+code_163622:
+	st	%r15, [%sp+92]	0xdcc10
+	st	%r9, [%sp+104]	0xeeb95aa4
+	st	%r10, [%sp+96]	0xeeb90e34
+	st	%r11, [%sp+100]	0x0
+code_163589:
+funtop_160748:
+	sethi	%hi(string_159282), %r8
+	or	%r8, %lo(string_159282), %r10	pds "writeVec"
+	! making closure call
+
+	pds asm/posix-prim-io-fn.sml.s:14645	_150134
+	pds asm/posix-prim-io-fn.sml.s:#6765,#7462	PosixPrimIOFn_announce_inner_code_157496
+	pds asm/posix-prim-io-fn.sml.s:#3721,#6212	PosixPrimIOFn_anonfun_code_157476
+	pds The global _150134 is 0x192368
+	pds memory contains 0x192364: 0x6f 0xeeb937cc 0x102
+	pds that is, {tag, closure, uninit_val}
+
+	pds The closure at 0xeeb937cc is 0xeeb937c8: 0x619 0xd01a8 0xeeb93790 0xeeb937bc
+	pds that is, {tag, PosixPrimIOFn_announce_inner_code_157496, cenv, venv}
+	pds The trace data at 0xeeb93790
+	pds is 0xeeb93790: 0x192040 0xeeb9377c 0x2 0x619 0x6 0xeeb9377c 0x2 0x311
+	pds The venv at 0xeeb937bc is a closure.
+
+	pds The inner closure at 0xeeb937bc is 0xeeb937b8: 0x619 0xd0098 0xeeb937b0 0x100
+	pds that is, {tag, PosixPrimIOFn_anonfun_code_157476, cenv2, ()}
+	pds The trace data at 0xeeb937b0 is
+	pds 0xeeb937b0: 0x2 0xeeb9377c 0x619 0xd0098
+	pds 0xeeb937c0: 0xeeb937b0 0x100 0x619 0xd01a8
+	pds 0xeeb937d0: 0xeeb93790 0xeeb937bc
+
+	sethi	%hi(_150134), %r8
+	or	%r8, %lo(_150134), %r9
+	ld	[%r2+804], %r8
+	add	%r9, %r8, %r8	pds %r8 = _150134 = 0x192368: 0xeeb937cc
+
+	ld	[%r8], %r9	pds %r9 = 0xeeb937cc (closure)
+	ld	[%r9], %r11	pds %r11 = PosixPrimIOFn_announce_inner_code_157496
+	ld	[%r9+4], %r8	pds %r8 = cenv (ignored by callee)
+	jmpl	%r11, %r15	pds PosixPrimIOFn_announce_inner_code_157496
+	ld	[%r9+8], %r9	pds %r9 = inner closure (returned by callee)
+code_163621:
+	mov	%r8, %r12
+code_163593:
+	! done making normal call
+
+	pds At this point, %r12 points to the inner closure (0xeeb937bc).
+
+	pds The global strbindvar_r_writeVec_150137 is 0x192380
+	pds memory contains 0x19237c: 0x6f 0x18fb2c 0x102
+	pds that is, {tag, writeVec_114655, uninit_val}
+
+	pds The closure writeVec_114655 is 0x18fb2c
+	pds memory contains 0x18fb28: 0x619 0xb4590 0x100 0x100
+	pds that is, {tag, POSIX_IO_Str_writeVec_code_123246, (), ()}
+
+	sethi	%hi(strbindvar_r_writeVec_150137), %r8
+	or	%r8, %lo(strbindvar_r_writeVec_150137), %r9
+	ld	[%r2+804], %r8
+	add	%r9, %r8, %r8	pds %r8 = strbindvar_r_writeVec_150137
+	ld	[%r8], %r10	pds %r10 = writeVec_114655
+	! making closure call
+
+	pds %r12 still refers to the inner closure (0xeeb937bc).
+
+	ld	[%r12], %r11	pds %r11 = PosixPrimIOFn_anonfun_code_157476
+	ld	[%r12+4], %r8	pds %r8 = cenv2 @ 0xeeb937b0
+	jmpl	%r11, %r15
+	ld	[%r12+8], %r9	pds %r9 = ()
+code_163617:
+	mov	%r8, %r9
+code_163596:
+	! done making normal call
+
+	pds At this point, %r9 points to a fresh closure allocated by
+	pds PosixPrimIOFn_anonfun_code_157476:
+	pds
+	pds Closure 0xeeb97174 = {
+	pds	notrace=PosixPrimIOFn_anonfun_code_157483,
+	pds	trace = 0xeeb97168 = {trace=2, trace=0xeeb9377c},
+	pds	trace = 0x18fb2c = writeVec_114655
+	pds }
+
+	pds Calling POSIX_IO_Str_writeVec_code_123246 with
+	pds	%r8 = 0xeeb97168 = {trace=2, trace=0xeeb9377c}
+	pds	%r9 = writeVec_114655
+	pds	%r10 = 0xeeb90e34 (argument from caller)
+	pds	%r11 = 0x0 (argument from caller)
+
+	! making closure call
+	ld	[%r9], %r12	pds PosixPrimIOFn_anonfun_code_157483
+	ld	[%r9+4], %r8	pds 0xeeb97168
+	ld	[%r9+8], %r9	pds writeVec_114655
+	ld	[%sp+96], %r10	pds 0xeeb90e34
+	
+	jmpl	%r12, %r15	pds crash occurs in PosixPrimIOFn_anonfun_code_157483
+	ld	[%sp+100], %r11

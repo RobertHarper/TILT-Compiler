@@ -1,0 +1,65 @@
+Number: 0064
+Title:       Typechecking fails after Reify1.
+Keywords:    Reify
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        11/15/01
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	Typechecking after Reify1 fails with this code:
+		Prelude: (*$import *)
+		Prelude: datatype 'a A = A
+		Prelude: exception Cycle of int A
+		
+		Graph: (*$import Prelude *)
+		Graph: val test = () handle Cycle c => ()
+Code:
+	tilt -fcheckReify1 mapfile-bug
+Transcript:
+Comments:
+	The reifier was generating trace annotations with free
+	variables.  The problem was with the annotations on the arms
+	of exception and sum switches when the carried constructors
+	were unknown.  In those cases, the reifier emitted trace
+	annotations of the form "TraceCompute v" for a new v without
+	also emitting a binding for v.
+
+	On the sample above, the reifier generated
+
+	EXN_SWITCH(handle_exn_1016: EXN, 
+	           exnarg_var_1018, 
+	           Let  stamp_1023 : Int = select[stamp][](_r_1012)
+	           In   stamp_1023
+	           End: Compute(reify_1034): Let  _1024 : Trace = record()
+	                                     In   _1024
+	                                     End
+	           DEFAULT = Let  _1025 : Trace = Raise(handle_exn_1016,shortResultType_1017)
+	                     In   _1025
+	                     End) : shortResultType_1017
+	
+	The annotation "Compute(reify_1034)" contains a free variable.
+Fix:
+	I changed reify_exn_arms and reify_sum_arms to use the helper
+        routine do_reify to calculate the new trace annotations and to
+        accumulate a list of constructor bindings.  I changed
+        reify_exp, which calls these routines, to deal with the
+        accumlated bindings.
+
+	On the sample above, the reifier now generates
+
+	Let  reify_1034 = APP(_c_990.A,(INT32))
+	In   EXN_SWITCH(handle_exn_1016: EXN, 
+	                exnarg_var_1018, 
+	                Let  stamp_1023 : Int = select[stamp][](_r_1012)
+	                In   stamp_1023
+	                End: Compute(reify_1034): Let  _1024 : Trace = record()
+	                                          In   _1024
+	                                          End
+	                DEFAULT = Let  _1025 : Trace = Raise(handle_exn_1016,shortResultType_1017)
+	                          In   _1025
+	                          End) : shortResultType_1017
+	End
+Test:
+Owner: swasey
+Status: closed

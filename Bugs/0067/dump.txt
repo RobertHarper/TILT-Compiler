@@ -1,0 +1,490 @@
+cd /usr0/swasey/ml96/Local/Bugs/0067/
+tilt -C mapfile-bug -fshowClosureConv -fshowRtl -fTraceDebug -fTraceDiag -fToasmMsgs -fChaitinMsgs mapfile-bug
+Warning: setting TILT_LIBDIR to /usr0/swasey/t
+Mapfile mapfile-bug with 1 units processed.
+Purging mapfile-bug (binaries and interfaces)
+Starting compilation           : Fri Nov 23 12:17:47 2001   0.0 sec
+Warning: only compiling to assembly because non-native
+Mapfile mapfile-bug with 1 units processed.
+Imports read.
+Dependency graph computed: 1 nodes and 0 edges.
+Not reducing dependency graph.
+Creating directories.
+1 necessary units:   Pprtl
+Start compiling files          : Fri Nov 23 12:17:47 2001   0.05 sec
+Starting slave c1660464-a.ehlls1.pa.home.com.1150.
+  [Plan for Pprtl:   elaborate  generate  cleanup]
+  [Sending FLUSH_ALL to c1660464-a.ehlls1.pa.home.com.1150]
+  [Calling c1660464-a.ehlls1.pa.home.com.1150 to compile Pprtl]
+Slave received FLUSH_ALL.
+Setting PtrWriteBarrier to true
+Setting FullWriteBarrier to true
+Setting MirrorGlobal to true
+Setting MirrorPtrArray to false
+Setting BranchingTraps to true
+Setting UptoElaborate to false
+Setting UptoPhasesplit to false
+Setting UptoClosureConvert to false
+Setting UptoRtl to false
+Setting UptoAsm to true
+Setting debug_asm to true
+Setting keep_asm to true
+Setting compress_asm to true
+Setting ManagerChat to true
+Setting ManagerVerbose to true
+Setting TimeEachFile to false
+Setting makeBackups to false
+Setting ShowWrittenContext to false
+Setting WriteUnselfContext to false
+Setting ShowTools to false
+  [0 imports of total size 0 were cached.
+   0 imports of total size 0 were uncached and took 0.0 seconds.]
+  [Added contexts.]
+  [Parsing bug.sml]
+  [Elaborating bug.sml non-constrained]
+gc_context: 29 items in original context.  0 items in reduced context.
+  [writing TM/any/bug.sml.il]
+  [Compiling Pprtl to assembly]
+===== Starting Phasesplit: Pprtl                         =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+===== Starting Rename: Pprtl                             =====
+===== Starting Optimize1: Pprtl                          =====
+===== Starting Vararg: Pprtl                             =====
+===== Starting Inline1: Pprtl                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify1: Pprtl                             =====
+===== Starting Specialize: Pprtl                         =====
+  0 optimizable candidates.
+  0 impure.
+  2 escaping.
+  0 used polymorphically.
+===== Starting Hoist: Pprtl                              =====
+Imports Processed
+===== Starting Optimize2: Pprtl                          =====
+===== Starting Inline2: Pprtl                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Optimize3: Pprtl                          =====
+===== Starting Inline3: Pprtl                            =====
+  0 functions inlined once.
+  0 copies of 0 other functions inlined.
+===== Starting Reify2: Pprtl                             =====
+===== Starting ClosureConv: Pprtl                        =====
+PASS: ClosureConv
+ClosureConv
+
+          [functor_var_c_code_1194 = 
+*               CODE(functor_var_c_cEnv_1196 ::  REC_K{},
+*                    funct_arg_c_1036 ::  REC_K{Rtl > _c_1038 :  REC_K{T0 > T0_1040 :  TYPE,
+*                                                                      T1 > T1_1041 :  TYPE,
+*                                                                      T2 > T2_1042 :  TYPE,
+*                                                                      T3 > T3_1043 :  TYPE,
+*                                                                      T4 > T4_1044 :  TYPE,
+*                                                                      T5 > T5_1045 :  TYPE,
+*                                                                      T6 > T6_1046 :  TYPE,
+*                                                                      T7 > T7_1047 :  TYPE,
+*                                                                      T8 > T8_1048 :  TYPE,
+*                                                                      T9 > T9_1049 :  TYPE,
+*                                                                      T10 > T10_1050 :  TYPE,
+*                                                                      T11 > T11_1051 :  TYPE,
+*                                                                      T12 > T12_1052 :  TYPE,
+*                                                                      T13 > T13_1053 :  TYPE,
+*                                                                      T14 > T14_1054 :  TYPE,
+*                                                                      T15 > T15_1055 :  TYPE,
+*                                                                      T16 > T16_1056 :  TYPE,
+*                                                                      T17 > T17_1057 :  TYPE,
+*                                                                      T18 > T18_1058 :  TYPE,
+*                                                                      T19 > T19_1059 :  TYPE,
+*                                                                      T20 > T20_1060 :  TYPE,
+*                                                                      T21 > T21_1061 :  TYPE,
+*                                                                      T22 > T22_1062 :  TYPE,
+*                                                                      T23 > T23_1063 :  TYPE,
+*                                                                      T24 > T24_1064 :  TYPE,
+*                                                                      T25 > T25_1065 :  TYPE,
+*                                                                      T26 > T26_1066 :  TYPE,
+*                                                                      T27 > T27_1067 :  TYPE,
+*                                                                      T28 > T28_1068 :  TYPE,
+*                                                                      T29 > T29_1069 :  TYPE,
+*                                                                      T30 > T30_1070 :  TYPE,
+*                                                                      T31 > T31_1071 :  TYPE}})
+*              = LET  
+*                IN   CREC{}
+*                END,
+*          functor_var_c_1034 = CLOSURE(functor_var_c_code_1194,CREC{}),
+*          STATIC 
+*            functor_var_r_type_1198 = ALLARROW(Closure; TOTAL; (funct_arg_c_1121 :: REC_K{Rtl > _c_1120 : 
+*                                                                                          REC_K{T0 > T0_1088 :  TYPE,
+*                                                                                                T1 > T1_1089 :  TYPE,
+*                                                                                                T2 > T2_1090 :  TYPE,
+*                                                                                                T3 > T3_1091 :  TYPE,
+*                                                                                                T4 > T4_1092 :  TYPE,
+*                                                                                                T5 > T5_1093 :  TYPE,
+*                                                                                                T6 > T6_1094 :  TYPE,
+*                                                                                                T7 > T7_1095 :  TYPE,
+*                                                                                                T8 > T8_1096 :  TYPE,
+*                                                                                                T9 > T9_1097 :  TYPE,
+*                                                                                                T10 > T10_1098 :  TYPE,
+*                                                                                                T11 > T11_1099 :  TYPE,
+*                                                                                                T12 > T12_1100 :  TYPE,
+*                                                                                                T13 > T13_1101 :  TYPE,
+*                                                                                                T14 > T14_1102 :  TYPE,
+*                                                                                                T15 > T15_1103 :  TYPE,
+*                                                                                                T16 > T16_1104 :  TYPE,
+*                                                                                                T17 > T17_1105 :  TYPE,
+*                                                                                                T18 > T18_1106 :  TYPE,
+*                                                                                                T19 > T19_1107 :  TYPE,
+*                                                                                                T20 > T20_1108 :  TYPE,
+*                                                                                                T21 > T21_1109 :  TYPE,
+*                                                                                                T22 > T22_1110 :  TYPE,
+*                                                                                                T23 > T23_1111 :  TYPE,
+*                                                                                                T24 > T24_1112 :  TYPE,
+*                                                                                                T25 > T25_1113 :  TYPE,
+*                                                                                                T26 > T26_1114 :  TYPE,
+*                                                                                                T27 > T27_1115 :  TYPE,
+*                                                                                                T28 > T28_1116 :  TYPE,
+*                                                                                                T29 > T29_1117 :  TYPE,
+*                                                                                                T30 > T30_1118 :  TYPE,
+*                                                                                                T31 > T31_1119 :  TYPE}}); 
+*                                         (funct_arg_r_1037 :: LET  type_1122 = funct_arg_c_1121.Rtl
+*                                                                   type_1123 = type_1122.T31
+*                                                              IN   DEP_RECORD[ Rtl > _r_1039]
+*                                                                     (DEP_RECORD[ t31_in > t31_in_1072, t31_eq > t31_eq_1073]
+*                                                                        (ALLARROW(Closure; PARTIAL; (); (); 0; type_1123),
+*                                                                         ALLARROW(Closure; PARTIAL; (); 
+*                                                                            (type_1122.T31, type_1122.T31); 0; 
+*                                                                            INT32)))
+*                                                              END); 0; 
+*                                         LET  type_1152 = funct_arg_c_1121.Rtl
+*                                              type_1153 = type_1152.T31
+*                                         IN   DEP_RECORD[ cmpf2s > _1078](VARARG[Closure->](type_1153, INT32))
+*                                         END),
+*          /LEAF-CODE\DEPfunctor_var_r_code_1199
+*            (functor_var_r_cEnv_1201 :: SINGLE(CREC{}),
+*             funct_arg_c_1121 :: REC_K{Rtl > _c_1120 :  REC_K{T0 > T0_1088 :  TYPE,
+*                                                              T1 > T1_1089 :  TYPE,
+*                                                              T2 > T2_1090 :  TYPE,
+*                                                              T3 > T3_1091 :  TYPE,
+*                                                              T4 > T4_1092 :  TYPE,
+*                                                              T5 > T5_1093 :  TYPE,
+*                                                              T6 > T6_1094 :  TYPE,
+*                                                              T7 > T7_1095 :  TYPE,
+*                                                              T8 > T8_1096 :  TYPE,
+*                                                              T9 > T9_1097 :  TYPE,
+*                                                              T10 > T10_1098 :  TYPE,
+*                                                              T11 > T11_1099 :  TYPE,
+*                                                              T12 > T12_1100 :  TYPE,
+*                                                              T13 > T13_1101 :  TYPE,
+*                                                              T14 > T14_1102 :  TYPE,
+*                                                              T15 > T15_1103 :  TYPE,
+*                                                              T16 > T16_1104 :  TYPE,
+*                                                              T17 > T17_1105 :  TYPE,
+*                                                              T18 > T18_1106 :  TYPE,
+*                                                              T19 > T19_1107 :  TYPE,
+*                                                              T20 > T20_1108 :  TYPE,
+*                                                              T21 > T21_1109 :  TYPE,
+*                                                              T22 > T22_1110 :  TYPE,
+*                                                              T23 > T23_1111 :  TYPE,
+*                                                              T24 > T24_1112 :  TYPE,
+*                                                              T25 > T25_1113 :  TYPE,
+*                                                              T26 > T26_1114 :  TYPE,
+*                                                              T27 > T27_1115 :  TYPE,
+*                                                              T28 > T28_1116 :  TYPE,
+*                                                              T29 > T29_1117 :  TYPE,
+*                                                              T30 > T30_1118 :  TYPE,
+*                                                              T31 > T31_1119 :  TYPE}} ;; 
+*             functor_var_r_eEnv_1202 : Trace : UNIT,
+*             funct_arg_r_1037 : 
+*               Trace : 
+*               LET  type_1122 = funct_arg_c_1121.Rtl
+*                    type_1123 = type_1122.T31
+*               IN   DEP_RECORD[ Rtl > _r_1039]
+*                      (DEP_RECORD[ t31_in > t31_in_1072, t31_eq > t31_eq_1073]
+*                         (ALLARROW(Closure; PARTIAL; (); (); 0; type_1123),
+*                          ALLARROW(Closure; PARTIAL; (); (type_1122.T31, type_1122.T31); 0; INT32)))
+*               END ;; 
+*             )
+*          =>LET  type_1152 = funct_arg_c_1121.Rtl
+*                 type_1153 = type_1152.T31
+*            IN   DEP_RECORD[ cmpf2s > _1078](VARARG[Closure->](type_1153, INT32))
+*            END =
+*          Let  funct_arg_r_Rtl_1132 : Trace = select[Rtl][](funct_arg_r_1037)
+*               funct_arg_Rtl_r_t31_eq_1133 : Trace = select[t31_eq][](funct_arg_r_Rtl_1132)
+*               funct_arg_Rtl_r_t31_in_1134 : Trace = select[t31_in][](funct_arg_r_Rtl_1132)
+*               STATIC cmpf2s_type_1203 = ALLARROW(Closure; PARTIAL; (); (funct_arg_c_1121.Rtl. T31); 0; INT32)
+*               /CODE\cmpf2s_code_1204
+*                 (cmpf2s_cEnv_1206 :: SINGLE(CREC{funct_arg_c_1121 = funct_arg_c_1121}) ;; 
+*                  cmpf2s_eEnv_1207 : 
+*                    Trace : 
+*                    RECORD[funct_arg_Rtl_r_t31_eq_1133, funct_arg_Rtl_r_t31_in_1134]
+*                      (TYPEOF(funct_arg_Rtl_r_t31_eq_1133), TYPEOF(funct_arg_Rtl_r_t31_in_1134)),
+*                  c_1083 : Compute(cmpf2s_cEnv_1206.funct_arg_c_1121. Rtl. T31) : cmpf2s_cEnv_1206.funct_arg_c_1121. Rtl. T31 ;; 
+*                  )
+*               ->INT32 =
+*               Let  funct_arg_c_1213 = cmpf2s_cEnv_1206.funct_arg_c_1121
+*                    funct_arg_Rtl_r_t31_eq_1211 : Trace = select[funct_arg_Rtl_r_t31_eq_1133][](cmpf2s_eEnv_1207)
+*                    funct_arg_Rtl_r_t31_in_1212 : Trace = select[funct_arg_Rtl_r_t31_in_1134][](cmpf2s_eEnv_1207)
+*                    funarg_2_1158 : Compute(funct_arg_c_1213.Rtl. T31) = App_Closure(funct_arg_Rtl_r_t31_in_1212;  ; ;  )
+*                    _1163 : Int = App_Closure(funct_arg_Rtl_r_t31_eq_1211;  ; c_1083, funarg_2_1158;  )
+*               In   _1163
+*               End
+*               cmpf2s_1154 : cmpf2s_type_1203 = 
+*                    (cmpf2s_code_1204,
+*                    CREC{funct_arg_c_1121 = funct_arg_c_1121},
+*                    record(funct_arg_Rtl_r_t31_eq_1133>funct_arg_Rtl_r_t31_eq_1133,
+*                           funct_arg_Rtl_r_t31_in_1134>funct_arg_Rtl_r_t31_in_1134))
+*               cmpf2s_1082 : Trace = make_vararg[Closure][funct_arg_c_1121.Rtl. T31, INT32](cmpf2s_1154)
+*               _r_1139 : Trace = record(cmpf2s>cmpf2s_1082)
+*          In   _r_1139
+*          End,
+*          functor_var_r_1035 : functor_var_r_type_1198 = (functor_var_r_code_1199,CREC{},record())]
+*         IMPORTS:
+*         
+*         EXPORTS:
+*         bug_FCT_c = functor_var_c_1034
+*         bug_FCT_r = functor_var_r_1035
+*         
+===== Translating to RTL             =====
+RTL code:
+
+main = ML Pprtl_unit
+
+ML Pprtl_main
+     args = []
+     ret = _1220(NOTRACE_CODE)
+     results = [_1232(TRACE)]
+
+{
+LCfuntop_1218:
+     li         0, _1219(NOTRACE_INT)
+     call_C_NORMALML AssertMirrorPtrArray arguments = ([_1219(NOTRACE_INT)] results = ([] }
+     needalloc  0
+     ### allocating 2-record
+     ### done allocating 2 record
+     ### allocating 1 closures
+     ### allocating 3-record
+     ### done allocating 3 record
+     laddr      0(LDfunctor_var_r_1035), _1230(NOTRACE_LABEL)
+     ### done allocating 1 closures
+     li         256, _1232(TRACE)
+     mv         _1232(TRACE), _1232(TRACE)
+     return     _1220(NOTRACE_CODE)
+}
+
+LCPprtl_functor_var_r_code_1199
+     args = [functor_var_r_cEnv_1201(TRACE),
+            funct_arg_c_1121(TRACE),
+            functor_var_r_eEnv_1202(TRACE),
+            funct_arg_r_1037(TRACE)]
+     ret = _1234(NOTRACE_CODE)
+     results = [_1273(TRACE)]
+
+{
+LCfuntop_1233:
+     needalloc  7
+     ldw        _1237(TRACE), 0(funct_arg_r_1037(TRACE))
+     ldw        _1239(TRACE), 4(_1237(TRACE))
+     ldw        _1241(TRACE), 0(_1237(TRACE))
+     ### allocating 1 closures
+     ### allocating 2-record
+     li         785, _1250(NOTRACE_INT)
+     stw        _1250(NOTRACE_INT), 0(HEAPALLOC)
+     stw        _1239(TRACE), 4(HEAPALLOC)
+     stw        _1241(TRACE), 8(HEAPALLOC)
+     addl       HEAPALLOC, 4, _1248(TRACE)
+     addl       HEAPALLOC, 12, HEAPALLOC
+     ### done allocating 2 record
+     ### allocating 3-record
+     li         1561, _1253(NOTRACE_INT)
+     stw        _1253(NOTRACE_INT), 0(HEAPALLOC)
+     laddr      0(LCPprtl_cmpf2s_code_1204), _1254(NOTRACE_CODE)
+     stw        _1254(NOTRACE_CODE), 4(HEAPALLOC)
+     stw        funct_arg_c_1121(TRACE), 8(HEAPALLOC)
+     stw        _1248(TRACE), 12(HEAPALLOC)
+     addl       HEAPALLOC, 4, _1251(TRACE)
+     addl       HEAPALLOC, 16, HEAPALLOC
+     ### done allocating 3 record
+     ### done allocating 1 closures
+     ### Proj_c at label T31_TYC
+     ldw        _1260(TRACE), 88(funct_arg_c_1121(TRACE))
+     ldw        _1259(TRACE), 36(_1260(TRACE))
+     li         2, _1262(TRACE)
+     ### making closure call 
+     laddr      0(ML vararg_INT), _1266(NOTRACE_LABEL)
+     mirror_global_offset_1267(NOTRACE_INT)
+     ldw        _1265(TRACE), (_1266(NOTRACE_LABEL)+_1267(NOTRACE_INT))
+     ldw        funreg_1268(NOTRACE_CODE), 0(_1265(TRACE))
+     ldw        creg_1269(TRACE), 4(_1265(TRACE))
+     ldw        ereg_1270(TRACE), 8(_1265(TRACE))
+     call_ML_NORMALfunreg_1268(NOTRACE_CODE)
+                    arguments = ([creg_1269(TRACE), _1259(TRACE), _1262(TRACE), ereg_1270(TRACE), _1251(TRACE)]
+                    results = ([_1271(TRACE)]
+                    }
+     ### done making normal call
+     needalloc  2
+     ### allocating 1-record
+     li         265, _1275(NOTRACE_INT)
+     stw        _1275(NOTRACE_INT), 0(HEAPALLOC)
+     stw        _1271(TRACE), 4(HEAPALLOC)
+     addl       HEAPALLOC, 4, _1273(TRACE)
+     addl       HEAPALLOC, 8, HEAPALLOC
+     ### done allocating 1 record
+     mv         _1273(TRACE), _1273(TRACE)
+     return     _1234(NOTRACE_CODE)
+}
+
+LCPprtl_cmpf2s_code_1204
+     args = [cmpf2s_cEnv_1206(TRACE), cmpf2s_eEnv_1207(TRACE), c_1083(COMPUTE cmpf2s_cEnv_1206(TRACE).31)]
+     ret = _1278(NOTRACE_CODE)
+     results = [_1296(NOTRACE_INT)]
+
+{
+LCfuntop_1276:
+     needalloc  0
+     ldw        _1282(TRACE), 0(cmpf2s_eEnv_1207(TRACE))
+     ldw        _1284(TRACE), 4(cmpf2s_eEnv_1207(TRACE))
+     ### making closure polycall
+     ldw        funreg_1286(NOTRACE_CODE), 0(_1284(TRACE))
+     ldw        creg_1287(TRACE), 4(_1284(TRACE))
+     ldw        ereg_1288(TRACE), 8(_1284(TRACE))
+     call_ML_NORMALfunreg_1286(NOTRACE_CODE)
+                    arguments = ([creg_1287(TRACE), ereg_1288(TRACE)]
+                    results = ([_1289(COMPUTE cmpf2s_cEnv_1206(TRACE).31)]
+                    }
+     ### done making normal call
+     needalloc  0
+     ### making closure call 
+     ldw        funreg_1293(NOTRACE_CODE), 0(_1282(TRACE))
+     ldw        creg_1294(TRACE), 4(_1282(TRACE))
+     ldw        ereg_1295(TRACE), 8(_1282(TRACE))
+     call_ML_TAIL(_1278(NOTRACE_CODE))funreg_1293(NOTRACE_CODE)
+                    arguments = ([creg_1294(TRACE),
+                                 ereg_1295(TRACE),
+                                 c_1083(COMPUTE cmpf2s_cEnv_1206(TRACE).31),
+                                 _1289(COMPUTE cmpf2s_cEnv_1206(TRACE).31)]
+                    results = ([_1296(NOTRACE_INT)]
+                    }
+     ### done making tail call
+     needalloc  0
+     mv         _1296(NOTRACE_INT), _1296(NOTRACE_INT)
+     return     _1278(NOTRACE_CODE)
+}
+
+LCPprtl_functor_var_c_code_1194
+     args = [functor_var_c_cEnv_1196(TRACE), funct_arg_c_1036(TRACE)]
+     ret = _1298(NOTRACE_CODE)
+     results = [_1301(TRACE)]
+
+{
+LCfuntop_1297:
+     needalloc  0
+     li         256, _1301(TRACE)
+     mv         _1301(TRACE), _1301(TRACE)
+     return     _1298(NOTRACE_CODE)
+}
+data objects = 
+[ML Pprtl_unit_GLOBALS_BEGIN_VAL:,
+     ### static record tag,
+     .long 529,
+LDrecord_1225:,
+     .data LCPprtl_functor_var_c_code_1194,
+     .long 256,
+     ### Global,
+     .long 111,
+ML bug_FCT_c_INT:,
+     .data LDrecord_1225,
+     .data LDrecord_1225,
+     ### Global,
+     .long 111,
+ML bug_FCT_r_INT:,
+     .data LDfunctor_var_r_1035,
+     .data LDfunctor_var_r_1035,
+     ### static record tag,
+     .long 1561,
+LDfunctor_var_r_1035:,
+     .data LCPprtl_functor_var_r_code_1199,
+     .long 256,
+     .long 256,
+     ### Module closure,
+     .long 1561,
+ML Pprtl_unit_closure:,
+     .data ML Pprtl_main,
+     .long 0,
+     .long 0,
+     .long 785,
+ML Pprtl_unit:,
+     .data ML Pprtl_unit_closure,
+     .data ML Pprtl_unit_closure,
+ML Pprtl_unit_GLOBALS_END_VAL:,
+     .long 0]
+global = []
+
+
+
+================================================
+Starting translation to TIL-Alpha assembly
+  4 procedures.  4 recursive components.   Largest component has size 1.
+Pprtl_functor_var_c_code_1194
+	translating
+	about to dump initial version
+	allocating
+	entered allocateproc1
+	replacing calls
+	annotating
+processing procedure Pprtl_functor_var_c_code_1194
+	building interference graph
+There are 4 blocks in the blockmap
+processBlock #0: 2instrs 
+processBlock #1: 0instrs 
+processBlock #2: 3instrs 
+processBlock #3: 2instrs 
+IG stat:  (V,E,avg deg) = (3, 1, 0)
+	coloring interference graph
+	summarizing storage information
+	rewriting module
+	making trace table
+	dumping
+Pprtl_cmpf2s_code_1204
+	translating
+	about to dump initial version
+	allocating
+	entered allocateproc1
+	replacing calls
+	annotating
+processing procedure Pprtl_cmpf2s_code_1204
+	building interference graph
+There are 6 blocks in the blockmap
+processBlock #0: 3instrs 
+processBlock #1: 0instrs 
+processBlock #2: 12instrs 
+processBlock #3: 2instrs 
+processBlock #4: 3instrs 
+processBlock #5: 11instrs 
+IG stat:  (V,E,avg deg) = (13, 163, 12)
+	coloring interference graph
+	summarizing storage information
+	rewriting module
+	making trace table
+
+------------------------
+LCcode_1317:
+framesize:32
+retaddpos:0
+regtrace:
+stacktrace:
+	12:yes
+	8:yes
+	16:stack_rec 4@8.31
+------------------------
+Stack  0:no
+Stack  4:no
+Stack  8:yes
+Stack  12:yes
+Stack  16:stack_rec 4@8.31
+indices2int: 31  
+tilt: tracetable.sml: index too large
+
+Compilation exited abnormally with code 1 at Fri Nov 23 12:17:48

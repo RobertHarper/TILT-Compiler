@@ -1,0 +1,94 @@
+Number: 0037
+Title:       High overhead on alpha.
+Keywords:    runtime
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        12/7/00
+Version:     CVS
+System:	     alpha
+Severity:    major
+Problem:
+	TILT-generated TILT spends a lot of time in the system.
+	top(1) typically reports 40% user and 60% system time while
+	using Top.alpha.exe.  The timing stats gathered by the runtime
+	are also very worrysome.
+Code:
+Transcript:
+	I did a full bootstrap on the alpha.  time(1) reported
+	the following times (in seconds):
+		real   43898.8
+		user   17039.8
+		sys    22357.1
+	And the runtime's stats were:
+	                                Sum (s)        Count     Min(ms)   Avg(ms)  Max(ms)
+	         --------------|-----------------------------------------------------------
+	         Total         |   43897.325
+	           Accounting  |   21563.055 (49.1%)   4108662        0.00      5.25   1196.18
+	           Scheduler   |    464.030 ( 1.1%)   1073296        0.00      0.43    46.85
+	           Mutator     |   14214.100 (32.4%)   536648        0.00     26.49   1129508.50
+	           GC          |   7656.140 (17.4%)   2498717        0.00      3.06   179602.19
+	         Pause         |   8120.181 (18.5%)   536649        0.00     15.13   179685.15
+	On solaris the Accounting overhead is around 1%.
+
+	This problem is not due simply to paging.  I see similar
+	results when compiling smaller examples that don't use any
+	virtual memory.
+Comments:
+	The profiler pixie is incompatible with the runtime.  It
+	changes the return addresses seen when the mutator calls the
+	GC (breaking things).  This is unfortuante since profiling
+	would likely pinpoint which sys calls were so expensive.
+
+	A trace of system calls revelead that well over 60% of the
+	system calls used by Top were gettimeofday (which is the
+	digital unix timing primitive).  It was my hope that replacing
+	uses of this system call with a speedier user-space function
+	would help.
+
+	I modified the runtime to use a simple (user-space) count to
+	represent time in order to avoid this system call.  After this
+	change I saw 60% user time and 40% system time (a shift of
+	20%).  This is a dramatic shift but doesn't really solve the
+	problem.
+
+	First, 40% system time still seems unreasonable.
+
+	Second, there is no fast alternative to gettimeofday on the
+	alpha.  I considered several alternatives and rejected them
+	for various reasons.  (1) The kernel keeps the (millisecond
+	resolution) time in a global variable.  We could map the
+	kernel memory and simply read that variable to get a
+	low-overhead, low-resolution timer.  I don't know how to do
+	this and you'd probably need superuser privledges.  (2) The
+	alpha architecture includes a per-process, per-processor cycle
+	counter (via the RPCC instruction) which provides a very fast,
+	very high resolution timer.  There probably exist ways to use
+	this, together with infrequent calls to gettimeofday to detect
+	cycle count overflow, to significantly reduce timing overhead.
+	The problem is the cycle counts are per-processor and any
+	implementation on our uniprocessors would likely fail on a
+	multi-processor.
+
+	It turns out that the atom-based profilers are incompatible
+	with our GC but that good-ole prof(1) style PC-sampling works.
+	I relinked Top.alpha.exe by hand to include the profiling code.
+	The prof report is in ./FOO.
+
+	Disabling add_windowQuotient yields a 25% improvement:
+
+                                Sum (s)        Count     Min(ms)   Avg(ms)  Max(ms)
+         --------------|-----------------------------------------------------------
+         Total         |    361.473
+           Accounting  |     71.631 (19.8%)    73286        0.00      0.98    55.63
+           Scheduler   |      9.762 ( 2.7%)    21432        0.00      0.46    46.85
+           Mutator     |    207.829 (57.5%)    10716        0.00     19.39   4814.56
+           GC          |     72.252 (20.0%)    41137        0.00      1.76   1200.08
+         Pause         |     82.014 (22.7%)    10717        0.00      7.65   1203.01
+
+Fix:
+	Perry is going to modify the runtime so that fewer stats are
+	gathered on the alpha.
+
+	I am going to attempt to profile to pinpoint the problem.
+Test: 
+Owner: swasey
+Status: open

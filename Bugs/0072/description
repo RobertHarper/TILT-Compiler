@@ -1,0 +1,33 @@
+Number: 0072
+Title:       Minor bug in register allocator.
+Keywords:    register allocator, spill code
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        3/25/2002
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	Machine.defUse ought to distinguish between registers written
+	to with useful results and registers trashed.
+Code:
+Transcript:
+Comments:
+	See the til-developers thread "large stack frames" around
+	March 20, 2002 for some background.
+Fix:
+	Change the defUse type to
+
+	   val defUse : instruction -> {results : register list, used : register list, trashed : register list}
+
+	Change definition in Sparc/sparc.sml.  Most "def" registers
+	from the old definition go into "results".  Exceptions include
+	BSR's regs_destroyed.  Make a similar change to
+	Alpha/decalpha.sml.
+
+	Change the allocator Backend/chaitin.sml to never spill
+	"trashed" registers to the stack frame.  That is the calls to
+	putInRegs should include "results" but not "trashed" as
+	dst_regs.
+Test: 
+Owner: swasey
+Status: open

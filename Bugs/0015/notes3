@@ -1,0 +1,95 @@
+string: 0x300bec04 replacing 0x0 as theString
+string: 0x300bec04 has been initialized
+string: 0x300bec04 has bad tag 0x0
+string: 0x300bec04 has a new tag of 0x0
+string: 0x300bec04 differs at offset 0
+string: 0x300bec04 has changed
+	NumGC = 3959
+	NumMajorGC = 11
+	(dbx) where
+	>  0 noticedChangedTag() ["string.c":684, 0x8746c40]
+	   1 checkObj(obj = 0xa007ae0) ["string.c":695, 0x8746cdc]
+	   2 AllocBigArray_Gen(proc = 0xa4dc780, thread = 0xa4fc780, spec = 0x10029a78) ["gc_gen.c":57, 0x873b0ac]
+		spec->type = IntField
+		spec->elemLen = 4096
+		spec->byteLen = 4096
+		spec->intVal = 0
+	   3 alloc_bigdispatcharray(spec = 0x10029a78) ["gc.c":443, 0x872c708]
+	   4 alloc_bigintarray(initVal = 806087684) ["gc.c":474, 0x872c8f4]
+	   5 LINKUNIT_polyArray_315() ["link_Top.nomirror.alpha.exe.alpha.s":670, 0x87208a8]
+	   6 Array_fromListPRIME_inner_code_24733() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/array.alpha.s":872, 0x80df458]
+	   7 Array_tab_code_24876() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/array.alpha.s":2254, 0x80e0108]
+	   8 BinIOFn_inputList_code_78252() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/IO/bin-io-fn.alpha.s":2074, 0x8135a5c]
+	   9 BinIOFn_inputList_code_78252() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/IO/bin-io-fn.alpha.s":2093, 0x8135a9c]
+	  10 BinIOFn_inputN_code_78268() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/IO/bin-io-fn.alpha.s":2526, 0x8135e74]
+	  11 BinIOFn_inputN_code_78492() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/IO/bin-io-fn.alpha.s":7033, 0x81388a0]
+	  12 Crc_loop_code_183788() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Util/crc-native.alpha.s":2664, 0x814078c]
+	  13 Crc_crc_of_file_code_183776() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Util/crc-native.alpha.s":3015, 0x8140b70]
+	  14 Manager_crc_code_1855289() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/manager.alpha.s":10990, 0x86ffdb8]
+	  15 Manager_anonfun_code_1855391() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/manager.alpha.s":13628, 0x87015d4]
+	  16 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2652, 0x80c923c]
+	  17 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2678, 0x80c9290]
+	  18 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2678, 0x80c9290]
+	  19 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2678, 0x80c9290]
+	  20 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2678, 0x80c9290]
+	  21 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2678, 0x80c9290]
+	  22 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2678, 0x80c9290]
+	  23 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2678, 0x80c9290]
+	  24 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2678, 0x80c9290]
+	  25 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2678, 0x80c9290]
+	  26 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2678, 0x80c9290]
+	  27 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2678, 0x80c9290]
+	  28 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2678, 0x80c9290]
+	  29 List_m_code_12912() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":2678, 0x80c9290]
+	  30 Manager_step_code_1855396() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/manager.alpha.s":15832, 0x870309c]
+	  31 Manager_loop_code_1855843() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/manager.alpha.s":42329, 0x871181c]
+	  32 Manager_make_code_1855838() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/manager.alpha.s":42647, 0x8711bb4]
+	  33 List_a2_code_13222() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":6482, 0x80cb414]
+	  34 List_a2_code_13222() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":6482, 0x80cb414]
+	  35 Main_main_inner_code_1574562() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/main.alpha.s":2278, 0x871f06c]
+	  36 Run_run_code_190930() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/run.alpha.s":97, 0x8131fb4]
+	  37 Top_main() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/top.alpha.s":59, 0x872012c]
+	  38 LINKUNIT_main() ["link_Top.nomirror.alpha.exe.alpha.s":8473, 0x8726340]
+	  39 start_client() ["service_alpha_osf_asm.s":132, 0x873a210]
+
+Guess: The string became garbage and the space is just being reused
+during the CRC check.
+
+string: 0x30073804 replacing 0x300bec04 as theString
+string: 0x30073804 has been initialized
+Starting translation to TIL-Alpha assembly
+string: 0x30073804 differs at offset 2044
+
+	thread 0xd stopped at   [noticedChange:680 +0x10,0x8746bfc]     printf("string: 0x%x has changed\n", theString);
+	(dbx) where
+	>  0 noticedChange() ["string.c":680, 0x8746bfc]
+	   1 checkObj(obj = 0xa007ae0) ["string.c":695, 0x8746d54]
+	   2 AllocBigArray_Gen(proc = 0xa4dc780, thread = 0xa4fc780, spec = 0x10029d48) ["gc_gen.c":57, 0x873b0ac]
+	   3 alloc_bigdispatcharray(spec = 0x10029d48) ["gc.c":443, 0x872c708]
+	   4 alloc_bigintarray(initVal = 32) ["gc.c":474, 0x872c8f4]
+	   5 Word8Array_array_code_36624() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/word8-array.alpha.s":127, 0x80e4554]
+	   6 TextIOFn_mkOutstream_code_138639() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/IO/text-io-fn.alpha.s":8890, 0x8129e78]
+	   7 TextIOFn_openOut_code_138901() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/IO/text-io-fn.alpha.s":12506, 0x812c054]
+	   8 PrintUtils_openOutput_code_1002373() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Backend/printutils.alpha.s":2017, 0x8266cf0]
+	   9 Linkalpha_comp_code_1486077() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Alpha/linkalpha.alpha.s":276, 0x86eb2e0]
+	  10 Stats_anonfun_code_240604() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Util/stats.alpha.s":2825, 0x8188a34]
+	  11 LINKUNIT_vararg2_code_627() ["link_Top.nomirror.alpha.exe.alpha.s":2042, 0x8721638]
+	  12 Linkalpha_rtl_to_asm_code_1486082() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Alpha/linkalpha.alpha.s":439, 0x86eb420]
+	  13 Compiler_il_to_asm_code_1767865() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/compiler.alpha.s":2306, 0x86ed7ec]
+	  14 Manager_step_code_1855396() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/manager.alpha.s":16233, 0x87035b0]
+	  15 Manager_loop_code_1855843() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/manager.alpha.s":42329, 0x871181c]
+	  16 Manager_make_code_1855838() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/manager.alpha.s":42647, 0x8711bb4]
+	  17 List_a2_code_13222() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":6482, 0x80cb414]
+	  18 List_a2_code_13222() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/list.alpha.s":6482, 0x80cb414]
+	  19 Main_main_inner_code_1574562() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/main.alpha.s":2278, 0x871f06c]
+	  20 Run_run_code_190930() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/run.alpha.s":97, 0x8131fb4]
+	  21 Top_main() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Top/top.alpha.s":59, 0x872012c]
+	  22 LINKUNIT_main() ["link_Top.nomirror.alpha.exe.alpha.s":8473, 0x8726340]
+	  23 start_client() ["service_alpha_osf_asm.s":132, 0x873a210]
+
+theString[2044] = 0x8002  (tag len=4096, type=WORD_ARRAY_TYPE)
+		gc_large_addRoot
+		byteLen = 4152
+		bytePos = 14336
+		chunkPos = 28
+		chunkLen = 9

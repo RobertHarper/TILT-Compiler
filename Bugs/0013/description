@@ -1,0 +1,112 @@
+Number: 0013
+Title:       Prolog-based stacklet allocation not working properly on alpha.
+Keywords:    alpha,runtime,stacklets
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        7/19/00
+Version:     CVS
+System:	     alpha
+Severity:    major
+Problem:
+	While bootstrapping, TILT dies with a segmentation violation
+	while compiling	BinIOFn
+	/afs/cs.cmu.edu/project/fox-28/member/swasey/ml96/Basis/IO/bin-io-fn.sml
+Code:
+	cd $m/tilt/b
+	TILT_LIBDIR=$m/tilt/b
+	dbx $m/tilt/a/Top.nomirror.alpha.exe
+	r -fdebug_asm -fkeep_link_asm mapfile-all
+Transcript:
+	================================================
+	Starting translation to TIL-Alpha assembly
+	 There are 98 procedures and  98 recursive components with the largest being of size 1
+	function BinIOFn_mkOutstream_code_263983 with 52 labels. liveness analysis took 4 steps
+	function BinIOFn_mkInstream_code_264347 with 65 labels. liveness analysis took 4 steps
+	Proc 0:  Memory error at 0 with PC = 3873
+	SEGV_MAPERR  address 0 not mapped
+	status=255
+	================================================
+	Starting translation to TIL-Alpha assembly
+	 There are 98 procedures and  98 recursive components with the largest being of size 1
+	function BinIOFn_mkOutstream_code_47434 with 52 labels. liveness analysis took 4 steps
+	function BinIOFn_mkInstream_code_47798 with 65 labels. liveness analysis took 4 steps
+	Proc 0:  Memory error at 0 with PC = 3873
+	SEGV_MAPERR  address 0 not mapped
+	status=255
+	===== Starting Phasesplit: BinIOFn                       =====
+	Proc 0:  Memory error at 0 with PC = 135070648
+	SEGV_MAPERR  address 0 not mapped
+	status=255
+	===== Starting Phasesplit: BinIOFn                       =====
+	Proc 0:  Memory error at 0 with PC = 135070648
+	SEGV_MAPERR  address 0 not mapped
+	status=255
+	----------------------------------------
+	thread 0x3 signal Segmentation fault at   [LINKUNIT_onearg2_code_517:1269 ,0x8721028]    Source not available
+	(dbx) where
+	>  0 LINKUNIT_onearg2_code_517() ["link_Top.nomirror.alpha.exe.alpha.s":1269, 0x8721028]
+	   1 LINKUNIT_onearg2_code_517() ["link_Top.nomirror.alpha.exe.alpha.s":1261, 0x8721018]
+	(dbx) wi
+	  [LINKUNIT_onearg2_code_517:1261, 0x8721014]   ldq     r27, -14000(gp) <0xa242940>     <r27=0x80d03b8,gp=0xa245ff0>
+	  [LINKUNIT_onearg2_code_517:1261, 0x8721018]   jsr     r26, (r27), NewStackletFromML(line 228) <r26=0x872101c,r27=0x80d03b8>
+	  [LINKUNIT_onearg2_code_517:1262, 0x872101c]   lda     sp, -32(sp) <0x1005bf40>        <sp=0x1005bf60>
+	  [LINKUNIT_onearg2_code_517:1264, 0x8721020]   stq     r26, 0(sp) <0x1005bf60> <r26=0x872101c,sp=0x1005bf60>
+	  [LINKUNIT_onearg2_code_517:1265, 0x8721024]   bis     r2, r2, r3      <r2=0x4ca,r3=0x4ca>
+	>*[LINKUNIT_onearg2_code_517:1269, 0x8721028]   ldl     r25, 0(r0) <0x1>        <r0=0x1,r25=0x20005968>
+	  [LINKUNIT_onearg2_code_517:1270, 0x872102c]   stl     r25, 12(sp) <0x1005bf6c>        <r25=0x20005968,sp=0x1005bf60>
+	  [LINKUNIT_onearg2_code_517:1272, 0x8721030]   ldl     r25, 4(r0) <0x5>        <r0=0x1,r25=0x20005968>
+	  [LINKUNIT_onearg2_code_517:1273, 0x8721034]   stl     r25, 8(sp) <0x1005bf68> <r25=0x20005968,sp=0x1005bf60>
+	  [LINKUNIT_onearg2_code_517:1275, 0x8721038]   ldl     r25, 8(r0) <0x9>        <r0=0x1,r25=0x20005968>
+	------------------------------
+	stop in NewStackletFromML
+	     Rra = $r26 = 0x872101c	(return address to B)
+	     Rat2 = $r25 = 0x818e9b4	(return address of B to A)
+	     Rat = $r28 = 0		(maxOffset)
+	     Stack:
+			Threads[0].stack->used = 1
+			Threads[0].stack->cursor = 1
+			Threads[0].stack->stacklets[0].baseTop    = 0x1001bf80
+			Threads[0].saveregs[30]			  = 0x1001bce0
+			$r30					  = 0x10002020
+			Threads[0].stack->stacklets[0].baseBottom = 0x10002000
+			Threads[0].stackLimit			  = 0x10002000
+			Goal $r30				  = 0x10002000	[Bug: should create new stacklet if goal < stackLimit, not <=]
+	    System stack:
+			Threads[0].proc->stack = 0xa9d7b00
+	>  0 NewStackletFromML() ["gc_alpha_osf_asm.s":228, 0x8727010]
+	   1 LINKUNIT_onearg2_code_517() ["link_Top.nomirror.alpha.exe.alpha.s":1261, 0x8721018]
+	   2 SplayTree_adj_code_205935() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Library/splaytree.alpha.s":876, 0x818ed20]
+	   3 SplayTree_adj_code_205935() ["/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Library/splaytree.alpha.s":720, 0x818eb10]
+	after NewStackletFromML the saved regs are:
+	      $r26 = 0x8727064 (PopStackletFromML)
+	      $r25 = 0x818e9b4 = Threads[0].stack->stacklets[0].retadd (return address of B to A)
+	      $r28 = 0
+	      $r30 = 0x1005bf80 = Threads[0].stack->stacklets[1].baseTop
+	      $r1 = 0x20005980
+Comments:
+	The bug was in gc_alpha_osf_asm.s.  returnToML wasn't properly
+	setting RA to saveregs[RA].
+
+	After a NewStackletFromML there are three important return
+	addresses.
+		(1) callee - the routine who invoked NewStackletFromML
+		(2) caller - the routine who invoked callee
+		(3) PopStackletFromML - the routine which cleans up
+		    the new stacklet.
+	After successfully allocating a new stacklet, (2) is saved in
+	the runtime's stack data structures to be used later by
+	PopStackletFromML and the runtime returns to ML with
+	returnToML(_, callee).  returnToML is supposed to set RA to
+	saveregs[RA] --- in this case (3) --- and then jump to its
+	argument --- in this case callee.
+
+	The problem was returnToML was setting RA to its argument,
+	callee, rather than the saved RA.  So when the callee tried to
+	return through RA it was re-invoking itself with a bogus
+	register set and causing a seg fault.
+Fix:
+	returnToML was changed to operate like the solaris version.
+	It now uses a temp register to jump back to ML, leaving RA
+	set pointing to saveregs[RA].
+Test: *
+Owner: swasey
+Status: closed

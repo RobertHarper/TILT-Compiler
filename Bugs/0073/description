@@ -1,0 +1,20 @@
+Number: 0073
+Title:       ref does not have constructor status.
+Keywords:    elaborator
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        3/27/02
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	The following code elaborates.
+
+	val ref = 3				(* should fail *)
+Code:
+	See basis_test.sml and basis_test_mapfile.
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

@@ -1,0 +1,56 @@
+Number: 0076
+Title:       Dead data possibly being retained by GC.
+Keywords:    GC, code generator
+Submitter:   Leaf Eames Petersen <leaf+@cs.cmu.edu>
+Date:        4/?/02
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	It is possible that the code generator and GC are conspiring
+	to keep lots of dead data around.  Consider The main
+	compilation function in the manager.  It is roughly
+
+		val il_mod = elaborate ...
+		val nil_mod = optimize il_mod ...
+		val rtl_mod = tortl nil_mod ...
+		val _ = toasm rtl_mod ...
+
+	On the third line, il_mod is dead.  But it is possible the
+	GC traces the register or stack frame slot holding that data.
+Code:
+Transcript:
+Comments:
+	First, I set up an experiment for measuring memory use.  I
+	instrumented the compiler to print out (total CPU) timestamps.
+	The plan is to sample the compiler's memory use while
+	compiling a particular unit (Toil).  I use ps(1) to sample the
+	CPU time, virtual memory used, and physical memory used every
+	10 seconds.  The CPU times reported by ps(1) match perfectly
+	with the compiler's CPU timestamps so it is possible to look
+	up the memory in use at a particular stage of the compile.
+
+	Second, I ran the experiment without changing the manager's
+	UpdateHelp module (whose "generate" function Leaf was talking about).
+
+	Third, I rewrote UpdateHelp.generate to store the intermediate
+	values in a ref cell and re-ran the experiment.
+
+	A quick scan of the data reveals that the compiler needed the
+	same amount of memory to compile Toil before and after the
+	change to UpdateHelp.generate.
+
+	The code I used for the experiment and the data I gathered are
+	available for review.  The original and modified
+	UpdateHelp.generate are in updatehelp.sml.  The ref cell type
+	I used in the second experiment is at the end of compiler.sml.
+	The output files with time 11:49 represent the first run.  The
+	output files with time 14:01 represent the second.
+
+	I can not conclude that this bug does not exist.  I can
+	conclude that it is not the sole cause of the compiler's
+	memory hunger.
+Fix:
+Test:
+Owner: swasey
+Status: closed

@@ -1,0 +1,6 @@
+#!/usr/local/bin/rc
+sed '
+	s,	, ,g
+	s, *<[a-z_0-9+]*>,,g
+	s,0x0*,0x,g
+'

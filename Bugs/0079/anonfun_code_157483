@@ -1,0 +1,64 @@
+PosixPrimIOFn_anonfun_code_157483
+asm/posix-prim-io-fn.sml.s:#2276,#3683
+
+A copy from Leaf's source tree: asm/leaf-posix-prim-io-fn.sml.s:#2276,#3683
+
+Arguments:
+	%r8 = 0xeeb97168 = {trace=2, trace=0xeeb9377c}
+	%r9 = Closure writeVec_114655
+	%r10 = 0xeeb90e34 (argument from caller to PosixPrimIOFn_putV_code_157734)
+	%r11 = 0x0 (argument from caller to PosixPrimIOFn_putV_code_157734)
+
+	.global PosixPrimIOFn_anonfun_code_157483
+ ! arguments : [$157485,$8] [$157486,$9] [$143979,$10] 
+ ! results    : [$162789,$8] 
+PosixPrimIOFn_anonfun_code_157483:
+	.proc   07
+	mov	%sp, %fp
+	sub	%sp, 112, %sp
+	ld	[%r2+800], %r16
+	cmp	%sp, %r16
+	bg	code_162841
+	mov	%sp, %fp
+	... branch taken ...
+code_162841:
+	st	%r15, [%sp+92]
+
+	pds XXX Why are we performing these projections?
+
+	st	%r8, [%sp+96]
+code_162836:
+funtop_162775:
+	! Proj_c at label type_154065_INT
+	ld	[%sp+96], %r17
+	ld	[%r17], %r16		pds 2
+	st	%r16, [%sp+100]		pds 2 (dead)
+	! Proj_c at label type_154064_INT
+	ld	[%sp+96], %r17
+	ld	[%r17+4], %r8		pds 0xeeb9377c (dead)
+
+	pds %r9 = Closure writeVec_114655 = { 
+	pds	trace = POSIX_IO_Str_writeVec_code_123246,
+	pds	trace = 0x100,
+	pds	notrace = 0x100
+	pds }
+
+	pds Tail call to POSIX_IO_Str_writeVec_code_123246
+
+	! making closure call
+	ld	[%r9], %r11		pds We just trashed %r11.
+	ld	[%r9+4], %r8
+	ld	[%r9+8], %r9
+	ld	[%sp+92], %r15		pds Restore return address
+	jmpl	%r11, %r0		pds Transfer control
+	add	%sp, 112, %sp		pds Restore stack pointer
+
+	pds XXX The following code is dead.
+
+code_162837:
+	! done making tail call
+code_162839:
+	ld	[%sp+92], %r15
+	retl
+	add	%sp, 112, %sp
+	.size PosixPrimIOFn_anonfun_code_157483,(.-PosixPrimIOFn_anonfun_code_157483)

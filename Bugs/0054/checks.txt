@@ -1,0 +1,47 @@
+2.9 Syntactic Restrictions
+
+. No expression row, pattern row or type-expression row may bind the
+  same lab twice.
+
+. No binding valbind, typbind, datbind or exbind may bind the same
+  identifier twice; this applies also to value identifiers within
+  a datbind.
+
+. No tyvarseq may contain the same tyvar twice.
+
+. For each value binding pat = exp within rec, exp must be of the form
+  fn match.
+
+. No datbind, valbind or exbind may bind true, false, nil, :: or ref.
+  No datbind or exbind may bind it.
+
+* No real constant may occur in a pattern.
+
+* In a value declaration val tyvarseq valbind, if valbind contains another
+  declaration val tyvarseq' valbind' then tyvarseq and tyvarseq' must be
+  disjoint.  In other words, no type variable may be scoped by two value
+  declarations of which one occurs inside the other.  This restriction
+  applies after tyvarseq and tyvarseq' have been extended to include
+  implicitly scoped type variables, as explained in Secion 4.6.
+
+3.5 Syntactic Restrictions
+
+. No binding strbind, sigbind, or funbind may bind the same identifier
+  twice.
+
+. No description valdesc, typdesc, datdesc, exdesc or strdesc may describe
+  the same identifier twice; this applies also to value identifiers
+  within a datdesc.
+
+. No tyvarseq may contain the same tyvar twice.
+
+* Any tyvar occurring on the right side of a datdesc of the form tyvarseq
+  tycon = ... must occur in the tyvarseq; similarly, in signature
+  expressions of the form sigexp where type tyvarseq longtycon = ty,
+  any tyvar occurring in ty must occur in tyvarseq.
+
+? Any tyvar occurring on the right side of a typbind or datbind of the
+  form tyvarseq tycon = ... must occur in tyvarseq.
+
+. No datdesc, valdesc or exdesc may describe true, false, nil, :: or ref.
+  No datdesc or exdesc may describe it.

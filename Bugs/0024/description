@@ -1,0 +1,22 @@
+Number: 0024
+Title:       Manager linking when unnecessary.
+Keywords:    manager, linking
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        9/16/00
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	The manager will always link, even when no re-compilation was
+	necessary and the runtime has not changed.
+
+	Compare the runtime timestamp with an existing exe timestamp
+	to determine if linking is necessary -- in the case that
+	no units needed GENERATE.
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

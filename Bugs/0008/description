@@ -1,0 +1,61 @@
+Number: 0008
+Title:       Bus error on alpha.
+Keywords:    alpha
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        7/12/00
+Version:     CVS
+System:	     alpha
+Severity:    major
+Problem:
+	"tilt -v" dies.
+Code:	     
+Transcript:
+	swasey@tcl ; ./Top.nomirror.alpha.exe -v
+	Defaulting to model DEC3000_500
+	  Scanning for free variables
+	  Computing transitive closure of close funs
+	  Rewriting imports, bindings, exports
+	Alpha detected.  Using Til-Alpha
+	main
+	calling run
+	TILT version 0.1 (alpha8)
+	(Using basis from Proc 0:  Memory error at 172681220 with PC = 134922808
+	Bus Error
+	BUS_ADRERR non-existent physical address
+	status=255
+Comments:
+	(gdb) disassemble 134922808
+	Dump of assembler code for function Prelude_anonfun_code_5603:
+	0x80ac238 <Prelude_anonfun_code_5603>:
+	        27bb021a        ldah    gp, 35258368(t12)
+	0x80ac23c <Prelude_anonfun_code_5603+4>:
+	        23bd9608        lda     gp, -27128(gp)
+	0x80ac240 <Prelude_anonfun_code_5603+8>:
+	        23deffe0        lda     sp, -32(sp)
+	0x80ac244 <Prelude_anonfun_code_5603+12>:
+	        b75e0000        stq     ra, 0(sp)
+	0x80ac248 <Prelude_anonfun_code_5603+16>:
+	        b03e0014        stl     t0, 20(sp)
+	0x80ac24c <Prelude_anonfun_code_5603+20>:
+	        b05e001c        stl     t1, 28(sp)
+	0x80ac250 <Prelude_anonfun_code_5603+24>:
+	        b07e0018        stl     t2, 24(sp)
+	Unit Prelude is (via Basis/mapfile-basis) Basis/Firstlude.alpha.s.
+
+	dbx points to raise_exception_raw in service_alpha_osf_asm.s, NOT to the
+	PC mentioned above.  The lines
+	 	ldq	ASMTMP_REG, 4(EXNPTR_REG)	# fetch sp in handler
+	 	addq	ASMTMP_REG, ASMTMP2_REG, $sp	# restore sp		
+	 	ldq	$27, 0(EXNPTR_REG)	# fetch pc of handler
+	Seem to disagree with other (long-word, not quad-word) access to EXNPTR_REG.
+
+	The lines
+		ldq	$16, MLsaveregs_disp+16*4(THREADPTR_REG)	# restore $16 which was used to save exn arg
+		ldq	$0, MLsaveregs_disp+0*4(THREADPTR_REG)		# restore $0 due to load_regs
+		ldq	$1, MLsaveregs_disp+1*4(THREADPTR_REG)		# restore $1 due to load_regs
+	are also wrong.  Each saved reg takes 8 bytes, not 4.
+Fix:
+	Changed raise_exception_raw.
+Test: *
+Owner: swasey
+Status: closed

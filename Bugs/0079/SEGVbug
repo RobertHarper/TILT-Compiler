@@ -1,0 +1,60 @@
+Context:	$ml96/Release/guide
+Args:	r @diag :pserver:swasey_tilt@cvs.concert.cs.cmu.edu:/cvsroot -rrelease_may_2002
+
+gdb stack trace
+	#0  0xb4724 in cmpsi_126473 ()
+	#1  0xd2f40 in code_163618 ()
+	#2  0x193094 in anonfun_162776 ()
+
+$h/ml96/Local/NOTES.solaris
+$ml96/Runtime/thread.h
+$ml96/Runtime/tag.h
+$ml96/Backend/tracetable.sml
+$ml96/Rtl
+
+fun announce (s:string) x y = x y
+
+val toFPI = Position.fromInt
+fun incPos k = pos := Position.+(!pos, toFPI k)
+
+fun putV x = incPos(announce "writeVec" PIO.writeVec x)
+
+cvs annotate -r1.17 sparc.sml |
+sed -n '
+	/fun allocate_stack_frame/,/fun deallocate_stack_frame/p
+'
+
+The SEGV is occuring in POSIX_IO_Str_writeVec_code_123246.
+This is (eventually) called with a bogus argument %r11 by
+PosixPrimIOFn_putV_code_157734.
+
+The call tree after entering PosixPrimIOFn_putV_code_157734
+looks like (click on the filenames to view notes):
+
+	PosixPrimIOFn_putV_code_157734
+		PosixPrimIOFn_announce_inner_code_157496 (trivial)
+		PosixPrimIOFn_anonfun_code_157476 (constructs a closure)
+			LINKUNIT_onearg_code_502 (trivial)
+			LINKUNIT_vararg_code_612 (trivial)
+		PosixPrimIOFn_anonfun_code_157483
+			POSIX_IO_Str_writeVec_code_123246 (bogus %r11)
+
+Look at the tail jump in PosixPrimIOFn_anonfun_code_157483;
+%r11 is used to hold the callee address but it is also an argument
+to the callee (value 0).
+
+This could be a bug in register allocation for tail calls.
+	RA	$ml96/Backend/chaitin.sml:#26928,#27392
+	defUse	$ml96/Sparc/sparc.sml:#20764,#24720
+	ML_TAIL	$ml96/Rtl/rtl.sig.sml:#3043
+	ASMCALL	$ml96/Backend/core.sig.sml:#1870,#2362
+	RTLCALL	$ml96/Rtl/rtl.sig.sml:#6071,#6717
+
+Could the problem be that we are ignoring the CALL{save,...} component?
+	$ml96/Sparc/tosparc.sml:847,865
+	$ml96/Sparc/tosparc.sml:865
+	$ml96/Rtl/tortl.sml:469
+No:  The save list should always be nil.
+
+The allocateInstr case for CALL actually looks OK.  The problem is
+probably in its caller.

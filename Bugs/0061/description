@@ -1,0 +1,65 @@
+Number: 0061
+Title:       Typechecking fails after Hoist.
+Keywords:    Elaborator, Nil, Hoist
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        11/2/01
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	Type-checking after hoisting fails with this code:
+		(*$import *)
+
+		signature PARSER_DATA =
+		sig
+		    datatype 'a token = TOKEN
+		end
+
+		functor JoinWithArg (structure ParserData : PARSER_DATA) =
+		struct
+		end
+Code:
+Transcript:
+Comments:
+	To see what's going wrong, I printed the NIL code after
+	specialization and hoisting.  Compare the files
+	specialized.nil and hoisted.nil.  In particular, study what
+	the hoist algorithm did to the coercion
+
+		*                    (COERCION[ 'a_1041 ](LET  type_1069 = funct_arg_c_1068.ParserData
+		*                                              type_1070 = type_1069.token_sum
+		*                                              type_1071 = APP(type_1070,('a_1041))
+		*                                         IN   type_1071
+		*                                         END,
+		*         +1   LET  type_1072 = funct_arg_c_1068.ParserData
+		*         +1        type_1073 = type_1072.token
+		*         +1        type_1074 = APP(type_1073,('a_1041))
+		*         +1   IN   type_1074
+		*         +1   END),
+
+	Looking at the hoisted.nil file, and ignoring the second LET,
+	we see that the bindings for type_1069 and type_1070 are
+	hoisted up but the binding for type_1071 disappears.  That is,
+	this part of the NIL module is translated to
+
+		COERCION[ 'a_1041 ](type_1071,type_1074)
+
+	where type_1071 is a free variable.
+
+	In general, bindings inside a constructor of the form
+	COERCION[vars](c1,c2) may mention variables in vars.  Such
+	bindings must not be hoisted above the level of vars.  The
+	hoist translation for COERCION[vars](c1,c2) was buggy: It did
+	not allow hosited bindings to collect at c1 and c2.
+
+	In our example, the algorithm was correctly deciding to hoist
+	type_1071 to the level of c1 but (incorrectly) ignoring the
+	decision.
+Fix:
+	The fix was a two line change to the case for Coercion_c in
+	the hoister.  The recursive calls to translate c1 and c2 were
+	changed to use "rcon_limited" rather than "rcon".  The former
+	must be used wherever bindings may collect.
+Test:
+Owner: swasey
+Status: closed

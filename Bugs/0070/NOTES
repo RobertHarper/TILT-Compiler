@@ -1,0 +1,28 @@
+exception mlyAction
+XXX distanceParse reducing 252
+
+val actions = 
+fn (i392,defaultPos,stack,
+    (error):arg) =>
+case (i392,stack)
+of (0,(_,(MlyValue.INT INT1,INT1left,INT1right))::rest671) => let val 
+result=MlyValue.int(fn _ => let val INT as INT1=INT1 ()
+ in (INT) end
+)
+ in (LrTable.NT 2,(result,INT1left,INT1right),rest671) end
+...
+| (252,rest671) => let val result=MlyValue.strlist(fn _ => ([]))
+ in (LrTable.NT 78,(result,defaultPos,defaultPos),rest671) end
+...
+| _ => raise (mlyAction i392)
+
+The problem is in MLLrValsFun(_).ParserData.Actions.actions.
+The case doesn't match when i392 : int = 252.
+
+Assembler level:
+
+	.global MLLrValsFun_anonfun_code_680003
+ ! arguments : [$680005,$8] [$680006,$9] [$645838,$10] [$645839,$11] [$645840,$12] [$645841,$13] 
+ ! results    : [$766398,$8] 
+
+--

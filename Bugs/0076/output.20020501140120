@@ -1,0 +1,511 @@
+Saving: ./Top/Top.sparc.exe -fShowTimestamps -fUptoAsm -rcompress_asm -m Elaborator/mapfile-elaborate-bug -p
+Host: cuff.link.cs.cmu.edu
+Pwd: /usr5/swasey/t
+Date: Wed May  1 14:01:20 EDT 2002
+Found 6 active processors: 6  7  10  11  14  15 
+Using processors  6.
+Sun detected.  Using Til-Sparc.
+Starting compilation           : Wed May  1 14:01:20 2002
+   0.0 sec
+Warning: flags prevent full compile
+Mapfile Elaborator/mapfile-elaborate-bug with 289 units processed.
+Imports read.
+Dependency graph computed: 289 nodes and 2109 edges.
+Not reducing dependency graph.
+Creating directories.
+227 necessary units:   Firstlude  TiltPrim  Prelude  POSIX_SYS_DB  PreWord  PreInt  OPTION  STRING_CVT  PreString
+        StringCvt  WORD  PreVector  PreReal  CHAR  STRING  General_extern  GENERAL  General  NumFormat  Char  String
+        Option  NumScan  Word32  SysWord  POSIX_FLAGS  POSIX_TTY  PreTime  TIME  LIST  List  RealFormat  IEEE_REAL
+        INTEGER  Int32  Int  IEEEReal  MATH  REAL  Math64  BOOL  Bool  Real64  Real  Time  POSIX_PROC_ENV  POSIX_SIGNAL
+        Word8  POSIX_PROCESS  PreOS  Position  POSIX_FILE_SYS  MONO_VECTOR  VECTOR  ARRAY  Array  Vector  Word8Vector
+        MONO_ARRAY  Word8Array  POSIX_IO  POSIX_ERROR  POSIX  POSIX_extern  PrePosix  Word  POSIX_FileSys  POSIX_Sys_DB
+        SysInt  POSIX_Signal  POSIX_Process  SUBSTRING  Substring  BYTE  Byte  POSIX_Tty  POSIX_ProcEnv  POSIX_IO_Str
+        POSIX_Error  Posix  OS_IO  OS_IO_Str  CLEAN_UP  CleanUp  OS_PROCESS  OS_Process  OS_PATH  OS_PathFn  OS_Path
+        OS_FILE_SYS  OS_FileSys  OS_SIG  OS  PRIM_IO  PrimIOFn  BinPrimIO  OS_PRIM_IO  IO_SIG  IO  PosixPrimIOFn
+        PosixBinPrimIO  CharArray  CharVector  TextPrimIO  PosixTextPrimIO  CleanIO  STREAM_IO  TEXT_STREAM_IO  TEXT_IO
+        TextIOFn  TextIO  Word31  TopLevel  UTIL  PLATFORM  UTIL_ERROR  UtilError  Platform  Util  TYVAR  SYMBOL  ENV
+        SOURCEMAP  SourceMap  PRETTYPRINT  PpQueue  CONTROL  Control  PrettyPrint  SOURCE  PATHNAMES  PathNames  Source
+        ERRORMSG  ErrorMsg  StrgHash  Symbol  HashTableRep  HASH_TABLE  HashTable  ORD_KEY  ORD_SET  ORD_MAP  NAME
+        STATS  LISTOPS  LIST_PAIR  ListPair  Listops  LIST_SORT  LIB_BASE  LibBase  ListMergeSort  DATE  Date  TIMER
+        Timer  Stats  SPLAY_TREE  SplayTree  SplaySetFn  SplayMapFn  Name  Tyvar  TILWORD  TilWord32  TilWord64  PRIM
+        Prim  Fixity  IL  Il  AST  Ast  TOIL  PAT  DATATYPE  ILSTATIC  IMPERATIVE_IO  BIN_IO  BinIOFn  BinIO
+        ILCONTEXTEQ  ILCONTEXT  ILUTIL  PRIMUTIL  PRIMUTILPARAM  FORMATTER  Formatter  PPPRIM  Ppprim  PrimUtil
+        IlPrimUtilParam  PPIL  Ppil  IlUtil  IlContext  SEQUENCE  Sequence  BinaryMapFn  IlTable  IntListMap  HASH_KEY
+        MONO_HASH_TABLE  HashTableFn  HashString  Blaster  NAMEBLAST  NameBlast  IlContextEq  IlStatic  ERROR  Error
+        ASTHELP  AstHelp  GRAPHUTIL  GraphUtil  Datatype  Pat  SIGNATURE  Signature  EQUAL  Equal  INFIXPARSE
+        InfixParse  TVClose  Toil
+Start compiling files          : Wed May  1 14:01:30 2002
+   9.63 sec
+Starting slave cuff.link.27192.
+  [Plan for Toil:   generate]
+  [These files are up-to-date already:  Firstlude  TiltPrim  Prelude  MATH  LIST_PAIR  CleanIO  IO_SIG  OS_PROCESS
+        CLEAN_UP  POSIX_ERROR  ARRAY  VECTOR  MONO_VECTOR  PreOS  IEEE_REAL  LIST  PreTime  GENERAL  General_extern
+        PreReal  PreVector  PreString  OPTION  PreInt  PreWord  POSIX_SYS_DB  STRING_CVT  General  Option  List  Math64
+        MONO_ARRAY  PRIM_IO  IO  ListPair  STREAM_IO  OS_PRIM_IO  PrimIOFn  CleanUp  Array  StringCvt  WORD  CHAR
+        NumFormat  TIME  INTEGER  BOOL  Vector  IMPERATIVE_IO  Word8Vector  Bool  Char  STRING  String  Word8Array
+        SUBSTRING  CharVector  CharArray  Substring  RealFormat  NumScan  Word32  Int32  Word8  OS_PATH  TEXT_STREAM_IO
+        BIN_IO  Word31  TEXT_IO  OS_PathFn  BYTE  SysInt  Word  Position  Int  SysWord  POSIX_FLAGS  IEEEReal
+        POSIX_SIGNAL  POSIX_extern  Byte  OS_Path  BinPrimIO  TextPrimIO  BinIOFn  POSIX_Error  POSIX_Signal  PrePosix
+        POSIX_IO  REAL  POSIX_TTY  Real64  Real  Time  TIMER  DATE  OS_FILE_SYS  OS_IO  POSIX_FILE_SYS  POSIX_PROCESS
+        POSIX_PROC_ENV  POSIX  POSIX_FileSys  POSIX_Process  OS_SIG  Date  Timer  POSIX_IO_Str  POSIX_ProcEnv  POSIX_Tty
+        POSIX_Sys_DB  Posix  OS_FileSys  OS_Process  OS_IO_Str  OS  TextIOFn  PosixPrimIOFn  PosixBinPrimIO  BinIO
+        PosixTextPrimIO  TextIO  TopLevel  UTIL  PLATFORM  UTIL_ERROR  SYMBOL  SOURCEMAP  PRETTYPRINT  PpQueue  CONTROL
+        PATHNAMES  StrgHash  HashTableRep  HASH_TABLE  ORD_KEY  STATS  LISTOPS  LIST_SORT  LIB_BASE  SPLAY_TREE  TILWORD
+        Fixity  FORMATTER  SEQUENCE  HASH_KEY  HashString  GRAPHUTIL  GraphUtil  MONO_HASH_TABLE  SplayTree  LibBase
+        ORD_MAP  ORD_SET  HashTable  PathNames  Control  SourceMap  ENV  UtilError  Platform  PrettyPrint  ListMergeSort
+        SplaySetFn  SplayMapFn  BinaryMapFn  IntListMap  HashTableFn  SOURCE  Util  TYVAR  Source  Listops  Sequence
+        TilWord32  Stats  ERRORMSG  ErrorMsg  TilWord64  Formatter  Blaster  Symbol  NAME  AST  Ast  Name  Tyvar  PRIM
+        NAMEBLAST  ASTHELP  TVClose  AstHelp  NameBlast  Prim  IL  PRIMUTIL  PRIMUTILPARAM  PPPRIM  Ppprim  Il  TOIL
+        PAT  DATATYPE  ILSTATIC  ILCONTEXTEQ  ILCONTEXT  ILUTIL  PrimUtil  IlPrimUtilParam  PPIL  IlTable  ERROR
+        SIGNATURE  EQUAL  INFIXPARSE  Ppil  IlUtil  InfixParse  Error  IlContext  IlContextEq  IlStatic  Datatype
+        Signature  Equal  Pat]
+  [Sending FLUSH_ALL to cuff.link.27192]
+  [Calling cuff.link.27192 to compile Toil]
+Slave received FLUSH_ALL.
+Setting PtrWriteBarrier to true
+Setting FullWriteBarrier to true
+Setting MirrorGlobal to true
+Setting MirrorPtrArray to false
+Setting BranchingTraps to true
+Setting UptoElaborate to false
+Setting UptoPhasesplit to false
+Setting UptoClosureConvert to false
+Setting UptoRtl to false
+Setting UptoAsm to true
+Setting debug_asm to true
+Setting keep_asm to true
+Setting compress_asm to false
+Setting ManagerChat to true
+Setting ManagerVerbose to true
+Setting TimeEachFile to false
+Setting makeBackups to false
+Setting ShowWrittenContext to false
+Setting WriteUnselfContext to false
+Setting ShowTools to false
+Setting Typecheck to false
+Setting WTypecheck to false
+  [Compiling Toil to assembly]
+  [0 imports of total size 0 were cached.
+   225 imports of total size 492235 were uncached.]
+  [Elaboration context took 21.57 seconds.]
+CPUTIME 41   [Parsing Elaborator/toil.sml]
+CPUTIME 47   [Elaborating Elaborator/toil.sml non-constrained]
+Warning: top-level unresolved tyvar -- setting to type unit: tv_38117_7500
+Warning: top-level unresolved tyvar -- setting to type unit: tv_37962_7439
+Warning: top-level unresolved tyvar -- setting to type unit: tv_37866_7394
+Warning: top-level unresolved tyvar -- setting to type unit: tv_37558_7283
+Warning: top-level unresolved tyvar -- setting to type unit: tv_37498_7262
+Warning: top-level unresolved tyvar -- setting to type unit: tv_37261_7159
+Warning: top-level unresolved tyvar -- setting to type unit: tv_29652_4002
+Warning: top-level unresolved tyvar -- setting to type unit: tv_29622_3992
+Warning: top-level unresolved tyvar -- setting to type unit: tv_26140_2446
+Warning: top-level unresolved tyvar -- setting to type unit: tv_24459_1822
+gc_context: 486 items in original context.  141 items in reduced context.
+  [writing Elaborator/TM/any/toil.sml.il - unnecessary]
+CPUTIME 70 ===== Starting Phasesplit: Toil                          =====
+  Initial context is phase-split
+  Bindings are phase-split
+  Imports are computed
+  Exports are phase-split
+CPUTIME 76 ===== Starting TypeofElim1: Toil                         =====
+2794 Typeof_c nodes rewritten
+CPUTIME 140 ===== Starting Rename: Toil                              =====
+CPUTIME 146 ===== Starting Optimize1: Toil                           =====
+CPUTIME 164 ===== Starting Vararg: Toil                              =====
+CPUTIME 186 ===== Starting Inline1: Toil                             =====
+  59 functions inlined once.
+  26 copies of 10 other functions inlined.
+CPUTIME 189 ===== Starting Reify1: Toil                              =====
+CPUTIME 303 ===== Starting Specialize: Toil                          =====
+  5 optimizable candidates.
+  58 impure.
+  278 escaping.
+  9 used polymorphically.
+CPUTIME 307 ===== Starting Hoist: Toil                               =====
+Imports Processed
+CPUTIME 314 ===== Starting Optimize2: Toil                           =====
+CPUTIME 345 ===== Starting Inline2: Toil                             =====
+  20 functions inlined once.
+  82 copies of 33 other functions inlined.
+CPUTIME 347 ===== Starting Optimize3: Toil                           =====
+CPUTIME 357 ===== Starting Inline3: Toil                             =====
+  5 functions inlined once.
+  2 copies of 1 other functions inlined.
+CPUTIME 358 ===== Starting Reify2: Toil                              =====
+CPUTIME 365 ===== Starting ClosureConv: Toil                         =====
+CPUTIME 371 ===== Starting TypeofElim2: Toil                         =====
+175 Typeof_c nodes rewritten
+CPUTIME 375 ===== Translating to RTL             =====
+CPUTIME 396 ===== Translating to TIL-Sparc assembly      =====
+  284 procedures.  284 recursive components.   Largest component has size 1.
+  [cuff.link.27192 compiled Toil in 1116.68 seconds]
+------- Times to compile files -------
+1 of  227 units needed compilation.
+  Unit work times (in seconds): min 1116.68 max 1116.68 mean 1116.68 absdev 0.0 (n=1)
+  Unit wait times (in seconds): min 0.32 max 0.32 mean 0.32 absdev 0.0 (n=1)
+  Slave work times (in seconds): min 1116.68 max 1116.68 mean 1116.68 absdev 0.0 (n=1)
+  Slave idle times (in seconds): min 0.03 max 0.05 mean 0.04 absdev 0.01 (n=2)
+0 files under 1.0 second.
+0 files from 1.0 to 10.0 seconds.
+0 files from 10.0 to 30.0 seconds:  
+1 files over 30.0 seconds:
+  Toil                 took 1116.68 seconds of work and waited for 0.32 seconds.
+Start linking on Toil          : Wed May  1 14:20:16 2002
+   1136.31 sec
+  [Checking that unit environments match up.]
+  [Generating startup code.]
+CPUTIME 1140 ===== Translating to TIL-Sparc assembly      =====
+  24 procedures.  24 recursive components.   Largest component has size 1.
+Finished compilation           : Wed May  1 14:20:29 2002
+   1148.63 sec
+
+
+Starting compilation           : Wed May  1 14:01:20 2002
+   0.0 sec
+Start compiling files          : Wed May  1 14:01:30 2002
+   9.63 sec
+Start linking on Toil          : Wed May  1 14:20:16 2002
+   1136.31 sec
+Finished compilation           : Wed May  1 14:20:29 2002
+   1148.63 sec
+
+
+Global flags
+-------------------------------------------
+BlastDebug                      : false
+BranchingTraps                  : true
+ChaitinDebug                    : false
+ChaitinMsgs                     : false
+CheckPointVerbose               : true
+Closure_TermCompress            : true
+DatatypeDebug                   : false
+DatatypeInline                  : true
+DebugAnalyze                    : false
+DoBackendTimer                  : false
+DoBblockTimer                   : false
+DoChaitinTimer                  : false
+DoNamedForm                     : true
+DoOptimizeTimer                 : false
+DoWriteList                     : true
+ElaboratorTrack                 : false
+ElideValues                     : true
+ElimTailCall                    : true
+EqualDebug                      : false
+FullWriteBarrier                : true
+HilElide                        : false
+HoistDebug                      : false
+IlPrimUtilParamDebug            : true
+IlcontextDebug                  : false
+IlcontexteqDebug                : false
+IlcontexteqShowUnequal          : false
+IlstaticDebug                   : false
+IlstaticShowing                 : false
+IlstaticTrace                   : false
+IlstaticTrackCoerce             : false
+IlutilDebug                     : false
+InfixParseDebug                 : false
+Linearize                       : true
+LinearizeStats                  : false
+MakeTable                       : true
+ManagerChat                     : true
+ManagerVerbose                  : true
+MirrorGlobal                    : true
+MirrorPtrArray                  : false
+NameDebug                       : false
+NoFork                          : false
+OptimizeDebug                   : false
+PatResultType                   : true
+Pattern_debug                   : false
+PermissiveSharing               : true
+PpnilHtmlElidePrim              : false
+PpnilHtmlElideRecord            : true
+PtrWriteBarrier                 : true
+ReifyDebug                      : false
+Reject_NonValue                 : true
+ResetStats                      : true
+RtlRecognizeConstants           : true
+ShowEnable                      : false
+ShowImports                     : false
+ShowPlan                        : true
+ShowStale                       : false
+ShowTimestamps                  : true
+ShowTools                       : false
+ShowWrittenContext              : false
+SignatureDebug                  : false
+SignatureDiag                   : false
+SparcTrackstorage               : false
+StatsSortTimers                 : false
+TimeEachFile                    : false
+TimeFinal                       : false
+ToasmDebug                      : false
+ToasmMsgs                       : false
+ToclosureDebug                  : false
+ToilDebug                       : false
+TonilDebug                      : false
+TonilDiag                       : true
+TonilFullDebug                  : false
+TortlBaseDebug                  : false
+TortlDebug                      : false
+TortlRecordDebug                : false
+TraceDebug                      : false
+TraceDiag                       : false
+TraceTagEntry                   : false
+Typecheck                       : false
+TyvarDebug                      : false
+UptoAsm                         : true
+UptoClosureConvert              : false
+UptoElaborate                   : false
+UptoPhasesplit                  : false
+UptoRtl                         : false
+WTypecheck                      : false
+WriteUnselfContext              : false
+checkClosureConv                : false
+checkCoerceElim                 : false
+checkHoist                      : false
+checkInline1                    : false
+checkInline2                    : false
+checkInline3                    : false
+checkOptimize1                  : false
+checkOptimize2                  : false
+checkOptimize3                  : false
+checkPhasesplit                 : false
+checkReify1                     : false
+checkReify2                     : false
+checkRename                     : false
+checkSpecialize                 : false
+checkTypeofElim1                : false
+checkTypeofElim2                : false
+checkVararg                     : false
+closure_omit_coercions          : true
+closure_print_free              : false
+coerce_elim_debug               : false
+compress_asm                    : false
+debug_asm                       : true
+doCSE                           : true
+doClosureConv                   : true
+doCoerceElim                    : false
+doConsistent                    : true
+doHoist                         : true
+doInline1                       : true
+doInline2                       : true
+doInline3                       : true
+doOptimize1                     : true
+doOptimize2                     : true
+doOptimize3                     : true
+doPhasesplit                    : true
+doReify1                        : true
+doReify2                        : true
+doRename                        : true
+doSpecialize                    : true
+doTypeofElim1                   : true
+doTypeofElim2                   : true
+doUncurry                       : false
+doVararg                        : true
+do_memoize                      : true
+do_polyrec                      : true
+do_preproject                   : true
+do_thin                         : true
+keep_asm                        : true
+keep_hil_numbers                : false
+killDeadImport                  : true
+littleEndian                    : false
+makeBackups                     : false
+nil_debug                       : false
+nil_eager                       : false
+nil_profile                     : false
+nil_show_calls                  : false
+nil_show_context                : false
+nilcontext:do_selfify           : false
+nilcontext_debug                : false
+nilcontext_memoize              : true
+nilcontext_path_compression     : true
+nilcontext_profile              : false
+nilcontext_transitive           : true
+nilstatic_assertions            : false
+nilstatic_bnd_profile           : false
+nilstatic_compare_paths         : false
+nilstatic_con_valid_profile     : false
+nilstatic_con_valid_top_profile : false
+nilstatic_equiv_profile         : false
+nilstatic_equiv_total_profile   : false
+nilstatic_exp_profile           : false
+nilstatic_import_profile        : false
+nilstatic_print_lets            : false
+nilstatic_profile               : false
+nilstatic_shao_recursion        : true
+nilstatic_show_stack            : false
+nilstatic_trace                 : false
+nilutil_profile                 : false
+normalize_debug                 : false
+normalize_profile               : false
+normalize_show_calls            : false
+normalize_show_context          : false
+prof                            : false
+showClosureConv                 : false
+showCoerceElim                  : false
+showHIL                         : false
+showHILContext                  : false
+showHTML                        : false
+showHoist                       : false
+showInline1                     : false
+showInline2                     : false
+showInline3                     : false
+showOnlyModule                  : false
+showOptimize1                   : false
+showOptimize2                   : false
+showOptimize3                   : false
+showPhasesplit                  : false
+showReify1                      : false
+showReify2                      : false
+showRename                      : false
+showRtl                         : false
+showSize                        : false
+showSpecialize                  : false
+showTypeofElim1                 : false
+showTypeofElim2                 : false
+showVararg                      : false
+show_cbnd                       : false
+subst_eager                     : false
+subst_eager_lets                : false
+subst_make_lets                 : false
+subst_opt_lets                  : true
+subst_profile                   : false
+tortl_base_debug_simp           : false
+traceops_minimize_computes      : true
+typeof_elim_debug               : false
+vararg_debug                    : false
+wcheckClosureConv               : false
+wcheckCoerceElim                : false
+wcheckHoist                     : false
+wcheckInline1                   : false
+wcheckInline2                   : false
+wcheckInline3                   : false
+wcheckOptimize1                 : false
+wcheckOptimize2                 : false
+wcheckOptimize3                 : false
+wcheckPhasesplit                : false
+wcheckReify1                    : false
+wcheckReify2                    : false
+wcheckRename                    : false
+wcheckSpecialize                : false
+wcheckTypeofElim1               : false
+wcheckTypeofElim2               : false
+wcheckVararg                    : false
+-------------------------------------------
+
+
+Global counters
+-------------------------------------------
+Alpha Equiv Checks Failed       :         0
+Alpha Equiv Checks Succeeded    :         0
+CC_typeofs                      :       175
+Elab-NumTyvars                  :      7094
+Kind Standardize Calls          :         0
+Large Frame Accesses            :         0
+Large Stack Frames              :         0
+PS_Typeofs                      :         0
+RTLconglobal                    :       493
+RTLglobal                       :      2140
+RTLprojsum                      :       106
+RTLxinject_sum_dyn_multi        :       163
+RTLxinject_sum_dyn_single       :        35
+Rtlxarray_dyn                   :         2
+Rtlxlen_dyn                     :         2
+Rtlxsub_dyn                     :         2
+Rtlxupdate_dyn                  :         1
+toil.unresolved_tyvar           :        10
+-------------------------------------------
+
+
+Global integer statistics
+-------------------------------------------
+FormatterIndent                 :         0
+SourceLines                     :      2576
+TortlDebugFull                  :         0
+convarMode                      :         0
+-------------------------------------------
+
+
+
+Global timings
+Timer Name          |   Calls     Avg     Max |      cpu     cpu |      gc |     real    real | flags
+                    |            (ms)    (ms) |      (s)     (%) |     (s) |      (s)     (%) |      
+----------------------------------------------------------------------------------------------------
+ReadingContext      |     226    44.9    1038 |    10.15   (0.9) |    0.00 |    10.14   (0.9) |      
+AddingContext       |     226     7.2     104 |     1.64   (0.1) |    0.00 |     1.65   (0.1) |      
+Parsing             |       1  5701.0    5701 |     5.70   (0.5) |    0.00 |     5.70   (0.5) |      
+Elaboration         |       1 21772.4   21772 |    21.77   (2.0) |    0.00 |    21.77   (2.0) |      
+GCContext           |       1  1075.2    1075 |     1.08   (0.1) |    0.00 |     1.07   (0.1) |      
+Phasesplit          |       1  5322.8    5322 |     5.32   (0.5) |    0.00 |     5.32   (0.5) |      
+Phase-split-ctxt    |       1  1579.0    1579 |     1.58         |    0.00 |     1.58         |      
+TypeofElim1         |       1 64836.3   64836 |    64.84   (5.8) |    0.00 |    64.85   (5.8) |      
+Rename              |       1  5250.6    5250 |     5.25   (0.5) |    0.00 |     5.25   (0.5) |      
+Optimize1           |       1 18746.4   18746 |    18.75   (1.7) |    0.00 |    18.75   (1.7) |      
+Vararg              |       1 21516.0   21516 |    21.52   (1.9) |    0.00 |    21.52   (1.9) |      
+Inline1             |       1  2575.4    2575 |     2.58   (0.2) |    0.00 |     2.58   (0.2) |      
+Reify1              |       1114778.3  114778 |   114.78  (10.3) |    0.00 |   114.77  (10.3) |      
+Specialize          |       1  3768.2    3768 |     3.77   (0.3) |    0.00 |     3.77   (0.3) |      
+Hoist               |       1  6608.0    6608 |     6.61   (0.6) |    0.00 |     6.61   (0.6) |      
+Optimize2           |       1 31668.2   31668 |    31.67   (2.8) |    0.00 |    31.67   (2.8) |      
+Inline2             |       1  1303.0    1303 |     1.30   (0.1) |    0.00 |     1.30   (0.1) |      
+Optimize3           |       1  9873.8    9873 |     9.87   (0.9) |    0.00 |     9.87   (0.9) |      
+Inline3             |       1  1135.3    1135 |     1.14   (0.1) |    0.00 |     1.14   (0.1) |      
+Reify2              |       1  6890.1    6890 |     6.89   (0.6) |    0.00 |     6.89   (0.6) |      
+ClosureConv         |       1  6384.8    6384 |     6.38   (0.6) |    0.00 |     6.38   (0.6) |      
+TypeofElim2         |       1  4248.8    4248 |     4.25   (0.4) |    0.00 |     4.25   (0.4) |      
+Translation to RTL  |       1 20509.8   20509 |    20.51   (1.8) |    0.00 |    20.51   (1.8) |      
+To Sparc ASM        |       2373567.8  739987 |   747.14  (67.1) |    0.00 |   747.24  (67.1) |      
+----------------------------------------------------------------------------------------------------
+TOTAL CPU TIME      : 1112.90 seconds
+TOTAL REAL TIME     : 1113.01 seconds
+OVERALL RATE        : 2.31 lines/second
+Wed May  1 14:20:29 2002
+
+
+
+
+
+
+
+PROC #0: Allocated  = 21345260 kb
+         Copied     =  4402708 kb
+         Work       =  7961732 kw
+                                Sum (s)        Count     Min(ms)   Avg(ms)  Max(ms)
+         --------------|-----------------------------------------------------------
+         Total         |   1149.222
+           Accounting  |     38.389 ( 3.3%)   492103        0.00      0.08    29.57
+           Scheduler   |      0.715 ( 0.1%)   118346        0.00      0.01     0.27
+           Mutator     |    830.657 (72.3%)    59173        0.01     14.04   287.07
+           GC          |    279.460 (24.3%)   314583        0.00      0.89   8099.91
+           Idle        |      0.000 ( 0.0%)        1        0.00      0.00     0.00
+         Pause         |    280.176 (24.4%)    59174        0.03      4.73   8100.64
+
+         5.0 ms util:   0.000 <  0.853 <   1.00        70.0 ms util:   0.000 <  0.881 <   1.00       500.0 ms util:   0.000 <  0.872 <  0.998
+        10.0 ms util:   0.000 <  0.914 <   1.00        80.0 ms util:   0.000 <  0.881 <   1.00      1000.0 ms util:   0.000 <  0.863 <  0.996
+        20.0 ms util:   0.000 <  0.883 <   1.00        90.0 ms util:   0.000 <  0.881 <   1.00      2000.0 ms util:   0.000 <  0.845 <  0.992
+        30.0 ms util:   0.000 <  0.889 <   1.00       100.0 ms util:   0.000 <  0.880 <   1.00      3000.0 ms util:   0.000 <  0.829 <  0.985
+        40.0 ms util:   0.000 <  0.884 <   1.00       150.0 ms util:   0.000 <  0.879 <   1.00      4000.0 ms util:   0.000 <  0.816 <  0.984
+        50.0 ms util:   0.000 <  0.883 <   1.00       200.0 ms util:   0.000 <  0.878 <   1.00
+        60.0 ms util:   0.000 <  0.882 <   1.00       250.0 ms util:   0.000 <  0.877 <   1.00
+
+GC:    GCMethod      =          Gen      StackMethod = Normal
+       Ordering   =  Default        ForceSpaceCheck = No   CopyCopy = Unneeded     WorkSharing = Yes     WorkTrack = Yes   Relaxed = No
+       CollectionRate = 2.00
+       Allocated     =  21345260 kb      Copied     =   4402708 kb    Replicated  =         0 kb
+       NumGC         =  49060            NumMajorGC =  42
+       AvgFramsSize  =  153         AvgStkDepth  =  182           MaxStkDepth  = 25807    newStkDepth =    0
+       NumCopied     = 297400066     NumRoot      =         0      NumConflict  =        0
+       NumShared     = 131787991     NumWrite     =  79064156      NumLocative  =        0
+       MinSurvRate    0.000 <  0.062 <  1.000
+       MajSurvRate    0.110 <  0.717 <  0.858
+       HeapSize(kb)   52308 < 100027 < 283717
+
+MISC:  Total time    =  1149.43 s   maxPhysMem   =         0      minPageFault =        0    invCtxtSwap  =    83
+       Total Threads =        1     sharedMem    =         0      majPageFault =        0    volCtxtSwap  = 12351
+       Processors    =        1
+       Max Threads   =        1     unsharedData =         0                                 swapping     =     0
+                                    unsharedStk  =         0
+
+real 1150.35
+user 1140.50
+sys 8.40

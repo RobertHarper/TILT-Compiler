@@ -1,0 +1,24 @@
+Number: 0016
+Title:       Want raised exceptions to carry debugging information.
+Keywords:    exception handling,runtime
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        7/25/00
+Version:     CVS
+System:	     solaris,alpha
+Severity:    minor
+Problem:
+	Exceptions should carry, at least as an option, some
+	information about where the exception is raised.
+	Ideally it will be possible to get a backtrace from
+	the point of a raise.
+
+	What about printing a stack trace in the top-level exception
+	handler.  It should be possible for the compiler and runtime
+	to do this better than, say, gdb on solaris.
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

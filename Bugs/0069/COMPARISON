@@ -1,0 +1,76 @@
+This probably belongs with bug # 69.
+
+Comparing three compilers:
+	Transparent	transparent interpretation (8/16/2001 compiler with minor
+			changes to command line interface)
+	Old		opaque interpretation without Leaf's optimizations
+	New		opaque interpretation with Leaf's optimizations
+
+This comparison is not perfect because I had each compiler build
+itself.
+
+        Metric          Transparent	Old             New             New/Old		New/Transparent
+        Heap		8300172		7549076		7592496		1.00		0.91
+        ASM1		3947		3916		46024
+	NJ-real		4024.06		7776.48		7237.96		0.93		1.79
+	NJ-user		3726.75		7288.49		6751.71		0.92		1.81
+	NJ-sys		129.70		277.29		252.26		0.90		1.94
+	LSF				1		0
+	LFA				1856		0
+        ASM2		3582832		6646248		5096348
+        ASM-TILT	3578885		6642332		5050324		0.76		1.41
+        Binary		24558396	40512660	31998716	0.78		1.30
+        Binary2		11800676	22182656	16872832	0.76		1.42
+	Binary/Heap	1.42		2.93		2.22		0.75		1.56
+	Parser-real	1797.58		3803.65		3067.76		0.80		1.70
+	Parser-user	1699.91		3698.94		2925.51		0.79		1.72
+	Parser-sys	33.25		41.13		44.92		1.09		1.35
+        ASM3		682654		1119530		900523
+	ASM-Parser	678707		1115614		854499		0.76		1.25
+
+Heap: Size of the SML/NJ 110.0.3 heaps for TILT.
+ASM1: Lines of assembler code after purge.
+
+NJ: Time in seconds for SML/NJ running the TILT heaps to compile
+    minimal basis library and TILT.
+Command: save tilt -rcompress_asm -m mapfile-all -p
+LSF: Number of large stack frames allocated during NJ compile.
+LFA: Number of large frame accesses emitted during NJ compile.
+ASM2: Lines of assembler code after NJ compile.
+ASM-TILT: (ASM2 - ASM1) Lines of sparc assembler code generated during
+          NJ compile.
+Binary: Size of TILT executable (not stripped).
+Binary2: Size of TILT executable (stripped).
+
+Parser: Time in seconds for TILT executables to compile minimal basis
+        library and TILT parser.
+Command: TILT_LIBDIR=`pwd save ./Top.sparc.exe -rcompress_asm -m Parser/mapfile-parse -p
+ASM3: Lines of assembler code after Parser compile.
+ASM-Parser: (ASM3 - ASM1) Lines of sparc assembler code generated during
+	    Parser compile.
+------------------------------
+    	[Leaf addressed this in April 2002.  The number of lines of
+	 SPARC assembler for MLLrValsFun and all of TILT are:
+
+			Transparent   Opaque	Opaque+Leaf
+	      parser	108221	      280967	137220
+	      TILT	3578885	      6642332	5050324
+
+	 the ratios x/Transparent are
+	
+			Transparent   Opaque	Opaque+Leaf
+	      parser	1.0	      2.59	1.26
+	      TILT	1.0	      1.85	1.41
+
+	 the ratios x/Opaque are
+
+			Transparent   Opaque	Opaque+Leaf
+	      parser	0.38	      1.0	0.48
+	      TILT	0.53	      1.0	0.76
+	]
+------------------------------
+Alpha binary sizes
+
+				Opaque		Opaque+Leaf	New/Old
+	     not stripped	42409984	33546240	0.79
+	     stripped		22593536	16187392	0.71

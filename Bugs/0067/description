@@ -1,0 +1,308 @@
+Number: 0067
+Title:       Representation of indices in trace table inadequate.
+Keywords:    tracetable, backend, GC
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        11/19/01
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	The compiler fails while translating the following code to
+	alpha assembler.  (This problem was first seen in bug 0065.)
+		(*$import *)
+
+		signature RTL =
+		sig
+		    type T0  type T1  type T2  type T3  type T4  type T5  type T6  type T7  type T8  type T9
+		    type T10 type T11 type T12 type T13 type T14 type T15 type T16 type T17 type T18 type T19
+		    type T20 type T21 type T22 type T23 type T24 type T25 type T26 type T27 type T28 type T29
+		    type T30 type T31
+
+		    val t31_in : unit -> T31
+		    val t31_eq : T31 * T31 -> int
+		end
+
+		functor bug (structure Rtl : RTL) =
+		struct
+		    fun cmpf2s c = Rtl.t31_eq (c, Rtl.t31_in ())
+		end
+Code:
+	tilt mapfile-bug
+	tilt -C mapfile-bug -fshowClosureConv -fshowRtl -fTraceDebug -fTraceDiag -fToasmMsgs -fChaitinDebug -fChaitinMsgs mapfile-bug
+Transcript:
+	================================================
+	Starting translation to TIL-Alpha assembly
+	  4 procedures.  4 recursive components.   Largest component has size 1.
+	tilt: tracetable.sml: index too large
+Comments:
+	Description of the Problem
+	--------------------------
+
+	TILT uses trace tables to avoid tagging data on the
+	stack or in registers; see pages 2--3 of the PLDI'96 paper
+	\cite{Tarditi96pldi} or pages 189--190 of Morrisett's dissertation
+	\cite{Morrisett95phd} for a summary.  These trace tables, together
+	with tags on heap-allocated data, constitute the run-time type
+	information used by the garbage collector.
+
+	Before a Nil module is translated to RTL, all bound expression
+	variables are annotated with information used to generate the
+	garbage collector's trace tables.  (These annotations are written,
+	for example, by the Reifier.)  One form these trace annotations
+	may take is
+
+		Nil.TraceKnown(TraceInfo.Compute (v, cpath)) : Nil.niltrace
+
+	where v is a bound constructor variable and cpath a non-empty list
+	of labels such that the projection ``v.cpath'' is well-formed.
+	This form of trace annotation supports types that can not be
+	known until runtime.  Abstractly, when the collector encounters
+	such an annotation, it uses the projection ``v.cpath'' to find
+	type information for the annotated variable.  The code above
+	tickles a limit in the low-level representation of this
+	form of annotation.  To provide some context, I will describe how
+	this form of annotation is translated into a trace table entry.
+
+	At the RTL level, all general purpose and floating point
+	registers are annotated with type information calculated
+	from the Nil annotations on bound expression variables.
+	The annotation above is translated into an RTL representation
+	(by TortlBase.niltrace2rep) as follows.  The bound constructor
+	variable v will already have been translated and the compiler
+	will already have decided how to find v's type information
+	at runtime: through a global label, through a local label,
+	or through a register.	The path cpath is translated into a
+	list of integers (by TortlBase.cpath2indices) specifying the
+	projections to apply to v's type information.  For example,
+	the annotation above might translate to
+
+		Rtl.COMPUTE (Rtl.Projvar_p (rv, indices)) : Rtl.rep
+
+	where, at runtime, the register rv will hold v's type information
+	and projecting according to indices will map this to type
+	information for the register being traced.
+
+	At the assembler level, RTL registers are assigned to stack
+	locations and machine registers which are associated with trace
+	table information corresponding (very directly) to the RTL level
+	type information.  For example, the RTL representation above might
+	get translated (by Toalpha.translateRep or Tosparc.translateRep)
+	to
+
+		Tracetable.TRACE_STACK_REC (sloc, indices) : Tracetable.trace
+
+	where, at runtime, the stack location sloc will hold some type
+	information and projecting according to indices will map this to
+	type information for the register or stack location being traced.
+
+	When register allocation is performed, a subset of the available
+	trace information is selected (by Chaitin.getCallInfo) and encoded
+	as binary data (by Tracetable.MakeTable) to form the trace tables
+	used by the garbage collector.	In particular, MakeTable must
+	map integer lists like "indices" into binary data.  TILT had
+	been using a compact representation: Pack four indices into a
+	single 30-bit value, allocating six bits for the first index
+	and eight bits for the other three.  With this representation,
+	there is no encoding for an index which is too large for it's
+	position (6 or 8 bits) or a list of more than four indices.
+	The code above demonstrates the former error.  I wasn't able to
+	contrive SML code leading to the latter error.
+
+	Instance of the Problem
+	-----------------------
+
+	I compiled the SML code above with some debug messages turned on;
+	see the file dump.txt.	The RTL code for cmpf2s has four trace
+	annotations which print as
+
+		COMPUTE cmpf2s_cEnv_1206(TRACE).31
+
+	These correspond to ML values like
+
+		COMPUTE (Projvar_p (REGI (cmpf2s_cEnv_1206, TRACE),[31]))
+
+	Note that the index 31 does not fit in 6 bits [This is wrong
+	in two ways.  First, I was confused because the limit 32
+	rather than 64 = 2^6 appeared in the compiler source.  Second,
+	the value (index + 1) must fit in the allotted bits since zero
+	is used as a sentinal.  With the correct limit of 64 and an
+	index of 63, the bug appears.]: If the compiler decides to
+	write any of these trace annotations into a trace table, we
+	will run into the encoding bug discussed above.  Luckily,
+	after register allocation, the compiler tries to do this.  The
+	trace table information it tries to encode includes
+
+		------------------------
+		LCcode_1317:
+		framesize:32
+		retaddpos:0
+		regtrace:
+		stacktrace:
+			12:yes
+			8:yes
+			16:stack_rec 4@8.31
+		------------------------
+
+	The last line specifies that, at run-time, the type of the
+	value at stack offset 16 can be calculated by projecting the
+	31st component from the record whose base address is stored in
+	the four bytes at stack offset eight.  If we examine the ALPHA
+	assembler code for cmpf2s, this all makes sense: The argument
+	c_1083 (corresponding to the bound identifier c) is at stack
+	offset 16 and the argument cmpf2s_cEnv_1206 (corresponding to type
+	components of the structure Rtl) is at stack offset eight. (To see
+	this code, I disabled generation of trace tables and recompiled;
+	see the file asm.s.)
+
+	Solutions for the Problem
+	-------------------------
+
+	What do we know about these integer lists?  We have been
+	assuming that the indices themselves are small (six or eight
+	bits).	We have been assuming that there are never more than
+	four indices to represent.  These assumptions have become more
+	important because with the opaque interpretation, there will be
+	more abstract types, more trace table entries, and more integer
+	lists to represent.
+
+	Could we strengthen the second assumption?  I suspect that rather
+	than write annotations like Compute(v,cpath), where cpath has
+	more than one element, the reifier could bind v.cpath to a new
+	variable r and use Compute(r,[]) instead.  If so, the integer
+	lists would either be empty or a singleton and we could use up
+	to 29 bits (instead of six or eight) for the index.  With this
+	approach, we force the mutator to do the projections and store
+	more (intermediate) projected type information.  This would
+	happen whether or not the garbage collector is invoked.  For now,
+	I assume we want to avoid this alternative in favor of changing
+	the representation of these integer lists.  (We could change
+	the reifier to bind projections, as above, when it is clear that
+	the corresponding integer list would not be representable.)
+
+	Changing the binary representation of these integer lists
+	involves changes to the compiler (functor Tracetable) and garbage
+	collector (stack.h and stack.c, especially the definition and
+	use of PathProject).
+
+	What constraints do we have?  There is a tension between
+	making the trace tables compact, making them simple for the
+	garbage collector to decode, and making them adequate to
+	represent the type information needed at runtime.  The
+	previous representation was both compact and simple to decode
+	(but is now inadequate).  For now, I assume we don't want to
+	make the trace tables larger and will consider only 30 bit
+	representations.  [But see Representation 4 below.]
+
+	Representation 1
+
+	We can continue to use a fixed number of fixed-width fields and
+	fiddle with the parameters to find a better representation.
+
+	The previous representation used bit field lengths [6,8,8,8].
+	If we used [8,8,8,6], we would need a structure with at least 63
+	type components (ie, 21 datatypes) to hit the bug.  If we used
+	[14,8,8], we would practically eliminate the bug.
+
+	Representation 2
+
+	We can vary (and record) the number of fields used and allocate
+	the remaining bits according to this number.
+
+	For example, if we want to support one to four indices, we use
+	two bits to represent the number and divide up the remaining 28
+	bits: [28] for one index, [14,14] for two, [10,9,9] for three,
+	and [7,7,7,7] for four.
+
+	Representation 3
+
+	We can do away with fixed-width fields by employing a
+	prefix-free mapping from the natural numbers to bit strings.
+	rho is prefix-free if whenever rho(n) is a prefix of rho(m),
+	then n = m.  Given a prefix-free mapping rho, we can represent
+	the list of indices [a_1,...,a_n] as the bit string
+
+		rho(n) rho(a_1) ... rho(a_n) junk
+
+	where junk flushes the bit string to 30 bits.
+
+	[Representation 4
+
+	This is what I implemented.
+
+	First, contrary to what Perry expected, the translation to RTL
+	was creating arbitrarily large indices.  The functions
+	TortlBase.cpath2indices and TortlBase.niltrace2rep constructed
+	index lists without considering the chained layout of records.
+	Under this implementation, Rtl.rep values could contain large
+	indices.  These large indices made it to
+	Tracetable.indices2word, where they were not supported.  Now,
+	cpath2indices knows about the chained layout of large records
+	and never generates large indices.  Now Perry's claim that
+	"the [index] being arbitrarily large is not a problem since 6
+	bits is always engouh" is true.  In fact, these indices lie in
+	the range 0..22 (inclusive) and fit in 5 bits.
+
+	As Perry points out, the lists of indices can be arbitrarily
+	long.  Because of this, I've relaxed the 30-bit.
+
+	A special trace with indices [a0, ..., a_{n-1}] is encoded in
+	2+floor(n/6) words as follows
+
+                 3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1
+                 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
+                +---------------------------------------------------------------+
+	0       |typ|   b5    |   b4    |   b3    |   b2    |   b1    |   b0    |
+                +---------------------------------------------------------------+
+	1       |                             data                              |
+                +---------------------------------------------------------------+
+	2       |0 0|   b11   |   b10   |   b9    |   b8    |   b7    |   b6    |
+                +---------------------------------------------------------------+
+        ...     |                             ...                               |
+                +---------------------------------------------------------------+
+        k/6     |0 0| b_{k-1} | b_{k-2} | b_{k-3} | b_{k-4} | b_{k-5} | b_{k-6} |
+                +---------------------------------------------------------------+
+       
+	where
+                typ encodes the type of the special trace
+
+                data is used to calculate the base address (type-specific)
+                
+                k = 6(1 + floor (n/6))
+
+                b_i = 1 + a_i   if 0 <= i < n
+                    = 0         if n <= i < k
+
+	This encoding allows 5 bits for each index, using 0 as a
+	sentinal for the last index.  Trace indices are made small
+	during the translation to RTL.
+
+        This information is decoded by the runtime in stack.h and
+        stack.c.
+	]
+
+	Critical Remarks
+
+	The benefit of (1) and (2) is simplicity: Decoding is extremely
+	fast.  Representation (1) breaks down when an index is too large.
+	Both break down when there are more indices than fields.
+
+	The benefit of (3) is flexibility: There is an overall bit
+	count limit but there are no other arbitrary limits in the
+	representation.  This representation supports a range of values
+	from a single field using many bits (eg, [30000]) to many fields
+	using a few bits each (eg, [3,3,3,3,3]).  The cost of this
+	flexibility is a few bits of overhead per index.  An important
+	problem with this representation is that decoding is likely to
+	be a slower than with (1) or (2).  (The complexity of decoding
+        depends	directly on the complexity of the prefix-free mapping rho.)
+
+	[With (4), we impose a limit on the size of the indices but no
+	limit on the number of indices.  This is reasonable because we
+	don't expect large records (which give rise to long lists of
+	indices despite the reifer's attempt to avoid nested
+	projections.]
+Fix:
+	I implemented representation 4.
+Test:
+Owner: swasey
+Status: closed

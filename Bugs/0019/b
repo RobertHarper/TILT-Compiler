@@ -1,0 +1,2190 @@
+           SIGS_SELF(_237603, 
+*            UNSELF_SIG = _237604
+*            SELF_SIG = [var_TYC > _237605 : TYPE = CON_PATH(_237606.var_TYC), 
+*                        label_TYC > _237607 : TYPE = CON_PATH(_237606.label_TYC), 
+*                        w32_TYC > _237608 : TYPE = CON_PATH(_237609.word_TYC), 
+*                        prim_TYC > _237610 : TYPE = CON_PATH(_237611.prim_TYC), 
+*                        sequence_TYC > _237612 : 
+**                          KIND(2 -> TYPE) = /-\(_237613, _237614)
+**        +1   CON_APP(CON_PATH(_237615.sequence_TYC);
+**        +1      _237613, _237614), 
+*                        flattenThreshold > _237616 : REF(INT32), 
+*                        annotation_TYC > _237617 : 
+**                          KIND(1 -> TYPE) = CON_PATH(_237618.annotation_TYC), 
+*                        annotation_sumarg_INT > _237619 : 
+**                          KIND(2) = CON_PATH(_237618.annotation_sumarg_INT), 
+*                        annotation_sum_INT > _237620 : 
+**                          KIND(1 -> TYPE) = CON_PATH(_237618.annotation_sum_INT), 
+*                        +Eannotation_INT > _237621 : 
+**                           $POLY$ SIGS_SELF(_237622.+Eannotation_INT, 
+**                                     UNSELF_SIG = NONE
+**                                     SELF_SIG = SIGF(_237623, 
+**        +1   ['a_TYV > _237624 : TYPE, 
+**        +1    +E'a_INT > _237625 : 
+***       +1       ({_237624 *
+***       +1         _237624} -> CON_MU(/-\(_237626)(SUM[ (false, true); 2; ()]))#0)] =>
+**                                                        [it_INT > _237627 : 
+***                                                           
+***       +1   ({CON_APP(CON_PATH(_237618.hiddenThinModule_INT. annotation_TYC);
+***       +1        CON_PATH(_237623.'a_TYV)) *
+***       +1     CON_APP(CON_PATH(_237618.hiddenThinModule_INT. annotation_TYC);
+***       +1        CON_PATH(_237623.'a_TYV))} ->
+***       +1      CON_MU(/-\(_237628)(SUM[ (false, true); 2; ()]))#0)])
+**                                     ), 
+*                        +O+Dannotation_INT > _237629 : 
+**                          SIGS_SELF(_237603.+O+Dannotation_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [annotation_INT > _237630 : 
+***                                           KIND(1 -> TYPE) == 
+***       +1   CON_PATH(_237618.hiddenThinModule_INT. annotation_TYC), 
+**                                         expose_INT > _237631 : 
+***                                            $POLY$ SIGS_SELF(
+***       +1   _237622.+O+Dannotation_INT. expose_INT, 
+***                                                      UNSELF_SIG = NONE
+***                                                      SELF_SIG = 
+***       +1   SIGF(_237623, ['a_TYV > _237632 : TYPE] =>
+***       +1           [it_INT > _237633 : 
+****      +1               (CON_APP(CON_PATH(_237618.hiddenThinModule_INT. annotation_TYC);
+****      +1                   CON_PATH(_237623.'a_TYV)) =>
+****      +1                  CON_APP(CON_PATH(_237618.hiddenThinModule_INT. annotation_sum_INT);
+****      +1                     CON_PATH(_237623.'a_TYV))) == /TOTALNONRECUR\_237634
+****      +2                (_237635 : CON_APP(CON_PATH(_237618.hiddenThinModule_INT.
+****      +2                                                    annotation_TYC);
+****      +2                              CON_PATH(_237623.'a_TYV)))
+****      +2                : CON_APP(CON_PATH(_237618.hiddenThinModule_INT.
+****      +2                                           annotation_sum_INT);
+****      +2                     CON_PATH(_237623.'a_TYV)) =
+****      +2             UNROLL(CON_APP(CON_PATH(_237618.hiddenThinModule_INT.
+****      +2                                             annotation_TYC);
+****      +2                       CON_PATH(_237623.'a_TYV)),
+****      +2   CON_APP(CON_PATH(_237618.hiddenThinModule_INT. annotation_sum_INT);
+****      +2      CON_PATH(_237623.'a_TYV)),_237635)])
+***                                                      ), 
+**                                         SUBST_RESULT > _237636 : 
+***                                            $POLY$ SIGS_SELF(
+***       +1   _237622.+O+Dannotation_INT. SUBST_RESULT, 
+***                                                      UNSELF_SIG = NONE
+***                                                      SELF_SIG = 
+***       +1   SIGF(_237623, ['a_TYV > _237632 : TYPE] =>
+***       +1           [it_INT > _237637 : 
+****      +1               CON_APP(CON_PATH(_237618.hiddenThinModule_INT. annotation_TYC);
+****      +1                  CON_PATH(_237623.'a_TYV)) == 
+****      +2   ROLL(CON_APP(CON_PATH(_237618.hiddenThinModule_INT. annotation_TYC);
+****      +2           CON_PATH(_237623.'a_TYV)),
+****      +3   INJ(0, CON_APP(CON_PATH(_237618.hiddenThinModule_INT. annotation_sum_INT);
+****      +3             CON_PATH(_237623.'a_TYV))))])
+***                                                      ), 
+**                                         FREE_VARS > _237638 : 
+***                                            $POLY$ SIGS_SELF(
+***       +1   _237622.+O+Dannotation_INT. FREE_VARS, 
+***                                                      UNSELF_SIG = NONE
+***                                                      SELF_SIG = 
+***       +1   SIGF(_237623, ['a_TYV > _237632 : TYPE] =>
+***       +1           [it_INT > _237639 : 
+****      +1               ({con_vars_LAB = REF(CON_PATH(_237618.hiddenThinModule_INT.
+****      +1                                                     VarSet_STR.
+****      +1                                                     set_TYC)),
+****      +1                 exp_vars_LAB = REF(CON_PATH(_237618.hiddenThinModule_INT.
+****      +1                                                     VarSet_STR.
+****      +1                                                     set_TYC))} =>
+****      +1                  CON_APP(CON_PATH(_237618.hiddenThinModule_INT. annotation_TYC);
+****      +1                     CON_PATH(_237623.'a_TYV))) == /TOTALNONRECUR\_237640
+****      +2            (_237641 : {con_vars_LAB = REF(CON_PATH(_237618.
+****      +2   hiddenThinModule_INT.
+****      +2   VarSet_STR.
+****      +2   set_TYC)),
+****      +2                        exp_vars_LAB = REF(CON_PATH(_237618.
+****      +2   hiddenThinModule_INT.
+****      +2   VarSet_STR.
+****      +2   set_TYC))})
+****      +2            : CON_APP(CON_PATH(_237618.hiddenThinModule_INT.
+****      +2                                       annotation_TYC);
+****      +2                 CON_PATH(_237623.'a_TYV)) =
+****      +2         ROLL(CON_APP(CON_PATH(_237618.hiddenThinModule_INT.
+****      +2                                       annotation_TYC);
+****      +2                 CON_PATH(_237623.'a_TYV)),
+****      +2   INJ(1, CON_APP(CON_PATH(_237618.hiddenThinModule_INT. annotation_sum_INT);
+****      +2             CON_PATH(_237623.'a_TYV))
+****      +3   ,_237641))])
+***                                                      ), 
+**                                         TYPECHECKED > _237642 : 
+***                                            $POLY$ SIGS_SELF(
+***       +1   _237622.+O+Dannotation_INT. TYPECHECKED, 
+***                                                      UNSELF_SIG = NONE
+***                                                      SELF_SIG = 
+***       +1   SIGF(_237623, ['a_TYV > _237632 : TYPE] =>
+***       +1           [it_INT > _237643 : 
+****      +1               (CON_PATH(_237623.'a_TYV) =>
+****      +1                  CON_APP(CON_PATH(_237618.hiddenThinModule_INT. annotation_TYC);
+****      +1                     CON_PATH(_237623.'a_TYV))) == /TOTALNONRECUR\_237644
+****      +2            (_237645 : CON_PATH(_237623.'a_TYV))
+****      +2            : CON_APP(CON_PATH(_237618.hiddenThinModule_INT.
+****      +2                                       annotation_TYC);
+****      +2                 CON_PATH(_237623.'a_TYV)) =
+****      +2         ROLL(CON_APP(CON_PATH(_237618.hiddenThinModule_INT.
+****      +2                                       annotation_TYC);
+****      +2                 CON_PATH(_237623.'a_TYV)),
+****      +2   INJ(2, CON_APP(CON_PATH(_237618.hiddenThinModule_INT. annotation_sum_INT);
+****      +2             CON_PATH(_237623.'a_TYV))
+****      +3   ,_237645))])
+***                                                      )]
+**                             ), 
+*                        openness_TYC > _237646 : 
+**                          TYPE = CON_MU(/-\(_237647)(SUM[ (Closure, Code, Open); 3; ()]))#0, 
+*                        openness_sumarg_INT > _237648 : KIND(0) = (), 
+*                        openness_sum_INT > _237649 : 
+**                          TYPE = SUM[
+**                                    (Closure, Code, Open);
+**                                    3;
+**                                    CON_PATH(_237603.openness_sumarg_INT)], 
+*                        +Eopenness_INT > _237650 : 
+**                          ({CON_PATH(_237603.openness_TYC) *
+**                            CON_PATH(_237603.openness_TYC)} ->
+**                             CON_MU(/-\(_237651)(SUM[ (false, true); 2; ()]))#0), 
+*                        +O+Dopenness_INT > _237652 : 
+**                          SIGS_SELF(_237603.+O+Dopenness_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [openness_INT > _237653 : 
+***                                           TYPE == CON_PATH(_237603.openness_TYC), 
+**                                         expose_INT > _237654 : 
+***                                           (CON_PATH(_237603.openness_TYC) =>
+***                                              CON_PATH(_237603.openness_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_237655
+***       +1         (_237656 : CON_PATH(_237603.openness_TYC))
+***       +1         : CON_PATH(_237603.openness_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.openness_TYC),CON_PATH(_237603.openness_sum_INT),_237656), 
+**                                         Closure > _237657 : 
+***                                           CON_PATH(_237603.openness_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.openness_TYC),INJ(0, CON_PATH(_237603.openness_sum_INT))), 
+**                                         Code > _237658 : 
+***                                           CON_PATH(_237603.openness_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.openness_TYC),INJ(1, CON_PATH(_237603.openness_sum_INT))), 
+**                                         Open > _237659 : 
+***                                           CON_PATH(_237603.openness_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.openness_TYC),INJ(2, CON_PATH(_237603.openness_sum_INT)))]
+**                             ), 
+*                        effect_TYC > _237660 : 
+**                          TYPE = CON_MU(/-\(_237661)(SUM[ (Partial, Total); 2; ()]))#0, 
+*                        effect_sumarg_INT > _237662 : KIND(0) = (), 
+*                        effect_sum_INT > _237663 : 
+**                          TYPE = SUM[
+**                                    (Partial, Total);
+**                                    2;
+**                                    CON_PATH(_237603.effect_sumarg_INT)], 
+*                        +Eeffect_INT > _237664 : 
+**                          ({CON_PATH(_237603.effect_TYC) *
+**                            CON_PATH(_237603.effect_TYC)} ->
+**                             CON_MU(/-\(_237651)(SUM[ (false, true); 2; ()]))#0), 
+*                        +O+Deffect_INT > _237665 : 
+**                          SIGS_SELF(_237603.+O+Deffect_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [effect_INT > _237666 : 
+***                                           TYPE == CON_PATH(_237603.effect_TYC), 
+**                                         expose_INT > _237667 : 
+***                                           (CON_PATH(_237603.effect_TYC) =>
+***                                              CON_PATH(_237603.effect_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_237668
+***       +1         (_237669 : CON_PATH(_237603.effect_TYC))
+***       +1         : CON_PATH(_237603.effect_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.effect_TYC),CON_PATH(_237603.effect_sum_INT),_237669), 
+**                                         Partial > _237670 : 
+***                                           CON_PATH(_237603.effect_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.effect_TYC),INJ(0, CON_PATH(_237603.effect_sum_INT))), 
+**                                         Total > _237671 : 
+***                                           CON_PATH(_237603.effect_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.effect_TYC),INJ(1, CON_PATH(_237603.effect_sum_INT)))]
+**                             ), 
+*                        recursive_TYC > _237672 : 
+**                          TYPE = CON_MU(/-\(_237673)(SUM[
+**                                                        (Arbitrary, Leaf, NonRecursive);
+**                                                        3;
+**                                                        ()]))#0, 
+*                        recursive_sumarg_INT > _237674 : KIND(0) = (), 
+*                        recursive_sum_INT > _237675 : 
+**                          TYPE = SUM[
+**                                    (Arbitrary, Leaf, NonRecursive);
+**                                    3;
+**                                    CON_PATH(_237603.recursive_sumarg_INT)], 
+*                        +Erecursive_INT > _237676 : 
+**                          ({CON_PATH(_237603.recursive_TYC) *
+**                            CON_PATH(_237603.recursive_TYC)} ->
+**                             CON_MU(/-\(_237651)(SUM[ (false, true); 2; ()]))#0), 
+*                        +O+Drecursive_INT > _237677 : 
+**                          SIGS_SELF(_237603.+O+Drecursive_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [recursive_INT > _237678 : 
+***                                           TYPE == CON_PATH(_237603.recursive_TYC), 
+**                                         expose_INT > _237679 : 
+***                                           (CON_PATH(_237603.recursive_TYC) =>
+***                                              CON_PATH(_237603.recursive_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_237680
+***       +1         (_237681 : CON_PATH(_237603.recursive_TYC))
+***       +1         : CON_PATH(_237603.recursive_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.recursive_TYC),CON_PATH(_237603.recursive_sum_INT),_237681), 
+**                                         Arbitrary > _237682 : 
+***                                           CON_PATH(_237603.recursive_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.recursive_TYC),INJ(0, CON_PATH(_237603.recursive_sum_INT))), 
+**                                         Leaf > _237683 : 
+***                                           CON_PATH(_237603.recursive_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.recursive_TYC),INJ(1, CON_PATH(_237603.recursive_sum_INT))), 
+**                                         NonRecursive > _237684 : 
+***                                           CON_PATH(_237603.recursive_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.recursive_TYC),INJ(2, CON_PATH(_237603.recursive_sum_INT)))]
+**                             ), 
+*                        niltrace_TYC > _237685 : 
+**                          TYPE = CON_MU(/-\(_237686)(SUM[
+**                                                        (TraceUnknown,
+**                                                         TraceCompute,
+**                                                         TraceKnown);
+**                                                        1;
+**                                                        (CON_PATH(_237603.var_TYC),
+**                                                         CON_PATH(_237687.traceinfo_TYC))]))#0, 
+*                        niltrace_sumarg_INT > _237688 : 
+**                          KIND(2) = (CON_PATH(_237603.var_TYC),
+**                                     CON_PATH(_237687.traceinfo_TYC)), 
+*                        niltrace_sum_INT > _237689 : 
+**                          TYPE = SUM[
+**                                    (TraceUnknown, TraceCompute, TraceKnown);
+**                                    1;
+**                                    CON_PATH(_237603.niltrace_sumarg_INT)], 
+*                        +Eniltrace_INT > _237690 : 
+**                          ({CON_PATH(_237603.niltrace_TYC) *
+**                            CON_PATH(_237603.niltrace_TYC)} ->
+**                             CON_MU(/-\(_237651)(SUM[ (false, true); 2; ()]))#0), 
+*                        +O+Dniltrace_INT > _237691 : 
+**                          SIGS_SELF(_237603.+O+Dniltrace_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [niltrace_INT > _237692 : 
+***                                           TYPE == CON_PATH(_237603.niltrace_TYC), 
+**                                         expose_INT > _237693 : 
+***                                           (CON_PATH(_237603.niltrace_TYC) =>
+***                                              CON_PATH(_237603.niltrace_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_237694
+***       +1         (_237695 : CON_PATH(_237603.niltrace_TYC))
+***       +1         : CON_PATH(_237603.niltrace_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.niltrace_TYC),CON_PATH(_237603.niltrace_sum_INT),_237695), 
+**                                         TraceUnknown > _237696 : 
+***                                           CON_PATH(_237603.niltrace_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.niltrace_TYC),INJ(0, CON_PATH(_237603.niltrace_sum_INT))), 
+**                                         TraceCompute > _237697 : 
+***                                           (CON_PATH(_237603.var_TYC) =>
+***                                              CON_PATH(_237603.niltrace_TYC)) == 
+***       +1   /TOTALNONRECUR\_237698
+***       +1         (_237699 : CON_PATH(_237603.var_TYC))
+***       +1         : CON_PATH(_237603.niltrace_TYC) =
+***       +1      ROLL(CON_PATH(_237603.niltrace_TYC),INJ(1, CON_PATH(_237603.niltrace_sum_INT),_237699)), 
+**                                         TraceKnown > _237700 : 
+***                                           (CON_PATH(_237687.traceinfo_TYC) =>
+***                                              CON_PATH(_237603.niltrace_TYC)) == 
+***       +1   /TOTALNONRECUR\_237701
+***       +1         (_237702 : CON_PATH(_237687.traceinfo_TYC))
+***       +1         : CON_PATH(_237603.niltrace_TYC) =
+***       +1      ROLL(CON_PATH(_237603.niltrace_TYC),INJ(2, CON_PATH(_237603.niltrace_sum_INT),_237702))]
+**                             ), 
+*                        letsort_TYC > _237703 : 
+**                          TYPE = CON_MU(/-\(_237704)(SUM[ (Parallel, Sequential); 2; ()]))#0, 
+*                        letsort_sumarg_INT > _237705 : KIND(0) = (), 
+*                        letsort_sum_INT > _237706 : 
+**                          TYPE = SUM[
+**                                    (Parallel, Sequential);
+**                                    2;
+**                                    CON_PATH(_237603.letsort_sumarg_INT)], 
+*                        +Eletsort_INT > _237707 : 
+**                          ({CON_PATH(_237603.letsort_TYC) *
+**                            CON_PATH(_237603.letsort_TYC)} ->
+**                             CON_MU(/-\(_237651)(SUM[ (false, true); 2; ()]))#0), 
+*                        +O+Dletsort_INT > _237708 : 
+**                          SIGS_SELF(_237603.+O+Dletsort_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [letsort_INT > _237709 : 
+***                                           TYPE == CON_PATH(_237603.letsort_TYC), 
+**                                         expose_INT > _237710 : 
+***                                           (CON_PATH(_237603.letsort_TYC) =>
+***                                              CON_PATH(_237603.letsort_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_237711
+***       +1         (_237712 : CON_PATH(_237603.letsort_TYC))
+***       +1         : CON_PATH(_237603.letsort_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.letsort_TYC),CON_PATH(_237603.letsort_sum_INT),_237712), 
+**                                         Parallel > _237713 : 
+***                                           CON_PATH(_237603.letsort_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.letsort_TYC),INJ(0, CON_PATH(_237603.letsort_sum_INT))), 
+**                                         Sequential > _237714 : 
+***                                           CON_PATH(_237603.letsort_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.letsort_TYC),INJ(1, CON_PATH(_237603.letsort_sum_INT)))]
+**                             ), 
+*                        phase_TYC > _237715 : 
+**                          TYPE = CON_MU(/-\(_237716)(SUM[ (Compiletime, Runtime); 2; ()]))#0, 
+*                        phase_sumarg_INT > _237717 : KIND(0) = (), 
+*                        phase_sum_INT > _237718 : 
+**                          TYPE = SUM[
+**                                    (Compiletime, Runtime);
+**                                    2;
+**                                    CON_PATH(_237603.phase_sumarg_INT)], 
+*                        +Ephase_INT > _237719 : 
+**                          ({CON_PATH(_237603.phase_TYC) *
+**                            CON_PATH(_237603.phase_TYC)} ->
+**                             CON_MU(/-\(_237651)(SUM[ (false, true); 2; ()]))#0), 
+*                        +O+Dphase_INT > _237720 : 
+**                          SIGS_SELF(_237603.+O+Dphase_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [phase_INT > _237721 : 
+***                                           TYPE == CON_PATH(_237603.phase_TYC), 
+**                                         expose_INT > _237722 : 
+***                                           (CON_PATH(_237603.phase_TYC) =>
+***                                              CON_PATH(_237603.phase_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_237723
+***       +1         (_237724 : CON_PATH(_237603.phase_TYC))
+***       +1         : CON_PATH(_237603.phase_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.phase_TYC),CON_PATH(_237603.phase_sum_INT),_237724), 
+**                                         Compiletime > _237725 : 
+***                                           CON_PATH(_237603.phase_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.phase_TYC),INJ(0, CON_PATH(_237603.phase_sum_INT))), 
+**                                         Runtime > _237726 : 
+***                                           CON_PATH(_237603.phase_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.phase_TYC),INJ(1, CON_PATH(_237603.phase_sum_INT)))]
+**                             ), 
+*                        primcon_TYC > _237727 : 
+**                          TYPE = CON_MU(/-\(_237728)(SUM[
+**                                                        (Array_c,
+**                                                         Exn_c,
+**                                                         Exntag_c,
+**                                                         Loc_c,
+**                                                         Vector_c,
+**                                                         BoxFloat_c,
+**                                                         Float_c,
+**                                                         Int_c,
+**                                                         Record_c,
+**                                                         Sum_c,
+**                                                         Vararg_c);
+**                                                        5;
+**                                                        (CON_PATH(_237611.floatsize_TYC),
+**                                                         CON_PATH(_237611.floatsize_TYC),
+**                                                         CON_PATH(_237611.intsize_TYC),
+**                                                         {
+**        +1   CON_APP(_237729;
+**        +1      CON_PATH(_237603.label_TYC)) *
+**                                                          
+**        +1   CON_APP(_237730;
+**        +1      CON_APP(_237729; CON_PATH(_237603.var_TYC)))},
+**                                                         {
+**        +1   totalcount_LAB = CON_PATH(_237603.w32_TYC),
+**                                                          
+**        +1   tagcount_LAB = CON_PATH(_237603.w32_TYC),
+**                                                          
+**        +1   known_LAB = CON_APP(_237730; CON_PATH(_237603.w32_TYC))},
+**                                                         {CON_PATH(_237603.openness_TYC) *
+**                                                          CON_PATH(_237603.effect_TYC)})]))#0, 
+*                        primcon_sumarg_INT > _237731 : 
+**                          KIND(6) = (CON_PATH(_237611.floatsize_TYC),
+**                                     CON_PATH(_237611.floatsize_TYC),
+**                                     CON_PATH(_237611.intsize_TYC),
+**                                     {CON_APP(_237729; CON_PATH(_237603.label_TYC)) *
+**                                      CON_APP(_237730;
+**                                         CON_APP(_237729; CON_PATH(_237603.var_TYC)))},
+**                                     {totalcount_LAB = CON_PATH(_237603.w32_TYC),
+**                                      tagcount_LAB = CON_PATH(_237603.w32_TYC),
+**                                      known_LAB = CON_APP(_237730;
+**                                                     CON_PATH(_237603.w32_TYC))},
+**                                     {CON_PATH(_237603.openness_TYC) *
+**                                      CON_PATH(_237603.effect_TYC)}), 
+*                        primcon_sum_INT > _237732 : 
+**                          TYPE = SUM[
+**                                    (Array_c,
+**                                     Exn_c,
+**                                     Exntag_c,
+**                                     Loc_c,
+**                                     Vector_c,
+**                                     BoxFloat_c,
+**                                     Float_c,
+**                                     Int_c,
+**                                     Record_c,
+**                                     Sum_c,
+**                                     Vararg_c);
+**                                    5;
+**                                    CON_PATH(_237603.primcon_sumarg_INT)], 
+*                        +Eprimcon_INT > _237733 : 
+**                          ({CON_PATH(_237603.primcon_TYC) *
+**                            CON_PATH(_237603.primcon_TYC)} ->
+**                             CON_MU(/-\(_237651)(SUM[ (false, true); 2; ()]))#0), 
+*                        +O+Dprimcon_INT > _237734 : 
+**                          SIGS_SELF(_237603.+O+Dprimcon_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [primcon_INT > _237735 : 
+***                                           TYPE == CON_PATH(_237603.primcon_TYC), 
+**                                         expose_INT > _237736 : 
+***                                           (CON_PATH(_237603.primcon_TYC) =>
+***                                              CON_PATH(_237603.primcon_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_237737
+***       +1         (_237738 : CON_PATH(_237603.primcon_TYC))
+***       +1         : CON_PATH(_237603.primcon_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.primcon_TYC),CON_PATH(_237603.primcon_sum_INT),_237738), 
+**                                         Array_c > _237739 : 
+***                                           CON_PATH(_237603.primcon_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.primcon_TYC),INJ(0, CON_PATH(_237603.primcon_sum_INT))), 
+**                                         Exn_c > _237740 : 
+***                                           CON_PATH(_237603.primcon_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.primcon_TYC),INJ(1, CON_PATH(_237603.primcon_sum_INT))), 
+**                                         Exntag_c > _237741 : 
+***                                           CON_PATH(_237603.primcon_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.primcon_TYC),INJ(2, CON_PATH(_237603.primcon_sum_INT))), 
+**                                         Loc_c > _237742 : 
+***                                           CON_PATH(_237603.primcon_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.primcon_TYC),INJ(3, CON_PATH(_237603.primcon_sum_INT))), 
+**                                         Vector_c > _237743 : 
+***                                           CON_PATH(_237603.primcon_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.primcon_TYC),INJ(4, CON_PATH(_237603.primcon_sum_INT))), 
+**                                         BoxFloat_c > _237744 : 
+***                                           (CON_PATH(_237611.floatsize_TYC) =>
+***                                              CON_PATH(_237603.primcon_TYC)) == 
+***       +1   /TOTALNONRECUR\_237745
+***       +1         (_237746 : CON_PATH(_237611.floatsize_TYC))
+***       +1         : CON_PATH(_237603.primcon_TYC) =
+***       +1      ROLL(CON_PATH(_237603.primcon_TYC),INJ(5, CON_PATH(_237603.primcon_sum_INT)
+***       +2   ,_237746)), 
+**                                         Float_c > _237747 : 
+***                                           (CON_PATH(_237611.floatsize_TYC) =>
+***                                              CON_PATH(_237603.primcon_TYC)) == 
+***       +1   /TOTALNONRECUR\_237748
+***       +1         (_237749 : CON_PATH(_237611.floatsize_TYC))
+***       +1         : CON_PATH(_237603.primcon_TYC) =
+***       +1      ROLL(CON_PATH(_237603.primcon_TYC),INJ(6, CON_PATH(_237603.primcon_sum_INT)
+***       +2   ,_237749)), 
+**                                         Int_c > _237750 : 
+***                                           (CON_PATH(_237611.intsize_TYC) =>
+***                                              CON_PATH(_237603.primcon_TYC)) == 
+***       +1   /TOTALNONRECUR\_237751
+***       +1         (_237752 : CON_PATH(_237611.intsize_TYC))
+***       +1         : CON_PATH(_237603.primcon_TYC) =
+***       +1      ROLL(CON_PATH(_237603.primcon_TYC),INJ(7, CON_PATH(_237603.primcon_sum_INT)
+***       +2   ,_237752)), 
+**                                         Record_c > _237753 : 
+***                                           ({CON_APP(_237729;
+***                                                CON_PATH(_237603.label_TYC)) *
+***                                             CON_APP(_237730;
+***                                                CON_APP(_237729;
+***                                                   CON_PATH(_237603.var_TYC)))} =>
+***                                              CON_PATH(_237603.primcon_TYC)) == 
+***       +1   /TOTALNONRECUR\_237754
+***       +1         (_237755 : {CON_APP(_237729; CON_PATH(_237603.label_TYC)) *
+***       +1                     CON_APP(_237730; CON_APP(_237729; CON_PATH(_237603.var_TYC)))})
+***       +1         : CON_PATH(_237603.primcon_TYC) =
+***       +1      ROLL(CON_PATH(_237603.primcon_TYC),INJ(8, CON_PATH(_237603.primcon_sum_INT)
+***       +2   ,_237755)), 
+**                                         Sum_c > _237756 : 
+***                                           ({totalcount_LAB = CON_PATH(_237603.w32_TYC),
+***                                             tagcount_LAB = CON_PATH(_237603.w32_TYC),
+***                                             known_LAB = CON_APP(_237730;
+***                                                            CON_PATH(_237603.w32_TYC))} =>
+***                                              CON_PATH(_237603.primcon_TYC)) == /TOTALNONRECUR\_237757
+***       +1                 (_237758 : {totalcount_LAB = CON_PATH(
+***       +1   _237603.w32_TYC),
+***       +1                             tagcount_LAB = CON_PATH(
+***       +1   _237603.w32_TYC),
+***       +1                             known_LAB = CON_APP(_237730;
+***       +1                                            CON_PATH(
+***       +1   _237603.w32_TYC))})
+***       +1                 : CON_PATH(_237603.primcon_TYC) =
+***       +1              ROLL(CON_PATH(_237603.primcon_TYC),INJ(9, 
+***       +1   CON_PATH(_237603.primcon_sum_INT),_237758)), 
+**                                         Vararg_c > _237759 : 
+***                                           ({CON_PATH(_237603.openness_TYC) *
+***                                             CON_PATH(_237603.effect_TYC)} =>
+***                                              CON_PATH(_237603.primcon_TYC)) == 
+***       +1   /TOTALNONRECUR\_237760
+***       +1         (_237761 : {CON_PATH(_237603.openness_TYC) *
+***       +1                     CON_PATH(_237603.effect_TYC)})
+***       +1         : CON_PATH(_237603.primcon_TYC) =
+***       +1      ROLL(CON_PATH(_237603.primcon_TYC),INJ(10, CON_PATH(_237603.primcon_sum_INT)
+***       +2   ,_237761))]
+**                             ), 
+*                        nilprim_TYC > _237762 : 
+**                          TYPE = CON_MU(/-\(_237763)(SUM[
+**                                                        (make_exntag,
+**                                                         peq,
+**                                                         roll,
+**                                                         unroll,
+**                                                         box_float,
+**                                                         inj_exn,
+**                                                         inject,
+**                                                         inject_known,
+**                                                         inject_known_record,
+**                                                         make_onearg,
+**                                                         make_vararg,
+**                                                         partialRecord,
+**                                                         project,
+**                                                         project_known,
+**                                                         project_known_record,
+**                                                         record,
+**                                                         select,
+**                                                         unbox_float);
+**                                                        4;
+**                                                        (CON_PATH(_237611.floatsize_TYC),
+**                                                         _237764,
+**                                                         CON_PATH(_237765.word_TYC),
+**                                                         CON_PATH(_237765.word_TYC),
+**                                                         CON_PATH(_237765.word_TYC),
+**                                                         {CON_PATH(_237603.openness_TYC) *
+**                                                          CON_PATH(_237603.effect_TYC)},
+**                                                         {CON_PATH(_237603.openness_TYC) *
+**                                                          CON_PATH(_237603.effect_TYC)},
+**                                                         {
+**        +1   CON_APP(_237729;
+**        +1      CON_PATH(_237603.label_TYC)) *
+**                                                          INT32},
+**                                                         CON_PATH(_237765.word_TYC),
+**                                                         CON_PATH(_237765.word_TYC),
+**                                                         {CON_PATH(_237765.word_TYC) *
+**                                                          CON_PATH(_237603.label_TYC)},
+**                                                         CON_APP(_237729;
+**                                                            CON_PATH(_237603.label_TYC)),
+**                                                         CON_PATH(_237603.label_TYC),
+**                                                         CON_PATH(_237611.floatsize_TYC))]))#0, 
+*                        nilprim_sumarg_INT > _237766 : 
+**                          KIND(14) = (CON_PATH(_237611.floatsize_TYC),
+**                                      _237764,
+**                                      CON_PATH(_237765.word_TYC),
+**                                      CON_PATH(_237765.word_TYC),
+**                                      CON_PATH(_237765.word_TYC),
+**                                      {CON_PATH(_237603.openness_TYC) *
+**                                       CON_PATH(_237603.effect_TYC)},
+**                                      {CON_PATH(_237603.openness_TYC) *
+**                                       CON_PATH(_237603.effect_TYC)},
+**                                      {CON_APP(_237729; CON_PATH(_237603.label_TYC)) *
+**                                       INT32},
+**                                      CON_PATH(_237765.word_TYC),
+**                                      CON_PATH(_237765.word_TYC),
+**                                      {CON_PATH(_237765.word_TYC) *
+**                                       CON_PATH(_237603.label_TYC)},
+**                                      CON_APP(_237729; CON_PATH(_237603.label_TYC)),
+**                                      CON_PATH(_237603.label_TYC),
+**                                      CON_PATH(_237611.floatsize_TYC)), 
+*                        nilprim_sum_INT > _237767 : 
+**                          TYPE = SUM[
+**                                    (make_exntag,
+**                                     peq,
+**                                     roll,
+**                                     unroll,
+**                                     box_float,
+**                                     inj_exn,
+**                                     inject,
+**                                     inject_known,
+**                                     inject_known_record,
+**                                     make_onearg,
+**                                     make_vararg,
+**                                     partialRecord,
+**                                     project,
+**                                     project_known,
+**                                     project_known_record,
+**                                     record,
+**                                     select,
+**                                     unbox_float);
+**                                    4;
+**                                    CON_PATH(_237603.nilprim_sumarg_INT)], 
+*                        +Enilprim_INT > _237768 : 
+**                          ({CON_PATH(_237603.nilprim_TYC) *
+**                            CON_PATH(_237603.nilprim_TYC)} ->
+**                             CON_MU(/-\(_237651)(SUM[ (false, true); 2; ()]))#0), 
+*                        +O+Dnilprim_INT > _237769 : 
+**                          SIGS_SELF(_237603.+O+Dnilprim_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [nilprim_INT > _237770 : 
+***                                           TYPE == CON_PATH(_237603.nilprim_TYC), 
+**                                         expose_INT > _237771 : 
+***                                           (CON_PATH(_237603.nilprim_TYC) =>
+***                                              CON_PATH(_237603.nilprim_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_237772
+***       +1         (_237773 : CON_PATH(_237603.nilprim_TYC))
+***       +1         : CON_PATH(_237603.nilprim_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.nilprim_TYC),CON_PATH(_237603.nilprim_sum_INT),_237773), 
+**                                         make_exntag > _237774 : 
+***                                           CON_PATH(_237603.nilprim_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.nilprim_TYC),INJ(0, CON_PATH(_237603.nilprim_sum_INT))), 
+**                                         peq > _237775 : 
+***                                           CON_PATH(_237603.nilprim_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.nilprim_TYC),INJ(1, CON_PATH(_237603.nilprim_sum_INT))), 
+**                                         roll > _237776 : 
+***                                           CON_PATH(_237603.nilprim_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.nilprim_TYC),INJ(2, CON_PATH(_237603.nilprim_sum_INT))), 
+**                                         unroll > _237777 : 
+***                                           CON_PATH(_237603.nilprim_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.nilprim_TYC),INJ(3, CON_PATH(_237603.nilprim_sum_INT))), 
+**                                         box_float > _237778 : 
+***                                           (CON_PATH(_237611.floatsize_TYC) =>
+***                                              CON_PATH(_237603.nilprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237779
+***       +1         (_237780 : CON_PATH(_237611.floatsize_TYC))
+***       +1         : CON_PATH(_237603.nilprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.nilprim_TYC),INJ(4, CON_PATH(_237603.nilprim_sum_INT)
+***       +2   ,_237780)), 
+**                                         inj_exn > _237781 : 
+***                                           (_237764 => CON_PATH(_237603.nilprim_TYC)) == /TOTALNONRECUR\_237782
+***       +1           (_237783 : _237764)
+***       +1           : CON_PATH(_237603.nilprim_TYC) =
+***       +1        ROLL(CON_PATH(_237603.nilprim_TYC),INJ(5, CON_PATH(
+***       +1   _237603.nilprim_sum_INT),_237783)), 
+**                                         inject > _237784 : 
+***                                           (CON_PATH(_237765.word_TYC) =>
+***                                              CON_PATH(_237603.nilprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237785
+***       +1         (_237786 : CON_PATH(_237765.word_TYC))
+***       +1         : CON_PATH(_237603.nilprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.nilprim_TYC),INJ(6, CON_PATH(_237603.nilprim_sum_INT)
+***       +2   ,_237786)), 
+**                                         inject_known > _237787 : 
+***                                           (CON_PATH(_237765.word_TYC) =>
+***                                              CON_PATH(_237603.nilprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237788
+***       +1         (_237789 : CON_PATH(_237765.word_TYC))
+***       +1         : CON_PATH(_237603.nilprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.nilprim_TYC),INJ(7, CON_PATH(_237603.nilprim_sum_INT)
+***       +2   ,_237789)), 
+**                                         inject_known_record > _237790 : 
+***                                           (CON_PATH(_237765.word_TYC) =>
+***                                              CON_PATH(_237603.nilprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237791
+***       +1         (_237792 : CON_PATH(_237765.word_TYC))
+***       +1         : CON_PATH(_237603.nilprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.nilprim_TYC),INJ(8, CON_PATH(_237603.nilprim_sum_INT)
+***       +2   ,_237792)), 
+**                                         make_onearg > _237793 : 
+***                                           ({CON_PATH(_237603.openness_TYC) *
+***                                             CON_PATH(_237603.effect_TYC)} =>
+***                                              CON_PATH(_237603.nilprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237794
+***       +1         (_237795 : {CON_PATH(_237603.openness_TYC) *
+***       +1                     CON_PATH(_237603.effect_TYC)})
+***       +1         : CON_PATH(_237603.nilprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.nilprim_TYC),INJ(9, CON_PATH(_237603.nilprim_sum_INT)
+***       +2   ,_237795)), 
+**                                         make_vararg > _237796 : 
+***                                           ({CON_PATH(_237603.openness_TYC) *
+***                                             CON_PATH(_237603.effect_TYC)} =>
+***                                              CON_PATH(_237603.nilprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237797
+***       +1         (_237798 : {CON_PATH(_237603.openness_TYC) *
+***       +1                     CON_PATH(_237603.effect_TYC)})
+***       +1         : CON_PATH(_237603.nilprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.nilprim_TYC),INJ(10, CON_PATH(_237603.nilprim_sum_INT)
+***       +2   ,_237798)), 
+**                                         partialRecord > _237799 : 
+***                                           ({CON_APP(_237729;
+***                                                CON_PATH(_237603.label_TYC)) *
+***                                             INT32} =>
+***                                              CON_PATH(_237603.nilprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237800
+***       +1         (_237801 : {CON_APP(_237729; CON_PATH(_237603.label_TYC)) *
+***       +1                     INT32})
+***       +1         : CON_PATH(_237603.nilprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.nilprim_TYC),INJ(11, CON_PATH(_237603.nilprim_sum_INT)
+***       +2   ,_237801)), 
+**                                         project > _237802 : 
+***                                           (CON_PATH(_237765.word_TYC) =>
+***                                              CON_PATH(_237603.nilprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237803
+***       +1         (_237804 : CON_PATH(_237765.word_TYC))
+***       +1         : CON_PATH(_237603.nilprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.nilprim_TYC),INJ(12, CON_PATH(_237603.nilprim_sum_INT)
+***       +2   ,_237804)), 
+**                                         project_known > _237805 : 
+***                                           (CON_PATH(_237765.word_TYC) =>
+***                                              CON_PATH(_237603.nilprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237806
+***       +1         (_237807 : CON_PATH(_237765.word_TYC))
+***       +1         : CON_PATH(_237603.nilprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.nilprim_TYC),INJ(13, CON_PATH(_237603.nilprim_sum_INT)
+***       +2   ,_237807)), 
+**                                         project_known_record > _237808 : 
+***                                           ({CON_PATH(_237765.word_TYC) *
+***                                             CON_PATH(_237603.label_TYC)} =>
+***                                              CON_PATH(_237603.nilprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237809
+***       +1         (_237810 : {CON_PATH(_237765.word_TYC) *
+***       +1                     CON_PATH(_237603.label_TYC)})
+***       +1         : CON_PATH(_237603.nilprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.nilprim_TYC),INJ(14, CON_PATH(_237603.nilprim_sum_INT)
+***       +2   ,_237810)), 
+**                                         record > _237811 : 
+***                                           (CON_APP(_237729;
+***                                               CON_PATH(_237603.label_TYC)) =>
+***                                              CON_PATH(_237603.nilprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237812
+***       +1         (_237813 : CON_APP(_237729; CON_PATH(_237603.label_TYC)))
+***       +1         : CON_PATH(_237603.nilprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.nilprim_TYC),INJ(15, CON_PATH(_237603.nilprim_sum_INT)
+***       +2   ,_237813)), 
+**                                         select > _237814 : 
+***                                           (CON_PATH(_237603.label_TYC) =>
+***                                              CON_PATH(_237603.nilprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237815
+***       +1         (_237816 : CON_PATH(_237603.label_TYC))
+***       +1         : CON_PATH(_237603.nilprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.nilprim_TYC),INJ(16, CON_PATH(_237603.nilprim_sum_INT)
+***       +2   ,_237816)), 
+**                                         unbox_float > _237817 : 
+***                                           (CON_PATH(_237611.floatsize_TYC) =>
+***                                              CON_PATH(_237603.nilprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237818
+***       +1         (_237819 : CON_PATH(_237611.floatsize_TYC))
+***       +1         : CON_PATH(_237603.nilprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.nilprim_TYC),INJ(17, CON_PATH(_237603.nilprim_sum_INT)
+***       +2   ,_237819))]
+**                             ), 
+*                        allprim_TYC > _237820 : 
+**                          TYPE = CON_MU(/-\(_237821)(SUM[
+**                                                        (NilPrimOp, PrimOp);
+**                                                        0;
+**                                                        (CON_PATH(_237603.nilprim_TYC),
+**                                                         CON_PATH(_237603.prim_TYC))]))#0, 
+*                        allprim_sumarg_INT > _237822 : 
+**                          KIND(2) = (CON_PATH(_237603.nilprim_TYC),
+**                                     CON_PATH(_237603.prim_TYC)), 
+*                        allprim_sum_INT > _237823 : 
+**                          TYPE = SUM[
+**                                    (NilPrimOp, PrimOp);
+**                                    0;
+**                                    CON_PATH(_237603.allprim_sumarg_INT)], 
+*                        +Eallprim_INT > _237824 : 
+**                          ({CON_PATH(_237603.allprim_TYC) *
+**                            CON_PATH(_237603.allprim_TYC)} ->
+**                             CON_MU(/-\(_237651)(SUM[ (false, true); 2; ()]))#0), 
+*                        +O+Dallprim_INT > _237825 : 
+**                          SIGS_SELF(_237603.+O+Dallprim_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [allprim_INT > _237826 : 
+***                                           TYPE == CON_PATH(_237603.allprim_TYC), 
+**                                         expose_INT > _237827 : 
+***                                           (CON_PATH(_237603.allprim_TYC) =>
+***                                              CON_PATH(_237603.allprim_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_237828
+***       +1         (_237829 : CON_PATH(_237603.allprim_TYC))
+***       +1         : CON_PATH(_237603.allprim_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.allprim_TYC),CON_PATH(_237603.allprim_sum_INT),_237829), 
+**                                         NilPrimOp > _237830 : 
+***                                           (CON_PATH(_237603.nilprim_TYC) =>
+***                                              CON_PATH(_237603.allprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237831
+***       +1         (_237832 : CON_PATH(_237603.nilprim_TYC))
+***       +1         : CON_PATH(_237603.allprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.allprim_TYC),INJ(0, CON_PATH(_237603.allprim_sum_INT)
+***       +2   ,_237832)), 
+**                                         PrimOp > _237833 : 
+***                                           (CON_PATH(_237603.prim_TYC) =>
+***                                              CON_PATH(_237603.allprim_TYC)) == 
+***       +1   /TOTALNONRECUR\_237834
+***       +1         (_237835 : CON_PATH(_237603.prim_TYC))
+***       +1         : CON_PATH(_237603.allprim_TYC) =
+***       +1      ROLL(CON_PATH(_237603.allprim_TYC),INJ(1, CON_PATH(_237603.allprim_sum_INT)
+***       +2   ,_237835))]
+**                             ), 
+*                        +Q_bnd_con_conbnd_conditionCode_exp_function_kind_switch_INT > _237836 : 
+**                          KIND(8) = CON_MU(/-\(_237837,
+**                                               _237838,
+**                                               _237839,
+**                                               _237840,
+**                                               _237841,
+**                                               _237842,
+**                                               _237843,
+**                                               _237844)(SUM[
+**                                                           (Con_b,
+**                                                            Exp_b,
+**                                                            Fixclosure_b,
+**                                                            Fixcode_b,
+**                                                            Fixopen_b);
+**                                                           0;
+**                                                           
+**        +1   ({CON_PATH(_237603.phase_TYC) *
+**        +1     _237839},
+**        +1    {CON_PATH(_237603.var_TYC) *
+**        +1     CON_PATH(_237603.niltrace_TYC) *
+**        +1     _237841},
+**        +1    {_237845 *
+**        +1     CON_APP(CON_PATH(_237603.sequence_TYC);
+**        +1        CON_PATH(_237603.var_TYC), {code_LAB = CON_PATH(_237603.var_TYC),
+**        +1                                    tipe_LAB = _237838,
+**        +1                                    cenv_LAB = _237838,
+**        +1                                    venv_LAB = _237841})},
+**        +1    CON_APP(CON_PATH(_237603.sequence_TYC); CON_PATH(_237603.var_TYC), _237842),
+**        +1    CON_APP(CON_PATH(_237603.sequence_TYC); CON_PATH(_237603.var_TYC), _237842))],
+**                                                        SUM[
+**                                                           (AllArrow_c,
+**                                                            Annotate_c,
+**                                                            App_c,
+**                                                            Closure_c,
+**                                                            Crecord_c,
+**                                                            ExternArrow_c,
+**                                                            Let_c,
+**                                                            Mu_c,
+**                                                            Prim_c,
+**                                                            Proj_c,
+**                                                            Typecase_c,
+**                                                            Typeof_c,
+**                                                            Var_c);
+**                                                           0;
+**                                                           
+**        +1   ({openness_LAB = CON_PATH(_237603.openness_TYC),
+**        +1     effect_LAB = CON_PATH(_237603.effect_TYC),
+**        +1     body_type_LAB = _237838,
+**        +1     eFormals_LAB = CON_APP(_237729;
+**        +1                       {CON_APP(_237730; CON_PATH(_237603.var_TYC)) *
+**        +1                        _237838}),
+**        +1     fFormals_LAB = CON_PATH(_237603.w32_TYC),
+**        +1     tFormals_LAB = CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+**        +1                                      _237843}),
+**        +1     isDependent_LAB = _237845},
+**        +1    {CON_APP(CON_PATH(_237603.annotation_TYC); _237843) *
+**        +1     _237838},
+**        +1    {_237838 *
+**        +1     CON_APP(_237729; _237838)},
+**        +1    {_237838 *
+**        +1     _237838},
+**        +1    CON_APP(_237729; {CON_PATH(_237603.label_TYC) *
+**        +1                      _237838}),
+**        +1    {CON_APP(_237729; _237838) *
+**        +1     _237838},
+**        +1    {CON_PATH(_237603.letsort_TYC) *
+**        +1     CON_APP(_237729; _237839) *
+**        +1     _237838},
+**        +1    {_237845 *
+**        +1     CON_APP(CON_PATH(_237603.sequence_TYC); CON_PATH(_237603.var_TYC), _237838)},
+**        +1    {CON_PATH(_237603.primcon_TYC) *
+**        +1     CON_APP(_237729; _237838)},
+**        +1    {_237838 *
+**        +1     CON_PATH(_237603.label_TYC)},
+**        +1    {arg_LAB = _237838,
+**        +1     kind_LAB = _237843,
+**        +1     arms_LAB = CON_APP(_237729; {CON_PATH(_237603.primcon_TYC) *
+**        +1                                  CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+**        +1                                                    _237843}) *
+**        +1                                  _237838}),
+**        +1     default_LAB = _237838},
+**        +1    _237841,
+**        +1    CON_PATH(_237603.var_TYC))],
+**                                                        SUM[
+**                                                           (Code_cb, Con_cb, Open_cb);
+**                                                           0;
+**                                                           
+**        +1   ({CON_PATH(_237603.var_TYC) *
+**        +1     CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+**        +1                       _237843}) *
+**        +1     _237838},
+**        +1    {CON_PATH(_237603.var_TYC) *
+**        +1     _237838},
+**        +1    {CON_PATH(_237603.var_TYC) *
+**        +1     CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+**        +1                       _237843}) *
+**        +1     _237838})],
+**                                                        SUM[
+**                                                           (And_cc,
+**                                                            Exp_cc,
+**                                                            Not_cc,
+**                                                            Or_cc);
+**                                                           0;
+**                                                           ({_237840 *
+**                                                             _237840},
+**                                                            _237841,
+**                                                            _237840,
+**                                                            {_237840 *
+**                                                             _237840})],
+**                                                        SUM[
+**                                                           (App_e,
+**                                                            Const_e,
+**                                                            ExternApp_e,
+**                                                            Handle_e,
+**                                                            Let_e,
+**                                                            Prim_e,
+**                                                            Raise_e,
+**                                                            Switch_e,
+**                                                            Var_e);
+**                                                           0;
+**                                                           
+**        +1   ({CON_PATH(_237603.openness_TYC) *
+**        +1     _237841 *
+**        +1     CON_APP(_237729; _237838) *
+**        +1     CON_APP(_237729; _237841) *
+**        +1     CON_APP(_237729; _237841)},
+**        +1    CON_APP(CON_PATH(_237611.value_TYC); _237838, _237841),
+**        +1    {_237841 *
+**        +1     CON_APP(_237729; _237841)},
+**        +1    {body_LAB = _237841,
+**        +1     result_type_LAB = _237838,
+**        +1     bound_LAB = CON_PATH(_237603.var_TYC),
+**        +1     handler_LAB = _237841},
+**        +1    {CON_PATH(_237603.letsort_TYC) *
+**        +1     CON_APP(_237729; _237837) *
+**        +1     _237841},
+**        +1    {CON_PATH(_237603.allprim_TYC) *
+**        +1     CON_APP(_237729; _237838) *
+**        +1     CON_APP(_237729; _237841)},
+**        +1    {_237841 *
+**        +1     _237838},
+**        +1    _237844,
+**        +1    CON_PATH(_237603.var_TYC))],
+**                                                        SUM[
+**                                                           (Function);
+**                                                           0;
+**                                                           
+**        +1   {effect_LAB = CON_PATH(_237603.effect_TYC),
+**        +1    body_LAB = _237841,
+**        +1    recursive_LAB = CON_PATH(_237603.recursive_TYC),
+**        +1    body_type_LAB = _237838,
+**        +1    eFormals_LAB = CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+**        +1                                     CON_PATH(_237603.niltrace_TYC) *
+**        +1                                     _237838}),
+**        +1    fFormals_LAB = CON_APP(_237729; CON_PATH(_237603.var_TYC)),
+**        +1    tFormals_LAB = CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+**        +1                                     _237843}),
+**        +1    isDependent_LAB = _237845}],
+**                                                        SUM[
+**                                                           (Type_k,
+**                                                            Arrow_k,
+**                                                            Record_k,
+**                                                            SingleType_k,
+**                                                            Single_k);
+**                                                           1;
+**                                                           
+**        +1   ({CON_PATH(_237603.openness_TYC) *
+**        +1     CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+**        +1                       _237843}) *
+**        +1     _237843},
+**        +1    CON_APP(CON_PATH(_237603.sequence_TYC);
+**        +1       {CON_PATH(_237603.label_TYC) *
+**        +1        CON_PATH(_237603.var_TYC)}, _237843),
+**        +1    _237838,
+**        +1    _237838)],
+**                                                        SUM[
+**                                                           (Exncase_e,
+**                                                            Ifthenelse_e,
+**                                                            Intsw_e,
+**                                                            Sumsw_e,
+**                                                            Typecase_e);
+**                                                           0;
+**                                                           
+**        +1   ({arg_LAB = _237841,
+**        +1     result_type_LAB = _237838,
+**        +1     bound_LAB = CON_PATH(_237603.var_TYC),
+**        +1     arms_LAB = CON_APP(_237729; {_237841 *
+**        +1                                  CON_PATH(_237603.niltrace_TYC) *
+**        +1                                  _237841}),
+**        +1     default_LAB = CON_APP(_237730; _237841)},
+**        +1    {arg_LAB = _237840,
+**        +1     elseArm_LAB = _237841,
+**        +1     result_type_LAB = _237838,
+**        +1     thenArm_LAB = _237841},
+**        +1    {arg_LAB = _237841,
+**        +1     size_LAB = CON_PATH(_237611.intsize_TYC),
+**        +1     result_type_LAB = _237838,
+**        +1     arms_LAB = CON_APP(_237729; {CON_PATH(_237603.w32_TYC) *
+**        +1                                  _237841}),
+**        +1     default_LAB = CON_APP(_237730; _237841)},
+**        +1    {arg_LAB = _237841,
+**        +1     result_type_LAB = _237838,
+**        +1     sumtype_LAB = _237838,
+**        +1     bound_LAB = CON_PATH(_237603.var_TYC),
+**        +1     arms_LAB = CON_APP(_237729; {CON_PATH(_237603.w32_TYC) *
+**        +1                                  CON_PATH(_237603.niltrace_TYC) *
+**        +1                                  _237841}),
+**        +1     default_LAB = CON_APP(_237730; _237841)},
+**        +1    {arg_LAB = _237838,
+**        +1     result_type_LAB = _237838,
+**        +1     arms_LAB = CON_APP(_237729; {CON_PATH(_237603.primcon_TYC) *
+**        +1                                  CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+**        +1                                                    _237843}) *
+**        +1                                  _237841}),
+**        +1     default_LAB = _237841})])), 
+*                        bnd_TYC > _237846 : 
+**                          TYPE = CON_PATH(_237603.+Q_bnd_con_conbnd_conditionCode_exp_function_kind_switch_INT)#0, 
+*                        con_TYC > _237847 : 
+**                          TYPE = CON_PATH(_237603.+Q_bnd_con_conbnd_conditionCode_exp_function_kind_switch_INT)#1, 
+*                        conbnd_TYC > _237848 : 
+**                          TYPE = CON_PATH(_237603.+Q_bnd_con_conbnd_conditionCode_exp_function_kind_switch_INT)#2, 
+*                        conditionCode_TYC > _237849 : 
+**                          TYPE = CON_PATH(_237603.+Q_bnd_con_conbnd_conditionCode_exp_function_kind_switch_INT)#3, 
+*                        exp_TYC > _237850 : 
+**                          TYPE = CON_PATH(_237603.+Q_bnd_con_conbnd_conditionCode_exp_function_kind_switch_INT)#4, 
+*                        function_TYC > _237851 : 
+**                          TYPE = CON_PATH(_237603.+Q_bnd_con_conbnd_conditionCode_exp_function_kind_switch_INT)#5, 
+*                        kind_TYC > _237852 : 
+**                          TYPE = CON_PATH(_237603.+Q_bnd_con_conbnd_conditionCode_exp_function_kind_switch_INT)#6, 
+*                        switch_TYC > _237853 : 
+**                          TYPE = CON_PATH(_237603.+Q_bnd_con_conbnd_conditionCode_exp_function_kind_switch_INT)#7, 
+*                        bnd_sumarg_INT > _237854 : 
+**                          KIND(5) = ({CON_PATH(_237603.phase_TYC) *
+**                                      CON_PATH(_237603.conbnd_TYC)},
+**                                     {CON_PATH(_237603.var_TYC) *
+**                                      CON_PATH(_237603.niltrace_TYC) *
+**                                      CON_PATH(_237603.exp_TYC)},
+**                                     {_237845 *
+**                                      CON_APP(CON_PATH(_237603.sequence_TYC);
+**                                         CON_PATH(_237603.var_TYC),
+**                                         {code_LAB = CON_PATH(_237603.var_TYC),
+**                                          tipe_LAB = CON_PATH(_237603.con_TYC),
+**                                          cenv_LAB = CON_PATH(_237603.con_TYC),
+**                                          venv_LAB = CON_PATH(_237603.exp_TYC)})},
+**                                     CON_APP(CON_PATH(_237603.sequence_TYC);
+**                                        CON_PATH(_237603.var_TYC),
+**                                        CON_PATH(_237603.function_TYC)),
+**                                     CON_APP(CON_PATH(_237603.sequence_TYC);
+**                                        CON_PATH(_237603.var_TYC),
+**                                        CON_PATH(_237603.function_TYC))), 
+*                        con_sumarg_INT > _237855 : 
+**                          KIND(13) = ({openness_LAB = CON_PATH(_237603.openness_TYC),
+**                                       effect_LAB = CON_PATH(_237603.effect_TYC),
+**                                       body_type_LAB = CON_PATH(_237603.con_TYC),
+**                                       eFormals_LAB = CON_APP(_237729;
+**                                                         {CON_APP(_237730;
+**                                                             CON_PATH(_237603.var_TYC)) *
+**                                                          CON_PATH(_237603.con_TYC)}),
+**                                       fFormals_LAB = CON_PATH(_237603.w32_TYC),
+**                                       tFormals_LAB = CON_APP(_237729;
+**                                                         {CON_PATH(_237603.var_TYC) *
+**                                                          CON_PATH(_237603.kind_TYC)}),
+**                                       isDependent_LAB = _237845},
+**                                      {CON_APP(CON_PATH(_237603.annotation_TYC);
+**                                          CON_PATH(_237603.kind_TYC)) *
+**                                       CON_PATH(_237603.con_TYC)},
+**                                      {CON_PATH(_237603.con_TYC) *
+**                                       CON_APP(_237729; CON_PATH(_237603.con_TYC))},
+**                                      {CON_PATH(_237603.con_TYC) *
+**                                       CON_PATH(_237603.con_TYC)},
+**                                      CON_APP(_237729; {CON_PATH(_237603.label_TYC) *
+**                                                        CON_PATH(_237603.con_TYC)}),
+**                                      {CON_APP(_237729; CON_PATH(_237603.con_TYC)) *
+**                                       CON_PATH(_237603.con_TYC)},
+**                                      {CON_PATH(_237603.letsort_TYC) *
+**                                       CON_APP(_237729; CON_PATH(_237603.conbnd_TYC)) *
+**                                       CON_PATH(_237603.con_TYC)},
+**                                      {_237845 *
+**                                       CON_APP(CON_PATH(_237603.sequence_TYC);
+**                                          CON_PATH(_237603.var_TYC),
+**                                          CON_PATH(_237603.con_TYC))},
+**                                      {CON_PATH(_237603.primcon_TYC) *
+**                                       CON_APP(_237729; CON_PATH(_237603.con_TYC))},
+**                                      {CON_PATH(_237603.con_TYC) *
+**                                       CON_PATH(_237603.label_TYC)},
+**                                      {arg_LAB = CON_PATH(_237603.con_TYC),
+**                                       kind_LAB = CON_PATH(_237603.kind_TYC),
+**                                       arms_LAB = CON_APP(_237729;
+**                                                     {CON_PATH(_237603.primcon_TYC) *
+**                                                      CON_APP(_237729;
+**                                                         {CON_PATH(_237603.var_TYC) *
+**                                                          CON_PATH(_237603.kind_TYC)}) *
+**                                                      CON_PATH(_237603.con_TYC)}),
+**                                       default_LAB = CON_PATH(_237603.con_TYC)},
+**                                      CON_PATH(_237603.exp_TYC),
+**                                      CON_PATH(_237603.var_TYC)), 
+*                        conbnd_sumarg_INT > _237856 : 
+**                          KIND(3) = ({CON_PATH(_237603.var_TYC) *
+**                                      CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+**                                                        CON_PATH(_237603.kind_TYC)}) *
+**                                      CON_PATH(_237603.con_TYC)},
+**                                     {CON_PATH(_237603.var_TYC) *
+**                                      CON_PATH(_237603.con_TYC)},
+**                                     {CON_PATH(_237603.var_TYC) *
+**                                      CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+**                                                        CON_PATH(_237603.kind_TYC)}) *
+**                                      CON_PATH(_237603.con_TYC)}), 
+*                        conditionCode_sumarg_INT > _237857 : 
+**                          KIND(4) = ({CON_PATH(_237603.conditionCode_TYC) *
+**                                      CON_PATH(_237603.conditionCode_TYC)},
+**                                     CON_PATH(_237603.exp_TYC),
+**                                     CON_PATH(_237603.conditionCode_TYC),
+**                                     {CON_PATH(_237603.conditionCode_TYC) *
+**                                      CON_PATH(_237603.conditionCode_TYC)}), 
+*                        exp_sumarg_INT > _237858 : 
+**                          KIND(9) = ({CON_PATH(_237603.openness_TYC) *
+**                                      CON_PATH(_237603.exp_TYC) *
+**                                      CON_APP(_237729; CON_PATH(_237603.con_TYC)) *
+**                                      CON_APP(_237729; CON_PATH(_237603.exp_TYC)) *
+**                                      CON_APP(_237729; CON_PATH(_237603.exp_TYC))},
+**                                     CON_APP(CON_PATH(_237611.value_TYC);
+**                                        CON_PATH(_237603.con_TYC),
+**                                        CON_PATH(_237603.exp_TYC)),
+**                                     {CON_PATH(_237603.exp_TYC) *
+**                                      CON_APP(_237729; CON_PATH(_237603.exp_TYC))},
+**                                     {body_LAB = CON_PATH(_237603.exp_TYC),
+**                                      result_type_LAB = CON_PATH(_237603.con_TYC),
+**                                      bound_LAB = CON_PATH(_237603.var_TYC),
+**                                      handler_LAB = CON_PATH(_237603.exp_TYC)},
+**                                     {CON_PATH(_237603.letsort_TYC) *
+**                                      CON_APP(_237729; CON_PATH(_237603.bnd_TYC)) *
+**                                      CON_PATH(_237603.exp_TYC)},
+**                                     {CON_PATH(_237603.allprim_TYC) *
+**                                      CON_APP(_237729; CON_PATH(_237603.con_TYC)) *
+**                                      CON_APP(_237729; CON_PATH(_237603.exp_TYC))},
+**                                     {CON_PATH(_237603.exp_TYC) *
+**                                      CON_PATH(_237603.con_TYC)},
+**                                     CON_PATH(_237603.switch_TYC),
+**                                     CON_PATH(_237603.var_TYC)), 
+*                        function_sumarg_INT > _237859 : 
+**                          TYPE = {effect_LAB = CON_PATH(_237603.effect_TYC),
+**                                  body_LAB = CON_PATH(_237603.exp_TYC),
+**                                  recursive_LAB = CON_PATH(_237603.recursive_TYC),
+**                                  body_type_LAB = CON_PATH(_237603.con_TYC),
+**                                  eFormals_LAB = CON_APP(_237729;
+**                                                    {CON_PATH(_237603.var_TYC) *
+**                                                     CON_PATH(_237603.niltrace_TYC) *
+**                                                     CON_PATH(_237603.con_TYC)}),
+**                                  fFormals_LAB = CON_APP(_237729;
+**                                                    CON_PATH(_237603.var_TYC)),
+**                                  tFormals_LAB = CON_APP(_237729;
+**                                                    {CON_PATH(_237603.var_TYC) *
+**                                                     CON_PATH(_237603.kind_TYC)}),
+**                                  isDependent_LAB = _237845}, 
+*                        kind_sumarg_INT > _237860 : 
+**                          KIND(4) = ({CON_PATH(_237603.openness_TYC) *
+**                                      CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+**                                                        CON_PATH(_237603.kind_TYC)}) *
+**                                      CON_PATH(_237603.kind_TYC)},
+**                                     CON_APP(CON_PATH(_237603.sequence_TYC);
+**                                        {CON_PATH(_237603.label_TYC) *
+**                                         CON_PATH(_237603.var_TYC)},
+**                                        CON_PATH(_237603.kind_TYC)),
+**                                     CON_PATH(_237603.con_TYC),
+**                                     CON_PATH(_237603.con_TYC)), 
+*                        switch_sumarg_INT > _237861 : 
+**                          KIND(5) = ({arg_LAB = CON_PATH(_237603.exp_TYC),
+**                                      result_type_LAB = CON_PATH(_237603.con_TYC),
+**                                      bound_LAB = CON_PATH(_237603.var_TYC),
+**                                      arms_LAB = CON_APP(_237729;
+**                                                    {CON_PATH(_237603.exp_TYC) *
+**                                                     CON_PATH(_237603.niltrace_TYC) *
+**                                                     CON_PATH(_237603.exp_TYC)}),
+**                                      default_LAB = CON_APP(_237730;
+**                                                       CON_PATH(_237603.exp_TYC))},
+**                                     {arg_LAB = CON_PATH(_237603.conditionCode_TYC),
+**                                      elseArm_LAB = CON_PATH(_237603.exp_TYC),
+**                                      result_type_LAB = CON_PATH(_237603.con_TYC),
+**                                      thenArm_LAB = CON_PATH(_237603.exp_TYC)},
+**                                     {arg_LAB = CON_PATH(_237603.exp_TYC),
+**                                      size_LAB = CON_PATH(_237611.intsize_TYC),
+**                                      result_type_LAB = CON_PATH(_237603.con_TYC),
+**                                      arms_LAB = CON_APP(_237729;
+**                                                    {CON_PATH(_237603.w32_TYC) *
+**                                                     CON_PATH(_237603.exp_TYC)}),
+**                                      default_LAB = CON_APP(_237730;
+**                                                       CON_PATH(_237603.exp_TYC))},
+**                                     {arg_LAB = CON_PATH(_237603.exp_TYC),
+**                                      result_type_LAB = CON_PATH(_237603.con_TYC),
+**                                      sumtype_LAB = CON_PATH(_237603.con_TYC),
+**                                      bound_LAB = CON_PATH(_237603.var_TYC),
+**                                      arms_LAB = CON_APP(_237729;
+**                                                    {CON_PATH(_237603.w32_TYC) *
+**                                                     CON_PATH(_237603.niltrace_TYC) *
+**                                                     CON_PATH(_237603.exp_TYC)}),
+**                                      default_LAB = CON_APP(_237730;
+**                                                       CON_PATH(_237603.exp_TYC))},
+**                                     {arg_LAB = CON_PATH(_237603.con_TYC),
+**                                      result_type_LAB = CON_PATH(_237603.con_TYC),
+**                                      arms_LAB = CON_APP(_237729;
+**                                                    {CON_PATH(_237603.primcon_TYC) *
+**                                                     CON_APP(_237729;
+**                                                        {CON_PATH(_237603.var_TYC) *
+**                                                         CON_PATH(_237603.kind_TYC)}) *
+**                                                     CON_PATH(_237603.exp_TYC)}),
+**                                      default_LAB = CON_PATH(_237603.exp_TYC)}), 
+*                        bnd_sum_INT > _237862 : 
+**                          TYPE = SUM[
+**                                    (Con_b, Exp_b, Fixclosure_b, Fixcode_b, Fixopen_b);
+**                                    0;
+**                                    CON_PATH(_237603.bnd_sumarg_INT)], 
+*                        con_sum_INT > _237863 : 
+**                          TYPE = SUM[
+**                                    (AllArrow_c,
+**                                     Annotate_c,
+**                                     App_c,
+**                                     Closure_c,
+**                                     Crecord_c,
+**                                     ExternArrow_c,
+**                                     Let_c,
+**                                     Mu_c,
+**                                     Prim_c,
+**                                     Proj_c,
+**                                     Typecase_c,
+**                                     Typeof_c,
+**                                     Var_c);
+**                                    0;
+**                                    CON_PATH(_237603.con_sumarg_INT)], 
+*                        conbnd_sum_INT > _237864 : 
+**                          TYPE = SUM[
+**                                    (Code_cb, Con_cb, Open_cb);
+**                                    0;
+**                                    CON_PATH(_237603.conbnd_sumarg_INT)], 
+*                        conditionCode_sum_INT > _237865 : 
+**                          TYPE = SUM[
+**                                    (And_cc, Exp_cc, Not_cc, Or_cc);
+**                                    0;
+**                                    CON_PATH(_237603.conditionCode_sumarg_INT)], 
+*                        exp_sum_INT > _237866 : 
+**                          TYPE = SUM[
+**                                    (App_e,
+**                                     Const_e,
+**                                     ExternApp_e,
+**                                     Handle_e,
+**                                     Let_e,
+**                                     Prim_e,
+**                                     Raise_e,
+**                                     Switch_e,
+**                                     Var_e);
+**                                    0;
+**                                    CON_PATH(_237603.exp_sumarg_INT)], 
+*                        function_sum_INT > _237867 : 
+**                          TYPE = SUM[
+**                                    (Function);
+**                                    0;
+**                                    CON_PATH(_237603.function_sumarg_INT)], 
+*                        kind_sum_INT > _237868 : 
+**                          TYPE = SUM[
+**                                    (Type_k, Arrow_k, Record_k, SingleType_k, Single_k);
+**                                    1;
+**                                    CON_PATH(_237603.kind_sumarg_INT)], 
+*                        switch_sum_INT > _237869 : 
+**                          TYPE = SUM[
+**                                    (Exncase_e,
+**                                     Ifthenelse_e,
+**                                     Intsw_e,
+**                                     Sumsw_e,
+**                                     Typecase_e);
+**                                    0;
+**                                    CON_PATH(_237603.switch_sumarg_INT)], 
+*                        +O+Dbnd_INT > _237870 : 
+**                          SIGS_SELF(_237603.+O+Dbnd_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [bnd_INT > _237871 : 
+***                                           TYPE == CON_PATH(_237603.bnd_TYC), 
+**                                         expose_INT > _237872 : 
+***                                           (CON_PATH(_237603.bnd_TYC) =>
+***                                              CON_PATH(_237603.bnd_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_237873
+***       +1         (_237874 : CON_PATH(_237603.bnd_TYC))
+***       +1         : CON_PATH(_237603.bnd_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.bnd_TYC),CON_PATH(_237603.bnd_sum_INT),_237874), 
+**                                         Con_b > _237875 : 
+***                                           ({CON_PATH(_237603.phase_TYC) *
+***                                             CON_PATH(_237603.conbnd_TYC)} =>
+***                                              CON_PATH(_237603.bnd_TYC)) == 
+***       +1   /TOTALNONRECUR\_237876
+***       +1         (_237877 : {CON_PATH(_237603.phase_TYC) *
+***       +1                     CON_PATH(_237603.conbnd_TYC)})
+***       +1         : CON_PATH(_237603.bnd_TYC) =
+***       +1      ROLL(CON_PATH(_237603.bnd_TYC),INJ(0, CON_PATH(_237603.bnd_sum_INT),_237877)), 
+**                                         Exp_b > _237878 : 
+***                                           ({CON_PATH(_237603.var_TYC) *
+***                                             CON_PATH(_237603.niltrace_TYC) *
+***                                             CON_PATH(_237603.exp_TYC)} =>
+***                                              CON_PATH(_237603.bnd_TYC)) == 
+***       +1   /TOTALNONRECUR\_237879
+***       +1         (_237880 : {CON_PATH(_237603.var_TYC) *
+***       +1                     CON_PATH(_237603.niltrace_TYC) *
+***       +1                     CON_PATH(_237603.exp_TYC)})
+***       +1         : CON_PATH(_237603.bnd_TYC) =
+***       +1      ROLL(CON_PATH(_237603.bnd_TYC),INJ(1, CON_PATH(_237603.bnd_sum_INT),_237880)), 
+**                                         Fixclosure_b > _237881 : 
+***                                           ({_237845 *
+***                                             CON_APP(CON_PATH(_237603.sequence_TYC);
+***                                                CON_PATH(_237603.var_TYC),
+***                                                {code_LAB = CON_PATH(_237603.var_TYC),
+***                                                 tipe_LAB = CON_PATH(_237603.con_TYC),
+***                                                 cenv_LAB = CON_PATH(_237603.con_TYC),
+***                                                 venv_LAB = CON_PATH(_237603.exp_TYC)})} =>
+***                                              CON_PATH(_237603.bnd_TYC)) == /TOTALNONRECUR\_237882
+***       +1                 (_237883 : {_237845 *
+***       +1                             CON_APP(CON_PATH(_237603.
+***       +1   sequence_TYC);
+***       +1                                CON_PATH(_237603.var_TYC),
+***       +1                                {code_LAB = CON_PATH(
+***       +1   _237603.var_TYC),
+***       +1                                 tipe_LAB = CON_PATH(
+***       +1   _237603.con_TYC),
+***       +1                                 cenv_LAB = CON_PATH(
+***       +1   _237603.con_TYC),
+***       +1                                 venv_LAB = CON_PATH(
+***       +1   _237603.exp_TYC)})})
+***       +1                 : CON_PATH(_237603.bnd_TYC) =
+***       +1              ROLL(CON_PATH(_237603.bnd_TYC),INJ(2, CON_PATH(
+***       +1   _237603.bnd_sum_INT)
+***       +1   ,_237883)), 
+**                                         Fixcode_b > _237884 : 
+***                                           (CON_APP(CON_PATH(_237603.sequence_TYC);
+***                                               CON_PATH(_237603.var_TYC),
+***                                               CON_PATH(_237603.function_TYC)) =>
+***                                              CON_PATH(_237603.bnd_TYC)) == /TOTALNONRECUR\_237885
+***       +1            (_237886 : CON_APP(CON_PATH(_237603.sequence_TYC);
+***       +1                          CON_PATH(_237603.var_TYC),
+***       +1                          CON_PATH(_237603.function_TYC)))
+***       +1            : CON_PATH(_237603.bnd_TYC) =
+***       +1         ROLL(CON_PATH(_237603.bnd_TYC),INJ(3, CON_PATH(
+***       +1   _237603.bnd_sum_INT)
+***       +1   ,_237886)), 
+**                                         Fixopen_b > _237887 : 
+***                                           (CON_APP(CON_PATH(_237603.sequence_TYC);
+***                                               CON_PATH(_237603.var_TYC),
+***                                               CON_PATH(_237603.function_TYC)) =>
+***                                              CON_PATH(_237603.bnd_TYC)) == /TOTALNONRECUR\_237888
+***       +1            (_237889 : CON_APP(CON_PATH(_237603.sequence_TYC);
+***       +1                          CON_PATH(_237603.var_TYC),
+***       +1                          CON_PATH(_237603.function_TYC)))
+***       +1            : CON_PATH(_237603.bnd_TYC) =
+***       +1         ROLL(CON_PATH(_237603.bnd_TYC),INJ(4, CON_PATH(
+***       +1   _237603.bnd_sum_INT)
+***       +1   ,_237889))]
+**                             ), 
+*                        +O+Dcon_INT > _237890 : 
+**                          SIGS_SELF(_237603.+O+Dcon_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [con_INT > _237891 : 
+***                                           TYPE == CON_PATH(_237603.con_TYC), 
+**                                         expose_INT > _237892 : 
+***                                           (CON_PATH(_237603.con_TYC) =>
+***                                              CON_PATH(_237603.con_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_237893
+***       +1         (_237894 : CON_PATH(_237603.con_TYC))
+***       +1         : CON_PATH(_237603.con_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.con_TYC),CON_PATH(_237603.con_sum_INT),_237894), 
+**                                         AllArrow_c > _237895 : 
+***                                           ({openness_LAB = 
+***       +1   CON_PATH(_237603.openness_TYC),
+***                                             effect_LAB = CON_PATH(_237603.effect_TYC),
+***                                             body_type_LAB = CON_PATH(_237603.con_TYC),
+***                                             eFormals_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      {CON_APP(_237730; CON_PATH(_237603.var_TYC)) *
+***       +1       CON_PATH(_237603.con_TYC)}),
+***                                             fFormals_LAB = CON_PATH(_237603.w32_TYC),
+***                                             tFormals_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      {CON_PATH(_237603.var_TYC) *
+***       +1       CON_PATH(_237603.kind_TYC)}),
+***                                             isDependent_LAB = _237845} =>
+***                                              CON_PATH(_237603.con_TYC)) == /TOTALNONRECUR\_237896
+***       +1                                        (_237897 : {openness_LAB = 
+***       +1   CON_PATH(_237603.openness_TYC),
+***       +1                                                    effect_LAB = 
+***       +1   CON_PATH(_237603.effect_TYC),
+***       +1                                                    body_type_LAB = 
+***       +1   CON_PATH(_237603.con_TYC),
+***       +1                                                    eFormals_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      {CON_APP(_237730; CON_PATH(_237603.var_TYC)) *
+***       +1       CON_PATH(_237603.con_TYC)}),
+***       +1                                                    fFormals_LAB = 
+***       +1   CON_PATH(_237603.w32_TYC),
+***       +1                                                    tFormals_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      {CON_PATH(_237603.var_TYC) *
+***       +1       CON_PATH(_237603.kind_TYC)}),
+***       +1                                                    isDependent_LAB = _237845})
+***       +1                                        : CON_PATH(_237603.
+***       +1   con_TYC) =
+***       +1                                     ROLL(CON_PATH(_237603.
+***       +1   con_TYC),
+***       +1   INJ(0, CON_PATH(_237603.con_sum_INT),_237897)), 
+**                                         Annotate_c > _237898 : 
+***                                           ({CON_APP(CON_PATH(_237603.annotation_TYC);
+***                                                CON_PATH(_237603.kind_TYC)) *
+***                                             CON_PATH(_237603.con_TYC)} =>
+***                                              CON_PATH(_237603.con_TYC)) == /TOTALNONRECUR\_237899
+***       +1                 (_237900 : {CON_APP(CON_PATH(_237603.
+***       +1   annotation_TYC);
+***       +1                                CON_PATH(_237603.kind_TYC)) *
+***       +1                             CON_PATH(_237603.con_TYC)})
+***       +1                 : CON_PATH(_237603.con_TYC) =
+***       +1              ROLL(CON_PATH(_237603.con_TYC),INJ(1, CON_PATH(
+***       +1   _237603.con_sum_INT)
+***       +1   ,_237900)), 
+**                                         App_c > _237901 : 
+***                                           ({CON_PATH(_237603.con_TYC) *
+***                                             CON_APP(_237729;
+***                                                CON_PATH(_237603.con_TYC))} =>
+***                                              CON_PATH(_237603.con_TYC)) == 
+***       +1   /TOTALNONRECUR\_237902
+***       +1         (_237903 : {CON_PATH(_237603.con_TYC) *
+***       +1                     CON_APP(_237729; CON_PATH(_237603.con_TYC))})
+***       +1         : CON_PATH(_237603.con_TYC) =
+***       +1      ROLL(CON_PATH(_237603.con_TYC),INJ(2, CON_PATH(_237603.con_sum_INT),_237903)), 
+**                                         Closure_c > _237904 : 
+***                                           ({CON_PATH(_237603.con_TYC) *
+***                                             CON_PATH(_237603.con_TYC)} =>
+***                                              CON_PATH(_237603.con_TYC)) == 
+***       +1   /TOTALNONRECUR\_237905
+***       +1         (_237906 : {CON_PATH(_237603.con_TYC) *
+***       +1                     CON_PATH(_237603.con_TYC)})
+***       +1         : CON_PATH(_237603.con_TYC) =
+***       +1      ROLL(CON_PATH(_237603.con_TYC),INJ(3, CON_PATH(_237603.con_sum_INT),_237906)), 
+**                                         Crecord_c > _237907 : 
+***                                           (CON_APP(_237729;
+***                                               {CON_PATH(_237603.label_TYC) *
+***                                                CON_PATH(_237603.con_TYC)}) =>
+***                                              CON_PATH(_237603.con_TYC)) == 
+***       +1   /TOTALNONRECUR\_237908
+***       +1         (_237909 : CON_APP(_237729; {CON_PATH(_237603.label_TYC) *
+***       +1                                      CON_PATH(_237603.con_TYC)}))
+***       +1         : CON_PATH(_237603.con_TYC) =
+***       +1      ROLL(CON_PATH(_237603.con_TYC),INJ(4, CON_PATH(_237603.con_sum_INT),_237909)), 
+**                                         ExternArrow_c > _237910 : 
+***                                           ({CON_APP(_237729;
+***                                                CON_PATH(_237603.con_TYC)) *
+***                                             CON_PATH(_237603.con_TYC)} =>
+***                                              CON_PATH(_237603.con_TYC)) == 
+***       +1   /TOTALNONRECUR\_237911
+***       +1         (_237912 : {CON_APP(_237729; CON_PATH(_237603.con_TYC)) *
+***       +1                     CON_PATH(_237603.con_TYC)})
+***       +1         : CON_PATH(_237603.con_TYC) =
+***       +1      ROLL(CON_PATH(_237603.con_TYC),INJ(5, CON_PATH(_237603.con_sum_INT),_237912)), 
+**                                         Let_c > _237913 : 
+***                                           ({CON_PATH(_237603.letsort_TYC) *
+***                                             CON_APP(_237729;
+***                                                CON_PATH(_237603.conbnd_TYC)) *
+***                                             CON_PATH(_237603.con_TYC)} =>
+***                                              CON_PATH(_237603.con_TYC)) == 
+***       +1   /TOTALNONRECUR\_237914
+***       +1         (_237915 : {CON_PATH(_237603.letsort_TYC) *
+***       +1                     CON_APP(_237729; CON_PATH(_237603.conbnd_TYC)) *
+***       +1                     CON_PATH(_237603.con_TYC)})
+***       +1         : CON_PATH(_237603.con_TYC) =
+***       +1      ROLL(CON_PATH(_237603.con_TYC),INJ(6, CON_PATH(_237603.con_sum_INT),_237915)), 
+**                                         Mu_c > _237916 : 
+***                                           ({_237845 *
+***                                             CON_APP(CON_PATH(_237603.sequence_TYC);
+***                                                CON_PATH(_237603.var_TYC),
+***                                                CON_PATH(_237603.con_TYC))} =>
+***                                              CON_PATH(_237603.con_TYC)) == /TOTALNONRECUR\_237917
+***       +1              (_237918 : {_237845 *
+***       +1                          CON_APP(CON_PATH(_237603.sequence_TYC);
+***       +1                             CON_PATH(_237603.var_TYC),
+***       +1                             CON_PATH(_237603.con_TYC))})
+***       +1              : CON_PATH(_237603.con_TYC) =
+***       +1           ROLL(CON_PATH(_237603.con_TYC),INJ(7, CON_PATH(
+***       +1   _237603.con_sum_INT)
+***       +1   ,_237918)), 
+**                                         Prim_c > _237919 : 
+***                                           ({CON_PATH(_237603.primcon_TYC) *
+***                                             CON_APP(_237729;
+***                                                CON_PATH(_237603.con_TYC))} =>
+***                                              CON_PATH(_237603.con_TYC)) == 
+***       +1   /TOTALNONRECUR\_237920
+***       +1         (_237921 : {CON_PATH(_237603.primcon_TYC) *
+***       +1                     CON_APP(_237729; CON_PATH(_237603.con_TYC))})
+***       +1         : CON_PATH(_237603.con_TYC) =
+***       +1      ROLL(CON_PATH(_237603.con_TYC),INJ(8, CON_PATH(_237603.con_sum_INT),_237921)), 
+**                                         Proj_c > _237922 : 
+***                                           ({CON_PATH(_237603.con_TYC) *
+***                                             CON_PATH(_237603.label_TYC)} =>
+***                                              CON_PATH(_237603.con_TYC)) == 
+***       +1   /TOTALNONRECUR\_237923
+***       +1         (_237924 : {CON_PATH(_237603.con_TYC) *
+***       +1                     CON_PATH(_237603.label_TYC)})
+***       +1         : CON_PATH(_237603.con_TYC) =
+***       +1      ROLL(CON_PATH(_237603.con_TYC),INJ(9, CON_PATH(_237603.con_sum_INT),_237924)), 
+**                                         Typecase_c > _237925 : 
+***                                           ({arg_LAB = CON_PATH(_237603.con_TYC),
+***                                             kind_LAB = CON_PATH(_237603.kind_TYC),
+***                                             arms_LAB = CON_APP(_237729;
+***                                                           
+***       +1   {CON_PATH(_237603.primcon_TYC) *
+***       +1    CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+***       +1                      CON_PATH(_237603.kind_TYC)}) *
+***       +1    CON_PATH(_237603.con_TYC)}),
+***                                             default_LAB = CON_PATH(_237603.con_TYC)} =>
+***                                              CON_PATH(_237603.con_TYC)) == /TOTALNONRECUR\_237926
+***       +1                                       (_237927 : {arg_LAB = 
+***       +1   CON_PATH(_237603.con_TYC),
+***       +1                                                   kind_LAB = 
+***       +1   CON_PATH(_237603.kind_TYC),
+***       +1                                                   arms_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      {CON_PATH(_237603.primcon_TYC) *
+***       +1       CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+***       +1                         CON_PATH(_237603.kind_TYC)}) *
+***       +1       CON_PATH(_237603.con_TYC)}),
+***       +1                                                   default_LAB = 
+***       +1   CON_PATH(_237603.con_TYC)})
+***       +1                                       : CON_PATH(_237603.
+***       +1   con_TYC) =
+***       +1                                    ROLL(CON_PATH(_237603.
+***       +1   con_TYC),
+***       +1   INJ(10, CON_PATH(_237603.con_sum_INT),_237927)), 
+**                                         Typeof_c > _237928 : 
+***                                           (CON_PATH(_237603.exp_TYC) =>
+***                                              CON_PATH(_237603.con_TYC)) == 
+***       +1   /TOTALNONRECUR\_237929
+***       +1         (_237930 : CON_PATH(_237603.exp_TYC))
+***       +1         : CON_PATH(_237603.con_TYC) =
+***       +1      ROLL(CON_PATH(_237603.con_TYC),INJ(11, CON_PATH(_237603.con_sum_INT),_237930)), 
+**                                         Var_c > _237931 : 
+***                                           (CON_PATH(_237603.var_TYC) =>
+***                                              CON_PATH(_237603.con_TYC)) == 
+***       +1   /TOTALNONRECUR\_237932
+***       +1         (_237933 : CON_PATH(_237603.var_TYC))
+***       +1         : CON_PATH(_237603.con_TYC) =
+***       +1      ROLL(CON_PATH(_237603.con_TYC),INJ(12, CON_PATH(_237603.con_sum_INT),_237933))]
+**                             ), 
+*                        +O+Dconbnd_INT > _237934 : 
+**                          SIGS_SELF(_237603.+O+Dconbnd_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [conbnd_INT > _237935 : 
+***                                           TYPE == CON_PATH(_237603.conbnd_TYC), 
+**                                         expose_INT > _237936 : 
+***                                           (CON_PATH(_237603.conbnd_TYC) =>
+***                                              CON_PATH(_237603.conbnd_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_237937
+***       +1         (_237938 : CON_PATH(_237603.conbnd_TYC))
+***       +1         : CON_PATH(_237603.conbnd_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.conbnd_TYC),CON_PATH(_237603.conbnd_sum_INT),_237938), 
+**                                         Code_cb > _237939 : 
+***                                           ({CON_PATH(_237603.var_TYC) *
+***                                             CON_APP(_237729;
+***                                                {CON_PATH(_237603.var_TYC) *
+***                                                 CON_PATH(_237603.kind_TYC)}) *
+***                                             CON_PATH(_237603.con_TYC)} =>
+***                                              CON_PATH(_237603.conbnd_TYC)) == 
+***       +1   /TOTALNONRECUR\_237940
+***       +1         (_237941 : {CON_PATH(_237603.var_TYC) *
+***       +1                     CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+***       +1                                       CON_PATH(_237603.kind_TYC)}) *
+***       +1                     CON_PATH(_237603.con_TYC)})
+***       +1         : CON_PATH(_237603.conbnd_TYC) =
+***       +1      ROLL(CON_PATH(_237603.conbnd_TYC),INJ(0, CON_PATH(_237603.conbnd_sum_INT)
+***       +2   ,_237941)), 
+**                                         Con_cb > _237942 : 
+***                                           ({CON_PATH(_237603.var_TYC) *
+***                                             CON_PATH(_237603.con_TYC)} =>
+***                                              CON_PATH(_237603.conbnd_TYC)) == 
+***       +1   /TOTALNONRECUR\_237943
+***       +1         (_237944 : {CON_PATH(_237603.var_TYC) *
+***       +1                     CON_PATH(_237603.con_TYC)})
+***       +1         : CON_PATH(_237603.conbnd_TYC) =
+***       +1      ROLL(CON_PATH(_237603.conbnd_TYC),INJ(1, CON_PATH(_237603.conbnd_sum_INT)
+***       +2   ,_237944)), 
+**                                         Open_cb > _237945 : 
+***                                           ({CON_PATH(_237603.var_TYC) *
+***                                             CON_APP(_237729;
+***                                                {CON_PATH(_237603.var_TYC) *
+***                                                 CON_PATH(_237603.kind_TYC)}) *
+***                                             CON_PATH(_237603.con_TYC)} =>
+***                                              CON_PATH(_237603.conbnd_TYC)) == 
+***       +1   /TOTALNONRECUR\_237946
+***       +1         (_237947 : {CON_PATH(_237603.var_TYC) *
+***       +1                     CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+***       +1                                       CON_PATH(_237603.kind_TYC)}) *
+***       +1                     CON_PATH(_237603.con_TYC)})
+***       +1         : CON_PATH(_237603.conbnd_TYC) =
+***       +1      ROLL(CON_PATH(_237603.conbnd_TYC),INJ(2, CON_PATH(_237603.conbnd_sum_INT)
+***       +2   ,_237947))]
+**                             ), 
+*                        +O+DconditionCode_INT > _237948 : 
+**                          SIGS_SELF(_237603.+O+DconditionCode_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [conditionCode_INT > _237949 : 
+***                                           TYPE == CON_PATH(_237603.conditionCode_TYC), 
+**                                         expose_INT > _237950 : 
+***                                           (CON_PATH(_237603.conditionCode_TYC) =>
+***                                              CON_PATH(_237603.conditionCode_sum_INT)) == /TOTALNONRECUR\_237951
+***       +1            (_237952 : CON_PATH(_237603.conditionCode_TYC))
+***       +1            : CON_PATH(_237603.conditionCode_sum_INT) =
+***       +1         UNROLL(CON_PATH(_237603.conditionCode_TYC),CON_PATH(
+***       +1   _237603.conditionCode_sum_INT),_237952), 
+**                                         And_cc > _237953 : 
+***                                           ({CON_PATH(_237603.conditionCode_TYC) *
+***                                             CON_PATH(_237603.conditionCode_TYC)} =>
+***                                              CON_PATH(_237603.conditionCode_TYC)) == /TOTALNONRECUR\_237954
+***       +1           (_237955 : {CON_PATH(_237603.conditionCode_TYC) *
+***       +1                       CON_PATH(_237603.conditionCode_TYC)})
+***       +1           : CON_PATH(_237603.conditionCode_TYC) =
+***       +1        ROLL(CON_PATH(_237603.conditionCode_TYC),INJ(0, 
+***       +1   CON_PATH(_237603.conditionCode_sum_INT),_237955)), 
+**                                         Exp_cc > _237956 : 
+***                                           (CON_PATH(_237603.exp_TYC) =>
+***                                              CON_PATH(_237603.conditionCode_TYC)) == 
+***       +1   /TOTALNONRECUR\_237957
+***       +1         (_237958 : CON_PATH(_237603.exp_TYC))
+***       +1         : CON_PATH(_237603.conditionCode_TYC) =
+***       +1      ROLL(CON_PATH(_237603.conditionCode_TYC),INJ(1, 
+***       +2   CON_PATH(_237603.conditionCode_sum_INT),_237958)), 
+**                                         Not_cc > _237959 : 
+***                                           (CON_PATH(_237603.conditionCode_TYC) =>
+***                                              CON_PATH(_237603.conditionCode_TYC)) == 
+***       +1   /TOTALNONRECUR\_237960
+***       +1         (_237961 : CON_PATH(_237603.conditionCode_TYC))
+***       +1         : CON_PATH(_237603.conditionCode_TYC) =
+***       +1      ROLL(CON_PATH(_237603.conditionCode_TYC),INJ(2, 
+***       +2   CON_PATH(_237603.conditionCode_sum_INT),_237961)), 
+**                                         Or_cc > _237962 : 
+***                                           ({CON_PATH(_237603.conditionCode_TYC) *
+***                                             CON_PATH(_237603.conditionCode_TYC)} =>
+***                                              CON_PATH(_237603.conditionCode_TYC)) == /TOTALNONRECUR\_237963
+***       +1           (_237964 : {CON_PATH(_237603.conditionCode_TYC) *
+***       +1                       CON_PATH(_237603.conditionCode_TYC)})
+***       +1           : CON_PATH(_237603.conditionCode_TYC) =
+***       +1        ROLL(CON_PATH(_237603.conditionCode_TYC),INJ(3, 
+***       +1   CON_PATH(_237603.conditionCode_sum_INT),_237964))]
+**                             ), 
+*                        +O+Dexp_INT > _237965 : 
+**                          SIGS_SELF(_237603.+O+Dexp_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [exp_INT > _237966 : 
+***                                           TYPE == CON_PATH(_237603.exp_TYC), 
+**                                         expose_INT > _237967 : 
+***                                           (CON_PATH(_237603.exp_TYC) =>
+***                                              CON_PATH(_237603.exp_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_237968
+***       +1         (_237969 : CON_PATH(_237603.exp_TYC))
+***       +1         : CON_PATH(_237603.exp_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.exp_TYC),CON_PATH(_237603.exp_sum_INT),_237969), 
+**                                         App_e > _237970 : 
+***                                           ({CON_PATH(_237603.openness_TYC) *
+***                                             CON_PATH(_237603.exp_TYC) *
+***                                             CON_APP(_237729;
+***                                                CON_PATH(_237603.con_TYC)) *
+***                                             CON_APP(_237729;
+***                                                CON_PATH(_237603.exp_TYC)) *
+***                                             CON_APP(_237729;
+***                                                CON_PATH(_237603.exp_TYC))} =>
+***                                              CON_PATH(_237603.exp_TYC)) == 
+***       +1   /TOTALNONRECUR\_237971
+***       +1         (_237972 : {CON_PATH(_237603.openness_TYC) *
+***       +1                     CON_PATH(_237603.exp_TYC) *
+***       +1                     CON_APP(_237729; CON_PATH(_237603.con_TYC)) *
+***       +1                     CON_APP(_237729; CON_PATH(_237603.exp_TYC)) *
+***       +1                     CON_APP(_237729; CON_PATH(_237603.exp_TYC))})
+***       +1         : CON_PATH(_237603.exp_TYC) =
+***       +1      ROLL(CON_PATH(_237603.exp_TYC),INJ(0, CON_PATH(_237603.exp_sum_INT),_237972)), 
+**                                         Const_e > _237973 : 
+***                                           (CON_APP(CON_PATH(_237611.value_TYC);
+***                                               CON_PATH(_237603.con_TYC),
+***                                               CON_PATH(_237603.exp_TYC)) =>
+***                                              CON_PATH(_237603.exp_TYC)) == /TOTALNONRECUR\_237974
+***       +1         (_237975 : CON_APP(CON_PATH(_237611.value_TYC);
+***       +1                       CON_PATH(_237603.con_TYC),
+***       +1                       CON_PATH(_237603.exp_TYC)))
+***       +1         : CON_PATH(_237603.exp_TYC) =
+***       +1      ROLL(CON_PATH(_237603.exp_TYC),INJ(1, CON_PATH(
+***       +1   _237603.exp_sum_INT)
+***       +1   ,_237975)), 
+**                                         ExternApp_e > _237976 : 
+***                                           ({CON_PATH(_237603.exp_TYC) *
+***                                             CON_APP(_237729;
+***                                                CON_PATH(_237603.exp_TYC))} =>
+***                                              CON_PATH(_237603.exp_TYC)) == 
+***       +1   /TOTALNONRECUR\_237977
+***       +1         (_237978 : {CON_PATH(_237603.exp_TYC) *
+***       +1                     CON_APP(_237729; CON_PATH(_237603.exp_TYC))})
+***       +1         : CON_PATH(_237603.exp_TYC) =
+***       +1      ROLL(CON_PATH(_237603.exp_TYC),INJ(2, CON_PATH(_237603.exp_sum_INT),_237978)), 
+**                                         Handle_e > _237979 : 
+***                                           ({body_LAB = CON_PATH(_237603.exp_TYC),
+***                                             result_type_LAB = 
+***       +1   CON_PATH(_237603.con_TYC),
+***                                             bound_LAB = CON_PATH(_237603.var_TYC),
+***                                             handler_LAB = CON_PATH(_237603.exp_TYC)} =>
+***                                              CON_PATH(_237603.exp_TYC)) == /TOTALNONRECUR\_237980
+***       +1                  (_237981 : {body_LAB = CON_PATH(_237603.
+***       +1   exp_TYC),
+***       +1                              result_type_LAB = CON_PATH(
+***       +1   _237603.con_TYC),
+***       +1                              bound_LAB = CON_PATH(_237603.
+***       +1   var_TYC),
+***       +1                              handler_LAB = CON_PATH(
+***       +1   _237603.exp_TYC)})
+***       +1                  : CON_PATH(_237603.exp_TYC) =
+***       +1               ROLL(CON_PATH(_237603.exp_TYC),INJ(3, 
+***       +1   CON_PATH(_237603.exp_sum_INT)
+***       +1   ,_237981)), 
+**                                         Let_e > _237982 : 
+***                                           ({CON_PATH(_237603.letsort_TYC) *
+***                                             CON_APP(_237729;
+***                                                CON_PATH(_237603.bnd_TYC)) *
+***                                             CON_PATH(_237603.exp_TYC)} =>
+***                                              CON_PATH(_237603.exp_TYC)) == 
+***       +1   /TOTALNONRECUR\_237983
+***       +1         (_237984 : {CON_PATH(_237603.letsort_TYC) *
+***       +1                     CON_APP(_237729; CON_PATH(_237603.bnd_TYC)) *
+***       +1                     CON_PATH(_237603.exp_TYC)})
+***       +1         : CON_PATH(_237603.exp_TYC) =
+***       +1      ROLL(CON_PATH(_237603.exp_TYC),INJ(4, CON_PATH(_237603.exp_sum_INT),_237984)), 
+**                                         Prim_e > _237985 : 
+***                                           ({CON_PATH(_237603.allprim_TYC) *
+***                                             CON_APP(_237729;
+***                                                CON_PATH(_237603.con_TYC)) *
+***                                             CON_APP(_237729;
+***                                                CON_PATH(_237603.exp_TYC))} =>
+***                                              CON_PATH(_237603.exp_TYC)) == 
+***       +1   /TOTALNONRECUR\_237986
+***       +1         (_237987 : {CON_PATH(_237603.allprim_TYC) *
+***       +1                     CON_APP(_237729; CON_PATH(_237603.con_TYC)) *
+***       +1                     CON_APP(_237729; CON_PATH(_237603.exp_TYC))})
+***       +1         : CON_PATH(_237603.exp_TYC) =
+***       +1      ROLL(CON_PATH(_237603.exp_TYC),INJ(5, CON_PATH(_237603.exp_sum_INT),_237987)), 
+**                                         Raise_e > _237988 : 
+***                                           ({CON_PATH(_237603.exp_TYC) *
+***                                             CON_PATH(_237603.con_TYC)} =>
+***                                              CON_PATH(_237603.exp_TYC)) == 
+***       +1   /TOTALNONRECUR\_237989
+***       +1         (_237990 : {CON_PATH(_237603.exp_TYC) *
+***       +1                     CON_PATH(_237603.con_TYC)})
+***       +1         : CON_PATH(_237603.exp_TYC) =
+***       +1      ROLL(CON_PATH(_237603.exp_TYC),INJ(6, CON_PATH(_237603.exp_sum_INT),_237990)), 
+**                                         Switch_e > _237991 : 
+***                                           (CON_PATH(_237603.switch_TYC) =>
+***                                              CON_PATH(_237603.exp_TYC)) == 
+***       +1   /TOTALNONRECUR\_237992
+***       +1         (_237993 : CON_PATH(_237603.switch_TYC))
+***       +1         : CON_PATH(_237603.exp_TYC) =
+***       +1      ROLL(CON_PATH(_237603.exp_TYC),INJ(7, CON_PATH(_237603.exp_sum_INT),_237993)), 
+**                                         Var_e > _237994 : 
+***                                           (CON_PATH(_237603.var_TYC) =>
+***                                              CON_PATH(_237603.exp_TYC)) == 
+***       +1   /TOTALNONRECUR\_237995
+***       +1         (_237996 : CON_PATH(_237603.var_TYC))
+***       +1         : CON_PATH(_237603.exp_TYC) =
+***       +1      ROLL(CON_PATH(_237603.exp_TYC),INJ(8, CON_PATH(_237603.exp_sum_INT),_237996))]
+**                             ), 
+*                        +O+Dfunction_INT > _237997 : 
+**                          SIGS_SELF(_237603.+O+Dfunction_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [function_INT > _237998 : 
+***                                           TYPE == CON_PATH(_237603.function_TYC), 
+**                                         expose_INT > _237999 : 
+***                                           (CON_PATH(_237603.function_TYC) =>
+***                                              CON_PATH(_237603.function_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_238000
+***       +1         (_238001 : CON_PATH(_237603.function_TYC))
+***       +1         : CON_PATH(_237603.function_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.function_TYC),CON_PATH(_237603.function_sum_INT),_238001), 
+**                                         Function > _238002 : 
+***                                           ({effect_LAB = CON_PATH(_237603.effect_TYC),
+***                                             body_LAB = CON_PATH(_237603.exp_TYC),
+***                                             recursive_LAB = 
+***       +1   CON_PATH(_237603.recursive_TYC),
+***                                             body_type_LAB = CON_PATH(_237603.con_TYC),
+***                                             eFormals_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      {CON_PATH(_237603.var_TYC) *
+***       +1       CON_PATH(_237603.niltrace_TYC) *
+***       +1       CON_PATH(_237603.con_TYC)}),
+***                                             fFormals_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      CON_PATH(_237603.var_TYC)),
+***                                             tFormals_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      {CON_PATH(_237603.var_TYC) *
+***       +1       CON_PATH(_237603.kind_TYC)}),
+***                                             isDependent_LAB = _237845} =>
+***                                              CON_PATH(_237603.function_TYC)) == /TOTALNONRECUR\_238003
+***       +1                           (_238004 : {effect_LAB = CON_PATH(
+***       +1   _237603.effect_TYC),
+***       +1                                       body_LAB = CON_PATH(
+***       +1   _237603.exp_TYC),
+***       +1                                       recursive_LAB = 
+***       +1   CON_PATH(_237603.recursive_TYC),
+***       +1                                       body_type_LAB = 
+***       +1   CON_PATH(_237603.con_TYC),
+***       +1                                       eFormals_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      {CON_PATH(_237603.var_TYC) *
+***       +1       CON_PATH(_237603.niltrace_TYC) *
+***       +1       CON_PATH(_237603.con_TYC)}),
+***       +1                                       fFormals_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      CON_PATH(_237603.var_TYC)),
+***       +1                                       tFormals_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      {CON_PATH(_237603.var_TYC) *
+***       +1       CON_PATH(_237603.kind_TYC)}),
+***       +1                                       isDependent_LAB = _237845})
+***       +1                           : CON_PATH(_237603.function_TYC) =
+***       +1                        ROLL(CON_PATH(_237603.function_TYC),
+***       +1   INJ(0, CON_PATH(_237603.function_sum_INT),_238004))]
+**                             ), 
+*                        +O+Dkind_INT > _238005 : 
+**                          SIGS_SELF(_237603.+O+Dkind_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [kind_INT > _238006 : 
+***                                           TYPE == CON_PATH(_237603.kind_TYC), 
+**                                         expose_INT > _238007 : 
+***                                           (CON_PATH(_237603.kind_TYC) =>
+***                                              CON_PATH(_237603.kind_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_238008
+***       +1         (_238009 : CON_PATH(_237603.kind_TYC))
+***       +1         : CON_PATH(_237603.kind_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.kind_TYC),CON_PATH(_237603.kind_sum_INT),_238009), 
+**                                         Type_k > _238010 : 
+***                                           CON_PATH(_237603.kind_TYC) == 
+***       +1   ROLL(CON_PATH(_237603.kind_TYC),INJ(0, CON_PATH(_237603.kind_sum_INT))), 
+**                                         Arrow_k > _238011 : 
+***                                           ({CON_PATH(_237603.openness_TYC) *
+***                                             CON_APP(_237729;
+***                                                {CON_PATH(_237603.var_TYC) *
+***                                                 CON_PATH(_237603.kind_TYC)}) *
+***                                             CON_PATH(_237603.kind_TYC)} =>
+***                                              CON_PATH(_237603.kind_TYC)) == 
+***       +1   /TOTALNONRECUR\_238012
+***       +1         (_238013 : {CON_PATH(_237603.openness_TYC) *
+***       +1                     CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+***       +1                                       CON_PATH(_237603.kind_TYC)}) *
+***       +1                     CON_PATH(_237603.kind_TYC)})
+***       +1         : CON_PATH(_237603.kind_TYC) =
+***       +1      ROLL(CON_PATH(_237603.kind_TYC),INJ(1, CON_PATH(_237603.kind_sum_INT),_238013)), 
+**                                         Record_k > _238014 : 
+***                                           (CON_APP(CON_PATH(_237603.sequence_TYC);
+***                                               {CON_PATH(_237603.label_TYC) *
+***                                                CON_PATH(_237603.var_TYC)},
+***                                               CON_PATH(_237603.kind_TYC)) =>
+***                                              CON_PATH(_237603.kind_TYC)) == /TOTALNONRECUR\_238015
+***       +1            (_238016 : CON_APP(CON_PATH(_237603.sequence_TYC);
+***       +1                          {CON_PATH(_237603.label_TYC) *
+***       +1                           CON_PATH(_237603.var_TYC)},
+***       +1                          CON_PATH(_237603.kind_TYC)))
+***       +1            : CON_PATH(_237603.kind_TYC) =
+***       +1         ROLL(CON_PATH(_237603.kind_TYC),INJ(2, CON_PATH(
+***       +1   _237603.kind_sum_INT)
+***       +1   ,_238016)), 
+**                                         SingleType_k > _238017 : 
+***                                           (CON_PATH(_237603.con_TYC) =>
+***                                              CON_PATH(_237603.kind_TYC)) == 
+***       +1   /TOTALNONRECUR\_238018
+***       +1         (_238019 : CON_PATH(_237603.con_TYC))
+***       +1         : CON_PATH(_237603.kind_TYC) =
+***       +1      ROLL(CON_PATH(_237603.kind_TYC),INJ(3, CON_PATH(_237603.kind_sum_INT),_238019)), 
+**                                         Single_k > _238020 : 
+***                                           (CON_PATH(_237603.con_TYC) =>
+***                                              CON_PATH(_237603.kind_TYC)) == 
+***       +1   /TOTALNONRECUR\_238021
+***       +1         (_238022 : CON_PATH(_237603.con_TYC))
+***       +1         : CON_PATH(_237603.kind_TYC) =
+***       +1      ROLL(CON_PATH(_237603.kind_TYC),INJ(4, CON_PATH(_237603.kind_sum_INT),_238022))]
+**                             ), 
+*                        +O+Dswitch_INT > _238023 : 
+**                          SIGS_SELF(_237603.+O+Dswitch_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [switch_INT > _238024 : 
+***                                           TYPE == CON_PATH(_237603.switch_TYC), 
+**                                         expose_INT > _238025 : 
+***                                           (CON_PATH(_237603.switch_TYC) =>
+***                                              CON_PATH(_237603.switch_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_238026
+***       +1         (_238027 : CON_PATH(_237603.switch_TYC))
+***       +1         : CON_PATH(_237603.switch_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.switch_TYC),CON_PATH(_237603.switch_sum_INT),_238027), 
+**                                         Exncase_e > _238028 : 
+***                                           ({arg_LAB = CON_PATH(_237603.exp_TYC),
+***                                             result_type_LAB = 
+***       +1   CON_PATH(_237603.con_TYC),
+***                                             bound_LAB = CON_PATH(_237603.var_TYC),
+***                                             arms_LAB = CON_APP(_237729;
+***                                                           
+***       +1   {CON_PATH(_237603.exp_TYC) *
+***       +1    CON_PATH(_237603.niltrace_TYC) *
+***       +1    CON_PATH(_237603.exp_TYC)}),
+***                                             default_LAB = 
+***       +1   CON_APP(_237730;
+***       +1      CON_PATH(_237603.exp_TYC))} =>
+***                                              CON_PATH(_237603.switch_TYC)) == /TOTALNONRECUR\_238029
+***       +1                       (_238030 : {arg_LAB = CON_PATH(
+***       +1   _237603.exp_TYC),
+***       +1                                   result_type_LAB = 
+***       +1   CON_PATH(_237603.con_TYC),
+***       +1                                   bound_LAB = CON_PATH(
+***       +1   _237603.var_TYC),
+***       +1                                   arms_LAB = CON_APP(_237729;
+***       +1                                                 {CON_PATH(
+***       +1   _237603.exp_TYC) *
+***       +1                                                  CON_PATH(
+***       +1   _237603.niltrace_TYC) *
+***       +1                                                  CON_PATH(
+***       +1   _237603.exp_TYC)}),
+***       +1                                   default_LAB = CON_APP(_237730;
+***       +1                                                    CON_PATH(
+***       +1   _237603.exp_TYC))})
+***       +1                       : CON_PATH(_237603.switch_TYC) =
+***       +1                    ROLL(CON_PATH(_237603.switch_TYC),
+***       +1   INJ(0, CON_PATH(_237603.switch_sum_INT),_238030)), 
+**                                         Ifthenelse_e > _238031 : 
+***                                           ({arg_LAB = CON_PATH(
+***       +1   _237603.conditionCode_TYC),
+***                                             elseArm_LAB = CON_PATH(_237603.exp_TYC),
+***                                             result_type_LAB = 
+***       +1   CON_PATH(_237603.con_TYC),
+***                                             thenArm_LAB = CON_PATH(_237603.exp_TYC)} =>
+***                                              CON_PATH(_237603.switch_TYC)) == /TOTALNONRECUR\_238032
+***       +1                    (_238033 : {arg_LAB = CON_PATH(_237603.
+***       +1   conditionCode_TYC),
+***       +1                                elseArm_LAB = CON_PATH(
+***       +1   _237603.exp_TYC),
+***       +1                                result_type_LAB = CON_PATH(
+***       +1   _237603.con_TYC),
+***       +1                                thenArm_LAB = CON_PATH(
+***       +1   _237603.exp_TYC)})
+***       +1                    : CON_PATH(_237603.switch_TYC) =
+***       +1                 ROLL(CON_PATH(_237603.switch_TYC),INJ(1, 
+***       +1   CON_PATH(_237603.switch_sum_INT),_238033)), 
+**                                         Intsw_e > _238034 : 
+***                                           ({arg_LAB = CON_PATH(_237603.exp_TYC),
+***                                             size_LAB = CON_PATH(_237611.intsize_TYC),
+***                                             result_type_LAB = 
+***       +1   CON_PATH(_237603.con_TYC),
+***                                             arms_LAB = CON_APP(_237729;
+***                                                           
+***       +1   {CON_PATH(_237603.w32_TYC) *
+***       +1    CON_PATH(_237603.exp_TYC)}),
+***                                             default_LAB = 
+***       +1   CON_APP(_237730;
+***       +1      CON_PATH(_237603.exp_TYC))} =>
+***                                              CON_PATH(_237603.switch_TYC)) == /TOTALNONRECUR\_238035
+***       +1                  (_238036 : {arg_LAB = CON_PATH(_237603.
+***       +1   exp_TYC),
+***       +1                              size_LAB = CON_PATH(_237611.
+***       +1   intsize_TYC),
+***       +1                              result_type_LAB = CON_PATH(
+***       +1   _237603.con_TYC),
+***       +1                              arms_LAB = CON_APP(_237729;
+***       +1                                            {CON_PATH(
+***       +1   _237603.w32_TYC) *
+***       +1                                             CON_PATH(
+***       +1   _237603.exp_TYC)}),
+***       +1                              default_LAB = CON_APP(_237730;
+***       +1                                               CON_PATH(
+***       +1   _237603.exp_TYC))})
+***       +1                  : CON_PATH(_237603.switch_TYC) =
+***       +1               ROLL(CON_PATH(_237603.switch_TYC),INJ(2, 
+***       +1   CON_PATH(_237603.switch_sum_INT),_238036)), 
+**                                         Sumsw_e > _238037 : 
+***                                           ({arg_LAB = CON_PATH(_237603.exp_TYC),
+***                                             result_type_LAB = 
+***       +1   CON_PATH(_237603.con_TYC),
+***                                             sumtype_LAB = CON_PATH(_237603.con_TYC),
+***                                             bound_LAB = CON_PATH(_237603.var_TYC),
+***                                             arms_LAB = CON_APP(_237729;
+***                                                           
+***       +1   {CON_PATH(_237603.w32_TYC) *
+***       +1    CON_PATH(_237603.niltrace_TYC) *
+***       +1    CON_PATH(_237603.exp_TYC)}),
+***                                             default_LAB = 
+***       +1   CON_APP(_237730;
+***       +1      CON_PATH(_237603.exp_TYC))} =>
+***                                              CON_PATH(_237603.switch_TYC)) == /TOTALNONRECUR\_238038
+***       +1                       (_238039 : {arg_LAB = CON_PATH(
+***       +1   _237603.exp_TYC),
+***       +1                                   result_type_LAB = 
+***       +1   CON_PATH(_237603.con_TYC),
+***       +1                                   sumtype_LAB = CON_PATH(
+***       +1   _237603.con_TYC),
+***       +1                                   bound_LAB = CON_PATH(
+***       +1   _237603.var_TYC),
+***       +1                                   arms_LAB = CON_APP(_237729;
+***       +1                                                 {CON_PATH(
+***       +1   _237603.w32_TYC) *
+***       +1                                                  CON_PATH(
+***       +1   _237603.niltrace_TYC) *
+***       +1                                                  CON_PATH(
+***       +1   _237603.exp_TYC)}),
+***       +1                                   default_LAB = CON_APP(_237730;
+***       +1                                                    CON_PATH(
+***       +1   _237603.exp_TYC))})
+***       +1                       : CON_PATH(_237603.switch_TYC) =
+***       +1                    ROLL(CON_PATH(_237603.switch_TYC),
+***       +1   INJ(3, CON_PATH(_237603.switch_sum_INT),_238039)), 
+**                                         Typecase_e > _238040 : 
+***                                           ({arg_LAB = CON_PATH(_237603.con_TYC),
+***                                             result_type_LAB = 
+***       +1   CON_PATH(_237603.con_TYC),
+***                                             arms_LAB = CON_APP(_237729;
+***                                                           
+***       +1   {CON_PATH(_237603.primcon_TYC) *
+***       +1    CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+***       +1                      CON_PATH(_237603.kind_TYC)}) *
+***       +1    CON_PATH(_237603.exp_TYC)}),
+***                                             default_LAB = CON_PATH(_237603.exp_TYC)} =>
+***                                              CON_PATH(_237603.switch_TYC)) == /TOTALNONRECUR\_238041
+***       +1                                       (_238042 : {arg_LAB = 
+***       +1   CON_PATH(_237603.con_TYC),
+***       +1                                                   result_type_LAB = 
+***       +1   CON_PATH(_237603.con_TYC),
+***       +1                                                   arms_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      {CON_PATH(_237603.primcon_TYC) *
+***       +1       CON_APP(_237729; {CON_PATH(_237603.var_TYC) *
+***       +1                         CON_PATH(_237603.kind_TYC)}) *
+***       +1       CON_PATH(_237603.exp_TYC)}),
+***       +1                                                   default_LAB = 
+***       +1   CON_PATH(_237603.exp_TYC)})
+***       +1                                       : CON_PATH(_237603.
+***       +1   switch_TYC) =
+***       +1                                    ROLL(CON_PATH(_237603.
+***       +1   switch_TYC),
+***       +1   INJ(4, CON_PATH(_237603.switch_sum_INT),_238042))]
+**                             ), 
+*                        import_entry_TYC > _238043 : 
+**                          TYPE = CON_MU(/-\(_238044)(SUM[
+**                                                        (ImportType, ImportValue);
+**                                                        0;
+**                                                        ({CON_PATH(_237603.label_TYC) *
+**                                                          CON_PATH(_237603.var_TYC) *
+**                                                          CON_PATH(_237603.kind_TYC)},
+**                                                         {CON_PATH(_237603.label_TYC) *
+**                                                          CON_PATH(_237603.var_TYC) *
+**                                                          CON_PATH(_237603.niltrace_TYC) *
+**                                                          CON_PATH(_237603.con_TYC)})]))#0, 
+*                        import_entry_sumarg_INT > _238045 : 
+**                          KIND(2) = ({CON_PATH(_237603.label_TYC) *
+**                                      CON_PATH(_237603.var_TYC) *
+**                                      CON_PATH(_237603.kind_TYC)},
+**                                     {CON_PATH(_237603.label_TYC) *
+**                                      CON_PATH(_237603.var_TYC) *
+**                                      CON_PATH(_237603.niltrace_TYC) *
+**                                      CON_PATH(_237603.con_TYC)}), 
+*                        import_entry_sum_INT > _238046 : 
+**                          TYPE = SUM[
+**                                    (ImportType, ImportValue);
+**                                    0;
+**                                    CON_PATH(_237603.import_entry_sumarg_INT)], 
+*                        +O+Dimport_entry_INT > _238047 : 
+**                          SIGS_SELF(_237603.+O+Dimport_entry_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [import_entry_INT > _238048 : 
+***                                           TYPE == CON_PATH(_237603.import_entry_TYC), 
+**                                         expose_INT > _238049 : 
+***                                           (CON_PATH(_237603.import_entry_TYC) =>
+***                                              CON_PATH(_237603.import_entry_sum_INT)) == /TOTALNONRECUR\_238050
+***       +1           (_238051 : CON_PATH(_237603.import_entry_TYC))
+***       +1           : CON_PATH(_237603.import_entry_sum_INT) =
+***       +1        UNROLL(CON_PATH(_237603.import_entry_TYC),CON_PATH(
+***       +1   _237603.import_entry_sum_INT),_238051), 
+**                                         ImportType > _238052 : 
+***                                           ({CON_PATH(_237603.label_TYC) *
+***                                             CON_PATH(_237603.var_TYC) *
+***                                             CON_PATH(_237603.kind_TYC)} =>
+***                                              CON_PATH(_237603.import_entry_TYC)) == 
+***       +1   /TOTALNONRECUR\_238053
+***       +1         (_238054 : {CON_PATH(_237603.label_TYC) *
+***       +1                     CON_PATH(_237603.var_TYC) *
+***       +1                     CON_PATH(_237603.kind_TYC)})
+***       +1         : CON_PATH(_237603.import_entry_TYC) =
+***       +1      ROLL(CON_PATH(_237603.import_entry_TYC),INJ(0, 
+***       +2   CON_PATH(_237603.import_entry_sum_INT),_238054)), 
+**                                         ImportValue > _238055 : 
+***                                           ({CON_PATH(_237603.label_TYC) *
+***                                             CON_PATH(_237603.var_TYC) *
+***                                             CON_PATH(_237603.niltrace_TYC) *
+***                                             CON_PATH(_237603.con_TYC)} =>
+***                                              CON_PATH(_237603.import_entry_TYC)) == 
+***       +1   /TOTALNONRECUR\_238056
+***       +1         (_238057 : {CON_PATH(_237603.label_TYC) *
+***       +1                     CON_PATH(_237603.var_TYC) *
+***       +1                     CON_PATH(_237603.niltrace_TYC) *
+***       +1                     CON_PATH(_237603.con_TYC)})
+***       +1         : CON_PATH(_237603.import_entry_TYC) =
+***       +1      ROLL(CON_PATH(_237603.import_entry_TYC),INJ(1, 
+***       +2   CON_PATH(_237603.import_entry_sum_INT),_238057))]
+**                             ), 
+*                        export_entry_TYC > _238058 : 
+**                          TYPE = CON_MU(/-\(_238059)(SUM[
+**                                                        (ExportType, ExportValue);
+**                                                        0;
+**                                                        ({CON_PATH(_237603.label_TYC) *
+**                                                          CON_PATH(_237603.var_TYC)},
+**                                                         {CON_PATH(_237603.label_TYC) *
+**                                                          CON_PATH(_237603.var_TYC)})]))#0, 
+*                        export_entry_sumarg_INT > _238060 : 
+**                          KIND(2) = ({CON_PATH(_237603.label_TYC) *
+**                                      CON_PATH(_237603.var_TYC)},
+**                                     {CON_PATH(_237603.label_TYC) *
+**                                      CON_PATH(_237603.var_TYC)}), 
+*                        export_entry_sum_INT > _238061 : 
+**                          TYPE = SUM[
+**                                    (ExportType, ExportValue);
+**                                    0;
+**                                    CON_PATH(_237603.export_entry_sumarg_INT)], 
+*                        +Eexport_entry_INT > _238062 : 
+**                          ({CON_PATH(_237603.export_entry_TYC) *
+**                            CON_PATH(_237603.export_entry_TYC)} ->
+**                             CON_MU(/-\(_237651)(SUM[ (false, true); 2; ()]))#0), 
+*                        +O+Dexport_entry_INT > _238063 : 
+**                          SIGS_SELF(_237603.+O+Dexport_entry_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [export_entry_INT > _238064 : 
+***                                           TYPE == CON_PATH(_237603.export_entry_TYC), 
+**                                         expose_INT > _238065 : 
+***                                           (CON_PATH(_237603.export_entry_TYC) =>
+***                                              CON_PATH(_237603.export_entry_sum_INT)) == /TOTALNONRECUR\_238066
+***       +1           (_238067 : CON_PATH(_237603.export_entry_TYC))
+***       +1           : CON_PATH(_237603.export_entry_sum_INT) =
+***       +1        UNROLL(CON_PATH(_237603.export_entry_TYC),CON_PATH(
+***       +1   _237603.export_entry_sum_INT),_238067), 
+**                                         ExportType > _238068 : 
+***                                           ({CON_PATH(_237603.label_TYC) *
+***                                             CON_PATH(_237603.var_TYC)} =>
+***                                              CON_PATH(_237603.export_entry_TYC)) == 
+***       +1   /TOTALNONRECUR\_238069
+***       +1         (_238070 : {CON_PATH(_237603.label_TYC) *
+***       +1                     CON_PATH(_237603.var_TYC)})
+***       +1         : CON_PATH(_237603.export_entry_TYC) =
+***       +1      ROLL(CON_PATH(_237603.export_entry_TYC),INJ(0, 
+***       +2   CON_PATH(_237603.export_entry_sum_INT),_238070)), 
+**                                         ExportValue > _238071 : 
+***                                           ({CON_PATH(_237603.label_TYC) *
+***                                             CON_PATH(_237603.var_TYC)} =>
+***                                              CON_PATH(_237603.export_entry_TYC)) == 
+***       +1   /TOTALNONRECUR\_238072
+***       +1         (_238073 : {CON_PATH(_237603.label_TYC) *
+***       +1                     CON_PATH(_237603.var_TYC)})
+***       +1         : CON_PATH(_237603.export_entry_TYC) =
+***       +1      ROLL(CON_PATH(_237603.export_entry_TYC),INJ(1, 
+***       +2   CON_PATH(_237603.export_entry_sum_INT),_238073))]
+**                             ), 
+*                        module_TYC > _238074 : 
+**                          TYPE = CON_MU(/-\(_238075)(SUM[
+**                                                        (MODULE);
+**                                                        0;
+**                                                        {imports_LAB = 
+**        +1   CON_APP(_237729;
+**        +1      CON_PATH(_237603.import_entry_TYC)),
+**                                                         exports_LAB = 
+**        +1   CON_APP(_237729;
+**        +1      CON_PATH(_237603.export_entry_TYC)),
+**                                                         bnds_LAB = 
+**        +1   CON_APP(_237729;
+**        +1      CON_PATH(_237603.bnd_TYC))}]))#0, 
+*                        module_sumarg_INT > _238076 : 
+**                          TYPE = {imports_LAB = CON_APP(_237729;
+**                                                   CON_PATH(_237603.import_entry_TYC)),
+**                                  exports_LAB = CON_APP(_237729;
+**                                                   CON_PATH(_237603.export_entry_TYC)),
+**                                  bnds_LAB = CON_APP(_237729; CON_PATH(_237603.bnd_TYC))}, 
+*                        module_sum_INT > _238077 : 
+**                          TYPE = SUM[ (MODULE); 0; CON_PATH(_237603.module_sumarg_INT)], 
+*                        +O+Dmodule_INT > _238078 : 
+**                          SIGS_SELF(_237603.+O+Dmodule_INT, 
+**                             UNSELF_SIG = NONE
+**                             SELF_SIG = [module_INT > _238079 : 
+***                                           TYPE == CON_PATH(_237603.module_TYC), 
+**                                         expose_INT > _238080 : 
+***                                           (CON_PATH(_237603.module_TYC) =>
+***                                              CON_PATH(_237603.module_sum_INT)) == 
+***       +1   /TOTALNONRECUR\_238081
+***       +1         (_238082 : CON_PATH(_237603.module_TYC))
+***       +1         : CON_PATH(_237603.module_sum_INT) =
+***       +1      UNROLL(CON_PATH(_237603.module_TYC),CON_PATH(_237603.module_sum_INT),_238082), 
+**                                         MODULE > _238083 : 
+***                                           ({imports_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      CON_PATH(_237603.import_entry_TYC)),
+***                                             exports_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      CON_PATH(_237603.export_entry_TYC)),
+***                                             bnds_LAB = CON_APP(_237729;
+***                                                           CON_PATH(_237603.bnd_TYC))} =>
+***                                              CON_PATH(_237603.module_TYC)) == /TOTALNONRECUR\_238084
+***       +1                           (_238085 : {imports_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      CON_PATH(_237603.import_entry_TYC)),
+***       +1                                       exports_LAB = 
+***       +1   CON_APP(_237729;
+***       +1      CON_PATH(_237603.export_entry_TYC)),
+***       +1                                       bnds_LAB = CON_APP(_237729;
+***       +1                                                     
+***       +1   CON_PATH(_237603.bnd_TYC))})
+***       +1                           : CON_PATH(_237603.module_TYC) =
+***       +1                        ROLL(CON_PATH(_237603.module_TYC),
+***       +1   INJ(0, CON_PATH(_237603.module_sum_INT),_238085))]
+**                             )]
+*            )

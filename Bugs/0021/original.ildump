@@ -1,0 +1,297 @@
+Saving: dumpil TM/any/redblack.sml.il
+Date: Wed Sep  6 12:50:07 EDT 2000
+Defaulting to model DEC3000_500
+----------------------------------------
+TM/any/redblack.sml.il
+int2var adding 69151  to  _262
+int2var adding 68193  to  _263
+int2var adding 68194  to  _264
+int2var adding 68196  to  _265
+int2var adding 17521  to  _266
+int2var adding 68166  to  _267
+int2var adding 68167  to  _268
+int2var adding 68168  to  _269
+int2var adding 68169  to  _270
+int2var adding 68170  to  _271
+int2var adding 68171  to  _272
+int2var adding 68172  to  _273
+int2var adding 68173  to  _274
+int2var adding 68174  to  _275
+int2var adding 68175  to  _276
+int2var adding 68176  to  _277
+int2var adding 68177  to  _278
+int2var adding 68178  to  _279
+int2var adding 68179  to  _280
+int2var adding 17497  to  _281
+int2var adding 68181  to  _282
+int2var adding 68182  to  _283
+int2var adding 68183  to  _284
+int2var adding 68184  to  _285
+int2var adding 68185  to  _286
+int2var adding 68186  to  _287
+int2var adding 68187  to  _288
+int2var adding 68188  to  _289
+int2var adding 68189  to  _290
+int2var adding 68190  to  _291
+int2var adding 68191  to  _292
+int2var adding 68192  to  _293
+int2var adding 69152  to  _294
+int2var adding 69153  to  _295
+int2var adding 17614  to  _296
+int2var adding 69155  to  _297
+int2var adding 259  to  _298
+int2var adding 69161  to  _299
+int2var adding 18377  to  _300
+int2var adding 69163  to  _301
+int2var adding 69167  to  _302
+int2var adding 69168  to  _303
+int2var adding 69170  to  _304
+int2var adding 69176  to  _305
+int2var adding 19198  to  _306
+int2var adding 69178  to  _307
+int2var adding 17441  to  _308
+int2var adding 17454  to  _309
+int2var adding 17738  to  _310
+int2var adding 17742  to  _311
+int2var adding 17817  to  _312
+int2var adding 17887  to  _313
+context:
+          ---- Fixity ----
+*            
+*            ---- Overload ----
+*            
+*            ---- Pathmap ----
+*            RedBlackTree_FCT --> _262 : PC_MOD(_262: SIGS_SELF(_262, 
+*                                                        UNSELF_SIG = NONE
+*                                                        SELF_SIG = 
+*         +1   SIGF(_263, [key'_TYC > _264 : TYPE, 
+*         +1               compare > _265 : ({_264 *
+**        +1                                  _264} -> _266)] ->
+*         +1           [key_TYC > _267 : TYPE = CON_PATH(_263.key'_TYC), 
+*         +1            Table_TYC > _268 : KIND(1 -> TYPE), 
+*         +1            new > _269 : 
+**        +1                $POLY$ SIGF(_270, ['a_TYV > _271 : TYPE] =>
+**        +1                               [it_INT > _272 : 
+***       +1                                   (INT32 -> CON_APP(_268; CON_PATH(_270.'a_TYV)))]), 
+*         +1            insert > _273 : 
+**        +1                $POLY$ SIGF(_274, ['a_TYV > _275 : TYPE] =>
+**        +1                               [it_INT > _276 : 
+***       +1                                   (CON_APP(_268; CON_PATH(_274.'a_TYV)) ->
+***       +1                                      ({_267 *
+***       +1                                        CON_PATH(_274.'a_TYV)} -> UNIT))]), 
+*         +1            insertShadow > _277 : 
+**        +1                $POLY$ SIGF(_278, ['a_TYV > _279 : TYPE] =>
+**        +1                               [it_INT > _280 : 
+***       +1                                   (CON_APP(_268; CON_PATH(_278.'a_TYV)) ->
+***       +1                                      ({_267 *
+***       +1                                        CON_PATH(_278.'a_TYV)} ->
+***       +1                                         CON_APP(_281; {_267 *
+***       +1                                                        CON_PATH(_278.'a_TYV)})))]), 
+*         +1            lookup > _282 : 
+**        +1                $POLY$ SIGF(_283, ['a_TYV > _284 : TYPE] =>
+**        +1                               [it_INT > _285 : 
+***       +1                                   (CON_APP(_268; CON_PATH(_283.'a_TYV)) ->
+***       +1                                      (_267 ->
+***       +1                                         CON_APP(_281; CON_PATH(_283.'a_TYV))))]), 
+*         +1            clear > _286 : 
+**        +1                $POLY$ SIGF(_287, ['a_TYV > _288 : TYPE] =>
+**        +1                               [it_INT > _289 : 
+***       +1                                   (CON_APP(_268; CON_PATH(_287.'a_TYV)) -> UNIT)]), 
+*         +1            app > _290 : 
+**        +1                $POLY$ SIGF(_291, ['a_TYV > _292 : TYPE] =>
+**        +1                               [it_INT > _293 : 
+***       +1                                   (({_267 *
+***       +1                                      CON_PATH(_291.'a_TYV)} -> UNIT) ->
+***       +1                                      (CON_APP(_268; CON_PATH(_291.'a_TYV)) ->
+***       +1                                         UNIT))])])
+*                                                        ))
+*            local_StringRedBlackTree_Named_Structure2_INT --> _294 : 
+*         +1   PC_MOD(_294: SIGS_SELF(_294, 
+*         +1                   UNSELF_SIG = NONE
+*         +1                   SELF_SIG = [key'_TYC > _295 : TYPE = _296, 
+*         +1                               +Ekey'_INT > _297 : 
+**        +1                                  ({_296 *
+**        +1                                    _296} ->
+**        +1                                     CON_MU(/-\(_298)(SUM[ (false, true); 2; ()]))#0), 
+*         +1                               compare > _299 : 
+**        +1                                  ({CON_PATH(_300.string_TYC) *
+**        +1                                    CON_PATH(_300.string_TYC)} -> _266)]
+*         +1                   ))
+*            StringRedBlackTree_STR --> _301 : PC_MOD(_301: 
+*         +1   SIGS_SELF(_301, 
+*         +1      UNSELF_SIG = NONE
+*         +1      SELF_SIG = [key_TYC > _267 : TYPE = CON_PATH(_294.key'_TYC), 
+*         +1                  Table_TYC > _268 : KIND(1 -> TYPE) = CON_PATH(_301.Table_TYC), 
+*         +1                  new > _269 : 
+**        +1                      $POLY$ SIGS_SELF(_301.new, 
+**        +1                                UNSELF_SIG = NONE
+**        +1                                SELF_SIG = SIGF(_270, ['a_TYV > _271 : TYPE] =>
+**        +1                                                   [it_INT > _272 : 
+***       +1                                                       
+***       +2   (INT32 ->
+***       +2      CON_APP(CON_PATH(_301.Table_TYC); CON_PATH(_270.'a_TYV)))])
+**        +1                                ), 
+*         +1                  insert > _273 : 
+**        +1                      $POLY$ SIGS_SELF(_301.insert, 
+**        +1                                UNSELF_SIG = NONE
+**        +1                                SELF_SIG = SIGF(_274, ['a_TYV > _275 : TYPE] =>
+**        +1                                                   [it_INT > _276 : 
+***       +1                                                       
+***       +2   (CON_APP(CON_PATH(_301.Table_TYC); CON_PATH(_274.'a_TYV)) ->
+***       +2      ({CON_PATH(_301.key_TYC) *
+***       +2        CON_PATH(_274.'a_TYV)} -> UNIT))])
+**        +1                                ), 
+*         +1                  insertShadow > _277 : 
+**        +1                      $POLY$ SIGS_SELF(_301.insertShadow, 
+**        +1                                UNSELF_SIG = NONE
+**        +1                                SELF_SIG = SIGF(_278, ['a_TYV > _279 : TYPE] =>
+**        +1                                                   [it_INT > _280 : 
+***       +1                                                       
+***       +2   (CON_APP(CON_PATH(_301.Table_TYC); CON_PATH(_278.'a_TYV)) ->
+***       +2      ({CON_PATH(_301.key_TYC) *
+***       +2        CON_PATH(_278.'a_TYV)} -> CON_APP(_281; {CON_PATH(_301.key_TYC) *
+***       +2                                                   CON_PATH(_278.'a_TYV)})))])
+**        +1                                ), 
+*         +1                  lookup > _282 : 
+**        +1                      $POLY$ SIGS_SELF(_301.lookup, 
+**        +1                                UNSELF_SIG = NONE
+**        +1                                SELF_SIG = SIGF(_283, ['a_TYV > _284 : TYPE] =>
+**        +1                                                   [it_INT > _285 : 
+***       +1                                                       
+***       +2   (CON_APP(CON_PATH(_301.Table_TYC); CON_PATH(_283.'a_TYV)) ->
+***       +2      (CON_PATH(_301.key_TYC) -> CON_APP(_281; CON_PATH(_283.'a_TYV))))])
+**        +1                                ), 
+*         +1                  clear > _286 : 
+**        +1                      $POLY$ SIGS_SELF(_301.clear, 
+**        +1                                UNSELF_SIG = NONE
+**        +1                                SELF_SIG = SIGF(_287, ['a_TYV > _288 : TYPE] =>
+**        +1                                                   [it_INT > _289 : 
+***       +1                                                       
+***       +2   (CON_APP(CON_PATH(_301.Table_TYC); CON_PATH(_287.'a_TYV)) ->
+***       +2      UNIT)])
+**        +1                                ), 
+*         +1                  app > _290 : 
+**        +1                      $POLY$ SIGS_SELF(_301.app, 
+**        +1                                UNSELF_SIG = NONE
+**        +1                                SELF_SIG = SIGF(_291, ['a_TYV > _292 : TYPE] =>
+**        +1                                                   [it_INT > _293 : 
+***       +1                                                       
+***       +2   (({CON_PATH(_301.key_TYC) *
+***       +2      CON_PATH(_291.'a_TYV)} -> UNIT) ->
+***       +2      (CON_APP(CON_PATH(_301.Table_TYC); CON_PATH(_291.'a_TYV)) -> UNIT))])
+**        +1                                )]
+*         +1      ))
+*            local_IntRedBlackTree_Named_Structure3_INT --> _302 : 
+*         +1   PC_MOD(_302: SIGS_SELF(_302, 
+*         +1                   UNSELF_SIG = NONE
+*         +1                   SELF_SIG = [key'_TYC > _303 : TYPE = INT32, 
+*         +1                               +Ekey'_INT > _304 : 
+**        +1                                  ({INT32 *
+**        +1                                    INT32} ->
+**        +1                                     CON_MU(/-\(_298)(SUM[ (false, true); 2; ()]))#0), 
+*         +1                               compare > _305 : ({CON_PATH(_306.int_TYC) *
+**        +1                                                  CON_PATH(_306.int_TYC)} -> _266)]
+*         +1                   ))
+*            IntRedBlackTree_STR --> _307 : PC_MOD(_307: SIGS_SELF(_307, 
+*                                                           UNSELF_SIG = NONE
+*                                                           SELF_SIG = 
+*         +1   [key_TYC > _267 : TYPE = CON_PATH(_302.key'_TYC), 
+*         +1    Table_TYC > _268 : KIND(1 -> TYPE) = CON_PATH(_307.Table_TYC), 
+*         +1    new > _269 : 
+**        +1        $POLY$ SIGS_SELF(_307.new, 
+**        +1                  UNSELF_SIG = NONE
+**        +1                  SELF_SIG = SIGF(_270, ['a_TYV > _271 : TYPE] =>
+**        +1                                     [it_INT > _272 : 
+***       +1                                         (INT32 ->
+***       +1                                            CON_APP(CON_PATH(_307.Table_TYC);
+***       +1                                               CON_PATH(_270.'a_TYV)))])
+**        +1                  ), 
+*         +1    insert > _273 : 
+**        +1        $POLY$ SIGS_SELF(_307.insert, 
+**        +1                  UNSELF_SIG = NONE
+**        +1                  SELF_SIG = SIGF(_274, ['a_TYV > _275 : TYPE] =>
+**        +1                                     [it_INT > _276 : 
+***       +1                                         (CON_APP(CON_PATH(_307.Table_TYC);
+***       +1                                             CON_PATH(_274.'a_TYV)) ->
+***       +1                                            ({CON_PATH(_307.key_TYC) *
+***       +1                                              CON_PATH(_274.'a_TYV)} -> UNIT))])
+**        +1                  ), 
+*         +1    insertShadow > _277 : 
+**        +1        $POLY$ SIGS_SELF(_307.insertShadow, 
+**        +1                  UNSELF_SIG = NONE
+**        +1                  SELF_SIG = SIGF(_278, ['a_TYV > _279 : TYPE] =>
+**        +1                                     [it_INT > _280 : 
+***       +1                                         (CON_APP(CON_PATH(_307.Table_TYC);
+***       +1                                             CON_PATH(_278.'a_TYV)) ->
+***       +1                                            ({CON_PATH(_307.key_TYC) *
+***       +1                                              CON_PATH(_278.'a_TYV)} ->
+***       +1                                               CON_APP(_281;
+***       +1                                                  {CON_PATH(_307.key_TYC) *
+***       +1                                                   CON_PATH(_278.'a_TYV)})))])
+**        +1                  ), 
+*         +1    lookup > _282 : 
+**        +1        $POLY$ SIGS_SELF(_307.lookup, 
+**        +1                  UNSELF_SIG = NONE
+**        +1                  SELF_SIG = SIGF(_283, ['a_TYV > _284 : TYPE] =>
+**        +1                                     [it_INT > _285 : 
+***       +1                                         (CON_APP(CON_PATH(_307.Table_TYC);
+***       +1                                             CON_PATH(_283.'a_TYV)) ->
+***       +1                                            (CON_PATH(_307.key_TYC) ->
+***       +1                                               CON_APP(_281; CON_PATH(_283.'a_TYV))))])
+**        +1                  ), 
+*         +1    clear > _286 : 
+**        +1        $POLY$ SIGS_SELF(_307.clear, 
+**        +1                  UNSELF_SIG = NONE
+**        +1                  SELF_SIG = SIGF(_287, ['a_TYV > _288 : TYPE] =>
+**        +1                                     [it_INT > _289 : 
+***       +1                                         (CON_APP(CON_PATH(_307.Table_TYC);
+***       +1                                             CON_PATH(_287.'a_TYV)) ->
+***       +1                                            UNIT)])
+**        +1                  ), 
+*         +1    app > _290 : 
+**        +1        $POLY$ SIGS_SELF(_307.app, 
+**        +1                  UNSELF_SIG = NONE
+**        +1                  SELF_SIG = SIGF(_291, ['a_TYV > _292 : TYPE] =>
+**        +1                                     [it_INT > _293 : 
+***       +1                                         (({CON_PATH(_307.key_TYC) *
+***       +1                                            CON_PATH(_291.'a_TYV)} -> UNIT) ->
+***       +1                                            (CON_APP(CON_PATH(_307.Table_TYC);
+***       +1                                                CON_PATH(_291.'a_TYV)) ->
+***       +1                                               UNIT))])
+**        +1                  )]
+*                                                           ))
+*            
+free variables:
+_266	order_TYC
+_281	option_TYC
+_296	string_TYC
+_300	String_STR
+_306	Int_STR
+_308	bool_TYC
+_309	list_TYC
+_310	PreInt_STR
+_311	PreLargeInt_STR
+_312	STRING_CVT_SIG
+_313	StringCvt_STR
+
+
+PROC #0: Allocated  =     3004 kb
+         Copied     =      452 kb
+         Work       =      399 kw
+                                Sum (s)        Count     Min(ms)   Avg(ms)  Max(ms)
+         --------------|-----------------------------------------------------------
+          Total        |      6.290
+          Mutator      |      6.182 (98.3%)       13        0.00    475.55   3098.58
+          GCNone       |      0.001 ( 0.0%)        4        0.00      0.24     0.98
+          GCWork       |      0.107 ( 1.7%)       10        1.95     10.74    45.87
+
+       MinSurvRate     0.057 <  0.173 <  0.333
+       HeapSize(kb)     1024 <   1024 <   1024
+GC:    GCMethod      =      Gen     Allocated    =      3004 kb   NumCopied    =    29839    MaxStkDepth  =   31
+       StackMethod   =   Normal     Copied       =       452 kb   NumShared    =     5191    AvgStkDepth  =   22
+       NumGC         =        6     NumRoot      =         0      NumConflict  =        0    AvgFrameSize =   39
+       NumMajorGC    =        0     NumWrite     =     65040      NumLocative  =        0
+MISC:  Total time    =     7.45 s   maxPhysMem   =      4648      minPageFault =      975    invCtxtSwap  =   316
+       Total Threads =        1     sharedMem    =       548      majPageFault =        0    volCtxtSwap  =   194
+       Max Threads   =        1     unsharedData =      1423                                 swapping     =     0
+                                    unsharedStk  =        10

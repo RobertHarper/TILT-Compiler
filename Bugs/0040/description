@@ -1,0 +1,76 @@
+Number: 0040
+Title:       datatype replication doesn't work behind opaque ascription
+Keywords:    Elaborator
+Submitter:   Tom 7 <twm@andrew.cmu.edu>
+Date:        1/29/01
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	datatype replication doesn't work behind opaque ascription:
+
+	datatype Y = A
+
+	structure S :> sig datatype D = A end =
+	struct
+	    datatype D = datatype Y
+	end
+
+	Gives me:
+
+	  [Elaborating oof/datarepl.sml non-constrained]
+	oof/datarepl.sml:4.1-7.4 Error: coercion of a non-existent component
+		    to a type specification failed at D_INT
+	Error: compiler.sml: File oof/datarepl.sml failed to elaborate.
+Code:
+Transcript:
+Comments:
+	This is really a datatype replication bug.  Signature
+	ascription just catches it.
+
+	The label for a datatype's type constructor, which appears in
+	the HIL module implementing the datatype, must match the
+	source-level name of the datatype.  I think this is done to
+	simplify elaboration of code which uses the type by name.
+	(Making the names match and creating the datatype modules
+	"open" reduces the number of special cases for datatypes.)
+
+	To elaborate "datatype tycon = datatype longtycon", the
+	elaborator has to build up the HIL module implementing tycon
+	from the module implementing longtycon.  The naming
+	restriction above rules out defining the HIL module for tycon
+	as a module variable or as a simple copy of the HIL module for
+	longtycon.  This is exactly what the elaborator had been
+	doing.
+
+	
+	For example,
+
+		datatype Y = A
+		datatype D = datatype Y
+
+	elaborated to HIL modules like:
+
+		Y* > y = [Y      = ...,
+			  expose = ...,
+			  A      = ...]
+		D* > d = y
+
+	where * marks open labels.  Notice that the label D (the path
+	d.D) is not provided--this is the bug Tom found.  The fix is
+	to produce something like:
+
+		D* > d = [D      = y.Y,
+		          expose = y.expose,
+		          A      = y.A]
+	
+	In fact I don't directly use paths like "y.Y".  The paths are
+	looked up in the context and the result is used.  I'm not sure
+	if this should be viewed as an optimization or a mistake.  I
+	suspect that internally things like y.Y and d.Y will share.  I
+	know that this kind of path compression was already being used
+	by the datatype copier.
+Fix:
+Test:
+Owner: swasey
+Status: closed

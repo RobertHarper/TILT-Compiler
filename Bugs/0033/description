@@ -1,0 +1,39 @@
+Number: 0033
+Title:       Bad use of LDD on sparc.
+Keywords:    backend
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        11/27/00
+Version:     CVS
+System:	     solaris
+Severity:    major
+Problem:
+	We see code like
+		ldd	[%sp+120], %r9
+	P. 179 of the v9 sparc architecture manual says
+		``An attempt to execute a load doubleword instruction
+		that refers to a misaligned (odd-numbered) destination
+		register causes an illegal_instruction exception.''
+Code:
+	See array.sml.s
+Transcript:
+	/usr/ccs/bin/as: "/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/TM/sparc/array.sml.s", line 4520: warning: not even-numbered register
+	/usr/ccs/bin/as: "/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/TM/sparc/array.sml.s", line 4822: warning: not even-numbered register
+	/usr/ccs/bin/as: "/afs/cs.cmu.edu/project/fox-20/member/swasey/ml96/Basis/Aggregate/TM/sparc/array.sml.s", line 5236: warning: not even-numbered register
+Comments:
+	This is related to the C calling convention.
+	On the sparc, 64-bit reals are not passed in 64-bit floating point
+	registers or even in 64-bit integer registers.
+	They are instead passed in a pair integer registers, 32-bits at a time.
+	The function assignRegsAmong, around line 79 of sparccallconv.sml takes
+	care of assigning the register pairs.  The problem is the pairs can be
+	odd/even rather than even/odd.
+
+	Changed MACHINE's push and pop interfaces to return instruction lists
+	and updated the sparc push/pop implemenations to use two LDs or two
+	STs rather than LDD or STD.
+
+	Other uses of LDD in the sparc backend are probably OK.
+Fix:
+Test:
+Owner: swasey
+Status: closed

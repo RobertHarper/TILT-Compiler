@@ -1,0 +1,51 @@
+#include ../Parser/mapfile-parse
+
+// -------- Elaborator directory -------------
+
+PRIM    prim.sig
+Prim    prim
+PPPRIM  ppprim.sig
+Ppprim  ppprim
+TYVAR   tyvar.sig
+Tyvar   tyvar
+
+IL	il.sig
+Il	il
+PPIL	ppil.sig
+Ppil	ppil
+PRIMUTILPARAM primutilparam.sig 
+IlPrimUtilParam ilprimutilparam
+PRIMUTIL primutil.sig
+PrimUtil primutil
+ILUTIL ilutil.sig
+IlUtil ilutil
+
+IlTable   iltable
+ILCONTEXT ilcontext.sig
+IlContext ilcontext
+ILCONTEXTEQ ilcontexteq.sig
+IlContextEq ilcontexteq
+	
+ERROR error.sig
+Error error
+
+INFIXPARSE infixparse.sig
+InfixParse infixparse
+
+
+
+ILSTATIC  ilstatic.sig
+IlStatic  ilstatic
+
+EQUAL equal.sig
+Equal equal
+DATATYPE datatype.sig
+Datatype datatype
+SIGNATURE signature.sig
+Signature signature
+
+PAT pat.sig
+Pat pat
+
+TOIL toil.sig
+Toil toil

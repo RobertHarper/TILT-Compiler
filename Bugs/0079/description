@@ -1,0 +1,58 @@
+Number: 0079
+Title:       Signed comparison of pointers.
+Keywords:    Code generation, pointer comparisons, vararg
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        7/4/02
+Version:     CVS
+System:	     any
+Severity:    major
+Problem:
+	In the process of fixing bug # 77, I changed how the runtime
+	gets memory from the system.  ML heaps and stacks could now appear
+	in "high" memory.  That is, a pointer to ML data could have its
+	high bit set.
+
+	This change to the runtime caused previously working code to seg fault.
+	
+	For example, the following code has a runtime error.
+	(*$import Firstlude TiltPrim Prelude *)
+
+	val f	: int * int option -> unit
+		= fn (_, x) => (case x
+				  of NONE => ()
+				   | _ => raise Subscript)
+
+	val g	: ('a -> unit) -> 'a -> unit
+		= fn x => fn y => x y
+
+	val _	: unit
+		= g f (0, NONE)	(* raises Subscript *)
+Code:
+	See mapfile-bug and bug.sml.
+Transcript:
+Comments:
+	Code emitted by the compiler performs signed rather than
+	unsigned comparisons on addresses.  In particular, sometimes
+	an address is compared with 0x100 to see if it is a pointer or
+	a special value.  Such a signed comparison gives incorrect
+	results if the address happens to have its high bit set.  In
+	the code above, these incorrect comparisons break
+	vararg/onearg, causing the closure for f to get invoked with
+	the wrong arguments.
+Fix:
+	The compiler is now generating unsigned pointer comparisons
+	where necessary.  In some places, the compiler was doing the
+	right thing.  I had to update the SPARC translation of
+	NEEDMUTATE and NEEDALLOC; the Alpha translation of NEEDMUTATE;
+	the RTL code for dynamic sum injections and projections,
+	vararg, onearg, Sumsw_e, and Typecase_e.  Because I changed
+	the RTL datatype (see below), I am pretty sure I covered all
+	the cases.
+
+	I needed the unsigned equivalent of the RTL instruction BCNDI.
+	I introduced a BCNDUI RTL instruction rather than using a
+	sequence like CMPUI; BCNDI.  This permits more efficient code
+	generation on the SPARC (and possibly x86).
+Test:
+Owner: swasey
+Status: closed

@@ -1,0 +1,35 @@
+Number: 0017
+Title:       Incorrect L2 cache size on some alphas.
+Keywords:    runtime,cache
+Submitter:   David Swasey <swasey@cs.cmu.edu>
+Date:        8/9/00
+Version:     CVS
+System:	     alpha
+Severity:    minor
+Problem:
+	According to digital's documentation, tcl and forth have 16K
+	instruction and data caches and a 2MB on-board cache.  This
+	is not reflected in platform.c.
+Code:
+Transcript:
+Comments:
+	I put the right cache size into platform.c and changed the min
+	heap size in GCInit_Gen from 1024K to 2560K, which should be
+	sufficient for level 2 caches up to 2048K.  A similar change
+	would be necessary in the parallel and concurrent generational
+	collectors if they ran on a machine with a large cache.
+
+	This fix improved performance on the alphas.  This was
+	expected since the L2 cache size determines the size of the
+	nursery.  A quick scan of a few of the benchmarks in Bench
+	leads me to believe that they aren't the most memory-intensive
+	tests.  So I performed a full rebuild of the basis in tilt/b
+	with and without the more accurate L2 cache size.
+
+			Allocated	Copied	Work	NumGC	NumMajorGC	Time
+		before	8852437		799895	927185	20334	65		1396.99
+		after	8859892		730045	729660	5090	64		1185.02
+Fix:
+Test:
+Owner: swasey
+Status: closed
