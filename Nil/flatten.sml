@@ -1,5 +1,7 @@
 (*$import Nil NilUtil Ppnil PrimUtil NilSubst Reduce PASS PRIMUTIL *)
 
+(* This file is currently OBSOLETE, with its functions subsumed by Optimize and Vararg. *)
+
 (* 
 
  Flatten functions which take records for and argument and  
@@ -118,7 +120,7 @@ functor Flatten( structure PrimUtil : PRIMUTIL
 		 val newbody = 
 		   NilUtil.makeLetE Sequential bnds body
 		   
-		 (* We'll on the body later *)
+		 (* We'll work on the body later *)
 		 val newFn = (newFnVar,
 			      Function{effect=effect, recursive=recursive, isDependent = isDependent,
 				       tFormals = vklist, eFormals = newvclist, 

@@ -1,5 +1,8 @@
 (*$import Nil NilUtil Ppnil PrimUtil NilSubst REDUCE *) 
 
+(* This file is OBSOLETED by Optimize. This file mentions dropping unused args (but has no code for it), but we are ignoring
+ that optimization possibility for now. *)
+
 (* This doesn't handle Fixclosure, Fixcode or Parallel lets *)
 
 structure Reduce

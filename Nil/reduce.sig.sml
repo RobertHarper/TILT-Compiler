@@ -1,4 +1,7 @@
 (*$import Nil *)
+
+(* OBSOLETED by OPTIMIZE *)
+
 signature REDUCE =
     sig 
 	val debug : bool ref 
