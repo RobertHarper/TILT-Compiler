@@ -17,5 +17,11 @@ measure.sig.sml
 measure.sml
 distribute.sml
 *)
-
+compiler.sig.sml
+manager.sig.sml
+manager.sml
+linker.sig.sml
+linker.sml
+makedep.sig.sml
+makedep.sml
 
