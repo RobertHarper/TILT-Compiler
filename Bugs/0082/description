@@ -1,0 +1,39 @@
+Number: 0082
+Title:       Type of thunk prematurely made a rigid record
+Keywords:    flexible records, elaborator
+Submitter:   Leaf Petersen <leaf@cs.cmu.edu>
+Date:        8/8/02
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:     
+	Flexible records seem to be sometimes made rigid before they
+	ought to be.  This is an old bug from the buglist in the Doc
+	directory.
+
+		
+Code:	     
+
+	fun g {a,b} = a + b + 3
+
+	fun f thunk = 
+	  let val {a, ...} = thunk  
+	  in  g thunk
+	  end
+
+
+Transcript:  
+
+testing/test_file.sml:6.3-8.6 Error:  application is ill-typed.
+  Function domain:           {a_LAB = Cmetavar_230031_439,
+*          b_LAB = Cmetavar_230032_439}
+  Argument type: {!a_LAB = metavar_230055_452!}
+  Expanded function domain:           {a_LAB = Cmetavar_230031_439,
+*          b_LAB = Cmetavar_230032_439}
+  Expanded argument type: {!a_LAB = metavar_230055_452!}
+
+Comments:    
+Fix:	     
+Test: 
+Owner: 
+Status: open
