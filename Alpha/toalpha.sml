@@ -1087,6 +1087,7 @@ struct
 	 emit (SPECIFIC (STOREF (STT, Fsrc, disp, Raddr)))
        end
 
+     | translate (Rtl.ICOMMENT str) = emit (BASE(COMMENT str))
 
      | translate (Rtl.NEEDMUTATE r) =
 	 let 
