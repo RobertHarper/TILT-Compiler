@@ -67,10 +67,12 @@ struct
   val prelude_modules : ((Rtl.label list * string list) option) ref = ref NONE
   val prelude_modules_hprof : ((Rtl.label list * string list) option) ref = ref NONE
 
-  fun asm_suffix() = ".alpha.s"
+  fun base2s base = base ^ ".alpha.s"
+  fun base2o base = base ^ ".alpha.o"
+  fun base2uo base = base ^ ".alpha.uo"
 
   fun comp (base_file,rtlmod) = 
-    let val asm_file = base_file ^ (asm_suffix())
+    let val asm_file = base2s base_file
 	val _ = print "\n================================================\n"
 	val _ = print "Starting translation to TIL-Alpha assembly\n"
 	val _ = Printutils.openOutput asm_file
@@ -90,7 +92,7 @@ struct
 
   fun link (base_file,labels) = 
     let val rtlmod = Tortl.entryTables labels
-    in  rtl_to_asm(base_file,rtlmod)
+    in  #1(rtl_to_asm(base_file,rtlmod))
     end
 
 end

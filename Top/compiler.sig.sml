@@ -16,14 +16,18 @@ signature COMPILER =
    val uptoPhasesplit : bool ref
    val uptoRtl : bool ref
 
-   val compile : context * string * (sbnd option * context_entry) list * context -> unit
+   val compile : context * string * (sbnd option * context_entry) list * context -> string
 
-   (* compile(ctxt, unitName, sbnds, ctxt') compiles sbnds into an
-    * object file `unitName.o'. ctxt is the context in which the sbnds
+   (* compile(ctxt, unitName, sbnds, ctxt') compiles sbnds to an obj file `unitName.platform.o'. 
+    * ctxt is the context in which the sbnds
     * were produced, and ctxt' contains the new bindings. unitName is
     * the name of the unit being compiled and can be used for
     * generating unique identifiers. Also, `unitName.o' must contain a
     * label for `initialization' with name `unitName_doit'. 
     *)
+
+   val base2s : string -> string  (* Given a base, create name of .o file for current platform *)
+   val base2o : string -> string  (* Given a base, create name of .o file for current platform *)
+   val base2uo : string -> string  (* Given a base, create name of .o file for current platform *)
 
  end

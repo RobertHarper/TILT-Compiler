@@ -159,11 +159,12 @@ structure Manager :> MANAGER =
 
   type unitname = string
   type filebase = string
-  fun base2ui (f : string) = f ^ ".ui"
-  fun base2uo (f : string) = f ^ ".uo"
-  fun base2o (f : string) = f ^ ".o"
   fun base2sml (f : string) = f ^ ".sml"
   fun base2int (f : string) = f ^ ".int"
+  fun base2ui (f : string) = f ^ ".ui"
+  val base2o = Compiler.base2o
+  val base2uo = Compiler.base2uo
+
   datatype fresh = STALE | FRESH_INTER | FRESH_IMPL
   local
       val unitlist = ref ([] : unitname list)
@@ -568,9 +569,6 @@ structure Manager :> MANAGER =
 	  val import_uis = List.map (fn x => (x, Linker.Crc.crc_of_file (x^".ui"))) import_bases
 	  val uiFile = srcBase ^ ".ui"
 	  val intFile = srcBase ^ ".int"
-	  val oFile = srcBase ^ ".o"
-	  val uoFile = srcBase ^ ".uo"
-
 
 	  val (ctxt',sbnds) = 
 	      if exists intFile then 
@@ -583,16 +581,16 @@ structure Manager :> MANAGER =
 		   in elab_nonconstrained(unit,ctxt,smlfile,fp,dec,uiFile,Time.zeroTime)
 		   end
 
-	  val _ = (chat ("  [Compiling into " ^ oFile ^ " ...");
-		   Compiler.compile(ctxt, srcBase, sbnds, ctxt');  (* generates oFile *)
-		   chat "]\n")
+	  val _ = chat ("  [Compiling to object file ...")
+	  val oFile = Compiler.compile(ctxt, srcBase, sbnds, ctxt')  (* generates oFile *)
+	  val _ =  chat "]\n"
+
 	  val crc = Linker.Crc.crc_of_file uiFile
 	  val exports = [(srcBase, crc)]
-	  val _ = chat ("  [Creating " ^ uoFile ^ " ...")
-	  val _ = Linker.mk_uo {imports = import_uis,
-				exports = exports,
-				base_result = srcBase}
-
+	  val _ = chat ("  [Creating .uo file ...")
+	  val uoFile = Linker.mk_uo {imports = import_uis,
+				     exports = exports,
+				     base_result = srcBase}
 
           val _ = (forget_stat uoFile; forget_stat uiFile)
 	  val _ = chat "]\n"
@@ -677,76 +675,13 @@ structure Manager :> MANAGER =
 		       #4(flags) := false)
 
 
-  (* getArgs:
-     Takes a list of string arguments and returns a 4-tuple.
-     The 1st is the mapfile.
-     The 2nd indicates whether the -c flag is present.
-     The 3rd carries the name of the -r filename, if present.
-     The 4th carries the name of the -o filename (final executable), if present.
-     The 5th component is a list of the source files to process. *)
-
-  fun getArgs (args : string list) :  bool * string option * string option * bool * string list = 
-      let
-	  fun getArgsH [] = (false, NONE, NONE, false, [])
-	    | getArgsH ("-c"::rest) = 
-	      let
-		  val (cs, rs, os, all, srcs) = getArgsH rest
-		  val (seen, _, _, _) = flags
-	      in
-		  if !seen then error ("Two -c switches not allowed.") else
-	 	      (seen := true; (true, rs, os, all, srcs))
-	      end
-	    | getArgsH ("-all"::rest) = 
-	      let
-		  val (cs, rs, os, all, srcs) = getArgsH rest
-		  val (_, _, _, seen) = flags
-	      in
-		  if !seen then error ("Two -all switches not allowed.") else
-	 	      (seen := true; (true, rs, os, true, srcs))
-	      end
-	    | getArgsH ("-o"::rest) = if List.length(rest) = 0 then
-	      error "No output file specified for -o switch." else 
-	      let 
-		  val file = hd rest
-		  val (cs, rs, os, all, srcs) = getArgsH (tl rest)
-		  val (_, _, seen, _) = flags
-	      in
-		  if (!seen) then error ("Two -o switches not allowed.") else
-		      (seen := true; (cs, rs, SOME file, all, srcs))
-	      end
-	    | getArgsH ("-r"::rest) = if List.length(rest) = 0 then
-	      error "No output file specified for -r switch." else 
-	      let
-		  val file = hd rest
-		  val (cs, rs, os, all, srcs) = getArgsH (tl rest)
-		  val (_, seen, _, _) = flags
-	      in
-		  if (!seen) then error ("Two -r switches not allowed.") else
-		      (seen := true; (cs, SOME file, rs, all, srcs))
-	      end
-	    | getArgsH (f::rest) = let
-				       val (cs, rs, os, all, srcs) = getArgsH rest
-				   in
-				       (cs, rs, os, all, f::srcs)
-				   end
-      in
-	  (resetFlags(); getArgsH args)
-      end
 
 
-  (* linkopt - if present, names the file containing the concatenation of the generated .uo files
-     exeopt  - if present, names the final executable 
+  (* exeopt  - if present, names the final executable 
      srcs    - unit names *)
 
-  fun compileThem(linkopt, exeopt, units) = 
+  fun compileThem(exeopt, units) = 
       let val _ = app (compile true) units
-	  val tmp = OS.FileSys.tmpName()
-	  val len = size tmp
-	  val tmp = if (len > 2 andalso String.substring(tmp,0,2) = ".\\")
-			then String.substring(tmp,2,len-2)
-		    else tmp
-	  val tmp_uo = tmp ^ ".uo"
-
           val unit_set = 
                List.foldl 
                  (fn (next, set) => 
@@ -769,24 +704,22 @@ structure Manager :> MANAGER =
                  (StringSet.empty)
                  units
 
-	  fun mapper unit = if (StringSet.member(unit_set,unit))
-				then SOME(get_base unit)
-			    else NONE
-          val base_args = List.mapPartial mapper units
+	  val units = List.filter (fn unit => (StringSet.member(unit_set,unit))) units
 
-      in
-	  (case (linkopt,exeopt) of
-	       (NONE,NONE) => ()
-	     | (NONE, SOME out) => (print "Manager calling linker with: ";
-				    app (fn s => (print s; print " ")) base_args;
-				    print "\nand with uo_result = ";
-				    print tmp_uo; print "\n";
-				    Linker.link {base_args = base_args, base_result = tmp};
-				    Linker.mk_exe {base_arg = tmp, exe_result = out};
-				    OS.FileSys.remove tmp_uo)
-	     | (SOME f, NONE) => Linker.link {base_args = base_args, base_result = f}
-	     | (SOME f, SOME out) => (Linker.link {base_args = base_args, base_result = f};
-				      Linker.mk_exe {base_arg = f, exe_result = out}))
+      in  (case exeopt of
+	       NONE => ()
+	     | SOME out => 
+		   let fun mapper unit = 
+		       let val base = get_base unit
+		       in  {unit=unit, base=base,
+			    uiFile=base2ui base, uoFile=base2uo base, oFile=base2o base}
+		       end
+		       val packages = map mapper units
+		   in  (print "Manager calling linker with: ";
+			app (fn s => (print s; print " ")) units;
+			print "\n";
+			Linker.mk_exe {units = packages, exe_result = out})
+		   end)
       end
        
   fun setMapping mapFile =
@@ -809,7 +742,7 @@ structure Manager :> MANAGER =
       end
 
 
-  fun tilc(mapfile : string, cs : bool, rs : string option, 
+  fun tilc(mapfile : string, cs : bool,
 	   os : string option, srcs : string list) =
 	let val _ = if !(Stats.tt "Reset stats between calls") then Stats.clear_stats() else ()
 	    val _ = reset_stats()
@@ -819,13 +752,11 @@ structure Manager :> MANAGER =
 			   then list_units()
 		       else srcs
 	    val default_exe = (List.last srcs) ^ ".exe"
-	in  (case (cs, rs, os) of
-		    (false, NONE, NONE) =>    compileThem(NONE, SOME default_exe, srcs)
-		  | (false, SOME f, NONE) =>  compileThem(SOME f, NONE, srcs)
-		  | (false, NONE, SOME f) =>  compileThem(NONE, SOME f, srcs)
-		  | (false, SOME f, SOME g)=> compileThem(SOME f, SOME g, srcs)
-		  | (true, NONE, NONE) =>     compileThem(NONE, NONE, srcs)
-		  | (true, _, _) =>           error "Cannot specify -c and -o/-r");
+	in  (case (cs, os) of
+		    (false, NONE)   => compileThem(SOME default_exe, srcs)
+		  | (false, SOME f) => compileThem(SOME f, srcs)
+		  | (true,  NONE)   => compileThem(NONE, srcs)
+		  | (true,  SOME _) => error "Cannot specify -c and -o");
 	    Stats.print_stats()
 	end
 
@@ -847,6 +778,42 @@ structure Manager :> MANAGER =
 
   fun buildRuntime() = (Util.system("cd Runtime; gmake purge; gmake runtime"); ())
 
+  (* getArgs:
+     Takes a list of string arguments and returns a 4-tuple.
+     The 1st is the mapfile.
+     The 2nd indicates whether the -c flag is present.
+     The 3rd carries the name of the -o filename (final executable), if present.
+     The 4th component is a list of the source files to process. *)
+
+  fun getArgs (args : string list) :  string option * bool * string option * bool * string list = 
+      let
+	  fun loop args (acc as (mapFile, hasC, oFile, hasAll, srcs)) = 
+	      case args of
+		  [] => acc
+		| ("-c"::rest) => if hasC 
+				      then  error ("Two -c switches not allowed.")
+				  else loop rest (mapFile, true, oFile, hasAll, srcs)
+		| ("-all"::rest) => if hasAll
+				      then error ("Two -all switches not allowed.")
+				    else if (null srcs)
+					     then loop rest (mapFile, hasC, oFile, true, srcs)
+					 else error "-all switch given but also units"
+		| ["-o"] => error "No output file specified for -o switch." 
+		| ("-o" :: file :: rest) => 
+				      (case oFile of
+					   NONE => loop rest (mapFile, hasC, SOME file, hasAll, srcs)
+					 | SOME _ => error "Output file already specified")
+		| ["-m"] => error "No output file specified for -m switch." 
+		| ("-m" :: file :: rest) => 
+				      (case mapFile of
+					   NONE => loop rest (SOME file, hasC, oFile, hasAll, srcs)
+					 | SOME _ => error "Output file already specified")
+		| (src::rest) => if hasAll
+				     then error "-all switch given and also unts"
+				 else loop rest (mapFile, hasC, oFile, hasAll, src::srcs)
+      in  (resetFlags(); loop args (NONE, false, NONE, false, []))
+      end
+
   fun command(env : string, args : string list) : int =
     case args of 
       [] => (print ("No arguments specified.\n"); 1)
@@ -859,10 +826,12 @@ structure Manager :> MANAGER =
     | (["-mkdep", makefile]) =>	(Makedep.mkDep(makefile); 0)
     | ("-mkdep"::args) => (print ("Incorrect number of files to -mkdep.\n"); 1)
     | args => 
-	let val mapfile = "mapfile"
-	    val (cs, rs, os, all, srcs) = getArgs args
-	    val srcs = if all then [] else srcs
-	in (tilc(mapfile, cs, rs, os, srcs); 0)
+	let val (mapFile, hasC, oFile, hasAll, srcs) = getArgs args
+	    val mapFile = (case mapFile of
+			       NONE => "mapfile"
+			     | SOME mfile => mfile)
+	    val srcs = if hasAll then [] else srcs
+	in (tilc(mapFile, hasC, oFile, srcs); 0)
 	end
 
 end

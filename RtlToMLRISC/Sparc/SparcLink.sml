@@ -9,11 +9,14 @@ structure SparcLink :> LINKASM
 
   (* -- translation functions (adapted from linksparc.sml) ----------------- *)
 
-  val asm_suffix = ".sparc.s"
+  fun base2s base = base ^ ".sparc.s"
+  fun base2o base = base ^ ".sparc.o"
+  fun base2uo base = base ^ ".sparc.uo"
 
-  fun comp(asmfile, rtlmod) = 
+  fun comp(basefile, rtlmod) = 
 	let
-	  val stream = TextIO.openOut asmfile
+	    val asmfile = base2s basefile
+	    val stream = TextIO.openOut asmfile
 	in
 	  AsmStream.asmOutStream := stream;
 	  SparcEmitRtlMLRISC.emitModule rtlmod;
@@ -25,15 +28,14 @@ structure SparcLink :> LINKASM
   fun wrapper string command = Stats.timer(string,command)
   val comp = wrapper "toasm" comp
 
-  fun rtl_to_asm (asm_file, rtlmod) : string * Rtl.label =
+  fun rtl_to_asm (base_file, rtlmod) : string * Rtl.label =
       let val Rtl.MODULE{main,...} = rtlmod
-      in (comp(asm_file,rtlmod), main)
+      in (comp(base_file,rtlmod), main)
       end
 
-  fun link (asm_file,labels) = 
+  fun link (base_file,labels) = 
     let val rtlmod = Tortl.entryTables labels
-	val _ = rtl_to_asm(asm_file,rtlmod)
-    in  ()
+    in  #1(rtl_to_asm(base_file,rtlmod))
     end
 
 end

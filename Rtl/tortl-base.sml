@@ -262,9 +262,24 @@ struct
 	in  result
 	end
 
-  fun reduce_to_sum str ({env,...}:state) sumcon = 
-      (Stats.subtimer("RTL_reduceToSum",Normalize.reduceToSumtype)
-       (env,sumcon))
+  fun reduce_to_sum str ({env,...}:state) (Prim_c(Sum_c{tagcount,totalcount,known}, [Crecord_c[]])) = 
+      (tagcount, known, [])
+  | reduce_to_sum str ({env,...}:state) sumcon = 
+      let val _ = (print "reduce_to_sum called with "; Ppnil.pp_con sumcon; print "\n")
+	  val res = Stats.subtimer("RTL_reduceToSum",Normalize.reduceToSumtype)
+	      (env,sumcon)
+	  val (a,b,cons) = res
+	  val _ = (print "reduce_to_sum returning with "; 
+		   print (Int.toString (TilWord32.toInt a));
+		   print "   ";
+		   (case b of 
+			NONE => print "NONE"
+		      | SOME b => (print "SOME "; print (Int.toString (TilWord32.toInt b))));
+		   print "   ";
+		   app (fn c => (Ppnil.pp_con c; print " ")) cons;
+		   print "\n\n")
+      in  res
+      end
       handle e => (print "reduce_to_sum "; print str; print " failed\n"; raise e)
 
 
@@ -297,80 +312,7 @@ struct
       in  loop [] k labs
       end
 
-(* XXXXXXXXXXXXXXXXXXXXXXXXxx
-   fun con2rep_raw (state : state) con : rep option = 
-       let fun primcon2rep (pcon,clist) = 
-	   case (pcon,clist) of
-	       (Int_c _,_) => SOME NOTRACE_INT
-	     | (Float_c Prim.F32,_) => error "32-bit floats not supported"
-	     | (Float_c Prim.F64,_) => SOME NOTRACE_REAL
-	     | (BoxFloat_c _, _) => SOME TRACE
-	     | (Exn_c , _) => SOME TRACE
-	     | (Array_c , _) => SOME TRACE
-	     | (Vector_c , _) => SOME TRACE
-	     | (Ref_c , _) => SOME TRACE
-	     | (Exntag_c , _) => SOME NOTRACE_INT
-	     | (Sum_c _, _) => SOME TRACE
-	     | (Record_c _, _) => SOME TRACE
-	     | (Vararg_c _, _) => SOME TRACE
 
-       in case con of
-	   Prim_c(pcon,clist) => primcon2rep(pcon,clist)
-	 | AllArrow_c{openness=Open,...} => error "no open lambdas allowed by this stage"
-	 | AllArrow_c{openness=Closure,...} => SOME TRACE
-	 | AllArrow_c{openness=Code,...} => SOME NOTRACE_CODE
-	 | ExternArrow_c _ => SOME NOTRACE_CODE
-	 | Var_c v => 
-	       (case (getconvarrep' state v) of
-
-		    SOME(_,SOME(RECORD (l,_)),_) => SOME(COMPUTE(Projlabel_p (l,[])))
-		  | SOME(_,SOME(LABEL l),_) => SOME(COMPUTE(Projlabel_p (l,[])))
-		  | SOME(_,SOME(TAG _),_) => SOME TRACE
-		  | SOME(_,SOME(INT _),_) => (print "Var_c "; print (var2string v); print "\n";
-					      error "constructor value is INT")
-		  | SOME(_,SOME _,_) => error "constructor value: not RECORD, LABEL, or TAG"
-
-		  | SOME(SOME(REGISTER (_,I r)),_,_) => SOME(COMPUTE(Projvar_p (r,[])))
-		  | SOME(SOME(REGISTER (_,F _)),_,_) => error "constructor in float reg"
-		  | SOME(SOME(GLOBAL (l,_)),_,_) => SOME(COMPUTE(Projlabel_p(l,[0])))
-		  | SOME(NONE,NONE,_) => NONE
-		  | NONE => NONE)
-	 | Mu_c (is_recur,vc_seq) => SOME TRACE
-	 | Proj_c(Mu_c _,_) => SOME TRACE
-	 | (Proj_c _) =>
-	       (let fun koop (Proj_c (c,l)) acc = koop c (l::acc)
-		     | koop (Var_c v) acc = (v,acc)
-		     | koop _ _ = error "projection is not a chain of projections from a variable"
-		   val (v,labels) = koop con []
-
-		   fun indices wrap kind = let val temp = cpath2indices state kind labels
-					   in  if (length temp > 3)
-						then NONE else SOME(wrap temp)
-					   end
-	       in  (case (getconvarrep' state v) of
-		       SOME(_,SOME(INT _),_) => error "expect constr record: got int"
-		     | SOME(_,SOME(TAG _),_) => error "expect constr record: got tag"
-		     | SOME(_,SOME(REAL _),_) => error "expect constr record: got real"
-		     | SOME(_,SOME(RECORD _),_) => error "expect constr record: got term record"
-		     | SOME(_,SOME(VOID _),_) => error "expect constr record: got void"
-		     | SOME(_,SOME(LABEL l),kind) => indices(fn inds => COMPUTE(Projlabel_p(l,inds))) kind
-		     | SOME(_,SOME(CODE _),_) => error "expect constr record: got code"
-		     | SOME(SOME(REGISTER (_,I ir)),_,kind) => 
-			   indices (fn inds => COMPUTE(Projvar_p(ir,inds))) kind
-		     | SOME(SOME(REGISTER (_,F _)),_,_) => error "constructor in float reg"
-		     | SOME(SOME(GLOBAL (l,_)),_,kind) => indices 
-			   (fn inds => COMPUTE(Projlabel_p(l,0::inds))) kind
-		     | _ => NONE)
-	       end)
-	 | (Let_c _) => NONE
-	 | (App_c _) => NONE
-	 | (Typecase_c _) => NONE
-	 | Typeof_c _ => NONE
-	 | (Crecord_c _) => error "Crecord_c not a type"
-	 | (Closure_c _) => error "Closure_c not a type"
-	 | (Annotate_c (_,c)) => con2rep_raw state c
-       end
-*)
 
    fun location2rep(REGISTER(_,I (SREGI HEAPPTR))) = NOTRACE_INT
      | location2rep(REGISTER(_,I (SREGI HEAPLIMIT))) = NOTRACE_INT
@@ -420,9 +362,13 @@ struct
 		       | TraceInfo.Label => NOTRACE_LABEL
 		       | TraceInfo.Locative => LOCATIVE
 		       | TraceInfo.Compute (v,labs) => 
-			     let val k = std_kind_of state (Var_c v)
-				 val labs = cpath2indices state k labs
-			     in  pathcase(v,labs)
+			     let val indices = 
+				 (case labs of
+				      [] => []
+				    | _ => let val k = std_kind_of state (Var_c v)
+					   in cpath2indices state k labs
+					   end)
+			     in  pathcase(v,indices)
 			     end))
        end
 
@@ -569,18 +515,7 @@ struct
 	     | _ => (rep,I(alloc_regi rep))
 	   end
 
-(* XXXXXX
-       fun alloc_reg state c = 
-	   case c of (* might need to normalize *)
-	       Nil.Prim_c(Float_c _,[]) => F(alloc_regf())
-	     | _ => I(alloc_regi (con2rep state c))
-
-		   
-       fun alloc_named_reg state (c,v : var) = 
-	   case c of
-	       Nil.Prim_c(Float_c _,[]) => F(alloc_named_regf v)
-	     | _ => I(alloc_named_regi v (con2rep state c))
-*)		   
+	   
 
        fun promote_maps ({env,...} : state) : state = 
 	   let val {varmap,convarmap,gcstate,...} = !global_state

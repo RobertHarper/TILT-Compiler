@@ -421,8 +421,8 @@ void install_signal_handlers(int isMain)
   struct sigaction newact;
 
   sigfillset(&newact.sa_mask);
-#ifdef alpha_osf
-  newact.sa_flags = SA_SIGINFO | SA_NODEFER | SA_ONSTACK;
+#if (defined alpha_osf) || (defined solaris)
+  newact.sa_flags = SA_SIGINFO | SA_NODEFER;
 #endif
 #ifdef rs_aix
   newact.sa_flags = 0;
@@ -445,18 +445,6 @@ void install_signal_handlers(int isMain)
     sigaddset(&sigset, SIGBUS);
     pthread_sigmask(isMain ? SIG_BLOCK : SIG_UNBLOCK,  &sigset, NULL);
   }
-
-  /* install a stack for signal handlers */
-#ifdef alpha_osf
-  {
-    struct sigstack in;
-    struct sigstack out;
-    long temp[4096];
-    in.ss_sp = (void *) ((long)temp+4096);
-    in.ss_onstack = 0;
-    sigstack(&in,&out);
-  }
-#endif
 
   if (ThreadedVersion)
   {

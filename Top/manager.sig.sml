@@ -6,7 +6,7 @@
  *    -mkdep <file>  -- Compute the dependencies for the current directory and
  *                      append the results to the specified file
  *
- * The next three options can each occur at most once on the command line, but
+ * The next two options can each occur at most once on the command line, but
  * they can be mixed in any combination.  In all cases, the rest of the 
  * command line must be a list of source and/or object (.sml, .int, .uo, and .ui)
  * files.
@@ -14,9 +14,6 @@
  *    -c             -- Compile the .sml or .int source files to .uo or .ui files.
  *                      This option does not link them.  It ignores .uo and .ui
  *                      arguments.
- *    -r <file>      -- This option links the specified source or object files and
- *                      places the resulting uo in <file>.  It first compiles
- *                      any .sml or .int files in the source list.
  *    -o <file>      -- Create an executable from the specified source or object
  *                      files and place the resulting executable in <file> it
  *                      first compiles and links the sources.
@@ -50,7 +47,7 @@ signature MANAGER = sig
   val flush_cache : unit -> unit
 
   val stat_each_file : bool ref
-  val tilc : string * bool * string option * string option * string list  -> unit  (* mapfile * args  *)
+  val tilc : string * bool * string option * string list  -> unit  (* mapfile * args  *)
   val purge : string -> unit  (* given a mapfile, remove all compiled .ui and .uo and .o files *)
   val buildRuntime : unit -> unit
   val command : string * string list  -> int  (* to be exported *)

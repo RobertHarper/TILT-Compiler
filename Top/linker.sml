@@ -47,10 +47,6 @@ structure Linker :> LINKER =
 	end
     val error = fn x => Util.error "Linker" x
 
-    fun base2uo s = s ^ ".uo"
-    fun base2o s = s ^ ".o"
-
-
     structure Crc = Crc
 
 
@@ -145,19 +141,20 @@ structure Linker :> LINKER =
     in
       fun mk_uo {imports : (string * Crc.crc) list,
 		 exports : (string * Crc.crc) list,
-		 base_result : string} : unit = 
+		 base_result : string} : string =
 	let 
-	    val uo_result = base2uo base_result
+	    val uo_result = Til.base2uo base_result
 	    val os = BinIO.openOut uo_result
-	  val out_pairs = app (fn (name,crc) =>
-			       (output_string (os, name ^ ":");
-				Crc.output_crc (os, crc);
-				output_string (os, "\n")))
-	in output_string (os, "$imports:\n");
-	  out_pairs imports;
-	  output_string (os, "$exports:\n");
-	  out_pairs exports;
-	  BinIO.closeOut os
+	    val out_pairs = app (fn (name,crc) =>
+				 (output_string (os, name ^ ":");
+				  Crc.output_crc (os, crc);
+				  output_string (os, "\n")))
+	in  output_string (os, "$imports:\n");
+	    out_pairs imports;
+	    output_string (os, "$exports:\n");
+	    out_pairs exports;
+	    BinIO.closeOut os;
+	    uo_result
 	end
 
       fun read_string (is, s) : unit =
@@ -217,18 +214,17 @@ structure Linker :> LINKER =
     (* link: Link a sequence of uo-files into a new uo-file 
      * and perform consistency check. *)
 
-    fun link {base_args : string list,       (* Current directory, or absolute path. *)
-	      base_result : string} : unit = (* Strings should not contain extension. *) 
+    type package = {unit : string, base : string, 
+		    uiFile : string, uoFile : string, oFile : string}
+
+    fun check (units : package list) = (* Current directory, or absolute path. *)
       let 
 	  val linkinfo =
-	    map (fn base =>
+	    map (fn {unit, base, uiFile, uoFile, oFile} =>
 		 let
-		     val o_file = base2o base
-		     val uo_file = base2uo base
-		     val {imports,exports} = read_header_and_extract_code 
-		       {uo_arg = uo_file}
-		 in {unitname=base, imports=imports, exports=exports,ofile=o_file}
-		 end) base_args
+		     val {imports,exports} = read_header_and_extract_code {uo_arg = uoFile}
+		 in {unitname=unit, imports=imports, exports=exports, ofile=oFile}
+		 end) units
 	  fun li (iue0,eue0,[]) = (iue0,eue0)
 	    | li (iue0,eue0,{unitname,imports=iue,exports=eue,ofile}::rest) =
 	    let val iue' = UE.confine(unitname,iue,eue0)
@@ -239,53 +235,42 @@ structure Linker :> LINKER =
 	    end
 	  val (imports, exports) = li ([],[],linkinfo)
 	  val o_files = map #ofile linkinfo
-	  val o_file = base2o base_result
-	  fun pr_list [] = ""
-	    | pr_list [a] = a
-	    | pr_list (a::xs) = a ^ " " ^ pr_list xs
-	  val command = (preld() ^ " -o " ^ o_file ^ 
-			 " " ^ pr_list o_files)
-	  val _ = (print "Running: "; print command; print "\n")
-	  val success = Util.system command
-	  val _ = if success
-		      then mk_uo {imports=imports,exports=exports,base_result=base_result}
-		  else (print "link failed: "; print command; print "\n";
-			error "link. System command ld failed")
-      in  ()
+      in  (imports, o_files)
       end
 
     (* mk_exe: Make an executable from a uo-file and check 
      * that the sequence of imports is empty. *)
-    fun mk_exe {base_arg : string,
+    fun mk_exe {units : package list,
 		exe_result : string} : unit =
-      let val o_temp = base2o base_arg
-	  val uo_arg  = base2uo base_arg
-	  val {imports,exports} = read_header_and_extract_code {uo_arg = uo_arg}
-
-      in case imports
-	   of nil => (* everything has been resolved *)
-	       let val link_s = "link_" ^ exe_result ^ ".s"
-		   val link_o = "link_" ^ exe_result ^ ".o"
-		   val unitnames = map #1 exports
-		   val local_labels = map (fn un => Rtl.ML_EXTERN_LABEL
-					   ("main_" ^ un ^ "_doit")) unitnames
-		   val _ = (case !Til.platform of
+      let val (imports, o_files) = check units
+      in case imports of
+	  nil => (* everything has been resolved *)
+	      let val link = "link_" ^ exe_result
+		  val bases = map #base units
+		  val local_labels = map (fn un => Rtl.ML_EXTERN_LABEL
+					  ("main_" ^ un ^ "_doit")) bases
+		  val link_s = (case !Til.platform of
 				Til.TIL_ALPHA => Linkalpha.link
 			      |	Til.TIL_SPARC => Linksparc.link
-(*			      | Til.MLRISC_ALPHA => AlphaLink.link 
+    (*			      | Til.MLRISC_ALPHA => AlphaLink.link 
 			      | Til.MLRISC_SPARC => SparcLink.link*))
-
-		       (link_s, local_labels)
-		   val success = Util.system (as_path ^ " -o " ^ link_o ^ " " ^ link_s)
+		      (link, local_labels)
+		  val link_o = (String.substring(link_s,0,size link_s - 2)) ^ ".o"
+		  val success = Util.system (as_path ^ " -o " ^ link_o ^ " " ^ link_s)
 		   val _ = if success then ()
 			   else error "mk_exe - as failed"
+
+		   val o_files_str = foldl (fn (a,b) => a ^ " " ^ b) "" o_files
 		   val command = (ld() ^ " -o " ^
-				  exe_result ^ " " ^ (crt()) ^ " " ^ o_temp ^ " " ^ link_o ^ " " ^ ld_libs())
+				  exe_result ^ " " ^ (crt()) ^ " " ^ 
+				     o_files_str ^ " " ^ link_o ^ " " ^ ld_libs())
 		   val _ = (print "Running: "; print command; print "\n")
 		   val success = Util.system command
 		   val _ = if success then ()
 			   else (print "load failed: "; print command; print "\n";
 				 error "mk_exe - ld failed")
+		   val rmcommand = "rm " ^ link_s ^ "; rm " ^ link_o ^ "\n"
+		   val _ = Util.system rmcommand
 	       in ()
 	       end
 	    | _ => let val units = map #1 imports
@@ -297,58 +282,6 @@ structure Linker :> LINKER =
 			     "an executable for you.\n"); error "mk_exe"
 		   end
       end
-(*
-    structure Test =
-      struct
-	val uo_file = "/tmp/test.uo"
-	val o_file = "/tmp/test.o"
-	val A_ui = "/tmp/A.ui"
-	val B_ui = "/tmp/B.ui"
-	val C_ui = "/tmp/C.ui"
-	val crc_A = Crc.crc_of_file A_ui
-	val crc_B = Crc.crc_of_file B_ui
-	val crc_C = Crc.crc_of_file C_ui
-	val object = "/tmp/first.o"
-	val _ =
-	  mk_uo {imports= [("A",crc_A),("B",crc_B)],
-		 exports= [("C",crc_C)],
-		 uo_result= uo_file,
-		 emitter= emitter object}
-	val {imports,exports} = read_header_and_extract_code {uo_arg = uo_file,
-							      o_file = o_file}
-	val _ = if Crc.crc_of_file object = Crc.crc_of_file o_file then ()
-		else error "TestError"
-	val [("A",crc_A'),("B",crc_B')] = imports
-	val [("C",crc_C')] = exports
-	val _ = if [crc_A,crc_B,crc_C] = [crc_A',crc_B',crc_C'] then ()
-		else error "TestError - imports, exports"
-      end
-
-    structure Test2 =
-      struct
-	val o_file = "/home/mael/tmp/hello.o"
-	val uo_file =  "/home/mael/tmp/helloworld.uo" 
-	val exe_result = "/home/mael/tmp/run"
-	val _ = mk_uo {imports= [],
-		       exports= [],
-		       uo_result= uo_file,
-		       emitter= emitter o_file}
-	val _ = mk_exe {uo_arg = uo_file,
-			exe_result = exe_result}
-
-	val A_ui = "/tmp/A.ui"
-	val crc_A = Crc.crc_of_file A_ui
-	val _ = mk_uo {imports= [("A", crc_A)],
-		       exports= [],
-		       uo_result= uo_file,
-		       emitter= emitter o_file}
-	val _ = (mk_exe {uo_arg = uo_file,
-			 exe_result = exe_result};
-		 error "Test2 - should not get here... \n**** ERROR ****\n") handle _ => ()
-
-      end
-*)
-
 
   end
 
