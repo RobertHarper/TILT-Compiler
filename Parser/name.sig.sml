@@ -3,7 +3,7 @@
 signature NAME = 
   sig
 
-    type var = int * string          (* IS  generative *)
+    type var = int                   (* IS  generative *)
     type label = int * string * bool (* NOT generative *)
     type tag
     type loc
@@ -36,8 +36,6 @@ signature NAME =
     val fresh_open_internal_label : string -> label      
     val derived_var : var -> var
 
-    (* non-generative; used for genarating entry labels in tortl.. - Martin *)
-    val non_generative_named_var : string -> var
 
     (* injective *)
     val tag2int : tag -> int
@@ -57,6 +55,7 @@ signature NAME =
     val tag2string   : tag  -> string
 
     (* These should be used by NameBlast only *)
+    val reset_varmap : unit -> unit (* clear out the variable names *)
     val deconstruct_label : label -> int * string * bool
     val construct_label : int * string * bool -> label
     val deconstruct_var : var -> int * string

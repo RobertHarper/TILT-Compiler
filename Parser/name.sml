@@ -8,38 +8,34 @@ structure Name :> NAME =
 
     val error = fn s => error "Name.sml" s
 
-    type var   = int * string
-
+    type var   = int
     type label = int * string * bool
     type labels = label list
     type loc  = int
     type tag  = int * string
 
-    fun construct_label x = x
-    fun deconstruct_label x = x
-    fun construct_var x = x
-    fun deconstruct_var x = x
-    fun construct_tag x = x
-    fun deconstruct_tag x = x
-    fun construct_loc x = x
-    fun deconstruct_loc x = x
 
     fun is_label_open ((_,_,flag) : label) = flag
 
     (* equality and generation functions on Nameitive types *)
     fun eq_var   (v1 : var, v2)     = v1 = v2
+    val eq_var2 = curry2 eq_var
+    val compare_var = Int.compare
+    structure VarKey : ORD_KEY = struct
+				     type ord_key = var
+				     val compare = compare_var
+				 end
+    structure VarSet = SplaySetFn(VarKey) 
+    structure VarMap = SplayMapFn(VarKey) 
+    val varmap = ref (VarMap.empty : string VarMap.map)
+    fun reset_varmap() = varmap := VarMap.empty
+
     fun eq_label (l1 as (h1,_,_) : label, l2 as (h2,_,_)) = 
 		let val res = (h1=h2) andalso (l1=l2)
-(*			val _ = Stats.counter ("eq_label=" ^ 
-				(Bool.toString res)) () *)
 		in  res
 		end
-
-    val eq_var2 = curry2 eq_var
     val eq_label2 = curry2 eq_label
-      
     fun eq_tag   (n1, n2)     = n1 = n2
-    fun compare_var ((a,_) : var,(b,_) : var) = Int.compare(a,b)
     fun compare_tag ((a,_),(b,_)) = Int.compare(a,b)
     fun compare_label_name((a,sa,oa) : label, (b,sb,ob) : label) = 
 	let val is_num_a = (size sa > 0) andalso Char.isDigit(String.sub(sa,0))
@@ -95,16 +91,30 @@ structure Name :> NAME =
     val maxnamespace = 8
     fun namespaceint (hash,str) = hash - (Symbol.number(Symbol.varSymbol str))
 
-    fun fresh_named_var s : var = (inc_counter var_counter,s)
+
+    fun construct_var (i : int, s : string) : var = 
+	let val _ = varmap := (VarMap.insert(!varmap,i,s))
+	in  i
+	end
+
+    fun fresh_named_var str = construct_var(inc_counter var_counter, str)
+    fun fresh_var() = inc_counter var_counter
+    fun gen_var_from_symbol v : var = fresh_named_var(Symbol.name v)
+
+    fun var2int    (v : var) = v
+    fun var2name   (v : var) = (case VarMap.find(!varmap,v) of
+				    NONE => ""
+				  | SOME str => str)
+    fun var2string (v : var) = (var2name v) ^ "_" ^ (Int.toString v)
+    fun derived_var v = fresh_named_var(var2name v)
+    fun deconstruct_var v = (v, var2name v)
+
+
     fun fresh_named_tag s = (inc_counter tag_counter,s)
-    fun fresh_var   () = fresh_named_var "v"
     fun fresh_tag  () = fresh_named_tag "t"
-    fun non_generative_named_var s : var = (0, s)
-    fun gen_var_from_symbol v : var = (inc_counter var_counter, Symbol.name v)
     fun internal_hash s = Symbol.number(Symbol.varSymbol s) + maxnamespace + 1
     fun internal_label s : label = (internal_hash s,s,false)
     fun open_internal_label s : label = (internal_hash s,s,true)
-    fun derived_var(_,s) = fresh_named_var s
     fun is_label_internal ((num,str,flag) : label) = internal_hash str = num
 
     fun symbol_label s = (Symbol.number s, Symbol.name s, false)
@@ -116,9 +126,6 @@ structure Name :> NAME =
 
 
 
-    fun var2int    ((i,s) : var) = i
-    fun var2name   ((i,s) : var) = s
-    fun var2string ((i,s) : var) = (s ^ "_" ^ (Int.toString i))
     fun label2name ((num,str,flag) : label) = str
     fun label2string (num,str,flag) =
       let
@@ -140,16 +147,11 @@ structure Name :> NAME =
     fun mk_var_hash_table (size,notfound_exn) = 
 	let
 	    val b : word = 0wx3141592
-	    fun hash ((i,_) : var) = 
-		Word31.>>(Word31.*(Word31.fromInt i,b),0wx12)
-	    fun eqKey ((i,_) : var, (j,_) : var) = i=j
+	    fun hash (i : var) = Word31.>>(Word31.*(Word31.fromInt i,b),0wx12)
+	    val eqKey = eq_var
 	in HashTable.mkTable (hash,eqKey) (size,notfound_exn)
 	end
 
-      structure VarKey : ORD_KEY = struct
-				    type ord_key = var
-				    val compare = compare_var
-				end
       type vpath = var * label list
       structure PathKey : ORD_KEY = 
 	  struct
@@ -176,12 +178,17 @@ structure Name :> NAME =
 					 type ord_key = tag
 					 val compare = compare_tag
 				     end
-      structure VarSet = SplaySetFn(VarKey) 
-      structure VarMap = SplayMapFn(VarKey) 
       structure LabelMap = SplayMapFn(LabelKey) 
       structure TagMap = SplayMapFn(TagKey) 
       structure PathMap = SplayMapFn(PathKey) 
       structure PathSet = SplaySetFn(PathKey) 
 
+
+    fun construct_label x = x
+    fun deconstruct_label x = x
+    fun construct_tag x = x
+    fun deconstruct_tag x = x
+    fun construct_loc x = x
+    fun deconstruct_loc x = x
 
 end

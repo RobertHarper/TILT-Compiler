@@ -1,4 +1,4 @@
-(*$import FrontEnd LINKPARSE NamedForm TVClose *)
+(*$import FrontEnd LINKPARSE NamedForm TVClose ErrorMsg *)
 
 
 structure LinkParse :> LINK_PARSE =
