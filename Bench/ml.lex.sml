@@ -1951,7 +1951,7 @@ in arrayoflist
 {fin = [(N 406)], trans = s0},
 {fin = [], trans = s237},
 {fin = [(N 416)], trans = s0},
-{fin = [(N 409)], trans = s0},
+{fin = [(T 51)], trans = s0},
 {fin = [], trans = s240},
 {fin = [], trans = s241},
 {fin = [(N 421)], trans = s0},
