@@ -1337,6 +1337,15 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
      | xcon' context (Il.CON_ARROW (il_cons1, il_con2, closed, arr)) =
        let
+	   val cons1 = map (#1 o (xcon context)) il_cons1
+           val con2 = #1(xcon context il_con2)
+	   val eff = xeffect (derefOneshot arr)
+	   val con = AllArrow_c(if closed then ExternCode else Open, eff, [], cons1, w0, con2)
+       in
+	   (con, Word_k Runtime)
+       end
+(*
+       let
 	   fun folder (Il.CON_FLOAT Prim.F64, (cons,f)) = (cons, TilWord32.uplus(f,0w1))
 	     | folder (c,(cons,f)) = (c::cons,f)
 	   val (rev_il_cons1,floats) = foldl folder ([],w0) il_cons1
@@ -1350,7 +1359,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
        in
 	   (con, Word_k Runtime)
        end
-
+*)
      | xcon' context (il_con as Il.CON_APP (il_con1, il_con2)) = 
        let
 	   val (con1, _) = xcon context il_con1

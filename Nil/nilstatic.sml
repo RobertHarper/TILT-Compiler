@@ -822,8 +822,11 @@ struct
 	       case openness
 		 of Open => Let_c (Parallel,[Open_cb (var,formals,c,return)],Var_c var)
 		  | (Code | ExternCode) => Let_c (Parallel,[Code_cb (var,formals,c,return)],Var_c var)
-		  | Closure => 
-		   (error "Got closure in pullout - expected open or code" handle e => raise e)
+		  | Closure => let val cenv = (fresh_var(), Record_k (list2sequence []))
+			       in  Let_c (Parallel,[Code_cb (var,formals @ [cenv] ,c,return)],
+					  Closure_c(Var_c var, Crecord_c []))
+			       end
+(*		   (error "Got closure in pullout - expected open or code" handle e => raise e) *)
 	     end)
 	   
       val subst = Subst.fromList (map (fn (v,k) => (v,pull (Var_c v,k))) kmap)
