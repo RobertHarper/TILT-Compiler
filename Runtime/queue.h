@@ -33,8 +33,8 @@ typedef struct Set__t
 Set_t*   SetCreate (long initialSize);
 void     SetInit (Set_t *, long initialSize);
 void     SetDestroy(Set_t *);
-void     SetNormalize (Set_t *);                /* There will always be at least 3 slots free after a call to Normalize */
-void     SetNormalizeExpand(Set_t *s, int addSize);
+void     SetNormalize (volatile Set_t *);       /* There will always be at least 3 slots free after a call to Normalize */
+void     SetNormalizeExpand(volatile Set_t *s, int addSize);
 void     SetCopy(Set_t *from, Set_t *to);       /* Copies the contents of from into to without changing from */
 void     SetTransfer(Set_t *from, Set_t *to);   /* Transfers the contents of from into to, leaving from empty */
 
@@ -64,7 +64,7 @@ int SetIsEmpty(Set_t *s)
 }
 
 INLINE(SetPush)
-void SetPush(Set_t *set, ptr_t item)
+void SetPush(volatile Set_t *set, ptr_t item)
 {
   fastAssert(item != NULL); 
   if (set->last + 1 >= set->limit)

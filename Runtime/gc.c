@@ -702,7 +702,7 @@ void GCFromMutator(Thread_t *curThread)
 
 #if defined(solaris)
 int calleeSaveMask = 0;
-#elif defined(solaris)
+#elif defined(alpha_osf)
 int calleeSaveMask = 0;
 #endif
 

@@ -35,6 +35,6 @@ static')',
 	`m4define(`INLINE', `static inline')')
 
 dnl	DISCARD_VOLATILE(type, exp)
-dnl m4define(`DISCARD_VOLATILE', `(($1)($2))')
+m4define(`DISCARD_VOLATILE', `(($1)($2))')
 
 m4divert`'m4dnl

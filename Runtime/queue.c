@@ -26,7 +26,7 @@ void SetDestroy(Set_t *s)
   free(s);
 }
 
-void SetNormalizeExpand(Set_t *s, int addSize)
+void SetNormalizeExpand(volatile Set_t *s, int addSize)
 {
   int numElem = s->last - s->first;
   int effSize = numElem + addSize;
@@ -53,7 +53,7 @@ void SetNormalizeExpand(Set_t *s, int addSize)
   assert(s->last + 3 < s->limit);
 }
 
-void SetNormalize(Set_t *s) 
+void SetNormalize(volatile Set_t *s) 
 {
   SetNormalizeExpand(s, 0);
 }
