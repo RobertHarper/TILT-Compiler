@@ -13,60 +13,98 @@ functor Datatype(structure Il : IL
     open AstHelp Il IlStatic IlUtil Ppil 
     open Util Listops Name (* IlLookup *) Tyvar
     open IlContext
-  
+
+    val do_inline = ref true
     val error = fn s => error "datatype.sml" s
     val error_sig = fn signat => fn s => error_sig "datatype.sml" signat s 
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
+    fun make_eqcon c = CON_ARROW([con_tuple[c,c]], con_bool, false, oneshot_init PARTIAL)
 
     (* ------------------------------------------------------------------
-      The datatype compiler for compiling a single strong-connected type.
+      The datatype compiler for compiling a single stronglg-connected type.
       ------------------------------------------------------------------ *)
     fun driver (xty : Il.context * Ast.ty -> Il.con,
 		context : context, 
 		std_list : (Symbol.symbol * Ast.tyvar list * (Symbol.symbol * Ast.ty option) list) list,
-		eqcomp : Il.context * Il.con -> Il.exp option) : (sbnd * sdec) list = 
+		eqcomp : Il.context * Il.con -> Il.exp option,
+		eqcomp_mu : Il.context * Il.con -> Il.exp option) : (sbnd * sdec) list = 
       let 
-	  fun geq_sym((s1,_),(s2,_)) = 
-	      (case (String.compare(Symbol.symbolToString s1,Symbol.symbolToString s2)) of
-		   GREATER => true
-		 | EQUAL => true
-		 | LESS => false)
-	  fun sort_std' (ncs,cs) [] = (ListMergeSort.sort geq_sym ncs) @ (ListMergeSort.sort geq_sym cs)
-	    | sort_std' (ncs,cs) ((nc as (_,NONE))::rest) = sort_std' (nc::ncs,cs) rest
-	    | sort_std' (ncs,cs) ((c as (_,SOME _))::rest) = sort_std' (ncs,c::cs) rest
-	fun sort_std (s,tvs,st_list) = (s,tvs,sort_std' ([],[]) st_list)
-	val std_list = map sort_std std_list
-	(* --------- create labels and variables; compute indices --------------- *)
-	val is_eq = ref true  (* speculate it is an eq-permitting datatype *)
-	val p = length std_list
-	val type_symbols = map #1 std_list
+        (* ---- speculate it is an eq-permitting datatype ------ *)
+	val is_eq = ref true
 
-	val type_label = map (fn s => symbol_label s) type_symbols
-	val top_type_label = map to_top_lab type_label
-	val top_type_var = map (fn s => fresh_named_var ("top_" ^ Symbol.name s)) type_symbols
-	val type_var = map (fn s => fresh_named_var ("unused_" ^ (Symbol.name s))) type_symbols
-	val tyvar_label = flatten (map (fn (_,tyvars,_) => map (symbol_label o tyvar_strip) tyvars) std_list)
-	val k = length tyvar_label
-	val varpoly_list = map (fn _ => fresh_named_var "poly") tyvar_label
-	val vardt_list = map (fn _ => fresh_named_var "vdt") type_label
-	val var_poly = fresh_named_var "varpoly"
-	val tys : Ast.ty option list list = map (fn (_,_,def) => map #2 def) std_list
-        val ids = map (fn (_,_,def) => map #1 def) std_list
+        (* ---- we name the type variables that the datatypes are polymorphic in 
+	        and alse name the argument struct holding the type variables --- *)
+	val tyvar_labs = flatten (map (fn (_,tyvars,_) => 
+					map (symbol_label o tyvar_strip) tyvars) std_list)
+	val tyvar_vars = map (fn _ => fresh_named_var "poly") tyvar_labs
+	val tyvar_tuple = con_tuple_inject(map CON_VAR tyvar_vars)
+	val mpoly_var = fresh_named_var "mpoly_var"
+	val num_tyvar = length tyvar_labs
+	val is_monomorphic = num_tyvar = 0
+	val num_datatype = length std_list
 
-	(* --------- compute sig_poly, sig_poly+, and context' ------------ *)
+	(* ----- create type, constr type, sum types, constr, and module names *)
+	val type_syms = map #1 std_list
+	val type_labs = map symbol_label type_syms
+	val type_vars = map (fn s => fresh_named_var (Symbol.name s)) type_syms
+	val eq_labs = map (fn s => symbol_label(Symbol.varSymbol(Symbol.name s ^ "_eq"))) type_syms
+	val eq_vars = map (fn s => fresh_named_var (Symbol.name s ^ "_eq")) type_syms
+	val inner_type_labvars = map (fn s => 
+				   let val str = Symbol.name s
+				   in  (internal_label str,
+					fresh_named_var ("copy_" ^ str))
+				   end) type_syms
+	val top_type_string = foldl (fn (s,acc) => acc ^ "_" ^ (Symbol.name s)) "" type_syms
+	val top_eq_string = top_type_string ^ "_eq"
+	val top_type_var = fresh_named_var top_type_string
+	val top_type_lab = symbol_label (Symbol.tycSymbol top_type_string)
+	val top_eq_var = fresh_named_var top_eq_string
+	val top_eq_lab = symbol_label (Symbol.tycSymbol top_eq_string)
+	val module_labvars = map (fn s => (openlabel(IlUtil.to_datatype_lab(symbol_label s)),
+					   fresh_named_var ((Symbol.name s) ^ "_inline"))) type_syms
+	val constr_sum_strings = map (fn s => (Symbol.name s) ^ "_sum") type_syms
+	val constr_sum_vars = map fresh_named_var constr_sum_strings
+	val constr_sum_labs = map internal_label constr_sum_strings
+	val constr_tys : Ast.ty option list list = map (fn (_,_,def) => map #2 def) std_list
+        val constr_syms = map (fn (_,_,def) => map #1 def) std_list
+	val constr_labs = mapmap symbol_label constr_syms
+	val constr_con_strings = map3 (fn (ty_sym,con_syms,con_tys) => 
+				       map2 (fn (s,NONE) => NONE
+					      | (s,SOME _) => SOME((Symbol.name ty_sym) ^ "_" ^ 
+							       (Symbol.name s)))
+				       (con_syms, con_tys))
+	                         (type_syms,constr_syms,constr_tys)
+	val constr_con_vars = mapmap (Util.mapopt fresh_named_var) constr_con_strings
+	val constr_con_labs = mapmap (Util.mapopt internal_label) constr_con_strings
+
+	(* ---- if all constructors are non value-carrying, we don't (un)roll -- *)
+	val is_noncarrying = 
+	      (case std_list of
+		   [(_,_,sym_tyopts)] => (Listops.andfold (fn (_,NONE) => true 
+		                                           | (_,SOME _) => false) sym_tyopts)
+		 | _ => false)
+	fun roll(x,y) = if (is_noncarrying) then y else ROLL(x,y)
+	fun unroll(x,y,z) = if (is_noncarrying) then z else UNROLL(x,y,z)
+
+        (* -- we name the datatypes with variables for use in CON_MU ----- *)
+	val vardt_list = map (fn s => (fresh_named_var ("vdt" ^ "_" ^ (Symbol.name s)))) type_syms
+
+
+	(* ---- compute sig_poly, sig_poly+, and a context context' -----------
+	   ---- that has the polymorphic type variables and datatypes bound --- *)
 	local
 	  val sdecs = (map2 (fn (tv,v) => SDEC(tv,DEC_CON(v,KIND_TUPLE 1,NONE))) 
-		       (tyvar_label, varpoly_list))
-	  val sdecs_eq = (map2 (fn (tv,v) => let val eq_label = to_eq_lab tv
-						 val eq_con = CON_ARROW([con_tuple[CON_VAR v, CON_VAR v]],
-									con_bool, false, oneshot_init PARTIAL)
-					     in SDEC(eq_label,DEC_EXP(fresh_var(),eq_con))
-					     end)
-			  (tyvar_label, varpoly_list))
-	  val temp = ((map2 (fn (tv,vp) => (tv,vp,KIND_TUPLE 1)) (tyvar_label,varpoly_list)) @
-		      (map2 (fn (tc,vty) => (tc,vty,KIND_ARROW(k,1))) (type_label,vardt_list)))
+		       (tyvar_labs, tyvar_vars))
+	  val sdecs_eq = (map2 (fn (tv,v) => 
+				let val eq_label = to_eq_lab tv
+				    val eq_con = make_eqcon(CON_VAR v)
+				in SDEC(eq_label,DEC_EXP(fresh_var(),eq_con))
+				end)
+			  (tyvar_labs, tyvar_vars))
+	  val temp = ((map2 (fn (tv,vp) => (tv,vp,KIND_TUPLE 1)) (tyvar_labs,tyvar_vars)) @
+		      (map2 (fn (tc,vty) => (tc,vty,KIND_ARROW(num_tyvar,1))) (type_labs,vardt_list)))
 	  fun folder ((l,v,k),context) = add_context_con(context,l,v,k,NONE)
 	  fun merge [] [] = []
 	    | merge (a::b) (c::d) = a::c::(merge b d)
@@ -75,252 +113,334 @@ functor Datatype(structure Il : IL
 	  val sigpoly = SIGNAT_STRUCTURE (NONE, sdecs)
 	  val sigpoly_eq = SIGNAT_STRUCTURE (NONE, merge sdecs sdecs_eq)
 	  val context' = foldl folder context temp
-	  val is_monomorphic = (length sdecs = 0)
-	  val is_onedatatype = (length std_list = 1)
-	  val is_noncarrying = (is_onedatatype andalso 
-				(Listops.andfold (fn (_,NONE) => true | (_,SOME _) => false) (#3 (hd std_list))))
 	end
 
-	(* ------------ compute all the cons -------------------------------------- *)
+	(* ---- compute all the types carried by the constructors ------------ *)
 	local
 	    val subst_nr2r = zip vardt_list (map CON_VAR vardt_list)
 	    fun conapper(CON_VAR tarv,c2) : con option = assoc_eq(eq_var,tarv,subst_nr2r)
 	      | conapper _ = NONE
-	in fun to_var_dt c = con_subst_conapps(c,conapper)
-	end
-	fun conopts_split (nca,ca) [] = (nca,rev ca)
-	  | conopts_split (nca,ca) (NONE::rest) = conopts_split (nca+1,ca) rest
-	  | conopts_split (nca,ca) ((SOME c)::rest) = conopts_split (nca,c::ca) rest
-	val conopts_split = conopts_split (0,[])
-	val almost_conss_nrc = mapmap (fn NONE => NONE | SOME ty => SOME(xty(context',ty))) tys
-	val conss_nrc = mapmap (Util.mapopt to_var_dt) almost_conss_nrc
-	val cons_nrc = (map (fn conopts => let val (nca,ca) = conopts_split conopts
-							  in CON_SUM{noncarriers=nca,carriers=ca,special=NONE}
-							  end)
-			      conss_nrc)
-	val con_nrc = con_tuple_inject cons_nrc
-
-	local
-	    val cons_rc_help = CON_FUN(vardt_list,con_nrc)
-	    fun cons_rc_maker (i,cons_nrc) = if is_noncarrying 
-						 then cons_nrc
-					     else CON_MUPROJECT(i,cons_rc_help)
-	in  val cons_rc = mapcount cons_rc_maker cons_nrc
+	    fun to_var_dt c = con_subst_conapps(c,conapper)
+	in 
+	    val constr_nrc = mapmap (fn NONE => NONE
+				      | SOME ty => SOME(to_var_dt(xty(context',ty)))) constr_tys
 	end
 
-
-
-	val cons_rf_help = map (fn l => CON_MODULE_PROJECT (MOD_VAR var_poly, l)) tyvar_label
-	val cons_rf_help' = con_tuple_inject cons_rf_help
-	val cons_rf = map (fn v => if (is_monomorphic) then (CON_VAR v)
-			   else CON_APP(CON_VAR v, cons_rf_help')) top_type_var
+        (* ------------ now create the sum types ------------------------------- *)
 	local
-	    val subst_c2f = zip varpoly_list cons_rf_help
-	    val subst_nr2r = zip vardt_list cons_rf 
-	    val subst_both = subst_c2f @ subst_nr2r
-	    fun subst c = con_subst_convar(c,subst_both)
-	in val conss_rf = mapmap (Util.mapopt subst) conss_nrc
-	    (* cons_rf' same as cons_rf except syntactically a mu type *)
-	    val cons_rf' = map (fn c => con_subst_convar(c,subst_c2f)) cons_rc
+	    fun conopts_split (nca,ca) ([] : 'a option list) = (nca,rev ca)
+	      | conopts_split (nca,ca) (NONE::rest) = conopts_split (nca+1,ca) rest
+	      | conopts_split (nca,ca) ((SOME c)::rest) = conopts_split (nca,c::ca) rest
+	in
+	    val conopts_split = fn arg => conopts_split (0,[]) arg
+	    val constr_nrc_sum = (map (fn conopts => 
+				       let val (nca,ca) = conopts_split conopts
+				       in CON_SUM{noncarriers=nca,carriers=ca,special=NONE}
+				       end)
+				  constr_nrc)
+	end
+
+        (* ---------- now create the top datatype tuple using var_poly ------ *)
+	val top_type_tyvar = if is_noncarrying 
+			       then hd(constr_nrc_sum)
+		              else CON_MU(CON_FUN(vardt_list,con_tuple_inject(constr_nrc_sum)))
+
+
+        (* ------------ create the polymorphic type arguments --------------------- 
+	   ------------- and instanitated versions of datatypes ------------------- *)
+	val tyvar_mprojs = map (fn l => CON_MODULE_PROJECT (MOD_VAR mpoly_var, l)) tyvar_labs
+	val tyvar_mproj = con_tuple_inject tyvar_mprojs
+	val type_cinsts = map (fn tv => if (is_monomorphic) 
+					    then (CON_VAR tv)
+					else CON_APP(CON_VAR tv, tyvar_tuple)) type_vars
+	val type_minsts = map (fn tv => if (is_monomorphic) 
+					    then (CON_VAR tv)
+					else CON_APP(CON_VAR tv, tyvar_mproj)) type_vars
+
+
+	(* ------------ create the version of constructors types and datatypes that 
+	   ------------ use the type variable projections ------------------------ *)
+	local
+	    val subst_nr2r = zip vardt_list type_cinsts
+	    val subst_c2m = zip tyvar_vars tyvar_mprojs
+	    fun constr_mapper NONE = NONE
+	      | constr_mapper (SOME c) = SOME(con_subst_convar(c,subst_nr2r))
+	    fun constr_sum_mapper constr_con_vars_i =
+		let val (nca,vars) = conopts_split constr_con_vars_i
+		    fun mapper v = if (is_monomorphic)
+					then CON_VAR v
+				   else CON_APP(CON_VAR v, tyvar_tuple)
+		in CON_SUM{noncarriers=nca,carriers=map mapper vars,special=NONE}
+		end
+	in  
+	    val constr_rf = mapmap constr_mapper constr_nrc
+	    val constr_rf_sum = map constr_sum_mapper constr_con_vars
+	    val top_type_mproj = con_subst_convar(top_type_tyvar,subst_c2m)
 	end 
-(*
-	val _ = (print "\nconss_nrc are:\n";
-		 mapmap (fn c => (pp_con c; print "\n")) conss_nrc;
-		 print "\nconss_rf are:\n";
-		 mapmap (fn c => (pp_con c; print "\n")) conss_rf)
-*)
-	(* ----------------- compute the type functions  ------------- *)
-	local
-	    fun help (i,cons_rc_i) = 
-		if (is_monomorphic) 
-		    then (cons_rc_i, KIND_TUPLE 1)
-		else (CON_FUN(varpoly_list,cons_rc_i), 
-		      KIND_ARROW(k,1))
-	    val temp = mapcount help cons_rc
-	in  val type_funs = map #1 temp
-	    val type_kinds = map #2 temp
-	end
+
+
+
 	  
 	(* ----------------- compute the constructors ------------- *)
-	fun roll(x,y) = if (is_noncarrying) then y else ROLL(x,y)
-	fun unroll(x,y) = if (is_noncarrying) then y else UNROLL(x,y)
 	local 
-	    fun mk_help (conss_rf_i, cons_rf_i, cons_rf_i') = 
+	    fun mk_help (type_minst, type_var_i, constr_con_vars_i : var option list) = 
 		let 
-		    val var = fresh_var()
-		    val (nca,ca) = conopts_split conss_rf_i
+		    val var = fresh_named_var "injectee"
+		    val (nca,vars) = conopts_split constr_con_vars_i
+		    fun mapper v = if (is_monomorphic)
+				       then CON_VAR v
+				   else CON_APP(CON_VAR v,tyvar_mproj)
+		    val ca = map mapper vars
+		    val mutype = if is_monomorphic
+				     then CON_VAR type_var_i
+				 else CON_APP(CON_VAR type_var_i, tyvar_mproj)
 		    fun help (j, NONE) = 
-			(roll(cons_rf_i',
+			(roll(type_minst,
 			      INJ{noncarriers = nca,
 				  carriers = ca,
 				  inject = NONE,
-				  special = j}), cons_rf_i)
-		      | help (j, SOME conss_rf_ij) =
-			(make_total_lambda(var,conss_rf_ij,cons_rf_i,
-					   roll(cons_rf_i',
+				  special = j}), mutype)
+		      | help (j, SOME constr_con_vars_ij) =
+			(make_total_lambda(var,
+					   if (is_monomorphic)
+					       then CON_VAR constr_con_vars_ij
+					   else CON_APP(CON_VAR constr_con_vars_ij, tyvar_mproj),
+					   mutype,
+					   roll(type_minst,
 						INJ{noncarriers = nca,
 						    carriers = ca,
 						    inject = SOME (VAR var),
 						    special = j})))
-		in mapcount help conss_rf_i
+		in mapcount help constr_con_vars_i
 		end
-	in val exp_con_mk = map3 mk_help (conss_rf,cons_rf,cons_rf')
+	in val exp_con_mk = map3 mk_help (type_minsts,type_vars,constr_con_vars)
 	end
 
+	
 	(* ----------------- compute the exposes ------------------- *)
 	local 
-	    fun expose_help (conss_rf_i,cons_rf_i,cons_rf_i') =
+	    fun expose_help (type_minst,constr_sum_var_i,constr_con_vars_i) =
 		let
-		    val (nca,ca) = conopts_split conss_rf_i
-		    val sumtype = CON_SUM{special = NONE,
-					  carriers = ca,
-					  noncarriers = nca}
-		    val var' = fresh_var()
-		in make_total_lambda(var',cons_rf_i,sumtype,unroll(cons_rf_i',VAR var'))
+		    val (count,vars : var list) = conopts_split constr_con_vars_i
+		    fun mapper v = if (is_monomorphic)
+				       then CON_VAR v
+				   else CON_APP(CON_VAR v,tyvar_mproj)
+		    val sumtype = if is_monomorphic
+				      then CON_VAR constr_sum_var_i
+				  else CON_APP(CON_VAR constr_sum_var_i, tyvar_mproj)
+		    val var = fresh_named_var "exposee"
+		in  make_total_lambda(var,type_minst,sumtype,
+				      unroll(type_minst,sumtype,VAR var))
 		end
-	in val exp_con_expose = map3 expose_help (conss_rf,cons_rf,cons_rf')
+	in val exp_con_expose = map3 expose_help (type_minsts,constr_sum_vars,constr_con_vars)
 	end
 		
-	(* ----------------- compute the equality functions ------------------- *)
+	(* ----------------- compute the equality function  ------------------- *)
 	local
-	    val var_poly_dec = DEC_MOD(var_poly,SelfifySig(SIMPLE_PATH var_poly,sigpoly_eq))
+	    val var_poly_dec = DEC_MOD(mpoly_var,SelfifySig(SIMPLE_PATH mpoly_var,sigpoly_eq))
 	    val temp_ctxt = add_context_dec(context,var_poly_dec)
-	    fun eq_help (i,type_fun_i,cons_rf_i) =
-		let
-		    val cons = if (is_monomorphic) 
-				   then type_fun_i
-			       else CON_APP(type_fun_i,cons_rf_help')
-		    (* don't need to resolve later, have all necessary data now *)
-
-		    val eq_exp = eqcomp(temp_ctxt,cons)
-		    val _ = (case eq_exp of 
-				 NONE => (is_eq := false)
-			       | _ => ())
-		    val eq_con = CON_ARROW([con_tuple[cons_rf_i,cons_rf_i]],
-					   con_bool,false,oneshot_init PARTIAL)
-
-		in (case eq_exp of 
-			SOME e => ((* eqfun_search e; *)
-				   SOME(e, eq_con))
-		      | NONE => NONE)
-		end
-	in  val exp_con_eq_opt = map2count eq_help (type_funs, cons_rf)
+	    val eq_con = if (is_noncarrying)
+				then make_eqcon top_type_mproj
+			 else let fun mapper i = make_eqcon(CON_TUPLE_PROJECT(i,top_type_mproj))
+			      in  con_tuple(map0count mapper num_datatype)
+			      end
+	    val eq_exp = if (is_noncarrying)
+			   then eqcomp(temp_ctxt,top_type_mproj)
+			 else let val CON_MU confun = top_type_mproj
+			      in  eqcomp_mu(temp_ctxt,confun)
+			      end
+	in
+	     val eq_exp_con = (case eq_exp of 
+				(SOME e) => SOME(e,eq_con)
+		      	      | NONE => (is_eq := false; NONE))
 	end
 
 
-	(* --------- put the result together now ------------- *)
-	fun help (i,(type_label,top_type_var,type_var,type_kind),
-		  id_i,expcon_mk_i,
-		  (exp_expose_i,con_expose_i)) =
+	(* --------- create the inner modules ------------- *)
+	fun help ((inner_type_lab_i, inner_type_var_i),type_var_i,
+		  (module_lab, module_var),
+		  (exp_expose_i,con_expose_i),
+		  constr_labs_row,
+		  expcon_mk_i) = 
 	  let 
-	    (* ----- do the tycon -------- *)
-	    val type_sbnd = SBND(type_label,BND_CON(type_var,CON_VAR top_type_var))
-	    val type_sdec = SDEC(type_label,DEC_CON(type_var,type_kind,SOME(CON_VAR top_type_var)))
+	    (* ----- do the type -------- *)
+	    val k = if is_monomorphic then KIND_TUPLE 1 else KIND_ARROW(num_tyvar,1)
+	    val type_sbnd = SBND(inner_type_lab_i, BND_CON(inner_type_var_i,CON_VAR type_var_i))
+	    val type_sdec = SDEC(inner_type_lab_i, DEC_CON(inner_type_var_i,k,SOME(CON_VAR type_var_i)))
 
 	    (* ----- do the expose -------- *)
-	    val expose_var = fresh_var()
+	    val expose_var = fresh_named_var "exposer"
+	    val expose_modvar = fresh_named_var "exposer_mod"
 	    val expose_expbnd = BND_EXP(expose_var,exp_expose_i)
 	    val expose_expdec = DEC_EXP(expose_var,con_expose_i)
-	    val bnd_var = fresh_var()
-	    val expose_sbnd = SBND(expose_lab,
-			     if (is_monomorphic)
-				 then expose_expbnd
-			     else
-				 BND_MOD(expose_var,
-					 MOD_FUNCTOR(var_poly,sigpoly,
-						     MOD_STRUCTURE[SBND(it_lab,expose_expbnd)])))
-	    val expose_sdec = 
-		SDEC(expose_lab,
-		     if (is_monomorphic)
-			 then expose_expdec
-		     else DEC_MOD(expose_var,
-				  SIGNAT_FUNCTOR(var_poly,sigpoly,
-						 SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expose_expdec)]),
-						 TOTAL)))
-		
+	    val expose_modbnd = BND_MOD(expose_modvar,
+					MOD_FUNCTOR(mpoly_var,sigpoly,
+						    MOD_STRUCTURE[SBND(it_lab,expose_expbnd)]))
+	    val expose_moddec = DEC_MOD(expose_modvar,
+					SIGNAT_FUNCTOR(mpoly_var,sigpoly,
+						  SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expose_expdec)]),
+						  TOTAL))
+	    val expose_sbnd = SBND(expose_lab,if is_monomorphic 
+						  then expose_expbnd else expose_modbnd)
+	    val expose_sdec = SDEC(expose_lab,if is_monomorphic
+						  then expose_expdec else expose_moddec)
+
 
 	    (* ----- do the mk  ---- *)
-	    fun inner_help (id_ij,(exp_mk_ij,con_mk_ij)) =
+	    fun inner_help (constr_lab_ij,(exp_mk_ij,con_mk_ij)) =
 	      let 
-		fun maker e s = 
-		  let val mk_var = fresh_var()
-		      val mkpoly_var = fresh_var()
-		      val exp_bnd = BND_EXP(mk_var, e)
-		      val sig_dec = DEC_EXP(mk_var, s)
-		  in if (is_monomorphic) then (exp_bnd,sig_dec)
-		     else
-		       (BND_MOD(mkpoly_var,MOD_FUNCTOR(var_poly,sigpoly,
-							MOD_STRUCTURE[SBND(it_lab,exp_bnd)])),
-			DEC_MOD(mkpoly_var,
-				SIGNAT_FUNCTOR(var_poly,sigpoly,
-					       SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,sig_dec)]),
-					       TOTAL)))
-		  end
-		val (mk_bnd,mk_dec) = maker exp_mk_ij con_mk_ij 
-	      in 
-		  (SBND(id_ij,mk_bnd),
-		   SDEC(id_ij,mk_dec))
+		  val mk_var = fresh_var()
+		  val mkpoly_var = fresh_var()
+		  val bnd = BND_EXP(mk_var, exp_mk_ij)
+		  val dec = DEC_EXP(mk_var, con_mk_ij)
+		  val modbnd = BND_MOD(mkpoly_var,
+					   MOD_FUNCTOR(mpoly_var,sigpoly,
+						       MOD_STRUCTURE[SBND(it_lab,bnd)]))
+		  val moddec = DEC_MOD(mkpoly_var,
+				       SIGNAT_FUNCTOR(mpoly_var,sigpoly,
+						      SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,dec)]),
+						      TOTAL))
+	      in  (SBND(constr_lab_ij, if is_monomorphic then bnd else modbnd),
+		   SDEC(constr_lab_ij, if is_monomorphic then dec else moddec))
 	      end
-	    val temp = map2 inner_help (map symbol_label id_i, expcon_mk_i)
+	    val temp = map2 inner_help (constr_labs_row, expcon_mk_i)
 	    val (sbnds,sdecs) = (map #1 temp, map #2 temp)
 
+	    val sbnds = type_sbnd::expose_sbnd::sbnds
+	    val sdecs = type_sdec::expose_sdec::sdecs
 
-	    val inner_mod = MOD_STRUCTURE(type_sbnd::expose_sbnd::sbnds)
-	    val inner_sig = SIGNAT_STRUCTURE(NONE,type_sdec::expose_sdec::sdecs)
+	    val inner_mod = MOD_STRUCTURE sbnds
+	    val inner_sig = if (!do_inline)
+				then SIGNAT_INLINE_STRUCTURE{self = NONE,
+							     abs_sig = sdecs,
+							     imp_sig = sdecs,
+							     code = sbnds}
+			    else SIGNAT_STRUCTURE(NONE,sdecs)
 
-	    val tc_star = to_datatype_lab type_label
-	    val tc_var = fresh_var()
-	  in (SBND(tc_star,BND_MOD(tc_var,inner_mod)),
-	      SDEC(tc_star,DEC_MOD(tc_var,inner_sig)))
+	  in (SBND(module_lab,BND_MOD(module_var,inner_mod)),
+	      SDEC(module_lab,DEC_MOD(module_var,inner_sig)))
 	  end
 
 
-	val components = map4count help ((zip4 type_label top_type_var type_var type_kinds), 
-					 ids, exp_con_mk,
-					 exp_con_expose)
+	val components = map6 help (inner_type_labvars, 
+				    type_vars,
+				    module_labvars,
+				    exp_con_expose,
+				    constr_labs,
+				    exp_con_mk)
 
 
 	local
-	    fun help (top_type_label,type_label,exp_con_eq_i_opt) = 
-		(case exp_con_eq_i_opt of
-		     NONE => NONE
-		   | SOME (exp_eq_i,con_eq_i) =>
+	    fun help (i,type_lab_i,type_var_i) =
+		(case eq_exp_con of
+		     NONE => error "must have eqfuntion at this point"
+		   | SOME (top_eq_exp,top_eq_con) =>
 			 let 
-(*			     val eq_lab = to_eq_lab type_label *)
-			     val eq_lab = to_eq_lab top_type_label 
+			     val eq_lab = to_eq_lab type_lab_i
 			     val equal_var = fresh_named_var (label2string eq_lab)
 			     val bnd_var = fresh_named_var ("poly" ^ (label2string eq_lab))
-			     val eq_expbnd = BND_EXP(equal_var,exp_eq_i)
-			     val eq_expdec = DEC_EXP(equal_var,con_eq_i)
+			     val exp_eq = if num_datatype = 1
+						then top_eq_exp
+						else RECORD_PROJECT(VAR top_eq_var, 
+							generate_tuple_label(i+1), top_eq_con)
+			     val con_eq = make_eqcon(if is_monomorphic 
+							then CON_VAR type_var_i
+						     else CON_APP (CON_VAR type_var_i, tyvar_mproj))
+			     val eq_expbnd = BND_EXP(equal_var,exp_eq)
+			     val eq_expdec = DEC_EXP(equal_var,con_eq)
 			     val eq_sbnd = 
 				 SBND((eq_lab,
 				       if (is_monomorphic)
 					   then eq_expbnd
 				       else
 					   BND_MOD(bnd_var,
-						   MOD_FUNCTOR(var_poly,sigpoly_eq,
+						   MOD_FUNCTOR(mpoly_var,sigpoly_eq,
 							   MOD_STRUCTURE[SBND(it_lab,eq_expbnd)]))))
 			     val eq_sdec = 
 				 SDEC(eq_lab,
 				      if (is_monomorphic)
 					  then eq_expdec
 				      else DEC_MOD(bnd_var,
-					     SIGNAT_FUNCTOR(var_poly,sigpoly_eq,
-							    SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,eq_expdec)]),
+					     SIGNAT_FUNCTOR(mpoly_var,sigpoly_eq,
+							    SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,
+											eq_expdec)]),
 							    TOTAL)))
-			 in SOME(eq_sbnd, eq_sdec)
+			 in (eq_sbnd, eq_sdec)
 			 end)
-	in val eq_sbnd_sdec_opts = map3 help (top_type_label,type_label,exp_con_eq_opt)
+	in val eq_sbnd_sdecs = if (!is_eq)
+				   then map2count help (type_labs,type_vars)
+			       else []
 	end
-	val type_sbnd_sdecs = (map4 (fn (l,v,c,k) => (SBND(l,BND_CON(v,c)),
-						      (SDEC(l,DEC_CON(v,k,NONE)))))
-			       (top_type_label,top_type_var, type_funs,type_kinds))
-	fun interleave [] [] = []
-	  | interleave (a::b) (NONE::d) = a::(interleave b d)
-	  | interleave (a::b) ((SOME c)::d) = a::c::(interleave b d)
-	  | interleave _ _ = error "interleave given unequal length lists"
-	val first_sbnd_sdecs = interleave type_sbnd_sdecs eq_sbnd_sdec_opts
-	val final_sbnd_sdecs = first_sbnd_sdecs @ components
+
+
+	val top_eq_sbnd_sdec = 
+	    (case (eq_exp_con, num_datatype) of
+		(NONE,_) => []
+	      | (_, 1) => []
+	      | (SOME (eq_exp, eq_con),_) =>
+		let val equal_var = if is_monomorphic then top_eq_var else fresh_named_var "top_eq"
+		    val expbnd = BND_EXP(equal_var, eq_exp)
+		    val expdec = DEC_EXP(equal_var, eq_con)
+		    val modbnd = BND_MOD(top_eq_var, MOD_FUNCTOR(mpoly_var,sigpoly_eq,
+					MOD_STRUCTURE[SBND(it_lab,expbnd)]))
+		    val moddec = DEC_MOD(top_eq_var, SIGNAT_FUNCTOR(mpoly_var,sigpoly_eq,
+					SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expdec)]), TOTAL))
+		    val bnd = if is_monomorphic then expbnd else modbnd
+		    val dec = if is_monomorphic then expdec else moddec
+		in  [(SBND(top_eq_lab, bnd), SDEC(top_eq_lab, dec))]
+		end)
+
+
+	val top_type_sbnd_sdec = 
+		let val (c,k) = if is_monomorphic
+					then (top_type_tyvar, KIND_TUPLE num_datatype)
+				else (CON_FUN(tyvar_vars, top_type_tyvar), KIND_ARROW(num_tyvar, num_datatype))
+		in  if num_datatype = 1 
+			then []
+		     else [(SBND(top_type_lab, BND_CON(top_type_var, c)),
+		            SDEC(top_type_lab, DEC_CON(top_type_var, k, NONE)))]
+		end
+
+	val type_sbnd_sdecs = 
+		let val base_kind = if is_monomorphic then KIND_TUPLE 1 else KIND_ARROW(num_tyvar,1)
+		    fun mapper(i,l,v) =
+			let val c = if num_datatype = 1 then top_type_tyvar 
+					else CON_TUPLE_PROJECT(i,CON_VAR top_type_var)
+			    val c = if is_monomorphic then c else CON_FUN(tyvar_vars, c)
+			    val k = if (!do_inline) then KIND_INLINE(base_kind,c) else base_kind
+			in  (SBND(l,BND_CON(v,c)), (SDEC(l,DEC_CON(v,k,NONE))))
+			end
+		in  map2count mapper (type_labs,type_vars)
+		end
+
+	fun mapper(constr_con_vars_i, constr_con_labs_i, constr_rf_i) = 
+	    List.mapPartial (fn (NONE,_,_) => NONE
+                              | (SOME v,SOME l,SOME c) => 
+			         let val (c,k) = if is_monomorphic 
+						     then (c, KIND_TUPLE 1)
+						 else (CON_FUN(tyvar_vars,c), KIND_ARROW(num_tyvar,1))
+				 in  SOME(SBND(l,BND_CON(v,c)),
+				      SDEC(l,DEC_CON(v,k,SOME c)))
+				 end) (zip3 constr_con_vars_i constr_con_labs_i constr_rf_i)
+	val constr_con_sbnd_sdecs = map3 mapper (constr_con_vars, constr_con_labs, constr_rf)
+
+	fun mapper(constr_sum_lab_i,constr_sum_var_i, constr_rf_sum_i) = 
+	    let val (c,k) = if is_monomorphic 
+				then (constr_rf_sum_i, KIND_TUPLE 1)
+			    else (CON_FUN(tyvar_vars,constr_rf_sum_i), KIND_ARROW(num_tyvar,1))
+	    in  (SBND(constr_sum_lab_i,BND_CON(constr_sum_var_i, c)),
+		 SDEC(constr_sum_lab_i,DEC_CON(constr_sum_var_i, k, SOME c)))
+	    end
+
+	val constr_sum_sbnd_sdecs = map3 mapper (constr_sum_labs,constr_sum_vars, constr_rf_sum)
+
+	val final_sbnd_sdecs = (top_type_sbnd_sdec
+				@ top_eq_sbnd_sdec
+				@ type_sbnd_sdecs 
+				@ (flatten constr_con_sbnd_sdecs) 
+				@ constr_sum_sbnd_sdecs
+				@ eq_sbnd_sdecs 
+				@ components)
       in  final_sbnd_sdecs
       end
 
@@ -330,7 +450,7 @@ functor Datatype(structure Il : IL
       ------------------------------------------------------------------ *)
     type node = int * (Symbol.symbol * Ast.tyvar list * (Ast.symbol * Ast.ty option) list)
     fun compile' (context, typecompile,
-		nodes : node list, eq_compile) : (sbnd * sdec) list =
+		nodes : node list, eq_compile, eq_compile_mu) : (sbnd * sdec) list =
       let 
 	(* ---- Find the strongly-connected components of datatypes. *)
 	local
@@ -353,19 +473,29 @@ functor Datatype(structure Il : IL
 	  val comps = rev(GraphUtil.scc numnodes edges)
 	  val sym_tyvar_def_listlist = mapmap (lookupint nodes) comps
 	end (* local *)
-        (* ---- call the main routine for each list of datatypes retaining the accumulated context *)
+        (* ---- call the main routine for each sorted list of datatypes 
+	   and retain the accumulated context *)
 	fun loop context acc [] = rev acc
 	  | loop context acc (std_list::rest) = 
-	    let val sbnd_sdecs = driver(typecompile,context,std_list, eq_compile)
-(*
-		val syms : Symbol.symbol list = map #1 std_list
-		val piecename = String.concat(map Symbol.name syms)
-		val l = open_internal_label ("disjoint_" ^ piecename) (* must always use same label *)
-		val v = fresh_var()
-		val sbnd = SBND(l,BND_MOD(v,m))
-		val sdec = SDEC(l,DEC_MOD(v,s))
-		val sdec' = SDEC(l,DEC_MOD(v,SelfifySig(SIMPLE_PATH v,s)))
-*)
+	    let fun geq_sym((s1,_),(s2,_)) = 
+		(case (String.compare(Symbol.symbolToString s1,Symbol.symbolToString s2)) of
+		     GREATER => true
+		   | EQUAL => true
+		   | LESS => false)
+		fun sort_std' (ncs,cs) [] = (ListMergeSort.sort geq_sym ncs) @ 
+		                            (ListMergeSort.sort geq_sym cs)
+		  | sort_std' (ncs,cs) ((nc as (_,NONE))::rest) = sort_std' (nc::ncs,cs) rest
+		  | sort_std' (ncs,cs) ((c as (_,SOME _))::rest) = sort_std' (ncs,c::cs) rest
+		fun sort_std (s,tvs,st_list) = (s,tvs,sort_std' ([],[]) st_list)
+		val std_list = map sort_std std_list
+		val sbnd_sdecs = driver(typecompile,context,std_list, eq_compile, eq_compile_mu)
+		val _ = if (!debug)
+			    then (print "DRIVER returned SBNDS = ";
+				  map (fn (sb,_) => (Ppil.pp_sbnd sb; print "\n")) sbnd_sdecs;
+				  print "   and returned SDECS = ";
+				  map (fn (_,sd) => (Ppil.pp_sdec sd; print "\n")) sbnd_sdecs;
+				  print "\n\n")
+			else ()
 		val sdecs = map (fn (_,SDEC(l,dec)) => SDEC(l,SelfifyDec dec)) sbnd_sdecs
 		val context' = add_context_sdecs(context,sdecs)
 		val acc' = (rev sbnd_sdecs) @ acc
@@ -375,8 +505,97 @@ functor Datatype(structure Il : IL
       in res
       end
 
+    fun copy_datatype(context,path,tyc) = 
+	let val old_type_sym = List.last path
+	    val type_sym = tyc
+	    val type_lab = symbol_label tyc
+	    val type_var = gen_var_from_symbol tyc
+	    val constr_sum_string = (Symbol.name type_sym) ^ "_sum"
+	    val old_constr_sum_string = (Symbol.name old_type_sym) ^ "_sum"
+	    val constr_sum_var = fresh_named_var constr_sum_string
+	    val constr_sum_lab = internal_label constr_sum_string
+	    val old_constr_sum_lab = internal_label old_constr_sum_string
+	    val eq_lab = to_eq_lab type_lab 
+	    val eq_var = fresh_named_var "eqfun"
+	    val dt_lab = to_datatype_lab type_lab
+	    val dt_var = fresh_named_var "dt"
+	    fun change_path [] _ = error "empty path"
+	      | change_path [l] base = [base l]
+	      | change_path (a::b) base = a :: change_path b base
+	    val change_path = change_path (map symbol_label path)
+	    val type_labs = change_path (fn l => l)
+	    val eq_labs = change_path to_eq_lab
+	    val dt_labs = change_path to_datatype_lab
+	    val constr_sum_labs = change_path (fn _ => old_constr_sum_lab)
+
+	    val eq_sbndsdec = 
+		(case (Context_Lookup(context,eq_labs)) of
+		     SOME(_,PHRASE_CLASS_EXP (e,c)) => 
+			 let val bnd = BND_EXP(eq_var,e)
+			     val dec = DEC_EXP(eq_var,c)
+			 in  [(SBND(eq_lab,bnd),SDEC(eq_lab,dec))]
+			 end
+		   | SOME(_,PHRASE_CLASS_MOD (m,s)) => 
+			 let val bnd = BND_MOD(eq_var,m)
+			     val dec = DEC_MOD(eq_var,s)
+			 in  [(SBND(eq_lab,bnd),SDEC(eq_lab,dec))]
+			 end
+		   | _ => [])
+	    val (constr_labs,constr_sbndsdec) = 
+		(case (Context_Lookup(context,dt_labs)) of
+		     SOME(_,PHRASE_CLASS_MOD (m,s)) => 
+			 let val bnd = BND_MOD(dt_var,m)
+			     val dec = DEC_MOD(dt_var,s)
+			     val (_::_::sdecs) = 
+				 (case s of 
+				      SIGNAT_STRUCTURE(_,sdecs) => sdecs
+				    | SIGNAT_INLINE_STRUCTURE {abs_sig,...} => abs_sig)
+			     (* need to keep only labs of value-carrying constructors *)
+			     fun mapper (SDEC(l,dec)) = 
+				 let fun is_arrow (CON_ARROW _) = SOME l
+				       | is_arrow _ = NONE
+				 in  case dec of
+				     DEC_EXP(_,c) => is_arrow c
+				   | DEC_MOD (_,SIGNAT_FUNCTOR(_,_,
+						  SIGNAT_STRUCTURE(_,[SDEC(_,DEC_EXP(_,c))]),_)) => is_arrow c
+				   | _ => NONE
+				 end
+			     val labs = List.mapPartial mapper sdecs
+			 in  (labs,[(SBND(dt_lab,bnd),SDEC(dt_lab,dec))])
+			 end
+		   | _ => error "unbound datatype - constr labs")
+	    fun copy_type str (lookup_labs, lab, var) =
+		case (Context_Lookup(context,lookup_labs)) of
+		     SOME(_,PHRASE_CLASS_CON (c,k)) => 
+			 let 
+			     val bnd = BND_CON(var,c)
+			     val dec = DEC_CON(var,k,SOME c)
+			 in  (SBND(lab,bnd),SDEC(lab,dec))
+			 end
+		   | _ => (print "lookup_labs: "; app Ppil.pp_label lookup_labs; print "\n";
+			   error ("unbound datatype - copy type" ^ str))
+
+	    val constr_con_strings = map (fn con_sym =>
+				         ((Symbol.name type_sym) ^ "_" ^ 
+					   (Name.label2name con_sym))) constr_labs
+	    val old_constr_con_strings = map (fn con_sym =>
+				         ((Symbol.name old_type_sym) ^ "_" ^ 
+					   (Name.label2name con_sym))) constr_labs
+
+	    val constr_con_vars = map fresh_named_var constr_con_strings
+	    val constr_con_labs = map internal_label constr_con_strings
+	    val old_constr_con_labs = map internal_label old_constr_con_strings
+	    val constr_con_lookup_labs = map (fn l => change_path (fn _ => l)) old_constr_con_labs
+	    val constr_con_sbnd_sdecs = map3 (copy_type "constr_con") (constr_con_lookup_labs,constr_con_labs,constr_con_vars)
+	    val type_sbndsdec = copy_type "type" (type_labs,type_lab,type_var)
+	    val constr_sum_sbndsdec = copy_type "constr_sum" (constr_sum_labs,constr_sum_lab,constr_sum_var)
+
+	in [type_sbndsdec] @ constr_con_sbnd_sdecs @ [constr_sum_sbndsdec] @ eq_sbndsdec @ constr_sbndsdec
+	end
+    
+
     fun compile {context, typecompile,
-		 datatycs : Ast.db list, eq_compile} : (sbnd * sdec) list =
+		 datatycs : Ast.db list, eq_compile, eq_compile_mu} : (sbnd * sdec) list =
 	let
 	    fun calldriver() = 
 		let fun mapper (i,arg) = 
@@ -387,143 +606,109 @@ functor Datatype(structure Il : IL
 		    in (i,(tyc,tyv,def))
 		    end
 		    val nodes = mapcount mapper datatycs
-		in  compile'(context,typecompile,nodes,eq_compile)
+		in  compile'(context,typecompile,nodes,eq_compile, eq_compile_mu)
 		end
 	in 
 	    case datatycs of
 		[db] => 
 		    let val (tyc,tyv,rhs) = db_strip db
 		    in  (case rhs of
-			     Ast.Repl path => 
-				 let val type_lab = symbol_label tyc
-				     val type_var = gen_var_from_symbol tyc
-				     val top_lab = to_top_lab type_lab
-				     val top_var = fresh_named_var "top_dt"
-(*				     val eq_lab = to_eq_lab type_lab *)
-				     val eq_lab = to_eq_lab top_lab 
-				     val eq_var = fresh_named_var "eqfun"
-				     val dt_lab = to_datatype_lab type_lab
-				     val dt_var = fresh_named_var "dt"
-				     val type_labs = map symbol_label path
-				     val (eq_labs,dt_labs) = 
-					 let fun loop base [] = error "empty path"
-					       | loop base [l] = [base l]
-					       | loop base (a::b) = a :: loop base b
-					 in  (loop (to_eq_lab o to_top_lab) type_labs,
-					      loop to_datatype_lab type_labs)
-					      
-					 end
-				     val type_sbndsdec = 
-					 (case (Context_Lookup(context,type_labs)) of
-					      SOME(_,PHRASE_CLASS_CON (c,k)) => 
-						  let 
-						      val bnd = BND_CON(top_var,c)
-						      val dec = DEC_CON(top_var,k,SOME c)
-						  in  [(SBND(top_lab,bnd),SDEC(top_lab,dec))]
-						  end
-					    | _ => (error "unbound datatype"))
-				     val eq_sbndsdec = 
-					 (case (Context_Lookup(context,eq_labs)) of
-					      SOME(_,PHRASE_CLASS_EXP (e,c)) => 
-						  let val bnd = BND_EXP(eq_var,e)
-						      val dec = DEC_EXP(eq_var,c)
-						  in  [(SBND(eq_lab,bnd),SDEC(eq_lab,dec))]
-						  end
-					    | SOME(_,PHRASE_CLASS_MOD (m,s)) => 
-						  let val bnd = BND_MOD(eq_var,m)
-						      val dec = DEC_MOD(eq_var,s)
-						  in  [(SBND(eq_lab,bnd),SDEC(eq_lab,dec))]
-						  end
-					    | _ => [])
-				     val constr_sbndsdec = 
-					 (case (Context_Lookup(context,dt_labs)) of
-					      SOME(_,PHRASE_CLASS_MOD (m,s)) => 
-						  let val bnd = BND_MOD(dt_var,m)
-						      val dec = DEC_MOD(dt_var,s)
-						  in  [(SBND(dt_lab,bnd),SDEC(dt_lab,dec))]
-						  end
-					    | _ => error "unbound datatype")
-				 in type_sbndsdec @ eq_sbndsdec @ constr_sbndsdec
-				 end
+			     Ast.Repl path => copy_datatype(context,path,tyc)
 			   | _ => calldriver())
 		    end
 	      | _ => calldriver()
 	end
 
+
+    (* ----- is the phrase-class for a non value-carrying constructor *)
+    fun pc_is_const pc = 
+	let val innercon =
+	    (case pc of
+		 PHRASE_CLASS_MOD(_,SIGNAT_FUNCTOR(_,_,s,_)) =>
+		     (case s of
+			  SIGNAT_STRUCTURE(_,[SDEC(itlabel,
+						   DEC_EXP(_,con))]) => con
+		       | _ => error "ill-formed constructor phrase_class")
+	       | PHRASE_CLASS_EXP(_,con) => con
+	       | _ => (error "ill-formed constructor phrase_class"))
+	in  (case innercon of
+		 CON_ARROW _ => false
+	       | CON_APP _ => true
+	       | CON_VAR _ => true
+	       | CON_SUM _ => true
+	       | CON_MODULE_PROJECT _ => true
+	       | _ => (print "ill-formed constructor type: ";
+		       Ppil.pp_con innercon; print "\n";
+		       error "ill-formed constructor type"))
+	end
+
     (* ---------------- constructor LOOKUP RULES --------------------------- 
      --------------------------------------------------------- *)
     type lookup = (Il.context * Il.label list -> (Il.mod * Il.signat) option) 
+    exception NotConstructor
     fun constr_lookup context (p : Ast.path) =
-	let 
-	    fun is_const pc = 
-		let val innercon =
-		    (case pc of
-			 PHRASE_CLASS_MOD(_,SIGNAT_FUNCTOR(_,_,s,_)) =>
-			     (case s of
-				  SIGNAT_STRUCTURE(_,[SDEC(itlabel,
-							   DEC_EXP(_,con))]) => con
-				| _ => error "ill-formed constructor phrase_class")
-		       | PHRASE_CLASS_EXP(_,con) => con
-		       | _ => (error "ill-formed constructor phrase_class"))
-		in  (case innercon of
-			 CON_ARROW _ => false
-		       | CON_APP _ => true
-		       | CON_VAR _ => true
-		       | CON_SUM _ => true
-		       | CON_MODULE_PROJECT _ => true
-		       | _ => (print "ill-formed constructor type: ";
-			       Ppil.pp_con innercon; print "\n";
-			       error "ill-formed constructor type"))
-		end
+	(SOME
+	 let 
 	    val _ = (debugdo (fn () => (print "constr_lookup called with path = ";
 					AstHelp.pp_path p;
 					print "\nand with context = ";
 					pp_context context;
 					print "\n")))
-	in
-	    (case (Context_Lookup(context,map symbol_label p)) of
-		 NONE=> (debugdo (fn () => print "constr_lookup modsig_lookup got NONE\n");
-			 NONE)
-	       | SOME (constr_path,pc) =>
-		     (case constr_path of
-			  SIMPLE_PATH v => NONE
-			| COMPOUND_PATH (v,[]) => error "constr_lookup: empty COMPOUND PATH"
-			| COMPOUND_PATH (v,ls) => 
-			      let 
-				  val (short_path,name) = (COMPOUND_PATH(v, butlast ls), 
-							   List.last ls)
-				  val data_sig = GetModSig(context,path2mod short_path)
-			      in  (case data_sig of
-				       (SIGNAT_STRUCTURE(_,sdecs) |
-					SIGNAT_INLINE_STRUCTURE {abs_sig = sdecs,...}) =>
-				       (case sdecs of
-					    (SDEC(type_lab,_)) :: 
-					    (SDEC(maybe_expose,_)) :: _ =>
-						if (eq_label(maybe_expose,expose_lab))
-						    then SOME{name = name,
-							      is_const = is_const pc,
-							      datatype_path = short_path,
-							      datatype_sig = data_sig}
-						else NONE
-					  | _ => NONE)
-				      | _ => NONE)
-			      end))
+	    val (constr_path,pc) = 
+		(case (Context_Lookup(context,map symbol_label p)) of
+		     NONE=> (debugdo (fn () => print "constr_lookup modsig_lookup got NONE\n");
+			     raise NotConstructor)
+		   | SOME lookup_result => lookup_result)
+		
+	    val (v,ls) = (* well-formed compound path *)
+		(case constr_path of
+		     SIMPLE_PATH v => raise NotConstructor
+		   | COMPOUND_PATH (v,[]) => error "constr_lookup: empty COMPOUND PATH"
+		   | COMPOUND_PATH v_ls => v_ls)
+		     
+	    val (short_path,name) = (COMPOUND_PATH(v, butlast ls), 
+				     List.last ls)
+
+	    val data_sig = GetModSig(context,path2mod short_path)
+	    val sdecs = (case data_sig of
+			     (SIGNAT_STRUCTURE(_,sdecs)) => sdecs
+			   | SIGNAT_INLINE_STRUCTURE {abs_sig = sdecs,...} => sdecs
+			   | _ => raise NotConstructor)
+
+	in (case sdecs of
+		(SDEC(type_lab,_)) :: 
+		(SDEC(maybe_expose,_)) :: _ =>
+		    if (eq_label(maybe_expose,expose_lab))
+			then {name = name,
+			      is_const = pc_is_const pc,
+			      datatype_path = short_path,
+			      datatype_sig = data_sig}
+		    else raise NotConstructor
+	      | _ => raise NotConstructor)
 	end
+    handle NotConstructor => NONE)
 
 
+    fun is_constr ctxt path = (case constr_lookup ctxt path of
+				   NONE => false
+				 | SOME _ => true)
 
-     fun des_dec (d : dec) : ((Il.var option * Il.sdecs option) * Il.con) = 
+    fun is_nonconst_constr ctxt path = (case constr_lookup ctxt path of
+					    NONE => false
+					  | SOME {is_const,...} => not is_const)
+
+     fun des_dec (d : dec) : ((Il.var * Il.sdecs) option * Il.con) = 
        (case d of
 	  DEC_MOD(_,SIGNAT_FUNCTOR(v,SIGNAT_STRUCTURE (_,sdecs),
-				   SIGNAT_STRUCTURE(_,[SDEC(_,DEC_EXP(_,c))]),_)) => ((SOME v, SOME sdecs), c)
-	| DEC_EXP(_,c) => ((NONE, NONE), c)
+		    SIGNAT_STRUCTURE(_,[SDEC(_,DEC_EXP(_,c))]),_)) => (SOME (v, sdecs), c)
+	| DEC_EXP(_,c) => (NONE, c)
 	| _ => error "des_dec")
 
 
-     fun destructure_datatype_signature s : {name : Il.label,
-					     var_poly : Il.var option,
-					     sdecs_poly : Il.sdecs option,
-					     arm_types : {name : Il.label, arg_type : Il.con option} list} 
+     fun destructure_datatype_signature 
+	 s : {name : Il.label,
+	      var_sdecs_poly : (Il.var * Il.sdecs) option,
+	      arm_types : {name : Il.label, arg_type : Il.con option} list} 
        = 
        let fun bad () = (Ppil.pp_signat s;
 			 error "ill-formed datatype_signature")
@@ -537,10 +722,9 @@ functor Datatype(structure Il : IL
 			    in (vso,{name=constr_name,arg_type=argcon})
 			    end
 		   val arm_types = map (#2 o helper) arm_sdecs
-		   val (var_poly,sdecs_poly) = #1 (helper (hd arm_sdecs))
+		   val var_sdecs_poly = #1 (helper (hd arm_sdecs))
 	       in {name = type_name,
-		   var_poly = var_poly,
-		   sdecs_poly = sdecs_poly,
+		   var_sdecs_poly = var_sdecs_poly,
 		   arm_types = arm_types}
 	       end
        in
@@ -556,40 +740,61 @@ functor Datatype(structure Il : IL
 	      | _ => bad())
        end
 
- fun instantiate_datatype_signature (datatype_path : Il.path,
-				     datatype_sig : Il.signat,
-				     context : Il.context,
-				     polyinst : (Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list)) =
+   fun Context_Lookup_Path(ctxt,SIMPLE_PATH v) = 
+          (case Context_Lookup'(ctxt,v) of
+	       NONE => NONE
+	     | SOME (lab,pc) => SOME(SIMPLE_PATH v,pc))
+     | Context_Lookup_Path(ctxt,COMPOUND_PATH (v,labs)) = 
+          (case Context_Lookup'(ctxt,v) of
+	       NONE => NONE
+	     | SOME (lab,_) => Context_Lookup(ctxt,lab::labs))
+	       
+ fun instantiate_datatype_signature (context : Il.context,
+				     path : Ast.path,
+				     polyinst : (Il.context * Il.sdecs -> 
+						 Il.sbnd list * Il.sdecs * Il.con list)) 
+     : {instantiated_type : IlContext.Il.con,
+	arms : {name : IlContext.Il.label, arg_type : IlContext.Il.con option} list,
+	expose_exp : IlContext.Il.exp} =
+
    let 
 
-     (* --- given the instantiated datatype and an option pair of
-       ---   the formal var_poly and instantiated sdecs
-       ---   and an sdec corresponding to a particular datatype arm dec
-       --- returns the name of the construtor and a list for the carried types *)
-     fun getconstr_namepatconoption datacon var_sdecs_option {name,arg_type} =
-	 {name=name,
-	  arg_type=(case (arg_type,var_sdecs_option) of
-			(NONE,_) => NONE
-		      | (SOME x,NONE) => SOME x
-		      | (SOME x,SOME(var_poly,sdecs)) => SOME(remove_modvar_type(x,var_poly,sdecs)))}
-	 
-     val {name,var_poly,
-	  sdecs_poly,arm_types} = destructure_datatype_signature datatype_sig
-     val abstract_type = CON_MODULE_PROJECT(path2mod datatype_path,name)
-     val expose_path = join_path_labels(datatype_path,[expose_lab])
+       val SOME {datatype_path, datatype_sig, ...} = constr_lookup context path
+       val {name,var_sdecs_poly,arm_types} = destructure_datatype_signature datatype_sig
 
-     val (expose_exp, datacon,var_sdec_opt) = 
-       (case (var_poly,sdecs_poly) of
-	  (SOME vp,SOME sp) => let val (sbnds,sdecs,cons) = polyinst(context, sp)
-				   val inst_con = CON_APP(abstract_type,
-							   con_tuple_inject cons)
-			       in (MODULE_PROJECT(MOD_APP(path2mod expose_path,MOD_STRUCTURE sbnds),it_lab),
-				   inst_con,SOME(vp,sdecs))
-			       end
-	| (NONE,NONE) => (path2exp expose_path, abstract_type, NONE)
-	| _ => error "var_poly/sdecs_poly mismatch")
+       val sbnds_sdecs_cons_opt =
+	   (case (var_sdecs_poly) of
+		SOME (vp,sp) => SOME(polyinst(context, sp))
+	      | NONE => NONE)
+
+       val tycon = CON_MODULE_PROJECT(path2mod datatype_path,name)
+       val datacon = (case sbnds_sdecs_cons_opt of
+			  NONE => tycon
+			| SOME (_,_,cons) => CON_APP(tycon, con_tuple_inject cons))
+	   
+       val expose_path = join_path_labels(datatype_path,[expose_lab])
+       val expose_exp = 
+	   (case (Context_Lookup_Path(context,expose_path), sbnds_sdecs_cons_opt) of
+		(SOME(_,PHRASE_CLASS_EXP(e,_)),_) => e
+	      | (SOME(_,PHRASE_CLASS_MOD(m,_)),SOME(sbnds,_,_)) => 
+		    (case m of
+			 MOD_FUNCTOR(v,_,MOD_STRUCTURE[SBND(_,BND_EXP(_,e))]) =>
+			     exp_subst_modvar(e,[(v,MOD_STRUCTURE sbnds)])
+		       | _ => MODULE_PROJECT(MOD_APP(m,MOD_STRUCTURE sbnds),it_lab))
+	      | _ => error "cannot construct expose_exp")
+
+     fun getconstr_namepatconoption {name,arg_type} =
+	 {name=name,
+	  arg_type=(case (arg_type,var_sdecs_poly,sbnds_sdecs_cons_opt) of
+			(NONE,_,_) => NONE
+		      | (SOME x,SOME(var_poly,_),
+			        SOME(_,sdecs,_)) => 
+			    (SOME(remove_modvar_type(x,var_poly,sdecs))
+			    handle e => error "remove_modvar_failed")
+		      | (SOME x, _, _) => SOME x)}
+	 
    in  {instantiated_type = datacon, 
-	arms = map (getconstr_namepatconoption datacon var_sdec_opt) arm_types,
+	arms = map getconstr_namepatconoption arm_types,
 	expose_exp = expose_exp}
    end
 

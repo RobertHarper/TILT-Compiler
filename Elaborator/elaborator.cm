@@ -31,6 +31,8 @@ illeak.sig.sml
 ilcontext.sig.sml
 ilcontext.sml 
 (* slowilcontext.sml *)
+equal.sig.sml
+equal.sml
 datatype.sig.sml
 datatype.sml
 pat.sig.sml
@@ -45,3 +47,7 @@ elaborator.sig.sml
 ilcontexteq.sig.sml
 ilcontexteq.sml 
 
+error.sig.sml
+error.sml
+signature.sig.sml
+signature.sml

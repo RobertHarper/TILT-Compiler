@@ -144,8 +144,7 @@ functor Ppil(structure Il : IL
 				       String ",",
 				       Break,
 				       pp_con seen c2]
-       | CON_MUPROJECT(i,c) => pp_region ("CON_MUPROJECT(" ^ (Int.toString i) ^ "; ") ")"
-	                              [pp_con seen c]
+       | CON_MU c => pp_region "CON_MU(" ")" [pp_con seen c]
        | CON_RECORD [] => String "UNIT"
        | CON_FLEXRECORD (ref(FLEXINFO(_,true,[]))) => String "UNIT"
        | CON_FLEXRECORD (ref(FLEXINFO(_,false,[]))) => String "FLEXUNIT"
@@ -303,7 +302,7 @@ functor Ppil(structure Il : IL
 						 pp_list (pp_exp seen) elist ("[",",","]", true)]
        | FIX (r,a,[FBND(v',v,c,cres,e)]) => 
 		  HOVbox[String ((case a of TOTAL => "/TOTAL" | PARTIAL => "/") ^
-				 (if r then "\\" else "LEAF\\")),
+				 (if r then "\\" else "NONRECUR\\")),
 			 pp_var v', Break0 0 5,
 			 String " (", pp_var v,	 String " : ", pp_con seen c, String ")", Break0 0 5,
 			 String " : ", pp_con seen cres, String " =", Break,
@@ -345,8 +344,9 @@ functor Ppil(structure Il : IL
 							      pp_exp seen e1, String ",", pp_exp seen e2]
        | ROLL (con,e) => pp_region "ROLL(" ")"
 			  [pp_con seen con, pp_exp seen e]
-       | UNROLL (con,e) => pp_region "UNROLL(" ")"
-			  [pp_con seen con, String ",", pp_exp seen e]
+       | UNROLL (con1,con2,e) => pp_region "UNROLL(" ")"
+			  [pp_con seen con1, String ",", 
+			   pp_con seen con2, String ",", pp_exp seen e]
        | INJ {noncarriers,carriers,special,inject} => 
 	     pp_region "INJ(" ")"
 	     [String ((Int.toString noncarriers) ^ "; "),

@@ -54,6 +54,18 @@ structure LinkIl (* : LINKIL *) =
 				      structure IlStatic = IlStatic
 				      structure IlUtil = IlUtil
 				      structure Ppil = Ppil);
+	structure Signature = Signature(structure Il = Il
+				      structure IlContext = IlContext
+				      structure AstHelp = AstHelp
+				      structure IlStatic = IlStatic
+				      structure IlUtil = IlUtil
+				      structure Ppil = Ppil);
+	structure Equal = Equal(structure Il = Il
+				structure IlContext = IlContext
+				structure IlStatic = IlStatic
+				structure IlUtil = IlUtil
+				structure Ppil = Ppil);
+	    
 	structure InfixParse = InfixParse(structure Il = Il
 					  structure Ppil = Ppil
 					  structure AstHelp = AstHelp);
@@ -72,6 +84,9 @@ structure LinkIl (* : LINKIL *) =
 			      structure Ppil = Ppil
 			      structure Pat = Pat
 			      structure Datatype = Datatype
+			      structure Signature = Signature
+			      structure Equal = Equal
+			      structure Error = Error
 			      structure InfixParse = InfixParse);
 	structure Basis = Basis(structure Il = Il		
 				structure IlContext = IlContext

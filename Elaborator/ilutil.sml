@@ -30,8 +30,11 @@ functor IlUtil(structure Ppil : PPIL
     (* --------------------- Misc helper functions ------------ *)
     fun fresh_named_con (ctxt,s) = CON_TYVAR (fresh_named_tyvar (ctxt,s))
     fun fresh_con ctxt = fresh_named_con (ctxt,"con")
-    fun generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
-    fun generate_tuple_label (i : int) = symbol_label(generate_tuple_symbol i)
+    fun generate_tuple_symbol 0 = error "generate_tuple_symbol called with 0"
+      | generate_tuple_symbol (i : int) = Symbol.labSymbol(Int.toString i)
+    fun generate_tuple_label 0 = error "generate_tuple_label called with 0"
+      | generate_tuple_label (i : int) = symbol_label(generate_tuple_symbol i)
+	
       
     val mk_lab = internal_label "mk"
     val km_lab = internal_label "km"
@@ -43,11 +46,11 @@ functor IlUtil(structure Ppil : PPIL
     val functor_arg_lab = internal_label "functor_arg"
 
 
-    (* We can use Name.compare_label as long as it respects the ordering of
-       numeric labels that arise from tuples.  *)
+    (* We cannot use Name.compare_label since it does not respect the ordering of
+       numeric labels that arise from tuples.  We use Name.compare_label_name instead. *)
     local 
       fun geq_label (l1,l2) = 
-	  (case (Name.compare_label(l1,l2)) of
+	  (case (Name.compare_label_name(l1,l2)) of
 	       GREATER => true
 	     | EQUAL => true
 	     | LESS => false)
@@ -58,7 +61,7 @@ functor IlUtil(structure Ppil : PPIL
       fun label_issorted [] = true
 	| label_issorted [_] = true
 	| label_issorted (l1::(r as (l2::_))) = 
-	  (case (Name.compare_label(l1,l2)) of
+	  (case (Name.compare_label_name(l1,l2)) of
 	       LESS => (label_issorted r)
 	     | _ => false)
     end
@@ -91,13 +94,13 @@ functor IlUtil(structure Ppil : PPIL
 			    special = NONE}
     val false_exp = INJ{noncarriers=2,carriers=[],special=0,inject=NONE}
     val true_exp = INJ{noncarriers=2,carriers=[],special=1,inject=NONE}
-    fun make_lambda_help (is_recur,a,var,con,rescon,e) 
+    fun make_lambda_help (a,var,con,rescon,e) 
       : exp * con = let val var' = fresh_var()
 			val fbnd = FBND(var',var,con,rescon,e)
-		    in (FIX(is_recur,a,[fbnd]), CON_ARROW([con],rescon,false,oneshot_init a))
+		    in (FIX(false,a,[fbnd]), CON_ARROW([con],rescon,false,oneshot_init a))
 		    end
-    fun make_total_lambda (var,con,rescon,e) = make_lambda_help(false,TOTAL,var,con,rescon,e)
-    fun make_lambda (var,con,rescon,e) = make_lambda_help(true,PARTIAL,var,con,rescon,e)
+    fun make_total_lambda (var,con,rescon,e) = make_lambda_help(TOTAL,var,con,rescon,e)
+    fun make_lambda (var,con,rescon,e) = make_lambda_help(PARTIAL,var,con,rescon,e)
     fun make_ifthenelse(e1,e2,e3,c) : exp = 
 	CASE{noncarriers=2,carriers=[],arg=e1,
 	     arms=[SOME e3,SOME e2],default=NONE,tipe=c}
@@ -257,7 +260,7 @@ functor IlUtil(structure Ppil : PPIL
 	   | NEW_STAMP con => NEW_STAMP(f_con state con)
 	   | EXN_INJECT (s,e1,e2) => EXN_INJECT(s,self e1, self e2)
 	   | ROLL (c,e) => ROLL(f_con state c, self e)
-	   | UNROLL (c,e) => UNROLL(f_con state c, self e)
+	   | UNROLL (c1,c2,e) => UNROLL(f_con state c1, f_con state c2, self e)
 	   | INJ {carriers,noncarriers,special,inject} => INJ{noncarriers=noncarriers,
 							      carriers = map (f_con state) carriers, 
 							      special = special,
@@ -302,7 +305,7 @@ functor IlUtil(structure Ppil : PPIL
 		     | CON_TAG c => CON_TAG (self c)
 		     | CON_ARROW (cons,c2,closed,complete) => CON_ARROW (map self cons, self c2, closed, complete)
 		     | CON_APP (c1,c2) => CON_APP (self c1, self c2)
-		     | CON_MUPROJECT (i,c) =>  CON_MUPROJECT (i, self c)
+		     | CON_MU c =>  CON_MU (self c)
 		     | CON_RECORD rdecs => CON_RECORD (map (f_rdec state) rdecs)
 		     | CON_FLEXRECORD r => (* don't dereference until flex_handler called *)
 			       (case (!r) of  
@@ -1155,6 +1158,7 @@ functor IlUtil(structure Ppil : PPIL
 	fun to_datatype_lab lab = openlabel (to_meta_lab dt_str lab)
     end
 
+
     fun is_exportable_lab l =
 	(not (is_label_internal l)) orelse
 	(is_eq_lab l) orelse
@@ -1163,6 +1167,7 @@ functor IlUtil(structure Ppil : PPIL
 	let val str = label2string l
 	in (substring ("open",str))
 	end
+
 
     fun is_inline_bnd (BND_EXP(v,e)) = is_inline_exp e
       | is_inline_bnd (BND_CON _) = true
@@ -1176,7 +1181,7 @@ functor IlUtil(structure Ppil : PPIL
 	   | ((SCON _) | (VAR _) | (ETAPRIM _) | (ETAILPRIM _) | (FIX _))  => true
 	   | ((PRIM _) | (ILPRIM _)) => false
 	   | (RECORD le_list) => List.all (fn (_,e) => is_inline_exp e) le_list
-	   | ((SUM_TAIL (_,e)) | (ROLL(_,e)) | (UNROLL(_,e)))  => is_inline_exp e
+	   | ((SUM_TAIL (_,e)) | (ROLL(_,e)) | (UNROLL(_,_,e)))  => is_inline_exp e
 	   | ((HANDLE (e1,e2)) | (EXN_INJECT(_,e1,e2))) => (is_inline_exp e1) andalso (is_inline_exp e2)
 	   | (RAISE (_,e)) => is_inline_exp e
 	   | (LET (bnds,e)) => (List.all is_inline_bnd bnds) andalso (is_inline_exp e)

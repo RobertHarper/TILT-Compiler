@@ -40,7 +40,7 @@ signature IL =
                  | NEW_STAMP of con
                  | EXN_INJECT of string * exp * exp (* name and tag and value *)
                  | ROLL    of con * exp
-                 | UNROLL  of con * exp
+                 | UNROLL  of con * con * exp    (* the recursive and non-recursive type *)
                  | INJ     of {noncarriers : int,
 			       carriers : con list,
 			       special : int,
@@ -82,7 +82,7 @@ signature IL =
 	         (* primitives are multi-argument also *)
                  | CON_ARROW         of con list * con * bool * (arrow Util.oneshot)
                  | CON_APP           of con * con
-                 | CON_MUPROJECT     of int * con
+                 | CON_MU            of con
                  | CON_RECORD        of (label * con) list
                  | CON_FUN           of var list * con
                  | CON_SUM           of {noncarriers : int,

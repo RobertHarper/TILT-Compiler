@@ -38,7 +38,7 @@ functor IlEval(structure Il : IL
 	   | (RECORD rbnds) => andfold (fn (l,bnd) => exp_isval bnd) rbnds
 	   | EXN_INJECT (_,t,e) => exp_isval e
 	   | ROLL (c,e) => (con_isval c) andalso (exp_isval e)
-	   | UNROLL (c,e) => (con_isval c) andalso (exp_isval e)
+	   | UNROLL (c1,c2,e) => (con_isval c1) andalso (con_isval c2) andalso (exp_isval e)
 	   | INJ {carriers,special,inject,noncarriers} => 
 		 (andfold con_isval carriers) andalso (case inject of NONE => true | SOME e => exp_isval e))
 
@@ -63,7 +63,7 @@ functor IlEval(structure Il : IL
 	   | (CON_TYVAR tv) => (case (tyvar_deref tv) of
 				    NONE => false
 				  | SOME c => con_isval c)
-	   | (CON_MUPROJECT(i,c)) => con_isval c
+	   | (CON_MU c) => con_isval c
 	   | (CON_VAR _ | CON_FUN _ | CON_INT _ | CON_UINT _ | CON_FLOAT _ | CON_ANY ) => true
 	   | (CON_ARRAY c | CON_VECTOR c | CON_REF c | CON_TAG c) => con_isval c
 	   | (CON_ARROW (cs1,c2,_,_)) => (Listops.andfold con_isval cs1) andalso (con_isval c2)
@@ -183,7 +183,7 @@ functor IlEval(structure Il : IL
 	  | CON_SUM {noncarriers,carriers,special} => CON_SUM{noncarriers=noncarriers,
 							      carriers = map (eval_con env) carriers,
 							      special = special}
-	  | CON_MUPROJECT(i,c) => con)
+	  | CON_MU _ => con)
 
     and reduce_con env (con : con) : con = 
 	(case con of
@@ -227,7 +227,7 @@ functor IlEval(structure Il : IL
 	  | CON_SUM {noncarriers,carriers,special} => CON_SUM{noncarriers=noncarriers,
 							      carriers = map (reduce_con env) carriers,
 							      special = special}
-	  | CON_MUPROJECT(i,c) => con)
+	  | CON_MU _ => con)
 
     and eval_prim ((prim,cons),arg) = 
 	let val vals = (case arg of
@@ -294,7 +294,7 @@ functor IlEval(structure Il : IL
 	  | RAISE (c,e) => RAISE(reduce_con env c, reduce_exp env e)
 	  | SUM_TAIL(c,e) => SUM_TAIL(reduce_con env c, reduce_exp env e)
 	  | ROLL(c,e) => ROLL(reduce_con env c, reduce_exp env e)
-	  | UNROLL(c,e) => UNROLL(reduce_con env c, reduce_exp env e)
+	  | UNROLL(c1,c2,e) => UNROLL(reduce_con env c1, reduce_con env c2,  reduce_exp env e)
 	  | MODULE_PROJECT (m,l) => let val m' = reduce_mod env m
 				    in case m' of 
 					MOD_STRUCTURE sbnds => 
@@ -370,11 +370,12 @@ functor IlEval(structure Il : IL
 	   | NEW_STAMP c => SCON(tag(fresh_tag(),eval_con env c))
 	   | EXN_INJECT (s,e1,e2) => EXN_INJECT(s,eval_exp env e1, eval_exp env e2)
 	   | ROLL(c,e) => ROLL(eval_con env c, eval_exp env e)
-	   | UNROLL(c,e) => let val c' = eval_con env c
-				val e' = eval_exp env e
-			    in case e' of
-				ROLL(c'',e'') => if (eq_con(empty_context,c',c'')) then e'' 
-						 else error_exp (UNROLL(c',ROLL(c'',e''))) 
+	   | UNROLL(c1,c2,e) => let val c1' = eval_con env c1
+				   val c2' = eval_con env c2
+				   val e' = eval_exp env e
+				in case e' of
+				ROLL(c'',e'') => if (eq_con(empty_context,c1',c'')) then e'' 
+						 else error_exp (UNROLL(c1',c2',ROLL(c'',e''))) 
 						     "UNROLL(ROLL(e)) bad"
 			      | _ => error_exp e' "UNROLL did not get a ROLL arg"
 			    end

@@ -88,12 +88,8 @@ functor Pat(structure Il : IL
 	    val svc_list' = List.filter notshadow svc_list
 	in  (cl,(s,v,c)::svc_list',expopt)
 	end
-    fun is_constr context (p : Ast.path) = 
-      let val res = (case Datatype.constr_lookup context p of
-			 SOME _ => true
-		       | NONE => false)
-      in res
-      end
+
+
     fun is_exn context (p : Ast.path) = 
 	 case Datatype.exn_lookup context p of
 		NONE => false
@@ -371,6 +367,7 @@ functor Pat(structure Il : IL
 					    print "\nand arm is:"; pp_arm arm; print "\n")) accs))
       val CASE_VAR(casevar, casecon) = arg1
       val casearg = VAR casevar
+      val rescon_var = fresh_named_var "rescon_var"
       val rescon = ref(fresh_con context)
       fun check_rescon c = 
 		(sub_con(context,c,!rescon)) orelse
@@ -392,8 +389,9 @@ functor Pat(structure Il : IL
 			print "casecon is "; Ppil.pp_con casecon; print "\n";
 			print "constructor pattern used on an argument of the wrong type\n")
 (*
-	val _ = (print "====getarm past sub_con====casecon is: "; Ppil.pp_con casecon; print "\n\nand context = \n";
-			Ppil.pp_context context; print "\n\n")
+	val _ = (print "====getarm past sub_con====casecon is: "; 
+	         Ppil.pp_con casecon; print "\n\nand context = \n";
+		  Ppil.pp_context context; print "\n\n")
 *)
 	  val rsvar = fresh_var()
 	  val rscon = CON_SUM{carriers = #2 sumcon,
@@ -425,45 +423,7 @@ functor Pat(structure Il : IL
 
       val {instantiated_type = datacon,
 	   arms = constr_patconopt_list,
-	   expose_exp} =
-	(case (Datatype.constr_lookup context (#1(#1(hd accs)))) of
-	   NONE => error "constructor_lookup got path not to constructor"
-	 | (SOME {name,datatype_path,is_const,datatype_sig}) => 
-	     Datatype.instantiate_datatype_signature(datatype_path,datatype_sig,context,polyinst))
-      val expose_exp = 
-	  let
-	      fun path2pc path = 
-		  let val (v,lbls) = (case path of 
-					  COMPOUND_PATH(v,lbls) => (v,lbls)
-					| SIMPLE_PATH v => (v,[]))
-		      val SOME(lbl,_) = Context_Lookup'(context,v)
-		      val lbls = lbl :: lbls
-		  in  (case Context_Lookup(context,lbls) of
-			   SOME(_,pc) => pc
-			 | _ => (print"expose_exp not found: lbls = ";
-				 Ppil.pp_pathlist Ppil.pp_label' lbls;
-				 print "context is\n";
-				 Ppil.pp_context context;
-				 print "\n";
-				 error "expose_exp not found"))
-		  end
-	      fun monocase exp =
-		  (case path2pc(exp2path exp) of
-		       PHRASE_CLASS_EXP(e,_) => e
-		     | _ => error "expose_exp is non expresion")
-	      fun polycase module types l = 
-		  (case path2pc(mod2path module) of
-		       PHRASE_CLASS_MOD(m,_) =>
-			   (* perform beta reduction since types are valuable *)
-			   (case m of
-				MOD_FUNCTOR(v,_,MOD_STRUCTURE[SBND(_,BND_EXP(_,e))]) =>
-				    exp_subst_modvar(e,[(v,types)])
-			      | _ => MODULE_PROJECT(MOD_APP(m,types),l))
-		     | _ => error "expose_mod is non-module")
-	  in  (case expose_exp of
-		   MODULE_PROJECT (MOD_APP(m,types),l) => polycase m types l
-		 | _ => monocase expose_exp)
-	  end
+	   expose_exp} = Datatype.instantiate_datatype_signature(context,#1(#1(hd accs)),polyinst)
 
       fun loop (nca,ca) [] = (nca,rev ca)
 	| loop (nca,ca) ({name,arg_type = NONE}::rest) = loop (nca+1,ca) rest
@@ -484,7 +444,8 @@ functor Pat(structure Il : IL
       val arg = (case (IlUtil.beta_reduce(expose_exp,casearg)) of
 			 NONE => APP(expose_exp,[casearg])
 		       | SOME e => e)
-    in  (CASE{noncarriers = nca,
+      val case_exp = 
+	  (CASE{noncarriers = nca,
 	       carriers = ca,
 	       arg = arg,
 	       arms = expopt_list,
@@ -505,7 +466,8 @@ functor Pat(structure Il : IL
 				   print "\n");
 				 SOME e)
 			end),
-		tipe = con_deref (!rescon)}, con_deref (!rescon))
+		tipe =  con_deref (!rescon)})
+    in   (case_exp, con_deref (!rescon))
     end
 
   and match (args : case_exp list, 
@@ -620,7 +582,7 @@ debugdo
 		  gather some information, compile the rest of the patterns into a def,
 		  and then call the appropriate compiler for those patterns. 
               ----------------------------------------------------------------- *)
-	       val is_constr = is_constr context
+	       val is_constr = Datatype.is_constr context
 	       val is_exn    = is_exn context
 	       fun exn_dispatch() = 
 		   let 
@@ -696,6 +658,8 @@ debugdo
 		   val (accs,def) = find_maxseq tuprecpred arms
 		 in tuprec_case(arg1,argrest,accs,def)
 		 end
+
+
 
 	       fun constant_dispatch(eqcon,eq,eqpat) : (exp * con) = 
 		   let
@@ -806,7 +770,9 @@ debugdo
 		  | (Ast.LayeredPat _) => layer_dispatch()
 		  | (Ast.ListPat _) => error "should not get ListPat here"
 		  | (Ast.VectorPat _) => raise UNIMP
-		  | (Ast.OrPat _) => error "Sorry, Or-patterns not implemented")
+		  | (Ast.OrPat _) => (Error.error_region();
+				      print "Or-patterns not implemented\n";
+				      error "Sorry, Or-patterns not implemented"))
 	     end)
 
 	val final_ec = match(compile_args,compile_arms,compile_default)
@@ -840,6 +806,29 @@ debugdo
           | OrPat _ => error "orpat not handler"
           | DelayPat _ => error "delaypat not handled")
 	end
+
+    fun minimize_result_type (e,c) = 
+	let val resvar = fresh_named_var "result_type"
+	    val restipe = CON_VAR resvar
+	    fun fun_rewrite (FIX(recur,arrow,fbnds)) = FIX(recur,arrow, map fbnd_rewrite fbnds)
+	      | fun_rewrite e = e
+	    and fbnd_rewrite (FBND(v,argvar,argcon,rescon,body)) = 
+		FBND(v,argvar,argcon,restipe,e_rewrite body)
+	    and e_rewrite (CASE{noncarriers,carriers,arg,arms,tipe,default}) = 
+		let val default = Util.mapopt e_rewrite default
+		    fun mapper (count,arm) = if (count < noncarriers)
+						 then Util.mapopt e_rewrite arm
+					     else Util.mapopt fun_rewrite arm
+		    val arms = mapcount mapper arms
+		in  CASE{noncarriers=noncarriers,carriers=carriers,
+			 arg=arg,arms=arms,tipe=restipe,default=default}
+		end
+	      | e_rewrite (LET(bnds,e)) = LET(bnds,e_rewrite e)
+	      | e_rewrite (RAISE(c,e)) = RAISE(restipe, e_rewrite e)
+	      | e_rewrite e = e
+	in  (LET([BND_CON(resvar,c)],e_rewrite e), c)
+	end
+
 
     (* ============ client interfaces =========================== *)
     (* ---- bindCompile creates bindings ----------------------- *)
@@ -928,7 +917,9 @@ debugdo
 	val res_con = fresh_con context
 (*	val def = SOME (Il.RAISE(res_con,matchexn_exp),res_con) *)
 	val def = NONE
-      in compile (patarg,args,arms,def)
+	val ec = compile (patarg,args,arms,def)
+	val ec = minimize_result_type ec
+      in ec
       end
 
 
@@ -943,9 +934,9 @@ debugdo
 	   -------- as the variable pattern when possible; just for legibility *)
 	local
 	  fun getname [] = "mvar"
-	    | getname ((Ast.VarPat[s])::rest) = (case (Datatype.constr_lookup context [s]) of
-						   NONE => Symbol.name s
-						 | _ => getname rest)
+	    | getname ((Ast.VarPat[s])::rest) = if Datatype.is_constr context [s]
+						    then getname rest
+						else Symbol.name s
 	    | getname (_::rest) = getname rest
 	  fun getnames ([]::_) = []
 	    | getnames clauses = (getname (map hd clauses)) :: (getnames (map tl clauses))
@@ -973,8 +964,8 @@ debugdo
 			     in SOME(fn()=>(RAISE (res_con,VAR v),res_con))
 			     end
 		      else NONE
-	val (e,c) = compile (patarg,args,arms,default)
-
+	val ec = compile (patarg,args,arms,default)
+	val (e,c) = minimize_result_type ec
 
 	val _ = debugdo (fn () => (print "\n\n***************\n";
 				   pp_exp e;

@@ -739,7 +739,7 @@ struct
 								 SOME a => a
 							       | _ => error "unresolved CON_ARROW"))
 	       | CON_APP (c1,c2) => (blastOutChoice os 10; blastOutCon os c1; blastOutCon os c2)
-	       | CON_MUPROJECT (i,c) => (blastOutChoice os 11; blastOutChoice os i; blastOutCon os c)
+	       | CON_MU c => (blastOutChoice os 11; blastOutCon os c)
 	       | CON_RECORD lclist => (blastOutChoice os 12; blastOutList (blastOutPair blastOutLabel blastOutCon) os lclist)
 	       | CON_FUN (vlist, c) => (blastOutChoice os 13; blastOutList blastOutVar os vlist; blastOutCon os c)
 	       | CON_SUM {noncarriers, carriers, special = NONE} => 
@@ -786,7 +786,7 @@ struct
 				     oneshot_init (blastInArrow is))) *)
 		      end
 	       | 10 => CON_APP (blastInCon is, blastInCon is)
-	       | 11 => CON_MUPROJECT (blastInChoice is, blastInCon is)
+	       | 11 => CON_MU (blastInCon is)
 	       | 12 => CON_RECORD(blastInList (blastInPair blastInLabel blastInCon) is)
 	       | 13 => CON_FUN (blastInList blastInVar is, blastInCon is)
 	       | 14 => CON_SUM {noncarriers = blastInChoice is,
@@ -1101,7 +1101,8 @@ struct
 	       | NEW_STAMP c => (blastOutChoice os 14; blastOutCon os c)
 	       | EXN_INJECT (str,e1,e2) => (blastOutChoice os 15; blastOutString os str; blastOutExp os e1; blastOutExp os e2)
 	       | ROLL (c,e) => (blastOutChoice os 16; blastOutCon os c; blastOutExp os e)
-	       | UNROLL (c,e) => (blastOutChoice os 17; blastOutCon os c; blastOutExp os e)
+	       | UNROLL (c1,c2,e) => (blastOutChoice os 17; blastOutCon os c1; blastOutCon os c2;
+				      blastOutExp os e)
 	       | INJ {noncarriers, carriers, special, inject} =>
 		     (blastOutChoice os 18; blastOutChoice os noncarriers; blastOutList blastOutCon os carriers;
 		      blastOutChoice os special; blastOutOption blastOutExp os inject)
@@ -1161,7 +1162,7 @@ struct
 	       | 14 => NEW_STAMP (blastInCon is)
 	       | 15 => EXN_INJECT (blastInString is, blastInExp is, blastInExp is)
 	       | 16 => ROLL (blastInCon is, blastInExp is)
-	       | 17 => UNROLL (blastInCon is, blastInExp is)
+	       | 17 => UNROLL (blastInCon is, blastInCon is, blastInExp is)
 	       | 18 => let val _ = tab "  INJ\n"
 			   val noncarriers = blastInChoice is
 			   val _ = tab "  done noncarriers\n"

@@ -583,7 +583,7 @@ end
 		 andalso (length c1_a = length c2_a andalso
 			  Listops.andfold (fn (c2,c1) => self (c2,c1,ctxt,is_sub)) (zip c1_a c2_a))
 		 andalso self(c1_r,c2_r,ctxt,is_sub))
-	  | (CON_MUPROJECT (i1,c1), CON_MUPROJECT(i2,c2)) => (i1=i2) andalso (self(c1,c2,ctxt,is_sub))
+	  | (CON_MU c1, CON_MU c2) => (self(c1,c2,ctxt,is_sub))
 	  | ((CON_RECORD _ | CON_FLEXRECORD _),(CON_RECORD _ | CON_FLEXRECORD _)) =>
 		let 
 		    fun match rdecs1 rdecs2 = 
@@ -720,7 +720,7 @@ end
 			  NONE => false
 			| SOME ctxt' => Exp_IsValuable(ctxt',e))
      | ROLL (c,e) => Exp_IsValuable(ctxt,e)
-     | UNROLL (c,e) => Exp_IsValuable(ctxt,e)
+     | UNROLL (c1,c2,e) => Exp_IsValuable(ctxt,e)
      | OVEREXP (_,v,os) => v orelse (case (oneshot_deref os) of
 				       NONE => false
 				     | SOME e => Exp_IsValuable(ctxt,e))
@@ -812,7 +812,9 @@ end
 		       else error "GetConKind: kind mismatch in CON_APP"
 		 | _ => error "GetConKind: kind mismatch in CON_APP")
 	   end
-     | (CON_MUPROJECT _) => KIND_TUPLE 1
+     | (CON_MU c) => (case GetConKind(c,ctxt) of
+			KIND_ARROW(m,n) => KIND_TUPLE n
+			| _ => error "kind of CON_MU argument not KIND_ARROW")
      | (CON_FLEXRECORD _) => KIND_TUPLE 1
      | (CON_RECORD _) => KIND_TUPLE 1
      | (CON_FUN (vs,c)) => 
@@ -1021,7 +1023,7 @@ end
 		  then (va1 andalso va2, CON_ANY)
 	      else error "EXN_INJECT tag type and value: type mismatch"
 	   end
-     | (ROLL(c,e) | UNROLL(c,e)) => 
+     | (ROLL(c,e) | UNROLL(c,_,e)) => 
        let val cNorm = Normalize' "ROLL/UNROLL" (c,ctxt)
 	   val (va,econ) = GetExpCon(e,ctxt)
 	   val isroll = (case exparg of
@@ -1032,15 +1034,21 @@ end
 				  Ppil.pp_exp exparg;
 				  print "\n";
 				  error str)
+	   val (i,cInner) = (case cNorm of
+			       (CON_TUPLE_PROJECT(i,CON_MU cInner)) => (i, cInner)
+	                     | CON_MU cInner => (0, cInner)
+  	                     | _ => (print "\nUnnormalized Decoration of (UN)ROLL was ";
+				   pp_con c; print "\n";
+				   print "\nNormalized Decoration of (UN)ROLL was ";
+				   pp_con cNorm; print "\n";
+				   error "decoration of ROLL not a recursive type CON_MU or CON_TUPLE_PROJ(CON_MU)"))
        in (va,
-	   case cNorm of
-	       CON_MUPROJECT(i,cInner) =>
-		   (case GetConKind(cInner,ctxt) of
+	   (case GetConKind(cInner,ctxt) of
 			KIND_ARROW(n,n') =>
 			    (if ((n = n') andalso (0 <= i) andalso (i < n))
 				 then 
 				     let 
-					 fun temp j = CON_MUPROJECT(j,cInner)
+					 fun temp j = if n = 1 then cInner else CON_TUPLE_PROJECT(j,CON_MU cInner)
 					 val contemp = CON_APP(cInner,con_tuple_inject(map0count temp n))
 					 val con2 = if (n = 1) then contemp
 						    else CON_TUPLE_PROJECT(i,contemp)
@@ -1063,12 +1071,7 @@ end
 						    error "UNROLL: expression type does not match decoration"))
 				     end
 			     else error "projected decoration has the wrong KIND_ARROW")
-		      | _ => error "projected decoration has the wrong kind")
-	   | _ => (print "\nUnnormalized Decoration of (UN)ROLL was ";
-		   pp_con c; print "\n";
-		   print "\nNormalized Decoration of (UN)ROLL was ";
-		   pp_con cNorm; print "\n";
-		   error "decoration of ROLL not a recursive type CON_MUPROJ"))
+		      | _ => error "projected decoration has the wrong kind"))
        end
     | (INJ {noncarriers,carriers,inject=NONE,special}) =>
 	  if (special<noncarriers)
@@ -1131,22 +1134,23 @@ end
 	   let 
 	       val n = length arms
 	       val carriers = map (fn c => Normalize' "CASE" (c,ctxt)) carriers
-	       val (_,eargCon) = GetExpCon(arg,ctxt)
+	       val (va,eargCon) = GetExpCon(arg,ctxt)
 	       val sumcon = CON_SUM {special = NONE,
 				     carriers = carriers,
 				     noncarriers = noncarriers}
-	       fun loop _ [] =  
+	       fun loop _ va [] =  
 		   (case default of 
-			NONE => (false, tipe)
+			NONE => (va, tipe)
 		      | SOME edef => 
-			    let val (_,defcon) = GetExpCon(edef,ctxt)
+			    let val (va',defcon) = GetExpCon(edef,ctxt)
 			    in  if (sub_con(defcon,tipe,ctxt))
-				    then (false, tipe)
+				    then (va andalso va', tipe)
 				else error "default arm type mismatch"
 			    end)
-		 | loop n (NONE::rest) = loop (n+1) rest
-		 | loop n ((SOME exp)::rest) = 
-			let val (_,c) = GetExpCon(exp,ctxt)
+		 | loop n va (NONE::rest) = loop (n+1) va rest
+		 | loop n va ((SOME exp)::rest) = 
+			let val (va',c) = GetExpCon(exp,ctxt)
+			    val va = va andalso va'
 			    val tipe' = if (n < noncarriers) then tipe 
 					else CON_ARROW([CON_SUM{special = SOME n,
 							       carriers = carriers,
@@ -1154,7 +1158,7 @@ end
 						       tipe,false,oneshot())
 			in  
 			    if (sub_con(c,tipe',ctxt))
-				then loop (n+1) rest
+				then loop (n+1) va rest
 			    else (print "case arm type mismatch: checking exp = ";
 				  pp_exp exparg; print "\nwith ctxt = ";
 				  pp_context ctxt; print "\n";
@@ -1164,7 +1168,7 @@ end
 				  error "case arm type mismatch")
 			end
 	   in if (eq_con_from_get_exp15(eargCon,sumcon,ctxt))
-		  then (loop 0 arms)
+		  then (loop 0 va arms)
 	      else 
 		  error "CASE: expression type and decoration con mismatch"
 	   end
@@ -1492,7 +1496,7 @@ end
       | (CON_TAG c)               => CON_TAG (Normalize(c,ctxt))
       | (CON_ARROW (cs1,c2,closed,comp))  => CON_ARROW (map (fn c => Normalize(c,ctxt)) cs1, 
 						 Normalize(c2,ctxt),closed,comp)
-      | (CON_MUPROJECT (i,c))     => CON_MUPROJECT (i, Normalize(c,ctxt))
+      | (CON_MU c)     => CON_MU(Normalize(c,ctxt))
       | (CON_RECORD rdecs)        => let fun f (l,c)= (l,Normalize(c,ctxt))
 	                             in CON_RECORD (map f rdecs)
                                      end

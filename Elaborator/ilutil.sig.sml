@@ -233,8 +233,10 @@ signature ILUTIL =
 
       rebind_free_type_var:  given a type and the current context and a variable v,
                     change all free type BUT not constructor variables to a 
-		    projection of v.fresh_label().
-                    Also, return the the list of the newly generated labels
+		    projection of v.fresh_label().  Also take a list of labels
+		    and tyvars and convert the tyvars to projections.  These are
+			not considered newly generated.
+                    Finally, also return the the list of the newly generated labels
                     and a bool indicating whether the type variable is an eqtype 
 			       *)
 

@@ -180,8 +180,7 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 		     andalso eq_arrow_oneshot(vm,arrow_oneshot,arrow_oneshot')
 	       | (CON_APP(con1,con2), CON_APP(con1',con2')) =>
 		     eq_con(vm,con1,con1') andalso eq_con(vm,con2,con2')
-	       | (CON_MUPROJECT(i,con), CON_MUPROJECT(i',con')) =>
-		     i=i' andalso eq_con(vm,con,con')    
+	       | (CON_MU(con), CON_MU(con')) => eq_con(vm,con,con')    
 	       | (CON_RECORD labcons, CON_RECORD labcons') => eq_labcons(vm,labcons,labcons')        
 	       | (CON_FUN(vars,con), CON_FUN(vars',con')) => 
 		     (case eq_vars(vm,vars,vars') of
@@ -309,7 +308,10 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 	       Listops.eq_list(fn (c1,c2) => eq_con(vm,c1,c2), c1,c2) andalso
 	       eq_opt (fn (e1,e2) => eq_exp(vm,e1,e2)) (eopt1,eopt2)
 	  | eq_exp(vm,ROLL(c1,e1),ROLL(c2,e2)) = eq_con(vm,c1,c2) andalso eq_exp(vm,e1,e2)
-	  | eq_exp(vm,UNROLL(c1,e1),UNROLL(c2,e2)) = eq_con(vm,c1,c2) andalso eq_exp(vm,e1,e2)
+	  | eq_exp(vm,UNROLL(c11,c12,e1),UNROLL(c21,c22,e2)) = 
+	       eq_con(vm,c11,c21) 
+	       andalso eq_con (vm,c12,c22)
+	       andalso eq_exp(vm,e1,e2)
 	  | eq_exp(vm,FIX(b1,a1,fbnds1),FIX(b2,a2,fbnds2)) = 
 	       b1=b2 andalso a1=a2 andalso eq_fbnds(vm,fbnds1,fbnds2)
 	  | eq_exp _ = false

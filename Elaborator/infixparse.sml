@@ -29,7 +29,7 @@ functor InfixParse(structure Il : IL
 
     (* -----------------------------------------------------------------------------      
       Utility functions for checking if an expression or path is infix and if so
-        what its fixity is.  Also convert Fixity.fixity to precedence levels(1-9)
+      what its fixity is.  Also convert Fixity.fixity to precedence levels(0-9)
       ----------------------------------------------------------------------------- *)
     fun fixity_to_level (Fixity.NONfix) = error "no level for NONfix"
       | fixity_to_level (Fixity.INfix (a,b)) = a div 2

@@ -20,10 +20,7 @@ signature TOIL =
     val xty     : Il.context * filepos * Ast.ty -> Il.con option
     val xtybind : Il.context * filepos * Ast.tb list -> decresult option
     val xeq     : Il.context * Il.con -> Il.exp option
+    val xeq_mu  : Il.context * Il.con -> Il.exp option
 
-    (* ---------------------- Signature Patching --------------------- *)
-    val xsig_sharing_type      : Il.context * Il.sdecs * Ast.path list -> Il.sdecs option
-    val xsig_sharing_structure : Il.context * Il.sdecs * Ast.path list -> Il.sdecs option
-    val xsig_wheretype         : Il.context * Il.sdecs * Il.label list * Il.con * Il.kind -> Il.sdecs option
 
   end;

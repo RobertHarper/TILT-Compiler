@@ -135,7 +135,7 @@ functor Basis(structure Il : IL
 	      fun add_basetype (s,c) =
 		  result := add_context_inline(!result,
 					       symbol_label (Symbol.tycSymbol s),
-					       fresh_named_var s,
+					       fresh_named_var ("inline_" ^ s),
 					       INLINE_CONKIND(c,IlStatic.GetConKind(empty_context,c)))
 	  in
 	      val _ = app add_basetype basetype_list
@@ -530,7 +530,8 @@ xxxxx *)
 		val list_sbnd_sdecs = Datatype.compile {context = !result,
 							typecompile = typecompile,
 							datatycs = listdb : Ast.db list,
-							eq_compile = Toil.xeq}
+							eq_compile = Toil.xeq,
+							eq_compile_mu = Toil.xeq_mu}
 		    
 		val (list_sbnds,list_sdecs) = (map #1 list_sbnd_sdecs,
 					       map #2 list_sbnd_sdecs)
@@ -549,7 +550,8 @@ xxxxx *)
 		val bool_sbnd_sdecs = Datatype.compile {context = !result,
 							typecompile = typecompile,
 							datatycs = booldb : Ast.db list,
-							eq_compile = Toil.xeq}
+							eq_compile = Toil.xeq,
+							eq_compile_mu = Toil.xeq_mu}
 		val (bool_sbnds,bool_sdecs) = (map #1 bool_sbnd_sdecs,
 					       map #2 bool_sbnd_sdecs)
 
@@ -579,8 +581,8 @@ xxxxx *)
 *)
 	      fun self_sdec (SDEC(l,dec)) = SDEC(l,IlStatic.SelfifyDec dec)
 
-	      val lbl = fresh_open_internal_label "basis_dt"
-	      val v = fresh_named_var "basis_dt"
+	      val lbl = fresh_open_internal_label "basis_dt_inline"
+	      val v = fresh_named_var "basis_dt_inline"
 	      val bool_sbnds_inline = 
 		  let val temp = MOD_STRUCTURE(bool_sbnds)
 		  in  (case IlUtil.make_inline_module(!result,temp,SOME(SIMPLE_PATH v), true) of
@@ -591,7 +593,7 @@ xxxxx *)
 		  end
 
 	(* we use a precise signature for bool type so that the elaborator can use
-	   the fact that a bool is a CON_MUPROJECT(unit + unit) *)
+	   the fact that a bool is a CON_SUM(2,[]) *)
 	      val final_sdec = SDEC(lbl,DEC_MOD(v,SIGNAT_INLINE_STRUCTURE{self=NONE,
 									abs_sig = bool_imp_sdecs,
 									imp_sig = bool_imp_sdecs,
