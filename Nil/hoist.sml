@@ -84,24 +84,6 @@ struct
   (* returns set of free type vars *)
   fun freeConVars c = 
       list2set (NilUtil.freeVarInCon c)
-    
-  (* get the bound var from a conbnd *)
-  fun get_conbnd_var (Con_cb (v,c)) = v
-    | get_conbnd_var (Open_cb (v,_,_)) = v
-    | get_conbnd_var (Code_cb (v,_,_)) = v
-
-  (* get the bound vars from a list of bnds *)
-  fun getBoundVars bnd_list = 
-    let
-      fun gv ([],l) = rev l
-	| gv (Con_b (p,cb)::rest,l) = gv(rest,(get_conbnd_var cb)::l)
-	| gv (Exp_b (v,_,e)::rest,l) = gv(rest,v::l)
-	| gv (Fixopen_b(vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
-	| gv (Fixcode_b(vfs)::rest,l) = gv(rest,(map #1 (Sequence.toList vfs))@l)
-	| gv (Fixclosure_b(_)::rest,l) = raise HoistError
-    in
-      gv (bnd_list,[])
-    end
 
   (* stop junk *)
 
@@ -112,7 +94,7 @@ struct
 	      if (disjoint(freevars,stop_vars)) then
 		  loop(rest, stop_vars, bv :: up, stay, freev)
 	      else
-		  loop(rest, Set.addList(stop_vars,getBoundVars [eb]),
+		  loop(rest, Set.addList(stop_vars,NilUtil.varsBoundByBnds [eb]),
 		       up, eb :: stay, Set.union(freev, freevars))
       in
 	  loop(bvl, stop_vars, nil, nil, Set.empty)
@@ -126,7 +108,7 @@ struct
 	      if (disjoint(freevars,stop_vars)) then
 		  loop(rest, stop_vars, bv :: up, stay, freev)
 	      else
-		  loop(rest, Set.add(stop_vars,get_conbnd_var cb),
+		  loop(rest, Set.add(stop_vars,NilUtil.varBoundByCbnd cb),
 		       up, cb :: stay, Set.union(freev, freevars))
       in
 	  loop(hoists, stop_vars, nil, nil, Set.empty)
@@ -142,10 +124,10 @@ struct
 	         if (disjoint(freevars,stop_vars)) then
 		     loop(rest, stop_vars, bv :: up, stay, freev)
 		 else
-		     loop(rest, Set.add(stop_vars,get_conbnd_var cb),
+		     loop(rest, Set.add(stop_vars,NilUtil.varBoundByCbnd cb),
 			  up, eb :: stay, Set.union(freev, freevars))
  	    | loop((bv as (eb,freevars))::rest, stop_vars, up, stay, freev) =
-		  loop(rest, Set.addList(stop_vars,getBoundVars [eb]),
+		  loop(rest, Set.addList(stop_vars,NilUtil.varsBoundByBnds [eb]),
 		       up, eb :: stay, Set.union(freev, freevars))
       in
 	  loop(hoists, Set.empty, [], [], Set.empty)
@@ -232,7 +214,7 @@ struct
       val (top_set, hoist_set, top, up, stay, freev) = 
 	  loop (conbnds, top_set, hoist_set, [], [], [], Set.empty)
 	  
-      val boundv = list2set (map get_conbnd_var stay)
+      val boundv = list2set (map NilUtil.varBoundByCbnd stay)
       val freev = Set.difference(freev, boundv)
     in
       (top_set, hoist_set, top, up, stay, freev)
@@ -315,7 +297,7 @@ struct
 
           (* we can hoist anything out of the body that depends on
              anything bound here *)
-	  val bound_var_set = list2set (map get_conbnd_var bndlist)
+	  val bound_var_set = list2set (map NilUtil.varBoundByCbnd bndlist)
           val body_hoist_set' = union (bound_var_set, hoist_set)
 
 	  val (bodcon',body_top_cbnds, body_hoists, body_freev) = 
@@ -323,7 +305,7 @@ struct
 	      
 	  (* But, bindings with free variables whose bindings
 	     are in this let must stay *)
-	  val stop_vars = list2set (map get_conbnd_var bnd_stay_cbnds)
+	  val stop_vars = list2set (map NilUtil.varBoundByCbnd bnd_stay_cbnds)
 	  val (body_hoists, body_stay_cbnds, body_stay_freev) = 
 	      filter_cbnds(body_hoists, stop_vars)
 	      
@@ -331,7 +313,7 @@ struct
           val hoists = bnd_hoists @ body_hoists
           val stay_cbnds= bnd_stay_cbnds @ body_stay_cbnds
 
-	  val boundv = list2set (map get_conbnd_var stay_cbnds)
+	  val boundv = list2set (NilUtil.varsBoundByCbnds stay_cbnds)
 	  val freev = 
 	      Set.difference
 	      (unionList [stay_freev, body_stay_freev, body_freev], boundv)
@@ -500,7 +482,7 @@ struct
 	  loop (bnds, top_set, hoist_set, [], [], [], 
 		econtext, true, Set.empty)
 
-      val boundv = list2set (getBoundVars stay_bnds)
+      val boundv = list2set (NilUtil.varsBoundByBnds stay_bnds)
       val freev = Set.difference(freev, boundv)
 
     in
@@ -510,7 +492,7 @@ struct
 
   and rbnd (Con_b(p,cb), top_set, hoist_set, econtext)  =
       let
-	  val v = get_conbnd_var cb
+	  val v = NilUtil.varBoundByCbnd cb
       (*
           val vstr = var2string v 
           val _ = (pprint ("rewriting bnd for con var: "^vstr^"\n");ppin 2) 
@@ -598,13 +580,13 @@ struct
 	       econtext', bnd_valuable, stay_vfree) = 
 	      rbnds(bndlst,top_set,hoist_set,econtext)
 
-	  val bound_var_set = list2set (getBoundVars bndlst)
+	  val bound_var_set = list2set (NilUtil.varsBoundByBnds bndlst)
 	  val body_hoist_set = union (bound_var_set,hoist_set)
 	  val (bodexp',body_top_bnds, body_hoists, effs, 
 	       body_valuable, body_vfree) = 
 	      rexp(bodexp,top_set',body_hoist_set,econtext')
 
-	  val stop_vars = list2set (getBoundVars bnd_stay_bnds)
+	  val stop_vars = list2set (NilUtil.varsBoundByBnds bnd_stay_bnds)
 	  val (body_hoists, body_stay_bnds, body_stay_vfree) = 
 	      filter_bnds(body_hoists, stop_vars)
 
@@ -612,7 +594,7 @@ struct
 	  val hoists = bnd_hoists @ body_hoists
 	  val stay_bnds = bnd_stay_bnds @ body_stay_bnds
 
-	  val vbound = Set.addList(stop_vars, getBoundVars body_stay_bnds)
+	  val vbound = Set.addList(stop_vars, NilUtil.varsBoundByBnds body_stay_bnds)
 	      
 	  val vfree = 
 	      Set.difference

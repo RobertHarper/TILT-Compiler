@@ -15,6 +15,10 @@ signature NILUTIL =
     val freeVarInCon        : Nil.con -> Nil.var list
     val freeVarInCbnd      : Nil.conbnd -> Nil.var list
 
+    val varBoundByCbnd : Nil.conbnd  -> Nil.var
+    val varsBoundByCbnds : Nil.conbnd list -> Nil.var list
+    val varsBoundByBnds : Nil.bnd list -> Nil.var list
+
     val muExpand : bool * (Nil.var,Nil.con) Nil.sequence * Nil.var -> Nil.con
     val generate_tuple_label : int -> Name.label
     val exp_tuple : Nil.exp list -> Nil.exp
