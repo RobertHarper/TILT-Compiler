@@ -1,4 +1,4 @@
-(* should add caching of import scans and contexts read in *)
+(* should add caching of import scans *)
 
 functor Manager (structure Parser: LINK_PARSE
 		 structure Elaborator: ELABORATOR
@@ -14,6 +14,7 @@ struct
   val up_to_phasesplit = ref false
   val up_to_elaborate = ref false
   val stat_each_file = ref false
+  val cache_context = ref false
 
   structure Basis = Elaborator.Basis
 (*  structure UIBlast = mkBlast(type t = Elaborator.context) *)
@@ -37,12 +38,12 @@ struct
 
   fun help() = print "This is TILT - no help available.\n"
   fun readContextRaw file = let val is = BinIO.openIn file
-			     val res = Elaborator.IlContext.blastInContext is
+			     val res = Elaborator.IlContextEq.blastInContext is
 			     val _ = BinIO.closeIn is
 			 in  res
 			 end
   fun writeContextRaw (file,ctxt) = let val os = BinIO.openOut file
-				     val _ = Elaborator.IlContext.blastOutContext os ctxt
+				     val _ = Elaborator.IlContextEq.blastOutContext os ctxt
 				     val _ = BinIO.closeOut os
 				 in  ()
 				 end
@@ -84,7 +85,8 @@ struct
 	       SOME ctxt => ctxt
 	     | NONE => let val uifile = base2ui (name2base mapping unit)
 			   val ctxt = readContextRaw uifile
-		       in  (r := SOME ctxt; ctxt)
+			   val _ = if (!cache_context) then r := SOME ctxt else ()
+		       in  ctxt
 		       end)
       end
   fun writeContext mapping (unit,ctxt) = 
@@ -127,7 +129,7 @@ struct
 	of SOME(sbnd_entries, new_ctxt) => 
 	    let	val same = 
 		(access(uiFile, [OS.FileSys.A_READ]) andalso
-		 Elaborator.eq_context(new_ctxt, readContext mapping unit))
+		 Elaborator.IlContextEq.eq_context(new_ctxt, readContext mapping unit))
 		val _ = if same 
 			    then (if Time.<(OS.FileSys.modTime uiFile, least_new_time)
 				      then 

@@ -1,3 +1,5 @@
+(*$import BinIO Util TilWord64 *)
+
 signature BLASTER = sig
 (*
   type t

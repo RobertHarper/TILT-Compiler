@@ -40,6 +40,7 @@
  *)
 
 signature MANAGER = sig
+  val cache_context : bool ref
   val up_to_phasesplit : bool ref
   val up_to_elaborate : bool ref
   val stat_each_file : bool ref
