@@ -1,1 +1,1 @@
-unit Test = "testdyn1.sml" {}
+unit Test = "testdyn1.sml" {Math}
