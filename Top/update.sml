@@ -3,7 +3,12 @@ struct
 
     structure I = IntSyn
     structure C = Compiler
+    structure S = I.S
+    structure D = S.D
+    structure P = S.P
     structure Map = Name.LabelMap
+
+    type label = I.label
 
     val error = fn s => Util.error "update.sml" s
     val reject = Util.reject
@@ -57,90 +62,209 @@ struct
 	|   Join ss => List.all status_uptodate ss)
 
     (*
-	Force recompilation if the interface of a unit in context
-	changes or if a unit is added or dropped from context.
+	Speed up lookup from a project description summary.  Also
+	checks that the summary description is well-formed, but this
+	is not essential due to the the magic number on the file and
+	the manager invariants.
     *)
-    fun context_status (current:I.ue, past:I.ue) : status =
-	let fun add ((U,c),m) = Map.insert (m,U,c)
-	    val past = foldl add Map.empty past
-	    fun bad (U,crc) : string option =
-		(case (Map.find (past, U)) of
-		    SOME crc' =>
-			if crc = crc' then NONE
+    structure Desc :>
+    sig
+	type desc
+	val desc : D.desc -> desc
+	val bound_interface : desc * label -> bool
+	val bound_unit : desc * label -> bool
+	val lookup_interface : desc * label -> D.iexp
+	val lookup_unit : desc * label -> label
+    end =
+    struct
+
+	fun malformed (what:label, msg:string) : 'a =
+	    error ("malformed summary: " ^
+		Name.label2longname what ^ ": " ^ msg ^ "\n")
+
+	type desc = D.pdec Map.map
+
+	fun lookup_interface' (desc:desc, I:label) : D.iexp option =
+	    (case (Map.find(desc,I)) of
+		SOME (D.IDEC(_,iexp)) => SOME iexp
+	    |	SOME _ => malformed(I,"bound to unit")
+	    |	NONE => NONE)
+
+	fun lookup_interface (desc:desc,I:label) : D.iexp =
+	    (case (lookup_interface'(desc,I)) of
+		SOME r => r
+	    |	NONE => malformed(I,"not bound"))
+
+	fun lookup_unit' (desc:desc, U:label) : label option =
+	    (case (Map.find(desc,U)) of
+		SOME (D.SCDEC(_,I)) => SOME I
+	    |	SOME _ => malformed(U,"bound to interface")
+	    |	NONE => NONE)
+
+	fun lookup_unit (desc:desc,U:label) : label =
+	    (case (lookup_unit'(desc,U)) of
+		SOME r => r
+	    |	NONE => malformed(U,"not bound"))
+
+	val bound_interface : desc * label -> bool =
+	    isSome o lookup_interface'
+
+	val bound_unit : desc * label -> bool =
+	    isSome o lookup_unit'
+
+	val bound : desc * label -> bool =
+	    isSome o Map.find
+
+	fun iexp_ok (desc:desc,iexp:D.iexp) : unit =
+	    (case iexp of
+		D.PRECOMPI (units,_) =>
+		    List.app (fn U => ignore(lookup_unit(desc,U))) units
+	    |	D.COMPI _ => ())
+
+	fun name_ok (desc:desc, l:label) : unit =
+	    if not(bound(desc,l)) then ()
+	    else malformed(l,"already bound")
+
+	fun pdec_ok (desc:desc, pdec:D.pdec) : unit =
+	    (case pdec of
+		D.IDEC (I,iexp) =>
+		    let val _ = name_ok(desc,I)
+			val _ = iexp_ok(desc,iexp)
+		    in	()
+		    end
+	    |	D.SCDEC(U,I) =>
+		    let val _ = name_ok(desc,U)
+			val _ = ignore(lookup_interface(desc,I))
+		    in	()
+		    end)
+
+	fun name (pdec:D.pdec) : label =
+	    (case pdec of
+		D.IDEC (I,_) => I
+	    |	D.SCDEC (U,_) => U)
+
+	val empty : desc = Map.empty
+
+	fun add (pdec:D.pdec, desc:desc) : desc =
+	    let val _ = pdec_ok(desc,pdec)
+	    in	Map.insert(desc,name pdec,pdec)
+	    end
+
+	val desc : D.desc -> desc =
+	    foldl add empty
+
+    end
+
+    (*
+	Compare interfaces.  For compiled interfaces, this is a poor
+	approximation but it is sufficient if the compiler is
+	deterministic.
+    *)
+    fun eq_iexp (iexp:D.iexp, iexp':D.iexp) : bool =
+	(case (iexp,iexp') of
+	    (D.PRECOMPI (opened,src),
+	     D.PRECOMPI (opened',src')) =>
+		Listops.eq_list(Name.eq_label,opened,opened') andalso
+		src = src'
+	|   (D.COMPI pinterface,
+	     D.COMPI pinterface') => pinterface = pinterface'
+	|   _ => false)
+
+
+    (*
+	Force recompilation if there exists a unit U declared in both
+	the current and previous project descriptions such that the
+	old and new interfaces for U are not equivalent.  We do not
+	warn about units that are in one project description and not
+	the other.  Such units imply that either an interface has
+	changed or the project declaration that is being compiled has
+	changed.  We check for those conditions and the resulting
+	warnings are friendlier than a list of missing/adding units.
+    *)
+    fun desc_status (current:D.desc, current':Desc.desc, past:Desc.desc) : status =
+	let fun check_unit (U:label, iexp:D.iexp) : status =
+		let val I = Desc.lookup_unit(past,U)
+		    val iexp' = Desc.lookup_interface(past,I)
+		in  if eq_iexp(iexp,iexp') then
+			OK
+		    else
+			Stale ("interface of " ^
+			    Name.label2longname U ^
+			    " has changed")
+		end
+	    fun check_pdec (pdec:D.pdec) : status =
+		(case pdec of
+		    D.IDEC _ => OK
+		|   D.SCDEC (U,I) =>
+			if Desc.bound_unit (past,U) then
+			    let val iexp = Desc.lookup_interface(current',I)
+			    in	check_unit(U,iexp)
+			    end
 			else
-			    SOME ("interface of " ^ Name.label2longname U ^
-				" has changed")
-		    | NONE =>
-			SOME (Name.label2longname U ^
-			    " no longer in context"))
-	    val badunits = List.mapPartial bad current
-	in  Join(map Stale badunits)
+			    OK)
+	in  Join (map check_pdec current)
 	end
 
-    (*
-	Force recompilation if units are added or taken away or the
-	order of units changes.
-    *)
-    fun opened_status (current:I.units, past:I.units) : status =
-	let val mismatch = Stale "list of opened units has changed"
-	    fun loop (c:I.units,p:I.units) : status =
-		(case (c,p) of
-		    (nil,nil) => OK
-		|   (u::c,u'::p) =>
-			if Name.eq_label(u,u') then loop(c,p)
-			else mismatch
-		|   (_::_,nil) => mismatch
-		|   (nil,_::_) => mismatch)
-	in  loop(current,past)
+    fun pdec_status (desc:Desc.desc, desc':Desc.desc, pdec:P.pdec, pdec':P.pdec) : status =
+	let fun check_opened (opened:I.units, opened':I.units) : status =
+		if Listops.eq_list(Name.eq_label,opened,opened') then OK
+		else Stale "list of opened units has changed"
+	    fun check_src' (src:Crc.crc, src':Crc.crc) : status =
+		if src = src' then OK
+		else Stale "source has changed"
+	    fun check_src ((opened,src),(opened',src')) : status =
+		Join [check_opened(opened,opened'),
+		    check_src'(src,src')]
+	    fun check_asc (I:label, I':label) : status =
+		let val iexp = Desc.lookup_interface(desc,I)
+		    val iexp' = Desc.lookup_interface(desc',I')
+		in  if eq_iexp(iexp,iexp') then OK
+		    else Stale "ascribed interface has changed"
+		end
+	    fun check_name (U:label, U':label) =
+		if Name.eq_label(U,U') then OK
+		else Stale "unit name has changed"
+	    fun check_iexp (iexp:P.iexp, iexp':P.iexp) : status =
+		(case (iexp,iexp') of
+		    (P.SRCI src, P.SRCI src') => check_src (src,src'))
+	    fun check_uexp (uexp:P.uexp, uexp':P.uexp) : status =
+		(case (uexp,uexp') of
+		    (P.SRCU src, P.SRCU src') => check_src(src,src')
+		|   (P.SSRCU (I,opened,src), P.SSRCU (I',opened',src')) =>
+			Join [check_asc(I,I'),
+			    check_src((opened,src),(opened',src'))]
+		|   (P.SRCU src, P.SSRCU (_,opened',src')) =>
+			Join [Stale "interface ascription has been removed",
+			    check_src(src,(opened',src'))]
+		|   (P.SSRCU (_,opened,src), P.SRCU src') =>
+			Join [Stale "interface ascription has been added",
+			    check_src((opened,src),src')])
+	in  (case (pdec,pdec') of
+		(P.IDEC(_,iexp), P.IDEC(_,iexp')) => check_iexp(iexp,iexp')
+	    |	(P.SCDEC(U,I), P.SCDEC(U',I')) =>
+		    Join [check_name(U,U'),
+			check_asc(I,I')]
+	    |	(P.UDEC(U,uexp),P.UDEC(U',uexp')) =>
+		    Join [check_name(U,U'),
+			check_uexp(uexp,uexp')]
+	    |	(P.SCDEC(U,I), P.UDEC(U',P.SSRCU(I',_,_))) =>
+		    Join [check_name(U,U'),
+			check_asc(I,I')]
+	    |	(P.UDEC(U,P.SSRCU(I,_,_)), P.SCDEC(U',I')) =>
+		    Join [Stale "implementation has been added",
+			check_name(U,U'),
+			check_asc(I,I')]
+	    |	_ => Stale "definition has changed")
 	end
 
-    (*
-	Force recompilation if the source code has changed.
-    *)
-    fun src_file_status (current:Crc.crc, past:Crc.crc) : status =
-	if current = past then OK
-	else Stale "source has changed"
-
-    type src = I.units * Crc.crc
-
-    fun src_status ((opened,crc):src, (opened',crc'):src) : status =
-	Join[opened_status(opened,opened'),
-	    src_file_status(crc,crc')]
-
-    fun src_option_status (current:src option, past:src option) : status =
-	(case (current,past) of
-	    (NONE,NONE) => OK
-	|   (SOME src, SOME src') => src_status(src,src')
-	|   (NONE,SOME _) => Stale "source has been added"
-	|   (SOME _,NONE) => OK)
-
-    (*
-	Force recompilation if an ascribed interface has changed.
-    *)
-    fun interface_status (current:Crc.crc option, past:Crc.crc option) : status =
-	(case (current,past) of
-	    (SOME current, SOME past) =>
-		if current = past then OK
-		else Stale "ascribed interface has changed"
-	|   (SOME _, NONE) => Stale "ascribed interface has been removed"
-	|   (NONE, SOME _) => Stale "ascribed interface has been added"
-	|   (NONE, NONE) => OK)
-
-    (*
-	Force recompilation if the type of definition has changed or
-	if any of the compiler inputs have changed.
-    *)
-    fun info_status (current:I.info, past:I.info) : status =
-	(case (current,past) of
-	    (I.INFO_I {ue,src}, I.INFO_I {ue=ue', src=src'}) =>
-		Join[context_status(ue,ue'),
-		    src_option_status(src,src')]
-	|   (I.INFO_U {ue,src,pinterface},
-	     I.INFO_U {ue=ue',src=src',pinterface=pinterface'}) =>
-		Join[context_status(ue,ue'),
-		     src_option_status(src,src'),
-		     interface_status(pinterface,pinterface')]
-	|   _ => Stale "definition has changed")
+    fun summary_status (current:S.summary, past:S.summary) : status =
+	let val (desc,pdec) = current
+	    val (desc',pdec') = past
+	    val d = Desc.desc desc
+	    val d' = Desc.desc desc'
+	in  Join [desc_status(desc,d,d'),
+		pdec_status(d,d',pdec,pdec')]
+	end
 
     fun auto_status (pdec:I.pdec) : status option =
 	(case pdec of
@@ -156,13 +280,14 @@ struct
 	(case (auto_status pdec) of
 	    SOME status => status
 	|   NONE =>
-		let val infoFile = I.P.D.info pdec
-		in  if !Cutoff andalso Fs.exists infoFile then
-			let val past = Fs.read I.blastInInfo infoFile
-			    val current = C.info (desc,pdec)
-			in  info_status (current, past)
-			end handle Blaster.BadMagicNumber _ =>
-			    Stale "bad magic number"
+		let val info = I.P.D.info pdec
+		in  if !Cutoff andalso Fs.exists info then
+			let val past = Fs.read S.blastInSummary info
+			    val current = C.summarize (desc,pdec)
+			in  summary_status (current, past)
+			end handle
+			    Blaster.BadMagicNumber _ =>
+				Stale "bad magic number"
 		    else
 			Stale "first compile"
 		end)

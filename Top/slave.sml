@@ -74,12 +74,12 @@ struct
 		in  if slow then send(comm, Comm.ACK_INTERFACE job)
 		    else ()
 		end
-	    val (desc,pdec) = Compiler.get_inputs (desc, job)
+	    val inputs = Compiler.get_inputs (desc, job)
 	    val finished =
 		if intonly then
-		    (Compiler.compile_int (desc,pdec); true)
+		    (Compiler.compile_int inputs; true)
 		else
-		    Compiler.compile (desc,pdec,ack_interface)
+		    Compiler.compile (inputs,ack_interface)
 	    val meas = Stats.get_measurements()
 	    val msg =
 		if finished then Comm.ACK_FINISHED (job,meas)

@@ -69,9 +69,9 @@ unit COMPILER = "compiler.sig.sml" {Name IntSyn}
 interface Compiler = "compiler.int" {COMPILER}
 unit Compiler : Compiler = "compiler.sml" {
 	COMPILER Name IntSyn ExtSyn LinkParse LinkIl Linknil Linksparc
-	Linkalpha Formatter Timestamp Util Stats List Ppil Pos Fs Crc
-	Ast Lil Rtl Target Platform Tools Listops OS TextIO Project
-	Symbol Linkrtl Linklil LinkTAL Option
+	Linkalpha Timestamp Util Stats List Pos Fs Crc Ast Lil Rtl Target
+	Platform Tools Listops OS TextIO Project Symbol Linkrtl Linklil
+	LinkTAL Option
 }
 
 unit COMMUNICATION = "communication.sig.sml" {
@@ -93,7 +93,7 @@ unit UPDATE = "update.sig.sml" {IntSyn}
 interface UPDATE = "update.int" {UPDATE}
 unit Update : UPDATE = "update.sml" {
 	UPDATE IntSyn Compiler Name Util Stats Crc Fs Blaster Pos List
-	Target
+	Target Listops
 }
 unit MASTER = "master.sig.sml" {Name}
 interface Master = "master.int" {MASTER}
@@ -122,7 +122,7 @@ unit Main : Main = "main.sml" {
 
 unit Dump = "dump.sml" {
 	MAIN Util Blaster Formatter List Char String Ppil IlBlast
-	IntSyn Communication Crc TextIO OS UtilError Arg
+	IntSyn Compiler Communication Crc TextIO OS UtilError Arg
 }
 
 unit RUN = "run.sig.sml" {OS}

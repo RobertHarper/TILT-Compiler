@@ -25,7 +25,7 @@ struct
 
     val readers : reader list =
 	[Ppil.pp_pinterface' o IlBlast.blastInPinterface,
-	 IntSyn.pp_info o IntSyn.blastInInfo,
+	 IntSyn.S.pp_summary o IntSyn.S.blastInSummary,
 	 IntSyn.pp_units o IntSyn.blastInUnits,
 	 Comm.pp_messages o Comm.blastInMessages,
 	 default_reader]

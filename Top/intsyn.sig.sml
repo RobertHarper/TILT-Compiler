@@ -18,17 +18,14 @@
     the front of a pinterface file without reading in the sdecs.
     This is how the manager knows what units a pinterface uses.
 
-    The manager uses info files to implement incremental, cut-off
-    recompilation and to check that (pre-)compiled units and
-    interfaces are consistent with the rest of the project
-    description.  An info files contains a value of type info (see
-    below) that summarizes the project description at the time of the
-    most recent compile.  If any information in an info file changes
-    between compilations, then the manager recompiles the unit or
-    interface.	Even separately compiled units like "unit U : I" must
-    be recompiled to generate a correct TAL interface (which depends
-    on the label U as well as the interface I). Recompiling a
-    (pre-)compiled unit or interface means signalling an error.
+    Info files store values of type summary (see below) and support
+    incremental recompilation and sanity checking pre-compiled
+    interfaces and units.  When a unit or interface is compiled, the
+    compiler stores a summary of its inputs in the corresponding info
+    file.  At a future time, the manager has new inputs and would like
+    to know if the compiled files from the earlier compile are
+    suitable.  To decide this question, the new inputs are compared to
+    the saved summary.
 
     A unit's asm, asmz, and obj files are what you expect.  A unit's
     tali file contains a TAL interface for its object file.  All four
@@ -49,23 +46,6 @@
     tali_rel file is the relative version of its tali filename.	 The
     function F.tal_include takes a project description file position
     to an include directory.
-
-    Invariant: If desc:desc, then |- desc ok.  In other words, the
-    manager only uses well-formed project descriptions.
-
-    Invariant: If desc:desc and pos:Pos.pos in desc, then
-    (Pos.file pos) terminates.
-
-    A unit environment summarizes a well-formed elaboration context
-	U_1:pinterface_1, ..., U_n:pinterface_n
-    as
-	U_1:CRC(pinterface_1), ..., U_n:CRC(pinterface_n)
-
-    A value of type info summarizes compiler inputs.  All info files
-    summarize the elaboration context.	Info files for source and
-    precompiled units and interfaces summarize the source code.	 Info
-    files for units with ascribed interfaces include summarize the
-    ascribed pinterface.
 *)
 signature INTSYN =
 sig
@@ -80,7 +60,7 @@ sig
     structure F :
     sig
 	type link = {exe:file, asm:file, asmz:file, obj:file}
-	val link : file * file -> link	(* desc, exe *)
+	val link : file -> link (* exe *)
 
 	type pack =
 	    {src:label -> file,
@@ -158,6 +138,13 @@ sig
     |	SCDEC of scdec
     |	UDEC of udec
 
+    (*
+	Invariant: If desc:desc, then |- desc ok.  In other words, the
+	manager only uses well-formed project descriptions.
+
+	Invariant: If desc:desc and pos:Pos.pos in desc, then
+	(Pos.file pos) terminates.
+    *)
     type desc = pdec list
 
     (* Constructors. *)
@@ -306,38 +293,89 @@ sig
 	end
     end
 
-    val free_pdec : pdec -> set
-
-    (*
-	If check_desc desc = (),
-	then |- desc ok.
-    *)
-    val check_desc : desc -> unit
-
     val blastOutUnits : Blaster.outstream -> units -> unit
     val blastInUnits : Blaster.instream -> units
 
     val blastOutDesc : Blaster.outstream -> desc -> unit
     val blastInDesc : Blaster.instream -> desc
 
+    val pp_label : label -> Formatter.format
     val pp_units : units -> Formatter.format
 
     val pp_pdec : pdec -> Formatter.format
     val pp_desc : desc -> Formatter.format
 
+    val free_pdec : pdec -> set
+
     (*
-	Info files
+	If check_desc (_,desc) = (),
+	then |- desc ok.
     *)
-    type crc = Crc.crc
-    type ue = (label * crc) list
+    val check_desc : string * desc -> unit  (* message in case of errors *)
 
-    datatype info =
-	INFO_I of {ue:ue, src:(units * crc) option}
-    |	INFO_U of {ue:ue, src:(units * crc) option, pinterface:crc option}
+    (*
+	Compiler inputs comprise an up-to-date project description and
+	a to-be-compiled project declaration.
 
-    val blastOutInfo : Blaster.outstream -> info -> unit
-    val blastInInfo : Blaster.instream -> info
+	Invariant:
 
-    val pp_info : info -> Formatter.format
+	If (desc,pdec) : inputs,
+	then desc defines only (pre-)compiled interfaces and
+	separately compiled units,
+	and pdec is not a (pre-)compiled interface or unit,
+	and desc |- pdec ok,
+	and support(pdec,desc) = dom(desc).
+    *)
+    type inputs = desc * pdec
+
+    (*
+	A summary of compiler inputs.  Precompiled interfaces are
+	summarized by the CRC of their source and their list of opened
+	units.	Compiled interfaces using no units (corresponding to
+	the primitive interface) are summarized by the CRC of their
+	pinterface.
+    *)
+    structure S :
+    sig
+	type crc = Crc.crc
+
+	structure D :
+	sig
+	    datatype iexp =
+		PRECOMPI of units * crc (* opened, source *)
+	    |	COMPI of crc	(* pinterface *)
+
+	    datatype pdec =
+		IDEC of label * iexp	(* I = iexp *)
+	    |	SCDEC of label * label	(* U : I *)
+
+	    type desc = pdec list
+	end
+
+	structure P :
+	sig
+	    datatype iexp =
+		SRCI of units * crc (* opened, source *)
+		(* PRIMI always out of date *)
+
+	    datatype uexp =
+		SRCU of units * crc (* opened, source *)
+	    |	SSRCU of label * units * crc	(* ascription, opened, source *)
+		(* PRIMU always out of date *)
+
+	    datatype pdec =
+		IDEC of label * iexp
+	    |	SCDEC of label * label
+	    |	UDEC of label * uexp
+	end
+
+	type summary = D.desc * P.pdec
+
+	val blastOutSummary : Blaster.outstream -> summary -> unit
+	val blastInSummary : Blaster.instream -> summary
+
+	val pp_summary : summary -> Formatter.format
+
+    end
 
 end

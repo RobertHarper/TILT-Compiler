@@ -168,12 +168,14 @@ struct
 
 	val lookup : label -> attr = wrap Graph.attribute
 
-	fun get_targets (desc:I.desc, targets:targets) : targets =
+	fun get_targets (desc:I.desc, targets:targets) : Set.set =
 	    let val labels = map I.P.D.name desc
 		val bound = Set.addList(Set.empty,labels)
 		fun notbound t = not(Set.member(bound,t))
 	    in  (case List.find notbound targets
-		   of NONE => if null targets then labels else targets
+		   of NONE =>
+			if null targets then bound
+			else Set.addList(Set.empty,targets)
 		    | SOME bad =>
 			reject (Name.label2longname bad ^
 				" not defined in project"))
@@ -222,7 +224,7 @@ struct
 		val TiltExn = Name.unit_label "TiltExn"
 		val targets = get_targets(d,targets)
 		val targets =
-		    if linking then TiltExn :: targets
+		    if linking then Set.add(targets,TiltExn)
 		    else targets
 		val d = Compiler.gc_desc(d,targets)
 		val numTargets = length d
@@ -936,10 +938,9 @@ struct
 		   of I.SCDEC {name=U,...} => SOME U
 		    | _ => NONE)
 	    val sc = List.mapPartial mapper desc
-	    val link = I.F.link (hd projects,exe)
 	    val _ = compile()
 	in  if null sc then
-		Compiler.link(desc,link)
+		Compiler.link(desc,exe)
 	    else
 		(print ("can not link " ^ exe ^
 			" because of unimplemented units: ");

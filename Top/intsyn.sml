@@ -86,10 +86,13 @@ struct
 		 using_file=root/Using, tali=root'/Tali, tali_rel=l/target/Tali}
 	    end
 
+	val cwd : unit -> string =
+	    Util.memoize OS.FileSys.getDir
+
 	type link = {exe:file, asm:file, asmz:file, obj:file}
 
-	fun link (desc:file, exe:file) : link =
-	    let val root = pdir' desc/L/file exe
+	fun link (exe:file) : link =
+	    let val root = cwd()/L/file exe
 	    in	{exe=exe, asm=root/Asm, asmz=root/Asmz, obj=root/Obj}
 	    end
 
@@ -651,58 +654,6 @@ struct
 	end
     end
 
-    (*
-	Syntactic definitions and well-formedness checks.
-    *)
-
-    fun free_units (units : units) : set = S.addList (S.empty, units)
-
-    fun free_iexp (iexp : iexp) : set =
-	(case iexp of
-	    SRCI {opened,...}=> free_units opened
-	|   PRIMI _ => S.empty
-	|   PRECOMPI {using,opened,...} =>
-		S.union (free_units using, free_units opened)
-	|   COMPI {using,...} => free_units using)
-
-    fun free_uexp (uexp : uexp) : set =
-	(case uexp of
-	    SRCU {opened,...}=> free_units opened
-	|   SSRCU {opened,asc=I,...} => S.add(free_units opened, I)
-	|   PRIMU {asc=I,...} => S.singleton I
-	|   PRECOMPU {using,opened,asc=I,...} =>
-		S.add(S.union(free_units using, free_units opened), I)
-	|   COMPU {using,opened,asc=I,...} =>
-		S.add(S.union(free_units using, free_units opened),I))
-
-    fun free_pdec (pdec : pdec) : set =
-	(case pdec of
-	    IDEC {iexp,...} => free_iexp iexp
-	|   SCDEC {asc=I,...} => S.singleton I
-	|   UDEC {uexp,...} => free_uexp uexp)
-
-    fun pdec_ok (pdec : pdec, dom : set) : set =
-	let val l = P.D.name pdec
-	    val redefined = S.member (dom,l)
-	    val missing = S.difference (free_pdec pdec, dom)
-	    fun fail msg =
-		error (concat[Pos.tostring (P.D.pos pdec), ": ",
-		    Name.label2longname l, " ", msg])
-	in
-	    (case (redefined, not (S.isEmpty missing)) of
-		(false, false) => S.add(dom,l)
-	    |	(true, _) => fail "redefined"
-	    |	(_, true) =>
-		    let val labels = S.listItems missing
-			val strings = map Name.label2longname labels
-			val missing = Listops.concatWith " " strings
-		    in	fail ("names undefined units/interfaces: " ^ missing)
-		    end)
-	end
-
-    fun check_desc (desc : desc) : unit =
-	ignore (foldl pdec_ok S.empty desc)
-
     fun blastOutIexp (os:B.outstream) (iexp:iexp) : unit =
 	(case iexp of
 	    SRCI {pos,opened,src,...} =>
@@ -798,7 +749,7 @@ struct
     val Has = String " : "
     val Box : format list -> format = Fmt.HOVbox
 
-    val pp_label = Ppil.pp_label'
+    val pp_label = String o Name.label2name'
     val pp_pos = Pos.pp_pos
 
     fun pp_units (units:units) : format =
@@ -907,69 +858,242 @@ struct
 	end
 
     (*
-	Info files
+	Syntactic definitions and well-formedness checks.
     *)
-    type crc = Crc.crc
-    type ue = (label * crc) list
 
-    datatype info =
-	INFO_I of {ue:ue, src:(units * crc) option}
-    |	INFO_U of {ue:ue, src:(units * crc) option, pinterface:crc option}
+    fun free_units (units : units) : set = S.addList (S.empty, units)
 
-    val blastOutEntry : B.outstream -> label * Crc.crc -> unit =
-	B.blastOutPair NB.blastOutLabel Crc.blastOutCrc
-    val blastInEntry : B.instream -> label * Crc.crc =
-	B.blastInPair NB.blastInLabel Crc.blastInCrc
+    fun free_iexp (iexp : iexp) : set =
+	(case iexp of
+	    SRCI {opened,...}=> free_units opened
+	|   PRIMI _ => S.empty
+	|   PRECOMPI {using,opened,...} =>
+		S.union (free_units using, free_units opened)
+	|   COMPI {using,...} => free_units using)
 
-    val blastOutUe : B.outstream -> ue -> unit =
-	B.blastOutList blastOutEntry
-    val blastInUe : B.instream -> ue =
-	B.blastInList blastInEntry
+    fun free_uexp (uexp : uexp) : set =
+	(case uexp of
+	    SRCU {opened,...}=> free_units opened
+	|   SSRCU {opened,asc=I,...} => S.add(free_units opened, I)
+	|   PRIMU {asc=I,...} => S.singleton I
+	|   PRECOMPU {using,opened,asc=I,...} =>
+		S.add(S.union(free_units using, free_units opened), I)
+	|   COMPU {using,opened,asc=I,...} =>
+		S.add(S.union(free_units using, free_units opened),I))
 
-    val blastOutSrc : B.outstream -> units * crc -> unit =
-	B.blastOutPair blastOutUnits Crc.blastOutCrc
-    val blastInSrc : B.instream -> units * crc =
-	B.blastInPair blastInUnits Crc.blastInCrc
+    fun free_pdec (pdec : pdec) : set =
+	(case pdec of
+	    IDEC {iexp,...} => free_iexp iexp
+	|   SCDEC {asc=I,...} => S.singleton I
+	|   UDEC {uexp,...} => free_uexp uexp)
 
-    fun blastOutInfo (os : B.outstream) (info : info) : unit =
-	(case info of
-	    INFO_I {ue,src} =>
-		(B.blastOutInt os 0; blastOutUe os ue;
-		 B.blastOutOption blastOutSrc os src)
-	 |  INFO_U {ue,src,pinterface} =>
-		(B.blastOutInt os 1; blastOutUe os ue;
-		 B.blastOutOption blastOutSrc os src;
-		 B.blastOutOption Crc.blastOutCrc os pinterface))
+    fun pdec_ok (pdec : pdec, dom : set) : set =
+	let val l = P.D.name pdec
+	    val redefined = S.member (dom,l)
+	    val missing = S.difference (free_pdec pdec, dom)
+	    fun fail msg =
+		error (concat[Pos.tostring (P.D.pos pdec), ": ",
+		    Name.label2longname l, " ", msg])
+	in
+	    (case (redefined, not (S.isEmpty missing)) of
+		(false, false) => S.add(dom,l)
+	    |	(true, _) => fail "redefined"
+	    |	(_, true) =>
+		    let val labels = S.listItems missing
+			val strings = map Name.label2longname labels
+			val missing = Listops.concatWith " " strings
+		    in	fail ("names undefined units/interfaces: " ^ missing)
+		    end)
+	end
 
-    fun blastInInfo (is : B.instream) : info =
-	(case (B.blastInInt is) of
-	    0 => INFO_I {ue=blastInUe is, src=B.blastInOption blastInSrc is}
-	 |  1 => INFO_U
-		{ue=blastInUe is, src=B.blastInOption blastInSrc is,
-		 pinterface=B.blastInOption Crc.blastInCrc is}
-	|   _ => error "blastInInfo")
+    fun check_desc (what:string, desc : desc) : unit =
+	(ignore (foldl pdec_ok S.empty desc)
+	 handle e =>
+	    (print (what ^ ": project description not well-formed\n");
+	     Fmt.print_fmt(pp_desc desc); print "\n";
+	     raise e))
 
-    val (blastOutInfo, blastInInfo) =
-	B.magic (blastOutInfo, blastInInfo, "info $Revision$")
+    (*
+	Compiler inputs and summary.
+    *)
 
-    fun pp_entry (name : label, crc : Crc.crc) : format =
-	Fmt.Hbox [String (Name.label2string name), Has, Crc.pp_crc crc]
+    type inputs = desc * pdec
 
-    fun pp_ue (ue : ue) : format = Fmt.pp_list pp_entry ue
+    structure S =
+    struct
 
-    fun pp_src (opened:units, crc:crc) : format =
-	Box[String "OPEN ", pp_units opened, String " IN ", Crc.pp_crc crc]
+	type crc = Crc.crc
 
-    fun pp_info (info : info) : format =
-	(case info of
-	    INFO_I {ue,src} =>
-		Box[String "INFO_SRCI", Break,
-		    String "ue = ", pp_ue ue, Break,
-		    String "src = ", Fmt.pp_option pp_src src]
-	|   INFO_U {ue,src,pinterface} =>
-		Box[String "INFO_SRCU", Break,
-		    String "ue = ", pp_ue ue, Break,
-		    String "src = ", Fmt.pp_option pp_src src, Break,
-		    String "pinterface = ", Fmt.pp_option Crc.pp_crc pinterface])
+	structure D =
+	struct
+
+	    datatype iexp =
+		PRECOMPI of units * crc (* opened, source *)
+	    |	COMPI of crc	(* pinterface *)
+
+	    datatype pdec =
+		IDEC of label * iexp	(* I = iexp *)
+	    |	SCDEC of label * label	(* U : I *)
+
+	    type desc = pdec list
+
+	    fun blastOutIexp (os:B.outstream) (iexp:iexp) : unit =
+		(case iexp of
+		    PRECOMPI (units, src) =>
+			(B.blastOutInt os 0; blastOutUnits' os units;
+			 Crc.blastOutCrc os src)
+		|   COMPI pinterface =>
+			(B.blastOutInt os 1; Crc.blastOutCrc os pinterface))
+
+	    fun blastInIexp (is:B.instream) : iexp =
+		(case (B.blastInInt is) of
+		    0 => PRECOMPI (blastInUnits' is, Crc.blastInCrc is)
+		|   1 => COMPI (Crc.blastInCrc is)
+		|   _ => error "S.D.blastInIexp")
+
+	    fun blastOutPdec (os:B.outstream) (pdec:pdec) : unit =
+		(case pdec of
+		    IDEC (I,iexp) =>
+			(B.blastOutInt os 0; blastOutLabel os I;
+			 blastOutIexp os iexp)
+		|   SCDEC (U,I) =>
+			(B.blastOutInt os 1; blastOutLabel os U;
+			 blastOutLabel os I))
+
+	    fun blastInPdec (is:B.instream) : pdec =
+		(case (B.blastInInt is) of
+		    0 => IDEC (blastInLabel is, blastInIexp is)
+		|   1 => SCDEC (blastInLabel is, blastInLabel is)
+		|   _ => error "S.D.blastInPdec")
+
+	    val blastOutDesc : B.outstream -> desc -> unit =
+		B.blastOutList blastOutPdec
+
+	    val blastInDesc : B.instream -> desc =
+		B.blastInList blastInPdec
+
+	    fun pp_iexp (iexp : iexp) : format =
+		(case iexp of
+		    PRECOMPI (opened,src) =>
+			Box[String "PRECOMPI", Break,
+			    String "opened = ", pp_units opened, Break,
+			    String "src = ", Crc.pp_crc src]
+		|   COMPI pinterface =>
+			Box[String "COMPI", Break,
+			    String "pinterface = ", Crc.pp_crc pinterface])
+
+	    fun pp_pdec (pdec:pdec) : format =
+		(case pdec of
+		    IDEC (I,iexp) => Box[pp_label I, Eq, pp_iexp iexp]
+		|   SCDEC (U,I) => Box[pp_label U, Has, pp_label I])
+
+	    fun pp_desc (desc:desc) : format =
+		let val formats = map pp_pdec desc
+		    val formats = Listops.join Break formats
+		in  Fmt.Vbox formats
+		end
+
+	end
+
+	structure P =
+	struct
+
+	    datatype iexp =
+		SRCI of units * crc (* opened, source *)
+
+	    datatype uexp =
+		SRCU of units * crc (* opened, source *)
+	    |	SSRCU of label * units * crc	(* ascription, opened, source *)
+
+	    datatype pdec =
+		IDEC of label * iexp
+	    |	SCDEC of label * label
+	    |	UDEC of label * uexp
+
+	    fun blastOutIexp (os:B.outstream) (iexp:iexp) : unit =
+		let val SRCI (opened,src) = iexp
+		in  blastOutUnits' os opened; Crc.blastOutCrc os src
+		end
+
+	    fun blastInIexp (is:B.instream) : iexp =
+		SRCI(blastInUnits' is,Crc.blastInCrc is)
+
+	    fun blastOutUexp (os:B.outstream) (uexp:uexp) : unit =
+		(case uexp of
+		    SRCU (opened,src) =>
+			(B.blastOutInt os 0; blastOutUnits' os opened;
+			 Crc.blastOutCrc os src)
+		|   SSRCU (I,opened,src) =>
+			(B.blastOutInt os 1; blastOutLabel os I;
+			 blastOutUnits' os opened; Crc.blastOutCrc os src))
+
+	    fun blastInUexp (is:B.instream) : uexp =
+		(case (B.blastInInt is) of
+		    0 => SRCU(blastInUnits' is,Crc.blastInCrc is)
+		|   1 => SSRCU(blastInLabel is,blastInUnits' is,Crc.blastInCrc is)
+		|   _ => error "S.P.blastInUexp")
+
+	    fun blastOutPdec (os:B.outstream) (pdec:pdec) : unit =
+		(case pdec of
+		    IDEC (I,iexp) =>
+			(B.blastOutInt os 0; blastOutLabel os I;
+			 blastOutIexp os iexp)
+		|   SCDEC (U,I) =>
+			(B.blastOutInt os 1; blastOutLabel os U;
+			 blastOutLabel os I)
+		|   UDEC (U,uexp) =>
+			(B.blastOutInt os 2; blastOutLabel os U;
+			 blastOutUexp os uexp))
+
+	    fun blastInPdec (is:B.instream) : pdec =
+		(case (B.blastInInt is) of
+		    0 => IDEC(blastInLabel is,blastInIexp is)
+		|   1 => SCDEC(blastInLabel is,blastInLabel is)
+		|   2 => UDEC(blastInLabel is,blastInUexp is)
+		|   _ => error "S.P.blastInPdec")
+
+	    fun pp_iexp (iexp:iexp) : format =
+		let val SRCI(opened,src) = iexp
+		in  Box[String "SRCI", Break,
+			String "opened = ", pp_units opened, Break,
+			String "src = ", Crc.pp_crc src]
+		end
+
+	    fun pp_uexp (uexp : uexp) : format =
+		(case uexp of
+		    SRCU (opened,src) =>
+			Box[String "SRCU", Break,
+			    String "opened = ", pp_units opened, Break,
+			    String "src = ", Crc.pp_crc src]
+		|   SSRCU (I,opened,src) =>
+			Box[String "SSRCU", Has, pp_label I, Break,
+			    String "opened = ", pp_units opened, Break,
+			    String "src = ", Crc.pp_crc src])
+
+	    fun pp_pdec (pdec:pdec) : format =
+		(case pdec of
+		    IDEC (I,iexp) => Box[pp_label I, Eq, pp_iexp iexp]
+		|   SCDEC (U,I) => Box[pp_label U, Has, pp_label I]
+		|   UDEC (U,uexp) => Box[pp_label U, Eq, pp_uexp uexp])
+
+	end
+
+	type summary = D.desc * P.pdec
+
+	val blastOutSummary : Blaster.outstream -> summary -> unit =
+	    B.blastOutPair D.blastOutDesc P.blastOutPdec
+
+	val blastInSummary : Blaster.instream -> summary =
+	    B.blastInPair D.blastInDesc P.blastInPdec
+
+	val (blastOutSummary, blastInSummary) =
+	    B.magic (blastOutSummary, blastInSummary, "summary $Revision$")
+
+	fun pp_summary ((desc,pdec):summary) : format =
+	    Box [String "SUMMARY", Break,
+		String "desc = ", D.pp_desc desc, Break,
+		String "pdec = ", P.pp_pdec pdec]
+
+    end
 
 end

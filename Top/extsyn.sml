@@ -1,45 +1,4 @@
 (* External syntax for project description files.  *)
-(*
-    A project description assigns logical names to the units and
-    interfaces in an SML project and describes the dependencies
-    between them.
-
-    A project description may comprise multiple project description
-    files that refer to one another.  The dependencies between project
-    description files must form a DAG.
-
-    The syntax for constants, comments, and (alphanumeric) identifiers
-    is borrowed from SML.
-
-    An identifier is either a variable x, a compilation unit name U,
-    an interface name I, or an environment variable X. These
-    categories are disjoint; for example, it is possible to assign the
-    same name to a unit and its interface.
-
-    The identifiers that may appear free in a project description file
-    are environment variables, a few predefined variables, identifiers
-    from the Basis library (usually), and identifiers from any
-    included project description files (transitively).
-
-    Variables may not be shadowed.  Compilation unit names may be
-    shadowed provided at most one implementation is defined and it
-    precedes any other definitions for the unit name.  Interface names
-    may be shadowed provided the definitions are equivalent.  These
-    restrictions ensure that unit and interface names are definite
-    references.
-
-    The expression langauge has types bool, string, and int.  String
-    expressions support naming files; for example, $libdir^"/lib".
-    Int and bool expressions support conditional compilation.
-    Precedence is as in SML.  The parser permits parentheses around
-    expressions and after the keyword defined.
-
-    Associated with every source file is a list of the units that need
-    to be opened to compile the source.	 Every free identifier in the
-    source must be declared in one or more of these units.
-
-    The location of compiled files is implicit.
-*)
 
 structure ExtSyn =
 struct
