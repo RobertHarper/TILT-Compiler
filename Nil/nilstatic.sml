@@ -547,9 +547,15 @@ struct
 	   val (rvals',record_kind) = con_valid (D,rvals)
 
 	   val entry_kinds = 
-	     (case record_kind
-		of Record_k kinds => Util.sequence2list kinds
-		 | _ => error "Unexpected kind returned from con_valid")
+	     (case (strip_singleton record_kind) of
+		 Record_k kinds => Util.sequence2list kinds
+	       | _ => (print"While con_valid-ing\n";
+		       PpNil.pp_con constructor;
+		       print"\nUnexpected kind returned from con_valid\n";
+		       PpNil.pp_kind (strip_singleton record_kind);
+		       print "\nand context is\n";
+		       NilContext.print_context D;
+		       error "Unexpected kind returned from con_valid"))
 		
 	   fun propogate [] = error "Label not found in record kind"
 	     | propogate (((label2,var),kind)::rest) = 

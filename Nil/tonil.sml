@@ -26,7 +26,7 @@ struct
    val il_debug = ref (Il.CON_ANY)
 *)
 
-   val elaborator_specific_optimizations = ref true
+   val elaborator_specific_optimizations = ref false
 
    fun error msg = Util.error "tonil.sml" msg
 
@@ -1088,16 +1088,19 @@ struct
        end
 
      | xexp context (il_exp as (Il.APP (il_exp1, il_exp2))) = 
-       let
-	   val (exp1, con1, valuable1) = xexp context il_exp1
-	   val (exp2, con2, valuable2) = xexp context il_exp2
-
-           val (AllArrow_c(_,effect,_,_,_,con)) = Nilstatic.con_reduce(NILctx_of context, con1)
-
-	   val valuable = (effect = Total) andalso valuable1 andalso valuable2
-       in
-	   (App_e (Open, exp1, [], [exp2], []), con, valuable)
-       end
+       (case (Ilutil.beta_reduce(il_exp1,il_exp2)) of
+	    NONE =>
+		let
+		    val (exp1, con1, valuable1) = xexp context il_exp1
+		    val (exp2, con2, valuable2) = xexp context il_exp2
+			
+		    val (AllArrow_c(_,effect,_,_,_,con)) = Nilstatic.con_reduce(NILctx_of context, con1)
+			
+		    val valuable = (effect = Total) andalso valuable1 andalso valuable2
+		in
+		    (App_e (Open, exp1, [], [exp2], []), con, valuable)
+		end
+	  | SOME il_exp => xexp context il_exp)
 
      | xexp context (Il.FIX (il_arrow, fbnds)) = 
        let

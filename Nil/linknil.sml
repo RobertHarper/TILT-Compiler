@@ -6,6 +6,7 @@ sig
     structure NilStatic : NILSTATIC
     structure PpNil : PPNIL
 
+    val compile_prelude : bool * string -> Nil.module
     val compile : string -> Nil.module
     val test : string -> Nil.module
 
@@ -41,7 +42,14 @@ struct
 				      structure Alpha = Alpha)
 
 
-    structure Tonil = Tonil(structure Ilstatic = LinkIl.IlStatic
+    structure NilPrimUtilParam = NilPrimUtilParam(structure NilUtil = NilUtil);
+	
+    structure NilPrimUtil = PrimUtil(structure Prim = LinkIl.Prim
+				     structure Ppprim = LinkIl.Ppprim
+				     structure PrimUtilParam = NilPrimUtilParam);
+    structure Tonil = Tonil(structure Il = LinkIl.Il
+			    structure Nilstatic = NilStatic
+			    structure Nilprimutil = NilPrimUtil
 			    structure Ilutil = LinkIl.IlUtil
                             structure Ilcontext = LinkIl.IlContext
 			    structure Nilcontext = NilContext
@@ -56,21 +64,15 @@ struct
 				    structure Ppnil = PpNil
 				    structure NilUtil = NilUtil)
 
-    structure NilPrimUtilParam = NilPrimUtilParam(structure NilUtil = NilUtil);
-	
-    structure NilPrimUtil = PrimUtil(structure Prim = LinkIl.Prim
-				     structure Ppprim = LinkIl.Ppprim
-				     structure PrimUtilParam = NilPrimUtilParam);
 	
     structure NilEval = NilEvaluate(structure Nil = Nil
 				    structure NilUtil = NilUtil
 				    structure Ppnil = PpNil
 				    structure PrimUtil = NilPrimUtil)
 
-    fun phasesplit debug filename : Nil.module = 
+    fun phasesplit debug (ctxt,sbnds) : Nil.module = 
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
-	    val SOME(sbnds, _, ctxt) = LinkIl.compile filename
 	    fun folder (v,(l,pc),maps as (vmap,mmap)) = 
 		let fun addv () = (VarMap.insert(vmap,v,l),mmap)
 		    fun addm () = (vmap,VarMap.insert(mmap,v,l))
@@ -123,10 +125,11 @@ struct
 	end
     val phasesplit = Stats.timer("Phase-splitting",phasesplit)
 
-    fun compile' debug filename =
+
+    fun compile' debug (ctxt,sbnds) = 
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
-	    val nilmod = phasesplit debug filename
+	    val nilmod = phasesplit debug (ctxt,sbnds)
 	    val nilmod = (Stats.timer("Linearization",Linearize.linearize_mod)) nilmod
 	    val _ = if debug 
 			then (print "\n\n=======================================\n\n";
@@ -144,8 +147,23 @@ struct
 	in  nilmod
 	end
 
-    val test = compile' true
-    val compile = compile' false
-
+    fun test filename = 
+	let val SOME(ctxt,sbnds,_) = LinkIl.test filename
+	in  compile' true (ctxt,sbnds)
+	end
+    fun compile filename = 
+	let val SOME(ctxt,sbnds,_) = LinkIl.compile filename
+	in  compile' false (ctxt,sbnds)
+	end
+    val cached_prelude = ref (NONE : Nil.module option)
+    fun compile_prelude (use_cache,filename) = 
+	case (use_cache, !cached_prelude) of
+		(true, SOME m) => m
+	      | _ => let val (ctxt,sbnds,_) = 
+				LinkIl.compile_prelude(use_cache,filename)
+			 val m = compile' false (ctxt,sbnds)
+			 val _ = cached_prelude := SOME m
+		     in  m
+		     end
 end
 
