@@ -1,4 +1,4 @@
-(*$import IL ILSTATIC ILUTIL PPIL ILCONTEXT PAT ASTHELP INFIXPARSE DATATYPE EQUAL ERROR SIGNATURE TOIL Stats *)
+(*$import IL ILSTATIC ILUTIL PPIL ILCONTEXT PAT AstHelp INFIXPARSE DATATYPE EQUAL ERROR SIGNATURE TOIL Stats *)
 
 (* todo : LetExp and CaseExp: valuability coputation too conservative
           optimize coercion functors to recognize when it is entirely unndeeded 
@@ -12,7 +12,6 @@ functor Toil(structure Il : IL
 	     structure Ppil : PPIL
 	     structure IlContext : ILCONTEXT
 	     structure Pat : PAT
-	     structure AstHelp : ASTHELP
 	     structure InfixParse : INFIXPARSE
 	     structure Datatype : DATATYPE
 	     structure Equal : EQUAL

@@ -7,9 +7,9 @@ structure LinkIl :> LINKIL  =
 	structure Il = Il(structure Prim = Prim
 			  structure Tyvar = Tyvar)
 	structure Ppprim = Ppprim(structure ArgPrim = Prim);
-	structure Ppil = Ppil(structure AstHelp = AstHelp
-			      structure Ppprim = Ppprim
-			      structure Il = Il)
+	structure Ppil = Ppil(structure Il = Il
+			      structure Ppprim = Ppprim)
+			      
 	structure IlContext = IlContext(structure Il = Il
 					structure Ppil = Ppil)
 	structure Formatter = Formatter
@@ -19,68 +19,69 @@ structure LinkIl :> LINKIL  =
 					structure Ppprim = Ppprim
 					structure PrimUtilParam = IlPrimUtilParam)
 	structure IlUtil = IlUtil(structure Il = Il
+				  structure Ppil = Ppil
 				  structure IlContext = IlContext
-				  structure PrimUtil = IlPrimUtil
-				  structure AstHelp = AstHelp
-				  structure Ppil = Ppil);
+				  structure PrimUtil = IlPrimUtil)
+
 	structure IlStatic = IlStatic(structure Il = Il
 				      structure IlContext = IlContext
 				      structure PrimUtil = IlPrimUtil
-				      structure IlUtil = IlUtil
-				      structure Ppil = Ppil);
-	structure Error = Error(structure Il = Il
+				      structure Ppil = Ppil
 				      structure IlUtil = IlUtil)
+
+	structure Error = Error(structure Il = Il
+				structure IlUtil = IlUtil)
+
         structure Datatype = Datatype(structure Il = Il
-				      structure IlContext = IlContext
-				      structure Error = Error
-				      structure AstHelp = AstHelp
 				      structure IlStatic = IlStatic
 				      structure IlUtil = IlUtil
-				      structure Ppil = Ppil);
+				      structure Ppil = Ppil
+				      structure IlContext = IlContext)
+
 	structure Signature = Signature(structure Il = Il
-				      structure IlContext = IlContext
-				      structure Error = Error
-				      structure AstHelp = AstHelp
-				      structure IlStatic = IlStatic
-				      structure IlUtil = IlUtil
-				      structure Ppil = Ppil);
+					structure IlStatic = IlStatic
+					structure IlUtil = IlUtil
+					structure Ppil = Ppil
+					structure IlContext = IlContext
+					structure Error = Error)
+
 	structure Equal = Equal(structure Il = Il
-				structure Error = Error
-				structure IlContext = IlContext
 				structure IlStatic = IlStatic
 				structure IlUtil = IlUtil
-				structure Ppil = Ppil);
+				structure IlContext = IlContext
+				structure Ppil = Ppil)
 	    
 	structure InfixParse = InfixParse(structure Il = Il
-					  structure Ppil = Ppil
-					  structure AstHelp = AstHelp);
+					  structure Ppil = Ppil)
+
 	structure Pat = Pat(structure Il = Il
-			    structure Error = Error
-			    structure IlContext = IlContext
 			    structure IlStatic = IlStatic
 			    structure IlUtil = IlUtil
-			    structure AstHelp = AstHelp
+			    structure Ppil = Ppil
 			    structure Datatype = Datatype
-			    structure Ppil = Ppil)
+			    structure IlContext = IlContext
+			    structure Error = Error)
+
+
 	structure Toil = Toil(structure Il = Il
-			      structure IlContext = IlContext
-			      structure AstHelp = AstHelp
 			      structure IlStatic = IlStatic
 			      structure IlUtil = IlUtil
 			      structure Ppil = Ppil
+			      structure IlContext = IlContext
 			      structure Pat = Pat
+			      structure InfixParse = InfixParse
 			      structure Datatype = Datatype
-			      structure Signature = Signature
 			      structure Equal = Equal
 			      structure Error = Error
-			      structure InfixParse = InfixParse);
+			      structure Signature = Signature)
+
 	structure Basis = Basis(structure Il = Il		
 				structure IlContext = IlContext
 				structure IlStatic = IlStatic
 				structure Ppil = Ppil
-				structure Toil = Toil
+				structure IlUtil = IlUtil
 				structure Datatype = Datatype      
-				structure IlUtil = IlUtil);
+				structure Toil = Toil)
 (*
 	structure IlEval = IlEval(structure Il = Il
 				  structure IlContext = IlContext
@@ -483,26 +484,43 @@ structure LinkIl :> LINKIL  =
 		    end
 	      | NONE => NONE
 
+
+	local
+	    open Ast
+	    fun seqDec [d] = d
+	      | seqDec decs = SeqDec decs
+	    fun valspec2dec (sym,ty) = ValDec([Vb{pat = ConstraintPat{pattern = VarPat [sym], 
+								      constraint = ty},
+						  exp = VarExp [sym]}],
+					      ref [])
+	    fun strspec2dec coerce (sym,SOME sigexp,path_opt) = 
+		let val copysym = Symbol.strSymbol("copy_" ^ (Symbol.name sym))
+		in  if coerce
+		    then StrDec[Strb{name = copysym,
+				     def = VarStr [sym],
+				     constraint = Opaque sigexp}]
+		    else StrDec[Strb{name = sym,
+				     def = VarStr [copysym],
+				     constraint = NoSig}]
+		end
+	      | strspec2dec _ _ = error "strspec2dec no constraining signature"
+	in  val seqDec = seqDec
+	    fun spec2dec coerce (MarkSpec(spec,r)) = spec2dec coerce spec
+	      | spec2dec coerce (StrSpec ls) = SOME(seqDec(map (strspec2dec coerce) ls))
+	      | spec2dec true (ValSpec ls) = SOME(seqDec(map valspec2dec ls))
+	      | spec2dec false (ValSpec ls) = NONE
+	      | spec2dec _ (TycSpec (ls,_)) = error "elab_dec_constrained: type spec not implemented"
+	      | spec2dec _ _ = error "elab_dec_constrained: unhandled spec"
+	end
+
+
+
 	fun elab_dec_constrained (ctxt1, fp, dec, fp2, specs : Ast.spec list) = 
-	    let open Ast
-		fun seqDec [d] = d
-		  | seqDec decs = SeqDec decs
-		fun valspec2dec (sym,ty) = ValDec([Vb{pat = ConstraintPat{pattern = VarPat [sym], 
-									  constraint = ty},
-						      exp = VarExp [sym]}],
-						  ref [])
-		fun strspec2dec (sym,SOME sigexp,path_opt) = StrDec[Strb{name = sym,
-								     def = VarStr [sym],
-								     constraint = Opaque sigexp}]
-		  | strspec2dec _ = error "strspec2dec no constraining signature"
-		fun spec2dec (MarkSpec(spec,r)) = MarkDec(spec2dec spec, r)
-		  | spec2dec (StrSpec ls) = seqDec(map strspec2dec ls)
-		  | spec2dec (TycSpec (ls,_)) = error "elab_dec_constrained: type spec not implemented"
-		  | spec2dec (ValSpec ls) = seqDec(map valspec2dec ls)
-		  | spec2dec _ = error "elab_dec_constrained: unhandled spec"
-		val fp' = fp
-		val dec' = seqDec(dec::(map spec2dec specs))
-	    in  elab_dec(ctxt1,fp',dec')
+	    let val coerce_dec = List.mapPartial (spec2dec true) specs
+		val export_dec = List.mapPartial (spec2dec false) specs
+		val new_dec = seqDec([dec] @ coerce_dec @ export_dec)
+	    in  elab_dec(ctxt1,fp,new_dec)
 	    end
+
     end (* struct *)
 

@@ -1971,8 +1971,7 @@ end
 		| (SIGNAT_STRUCTURE (SOME p,sdecs1), 
 		   SIGNAT_STRUCTURE (NONE, sdecs2)) => help(ctxt,sdecs1,SelfifySdecs ctxt (p,sdecs2))
 		| (SIGNAT_STRUCTURE (SOME p1,sdecs1), 
-		   SIGNAT_STRUCTURE (SOME p2,sdecs2)) => eq_path(p1,p2)
-							  orelse help(ctxt,sdecs1,sdecs2)
+		   SIGNAT_STRUCTURE (SOME p2,sdecs2)) => (* eq_path(p1,p2) orelse *) help(ctxt,sdecs1,sdecs2)
 		| (SIGNAT_FUNCTOR(v1,s1_arg,s1_res,a1), 
 		   SIGNAT_FUNCTOR(v2,s2_arg,s2_res,a2)) =>
 		  ((eq_arrow(a1,a2,true)) andalso 

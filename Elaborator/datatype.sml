@@ -1,4 +1,4 @@
-(*$import IL ILSTATIC ILUTIL ILCONTEXT Env Name PPIL Ast GraphUtil ListMergeSort AstHelp DATATYPE *)
+(*$import IL ILSTATIC ILUTIL ILCONTEXT Name PPIL Ast GraphUtil ListMergeSort AstHelp DATATYPE *)
 
 (* Datatype compiler and destructures of datatype signatures. *)
 functor Datatype(structure Il : IL
@@ -217,6 +217,19 @@ functor Datatype(structure Il : IL
 
 
 	  
+        (* -----------  create the carried types -------------- *)
+	fun mapper(constr_con_vars_i, constr_con_labs_i, constr_rf_i) = 
+	    map (fn (NONE,_,_) => NONE
+	          | (SOME v,SOME l,SOME c) => 
+		 let val (c,k) = if is_monomorphic 
+				     then (c, KIND_TUPLE 1)
+				 else (CON_FUN(tyvar_vars,c), KIND_ARROW(num_tyvar,1))
+		 in  SOME(c,SBND(l,BND_CON(v,c)),
+			  SDEC(l,DEC_CON(v,k,SOME c)))
+		 end) (zip3 constr_con_vars_i constr_con_labs_i constr_rf_i)
+	val constr_con_con_sbnd_sdecs = map3 mapper (constr_con_vars, constr_con_labs, constr_rf)
+
+
 	(* ----------------- compute the constructors ------------- *)
 	local 
 	    fun mk_help (type_minst, 
@@ -267,7 +280,9 @@ functor Datatype(structure Il : IL
 					  else map CON_VAR type_vars,
 					  if transparent 
 					      then constr_rf
-					    else mapmap (Util.mapopt CON_VAR) constr_con_vars,
+(*	    else mapmap (Util.mapopt CON_VAR) constr_con_vars, *)
+					  else mapmap (fn SOME(c,_,_) => SOME c
+						        | NONE => NONE) constr_con_con_sbnd_sdecs,
 					  if transparent 
 					      then constr_rf_sum
 					  else map CON_VAR constr_sum_vars)
@@ -317,6 +332,7 @@ functor Datatype(structure Il : IL
 				(SOME e) => SOME(e,eq_con)
 		      	      | NONE => (is_eq := false; NONE))
 	end
+
 
 
 	(* --------- create the inner modules ------------- *)
@@ -480,41 +496,32 @@ functor Datatype(structure Il : IL
 		in  map2count mapper (type_labs,type_vars)
 		end
 
-	fun mapper(constr_con_vars_i, constr_con_labs_i, constr_rf_i) = 
-	    List.mapPartial (fn (NONE,_,_) => NONE
-                              | (SOME v,SOME l,SOME c) => 
-			         let val (c,k) = if is_monomorphic 
-						     then (c, KIND_TUPLE 1)
-						 else (CON_FUN(tyvar_vars,c), KIND_ARROW(num_tyvar,1))
-				 in  SOME(SBND(l,BND_CON(v,c)),
-				      SDEC(l,DEC_CON(v,k,SOME c)))
-				 end) (zip3 constr_con_vars_i constr_con_labs_i constr_rf_i)
-	val constr_con_sbnd_sdecs = map3 mapper (constr_con_vars, constr_con_labs, constr_rf)
 
 	fun mapper(constr_sumarg_lab_i,constr_sumarg_var_i, 
-		   constr_con_vars_i, constr_sumarg_kind_i) = 
+		   constr_con_con_sbnd_sdecs_i : (con * sbnd * sdec) option list, 
+		   constr_sumarg_kind_i) = 
 	    let val KIND_TUPLE num_carrier = constr_sumarg_kind_i
-		val vars = List.mapPartial (fn vopt => vopt) constr_con_vars_i
+		val cons = List.mapPartial (Util.mapopt #1) constr_con_con_sbnd_sdecs_i
 		val k = if is_monomorphic 
 			    then KIND_TUPLE num_carrier
 			else KIND_ARROW(num_tyvar,num_carrier)
 		val tyvar_tuple = con_tuple_inject(map CON_VAR tyvar_vars)
 		val c =
-		    (case (length vars = 1, is_monomorphic) of
-			 (true,true) => CON_VAR(hd vars)
-		       | (false,true) => con_tuple_inject(map CON_VAR vars)
-		       | (true,false) => (print "case 3\n";CON_VAR(hd vars))
+		    (case (length cons = 1, is_monomorphic) of
+			 (true,true) => hd cons
+		       | (false,true) => con_tuple_inject cons
+		       | (true,false) => hd cons
 		       | (false,false) => 
 			     (print "case 4 \n"; 
 			      CON_FUN(tyvar_vars,
 				      con_tuple_inject
-				      (map (fn v => CON_APP(CON_VAR v, tyvar_tuple)) vars))))
+				      (map (fn c => CON_APP(c, tyvar_tuple)) cons))))
 	    in  (SBND(constr_sumarg_lab_i,BND_CON(constr_sumarg_var_i, c)),
 		 SDEC(constr_sumarg_lab_i,DEC_CON(constr_sumarg_var_i, k, SOME c)))
 	    end
 
 	val constr_sumarg_sbnd_sdecs = map4 mapper
-	    (constr_sumarg_labs,constr_sumarg_vars, constr_con_vars,constr_sumarg_kind)
+	    (constr_sumarg_labs,constr_sumarg_vars, constr_con_con_sbnd_sdecs,constr_sumarg_kind)
 
 	fun mapper(constr_sum_lab_i,constr_sum_var_i, constr_rf_sum_i) = 
 	    let val (c,k) = if is_monomorphic 
@@ -542,7 +549,7 @@ functor Datatype(structure Il : IL
 	val final_sbnd_sdecs = (top_type_sbnd_sdec
 				@ top_eq_sbnd_sdec
 				@ type_sbnd_sdecs 
-				@ (flatten constr_con_sbnd_sdecs) 
+(*				@ (flatten constr_con_sbnd_sdecs)  *)
 				@ constr_sumarg_sbnd_sdecs
 				@ constr_sum_sbnd_sdecs
 (*				@ (flatten constr_ssum_sbnd_sdecs) *)
@@ -707,6 +714,7 @@ functor Datatype(structure Il : IL
 		   | _ => (print "lookup_labs: "; app Ppil.pp_label lookup_labs; print "\n";
 			   error ("unbound datatype - copy type" ^ str))
 
+(*
 	    val constr_con_strings = map (fn con_sym =>
 				         ((Symbol.name type_sym) ^ "_" ^ 
 					   (Name.label2name con_sym))) carrying_constr_labs
@@ -720,6 +728,7 @@ functor Datatype(structure Il : IL
 	    val constr_con_lookup_labs = map (fn l => change_path (fn _ => l)) old_constr_con_labs
 	    val constr_con_sbnd_sdecs = map3 (copy_type "constr_con") 
 		(constr_con_lookup_labs,constr_con_labs,constr_con_vars)
+*)
 	    val type_sbndsdec = copy_type "type" (type_labs,type_lab,type_var)
 	    val constr_sum_sbndsdec = copy_type "constr_sum" 
 		(constr_sum_labs,constr_sum_lab,constr_sum_var)
@@ -729,7 +738,8 @@ functor Datatype(structure Il : IL
 	    val constr_ssum_sbndsdecs = map3 (copy_type "constr_ssum") 
 		(constr_ssum_labs,constr_ssum_lab,constr_ssum_var)
 *)
-	in [type_sbndsdec] @ constr_con_sbnd_sdecs 
+	in [type_sbndsdec] 
+(* @ constr_con_sbnd_sdecs *)
 	    @ [constr_sumarg_sbndsdec,constr_sum_sbndsdec]
 (*  @ constr_ssum_sbndsdecs *)
 	      @ eq_sbndsdec @ constr_sbndsdec

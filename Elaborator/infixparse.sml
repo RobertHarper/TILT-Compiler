@@ -1,7 +1,6 @@
-(*$import INFIXPARSE IL PPIL ASTHELP ListMergeSort *)
+(*$import INFIXPARSE IL PPIL AstHelp ListMergeSort *)
 functor InfixParse(structure Il : IL
 		   structure Ppil : PPIL
-		   structure AstHelp : ASTHELP
 		   sharing Ppil.Il = Il)
   :> INFIXPARSE where Il = Il = 
   struct

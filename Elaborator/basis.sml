@@ -1,4 +1,4 @@
-(*$import IL ILCONTEXT ILSTATIC PPIL ILUTIL DATATYPE TOIL BASIS Stats *)
+(*$import Ast IL ILCONTEXT ILSTATIC PPIL ILUTIL DATATYPE TOIL BASIS Stats *)
 (* Forms the initial basis for elaboration *)
 functor Basis(structure Il : IL
 	      structure IlContext : ILCONTEXT

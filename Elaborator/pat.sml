@@ -1,4 +1,4 @@
-(*$import IL ILSTATIC PPIL ILUTIL ASTHELP DATATYPE ILCONTEXT ERROR PAT Stats *)
+(*$import IL ILSTATIC PPIL ILUTIL AstHelp DATATYPE ILCONTEXT ERROR PAT Stats *)
 
 (* xxx should coalesce constants *)
 
@@ -6,7 +6,6 @@ functor Pat(structure Il : IL
 	    structure IlStatic : ILSTATIC
 	    structure IlUtil : ILUTIL
 	    structure Ppil : PPIL
-	    structure AstHelp : ASTHELP
 	    structure Datatype : DATATYPE
 	    structure IlContext : ILCONTEXT
 	    structure Error : ERROR
@@ -475,7 +474,7 @@ functor Pat(structure Il : IL
 								  NONE => print "NO ARM"
 								| SOME e => (pp_exp e; ()));
 								  print "\n")) expopt_list))
-      val sumtypes = map (fn {arg_type=NONE,...} => con_unit | {arg_type=SOME c,...} => c)  constr_patconopt_list
+
       val exhaustive = List.all (fn NONE => false | SOME _ => true) expopt_list
 (*	val _ = (print "========casecon is: "; Ppil.pp_con casecon; print "\n") *)
       val arg = (case (IlUtil.beta_reduce(expose_exp,casearg)) of
