@@ -113,6 +113,7 @@ val quotedBogusString = "'BOGUS"
        | strspec of  (symbol * sigexp * path option) list
        | fctspec of  (symbol * fsigexp) list
        | tyspec of  (symbol * tyvar list * ty option) list
+       | etyspec of  (symbol * tyvar list * ty option) list
        | valspec of (symbol * ty) list
        | exnspec of (symbol * ty option) list
        | sharespec of spec list
@@ -518,7 +519,7 @@ spec	: STRUCTURE strspec	([StrSpec strspec])
 	| DATATYPE db		([DataSpec{datatycs=db,withtycs=nil}])
 	| DATATYPE db WITHTYPE tb ([DataSpec{datatycs=db,withtycs=tb}])
 	| TYPE tyspec		([TycSpec(tyspec,false)])
-	| EQTYPE tyspec		([TycSpec(tyspec,true)])
+	| EQTYPE etyspec		([TycSpec(etyspec,true)])
 	| VAL valspec		([ValSpec valspec])
 	| EXCEPTION exnspec	([ExceSpec exnspec])
 	| SHARING sharespec	(sharespec)
@@ -552,6 +553,9 @@ strspec	: strspec AND strspec	(strspec1 @ strspec2)
 	| ident COLON sign	([(strSymbol ident, sign, NONE)])
 	| ident COLON sign EQUALOP qid
 				([(strSymbol ident, sign, SOME(qid strSymbol))])
+
+etyspec	: etyspec AND etyspec	(etyspec1 @ etyspec2)
+	| tyvars ID		([(tycSymbol ID,tyvars,NONE)])
 
 tyspec	: tyspec AND tyspec	(tyspec1 @ tyspec2)
 	| tyvars ID		([(tycSymbol ID,tyvars,NONE)])

@@ -1694,6 +1694,7 @@ structure Toil
 				[] => KIND
 			      | _ => KIND_ARROW(length tyvars,KIND))
 		       fun doty ty =
+			   if is_eq then error "eqtypedesc with definition" else
 			   let
 			       val vars = map (fn _ => fresh_var()) tyvars
 			       val tyvars_bar = map (fn s => symbol_label (tyvar_strip s)) tyvars

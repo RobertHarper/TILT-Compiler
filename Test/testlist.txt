@@ -41,6 +41,8 @@
 0023	pass	Elaborator error: Bombing with unbound variable during coercion.
 0024	pass	Problem with "where structure" signature patching.
 0025	pass	Problem with "where structure" and datatype modules.
+bug50a	pass	We no longer support "eqtype t = ty" specs.
+bug50b	pass	We no longer support "eqtype tyvars t = ty" specs.
 bug55a	pass	Unresolved tyvar breaking elaborator.
 bug55b	pass	Unresolved tyvar breaking phase-splitter.
 bug80	pass	Phase splitter and signatures.
