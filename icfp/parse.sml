@@ -20,8 +20,10 @@ struct
   fun lit x = (anyWord suchthat (curry2 op= x))
       
   val binder = ((anyWord suchthat (fn x => CharVector.sub(x, 0) = #"/")) 
-		suchthat (fn x => Envmap.lookup 
-			  (Toplevel.opers, String.extract (x,1,NONE)) = NONE))
+		suchthat (fn x => case Envmap.find
+			  (Toplevel.opers, String.extract (x,1,NONE)) of
+			  NONE => true
+			| _ => false))
                 wth (fn x => Binder (String.extract (x,1,NONE)))
 
 (* val operator = [ "addi", "addf", "acos", "asin", "clampf", "cos",
