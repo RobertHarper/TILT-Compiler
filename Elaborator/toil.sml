@@ -2454,11 +2454,9 @@ structure Toil
 	fun eq_help (reg,tyvar) =
 	    let
 		fun error' (msg, debugmsg) =
-		    (debugdo (fn () =>
-			      (push_region reg; error_region(); pop_region();
-			       print msg; print "\n";
-			       debugmsg()));
-		     error msg)
+		    let
+		    in  ()
+		    end
 	    in
 		case tyvar_eq_hole tyvar
 		  of NONE => ()
@@ -2466,15 +2464,19 @@ structure Toil
 		      (case oneshot_deref os
 			 of SOME _ => ()
 			  | NONE =>
-			     error' ("unresolved equality",
-				     fn () =>
-				     let
-					 fun printOpt f NONE = print "NONE"
-					   | printOpt f (SOME x) = (print "SOME "; f x)
-				     in
-					 print " tyvar = "; print (tyvar2string tyvar); print "\n";
-					 print " con   = "; printOpt pp_con (tyvar_deref tyvar); print "\n"
-				     end))
+			     let
+				 val _ = (push_region reg; error_region(); pop_region();
+					  print "unresolved equality"; print "\n")
+				 val _ = debugdo (fn () =>
+						  let
+						      fun printOpt f NONE = print "NONE"
+							| printOpt f (SOME x) = (print "SOME "; f x)
+						  in
+						      print " tyvar = "; print (tyvar2string tyvar); print "\n";
+						      print " con   = "; printOpt pp_con (tyvar_deref tyvar); print "\n"
+						  end)
+			     in ()
+			     end)
 	    end
 	fun tyvar_help tv = 
 	    (case (Tyvar.tyvar_deref tv) of
