@@ -285,16 +285,8 @@ structure Toil
 	  sbnd_ctxt : (sbnd option * context_entry) list) : sbnd list * context = 
 	 let 
 	     val sbnds = List.mapPartial #1 sbnd_ctxt
-	     fun folder((_,CONTEXT_SDEC (sdec as (SDEC(l,DEC_MOD(v,b,s))))),ctxt) = 
-		 if (is_open l)
-		     then let val s = reduce_signat ctxt s
-			  in  add_context_sdec(ctxt,SelfifySdec ctxt (SDEC(l,DEC_MOD(v,b,s))))
-			  end
-		 else add_context_sdec(ctxt,SelfifySdec ctxt sdec)
-	       | folder((_,CONTEXT_SDEC sdec),ctxt) = 
-		 add_context_sdec(ctxt,SelfifySdec ctxt sdec)
-	       | folder((_,ce),ctxt) = add_context_entries(ctxt,[ce])
-	     val ctxt = foldl folder context sbnd_ctxt
+	     val ces = map #2 sbnd_ctxt
+	     val ctxt = add_context_entries(context,ces)
 	 in  (sbnds,ctxt)
 	 end
 
@@ -606,7 +598,7 @@ structure Toil
 		      (case (Context_Lookup_Labels(context,labs)) of
 			   SOME(_,PHRASE_CLASS_EXP (_,c,SOME e,true)) => (e,coerce c,Exp_IsValuable(context,e))
 			 | SOME(_,PHRASE_CLASS_EXP (e,c,_,_)) => (e,coerce c,true)
-			 | SOME(_,PHRASE_CLASS_MOD (m, _, SIGNAT_SELF(_, _, s))) =>
+			 | SOME(_,PHRASE_CLASS_MOD (m, _, s)) =>
 			       (case s of
 				    SIGNAT_FUNCTOR _ => 
 					let val (e,c) = polyfun_inst (context,m,s)
@@ -632,10 +624,6 @@ structure Toil
 					      | [_,sdec] => dosdec sdec
 					      | _ => unbound())
 					end)
-			 | SOME(_,PHRASE_CLASS_MOD (_, _, s)) =>
-				    (print "Context_lookup returned unexpected signature:\n"; 
-				     pp_signat s; print "\n";
-				     error "Context_lookup returned unexpected signature")
 			 | SOME (_, PHRASE_CLASS_CON _) => unbound()
 			 | SOME (_, PHRASE_CLASS_SIG _) => unbound()
 			 | NONE => if (length path = 1 andalso (Symbol.eq(hd path,Symbol.varSymbol "=")))
@@ -963,17 +951,13 @@ structure Toil
 	     let fun getarm (Ast.Rule{pat,exp}) = (parse_pat context pat,exp)
 		 val arms = map getarm rules
 		 val (arge,argc,_) = xexp(context,expr)
-		 val (context,wrap,v) = (case arge of 
-					     VAR v => (context,fn e => e, v)
-					   | _ => let val v = fresh_named_var "casearg"
-						      fun wrap e = LET([BND_EXP(v,arge)],e)
-						  in  (add_context_exp'(context,v,argc),wrap,v)
-						  end)
-		 val (e,c) = caseCompile{context = context,
-					 arms = arms,
-					 arg = (v,argc),
-					 reraise = false}
-	     in (wrap e,c,false)
+		 val v = fresh_named_var "casearg"
+		 val (bodye,c) = caseCompile{context = context,
+					     arms = arms,
+					     arg = (v,argc),
+					     reraise = false}
+		 val e = make_let([BND_EXP(v,arge)], bodye)
+	     in (e,c,false)
 	     end
        | Ast.MarkExp(exp,region) => 
 	     let val _ = push_region region
@@ -1012,8 +996,7 @@ structure Toil
 		 end
 	     
 	     val context'' = add_context_mod(context_fun_ids,open_lbl,var_poly,
-					     SelfifySig context (PATH (var_poly,[]),
-								 SIGNAT_STRUCTURE sdecs1))
+					     SIGNAT_STRUCTURE sdecs1)
 		 
 	     val fbnd_con_list = 
 		 (map (fn (_,var',fun_con,body_con,matches) => 
@@ -1052,7 +1035,7 @@ structure Toil
 		 
 	     val fbnds = map #1 fbnd_con_list
 	     val fbnd_cons : con list = map #2 fbnd_con_list
-	     (* Use symbols cannot have a bang andalphnumeric characters *)
+	     (* User symbols cannot have a bang and alphanumeric characters *)
 	     val top_name = foldl (fn (l,s) => (Name.label2name' l) ^ "_" ^ s) "" fun_ids
 	     val top_label = to_nonexport(to_cluster (internal_label top_name))
 	     val top_var = fresh_named_var "cluster"
@@ -1182,14 +1165,11 @@ structure Toil
 		end
 		val lbl_poly = to_open(internal_label ("!varpoly"))
 		val var_poly = fresh_named_var "varpoly"
-		val context' = add_context_mod(context,lbl_poly,var_poly,
-					       SelfifySig context (PATH (var_poly,[]),
-								   SIGNAT_STRUCTURE temp_sdecs))
+		val context' = add_context_mod(context,lbl_poly,var_poly,SIGNAT_STRUCTURE temp_sdecs)
 		val lbl = to_nonexport(internal_label "!bindarg")
 		val v = fresh_named_var "bindarg"
 		val (e,con,va) = xexp(context',expr)
 		val sbnd_sdec = (SBND(lbl,BND_EXP(v,e)),SDEC(lbl,DEC_EXP(v,con,NONE,false)))
-		val context' = add_context_exp'(context',v,con)
                 val parsed_pat = parse_pat context pat
 		val bind_sbnd_sdec = (bindCompile{context = context',
 						  bindpat = parsed_pat,
@@ -1205,7 +1185,11 @@ structure Toil
 				 then [(SBND(lbl',BND_EXP(v'',e)), SDEC(lbl',DEC_EXP(v'',con,NONE,false)))]
 			     else sbnd_sdec::bind_sbnd_sdec
 		       | _ => sbnd_sdec::bind_sbnd_sdec)
-		val is_irrefutable = va andalso Sbnds_IsValuable(context', map #1 bind_sbnd_sdec)
+		local
+		    val context' = add_context_exp'(context',v,con)
+		in
+		    val is_irrefutable = va andalso Sbnds_IsValuable(context', map #1 bind_sbnd_sdec)
+		end
 		fun refutable_case () =
 		    map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) sbnd_sdec_list
 		and irrefutable_case () = 
@@ -1278,9 +1262,7 @@ structure Toil
 	 
 		val var_poly = fresh_named_var "var_poly"
 		val open_lbl = to_open(internal_label "!opened")
-		val context' = add_context_mod(context,open_lbl,var_poly,
-					       SelfifySig context (PATH (var_poly,[]),
-								   SIGNAT_STRUCTURE sdecs1))
+		val context' = add_context_mod(context,open_lbl,var_poly,SIGNAT_STRUCTURE sdecs1)
 
 		fun rvb_help {var:Ast.symbol, fixity: (Ast.symbol * 'a) option,
 			      exp:Ast.exp, resultty: Ast.ty option} = 
@@ -1397,9 +1379,7 @@ structure Toil
 	 
 		val var_poly = fresh_named_var "var_poly"
 		val open_lbl = to_open(internal_label "!opened")
-		val context' = add_context_mod(context,open_lbl,var_poly,
-					       SelfifySig context (PATH (var_poly,[]),
-								   SIGNAT_STRUCTURE sdecs1))
+		val context' = add_context_mod(context,open_lbl,var_poly,SIGNAT_STRUCTURE sdecs1)
 
 		fun fb_help clause_list =
 		    let 
@@ -1512,7 +1492,7 @@ structure Toil
 			  val eqlab = to_eq l
 			  val eq_con = con_eqfun context c''
 			  val sigpoly = sigPoly tvs
-			  val ctxt' = add_context_dec(context,SelfifyDec context (DEC_MOD(vp,false,sigpoly)))
+			  val ctxt' = add_context_dec(context,DEC_MOD(vp,false,sigpoly))
 		      in
 			  case xeq(ctxt', c')
 			    of NONE => []
@@ -1775,7 +1755,7 @@ structure Toil
       (case ty of
 	 Ast.VarTy tyvar => 
 	     let val sym = AstHelp.tyvar_strip tyvar
-	     in (case (Context_Lookup_Label(context,symbol_label sym)) of
+	     in (case (IlStatic.Context_Lookup_Labels(context,[symbol_label sym])) of
 		     SOME(p,PHRASE_CLASS_CON (_,_,SOME inline_con,true)) => inline_con
 		   | SOME(p,PHRASE_CLASS_CON (_,_,_,_)) => path2con p
 		   | _ => (error_region(); print "unbound type constructor: ";
@@ -1939,7 +1919,7 @@ structure Toil
       --------------------------------------------------------- *)
      and xsigexp(context,sigexp) : signat =
        (case sigexp of
-	  Ast.VarSig s => (case (Context_Lookup_Label(context,symbol_label s)) of
+	  Ast.VarSig s => (case (IlStatic.Context_Lookup_Labels(context,[symbol_label s])) of
 			       SOME(_,PHRASE_CLASS_SIG (v,s)) => SIGNAT_VAR v
 			     | _ => (error_region();
 				     print "unbound signature: "; 
@@ -1954,16 +1934,14 @@ structure Toil
 			       end
 	| Ast.AugSig (s, []) => xsigexp(context,s)
 	| Ast.AugSig (s, ((Ast.WhStruct (syms1,syms2))::rest)) => 
-	      let val mjunk = MOD_VAR(fresh_named_var "mjunk")
-		  val (_,m2,s2) = xstrexp(context,Ast.VarStr syms2, Ast.NoSig)
+	      let val (_,m2,s2) = xstrexp(context,Ast.VarStr syms2, Ast.NoSig)
 		  val s = xsigexp(context,Ast.AugSig(s,rest))
 		  val s2_is_struct = (case reduce_signat context s2 of
 					  SIGNAT_STRUCTURE _ => true
 					| _ => false)
 		  val sdecs_opt = 
 		      (case reduce_signat context s of
-			   SIGNAT_SELF(_, _, SIGNAT_STRUCTURE sdecs) => SOME sdecs
-			 | SIGNAT_STRUCTURE sdecs => SOME sdecs
+			   SIGNAT_STRUCTURE sdecs => SOME sdecs
 			 | _ => NONE)
 	      in  case (s2_is_struct,sdecs_opt) of
 		  (false, _) => (error_region();
@@ -1977,15 +1955,12 @@ structure Toil
 					    (context,sdecs,map symbol_label syms1,m2,s2))
 	      end
 	| Ast.AugSig (s, ((Ast.WhType(syms, tyvars, ty))::rest)) =>
-	      let val s = reduce_signat context (xsigexp(context,Ast.AugSig(s,rest)))
-		  val sdecsOpt = (case s of
-				      SIGNAT_STRUCTURE sdecs => SOME sdecs
-				    | SIGNAT_SELF(_, _, SIGNAT_STRUCTURE sdecs) => SOME sdecs
-				    | _ => NONE)
-		  val mjunk = MOD_VAR(fresh_named_var "mjunk")
-	      in  (case sdecsOpt of
-		       SOME sdecs => 
-			   (case (Sdecs_Lookup_Open context (mjunk,sdecs,map symbol_label syms)) of
+	      let val s = xsigexp(context,Ast.AugSig(s,rest))
+		  val mjunk = fresh_named_var "mjunk"
+		  val ctxt' = add_context_mod'(context,mjunk,s)
+	      in  (case reduce_signat context s of
+		       SIGNAT_STRUCTURE sdecs =>
+			   (case (Sdecs_Lookup ctxt' (MOD_VAR mjunk,sdecs,map symbol_label syms)) of
 				SOME(labels,PHRASE_CLASS_CON(_,k,_,_)) => 
 				    let val sym_vars = map (fn tv => 
 							    let val sym = AstHelp.tyvar_strip tv
@@ -2058,10 +2033,8 @@ structure Toil
 				   else [type_sdec]
 				end
 			    val sigpoly = SIGNAT_STRUCTURE(flatten(mapcount help ftv_sym))
-			    val context' = add_context_mod(context,
-							      to_open(internal_label "opened"),
-							      varpoly, 
-							      SelfifySig context (PATH (varpoly,[]),sigpoly))
+			    val context' = add_context_mod(context, to_open(internal_label "opened"),
+							   varpoly, sigpoly)
 			    val con = xty(context',ty)
 			    val fsig = SIGNAT_FUNCTOR(varpoly,sigpoly,
 						      SIGNAT_STRUCTURE([SDEC(it_lab,
@@ -2104,8 +2077,7 @@ structure Toil
 				    param)
 			       val sigexp = Ast.BaseSig[Ast.StrSpec sym_sigexp_path_list]
 			       val signat = xsigexp(context,sigexp)
-			       val context' = add_context_mod(context,strid,var,
-								 SelfifySig context (PATH (var,[]),signat))
+			       val context' = add_context_mod(context,strid,var,signat)
 			       val signat' = xsigexp(context',sigexp')
 			     in SIGNAT_FUNCTOR(var,signat,signat',PARTIAL)
 			     end
@@ -2168,15 +2140,12 @@ structure Toil
            | loop ctxt prev_sdecs (spec::specrest) =
 	     (case (xspec1 ctxt prev_sdecs spec) of
 		  ADDITIONAL sdecs' =>
-		      let val sdecs'' = map (SelfifySdec ctxt) sdecs'
-			  val ctxt' = add_context_sdecs(ctxt,sdecs'')
+		      let val ctxt' = add_context_sdecs(ctxt,sdecs')
 		      in loop ctxt' (prev_sdecs @ sdecs') specrest
 		      end
 		| ALL_NEW sdecs' => 
-		      let val (sdecs'',ctxt') = foldl_acc (fn (sdec,ctxt) => 
-							   let val sdec' = SelfifySdec ctxt sdec
-							   in  (sdec', add_context_sdec(ctxt, sdec'))
-							   end) orig_ctxt sdecs'
+		      let val ctxt' = foldl (fn (sdec,ctxt) =>
+					    add_context_sdec(ctxt, sdec)) orig_ctxt sdecs'
 		      in loop ctxt' sdecs' specrest
 		      end)
        in loop orig_ctxt [] specs
@@ -2211,8 +2180,7 @@ structure Toil
 			      val funid = symbol_label name
 			      val argvar = fresh_named_var "funct_arg"
 			      val signat = xsigexp(context,sigexp)
-			      val self_signat = SelfifySig context (PATH (argvar,[]), signat)
-			      val context' = add_context_mod(context,arglabel,argvar, self_signat)
+			      val context' = add_context_mod(context,arglabel,argvar, signat)
 			      val (sbnd_ce_list,m',s') = xstrexp(context',body,constraint)
 			      val v = fresh_named_var "functor_var"
 			      val sbnd = SBND(funid,BND_MOD(v,false,MOD_FUNCTOR(PARTIAL, argvar,signat,m',s')))
@@ -2244,8 +2212,7 @@ structure Toil
 	     val (_,context) = add_context_sbnd_ctxts(context,sbnd_ce_list)
 	 in  if (Sig_IsSub(context, sig_actual, sig_target))
 		 then (sbnd_ce_list,module, sig_target)
-	     else let val (mod_result, _) = Signature.xcoerce_seal(context,
-								   module,sig_actual,sig_target)
+	     else let val mod_result = Signature.xcoerce_seal(context,module,sig_actual,sig_target)
 		  in  (sbnd_ce_list, mod_result, sig_target)
 		  end
 	 end
@@ -2280,12 +2247,12 @@ structure Toil
 		 xstrexp(context, Ast.AppStr(f,[(se,flag)]), Ast.NoSig)
 	   | Ast.AppStr (funpath,[(strexp as (Ast.VarStr [var]),_)]) =>
 		 (case (Context_Lookup_Labels(context,map symbol_label funpath)) of
-		      SOME(_,PHRASE_CLASS_MOD(m,_,SIGNAT_SELF(_,_,SIGNAT_FUNCTOR(var1,sig1,sig2,_)))) => 
+		      SOME(_,PHRASE_CLASS_MOD(m,_,SIGNAT_FUNCTOR(var1,sig1,sig2,_))) => 
 			  let
 			      (* Compiling an ML path should lead to a HIL path with no bindings *)
 			      fun sig_elim_open (context, signat) =
 				  let val vpaths = Name.PathSet.listItems (findPathsInSig signat)
-				      fun mapper p = (case Context_Lookup_Path_Open (context, p)
+				      fun mapper p = (case Context_Lookup_Path (context, p)
 							of SOME (p', pc) => SOME (p, p', pc)
 							 | NONE => NONE)
 				      val paths = List.mapPartial (mapper o PATH) vpaths
@@ -2350,8 +2317,7 @@ structure Toil
 		     val lbl2 = to_open(internal_label "LetStr2")
 		     val sbnd_sdec_list = xdec true (context,dec)
 		     val (mod1,sig1) = sbnd_ctxt_list2modsig sbnd_sdec_list
-		     val context' = add_context_mod(context,lbl1,var1,
-						    SelfifySig context (PATH (var1,[]), sig1)) (* <-- inline ? *)
+		     val context' = add_context_mod(context,lbl1,var1,sig1) (* <-- inline ? *)
 		     val (sbnd_ce_list,mod2,sig2) = xstrexp(context',strexp,Ast.NoSig)
 		     val final_mod = MOD_STRUCTURE [SBND(lbl1,BND_MOD(var1,false,mod1)),
 						    SBND(lbl2,BND_MOD(var2,false,mod2))]
@@ -2431,15 +2397,16 @@ structure Toil
 	    fun strSpecFolder ((sym, sigExp, pathOpt), (acc,interCtxt)) = 
 		let val sigTarget = xsigexp(interCtxt, sigExp)
 		    val (_, modOriginal, sigOriginal) = xstrexp(interCtxt, VarStr [sym], NoSig)
-		    val (modCoerced, sigActual) = Signature.xcoerce_seal(interCtxt,
-									 modOriginal, sigOriginal, sigTarget)
+		    val (modCoerced,SOME sigUnsealed) =
+			Signature.xcoerce_seal'(interCtxt, modOriginal, sigOriginal, sigTarget)
 		    val lab = Name.symbol_label sym
 		    val varCoerced = Name.fresh_named_var ("coerced" ^ (Symbol.name sym))
 		    val sbnd = SBND(lab, BND_MOD(varCoerced, false, modCoerced))
-		    val ctxtEnt = CONTEXT_SDEC(SDEC(lab, DEC_MOD(varCoerced, false, sigTarget)))
-		    val interCtxtEnt = CONTEXT_SDEC(SDEC(lab, DEC_MOD(varCoerced, false, sigActual)))
-		    val (_,interCtxt) = add_context_sbnd_ctxts(interCtxt, [(SOME sbnd, interCtxtEnt)])
-		in  ([(SOME sbnd, ctxtEnt)]::acc, interCtxt)
+		    val sdec = SDEC(lab, DEC_MOD(varCoerced, false, sigTarget))
+		    val sdec' = SDEC(lab, DEC_MOD(varCoerced, false, sigUnsealed))
+		    val decResult = [(SOME sbnd, CONTEXT_SDEC sdec)]
+		    val interCtxt = add_context_sdec (interCtxt, sdec')
+		in  (decResult::acc, interCtxt)
 		end
 	    fun folder (spec, acc) = 
 		(case spec of
