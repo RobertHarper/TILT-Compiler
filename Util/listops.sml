@@ -126,6 +126,7 @@ structure Listops :> LISTOPS =
     fun list_sum (a,[]) = a
       | list_sum (a,b::rest) = if (member(b,a)) then list_sum(a,rest) else list_sum(b::a,rest)
     fun list_sum_eq (_,a,[]) = a
+      | list_sum_eq (_,[],b) = b
       | list_sum_eq (p,a,b::rest) = if (member_eq(p,b,a)) then list_sum_eq(p,a,rest) else list_sum_eq(p,b::a,rest)
     fun list_diff ([],_) = []
       | list_diff (a::rest,b) = if (member(a,b)) then list_diff(rest,b) else a::(list_diff (rest,b))
@@ -143,14 +144,18 @@ structure Listops :> LISTOPS =
       | eq_list (f, _, _) = false
     fun eq_listlist  (f, a, b) = eq_list(fn (x,y) => eq_list(f,x,y), a,b)
 
+    fun subset_eq eq nil _ = true
+      | subset_eq eq (r1::s1) s2 = member_eq (eq, r1, s2) andalso subset_eq eq s1 s2
+
+    fun sameset_eq eq a b = subset_eq eq a b andalso subset_eq eq b a
+
     fun butlast [] = error "but_last got empty list"
       | butlast [a] = []
       | butlast (a::rest) = a :: (butlast rest)
 
-    fun andfold pred [] = true
-      | andfold pred (a::rest) = (pred a) andalso (andfold pred rest)
-    fun orfold pred [] = false
-      | orfold pred (a::rest) = (pred a) orelse (orfold pred rest)
+    val andfold = List.all
+    val orfold = List.exists
+
     fun andfold' pred acc [] = true
       | andfold' pred acc (a::rest) = let val (b,acc') = pred(a,acc)
 				      in b andalso (andfold' pred acc' rest)

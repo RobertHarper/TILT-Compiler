@@ -63,8 +63,19 @@ signature LISTOPS =
     val copy : int * 'a -> 'a list
     val member : ''a * ''a list -> bool
     val member_eq : ('a * 'b -> bool) * 'a * 'b list -> bool
+
+    (* association list lookup *)
     val assoc : (''a * (''a * 'b) list) -> 'b option
     val assoc_eq : (('a * 'a -> bool) * 'a * ('a * 'b) list) -> 'b option
+
+    (* subset_eq eq a b
+       true if every element A in a is eq(A, B) for some B in b. *)
+    val subset_eq : ('a * 'b -> bool) -> 'a list -> 'b list -> bool
+
+    (* sameset_eq eq a b
+       iff subset eq a b andalso subset eq b a *)
+    val sameset_eq : ('a * 'a -> bool) -> 'a list -> 'a list -> bool
+
     val list_sum  : ''a list * ''a list -> ''a list
     val list_sum_eq  : (('a * 'a -> bool) * 'a list * 'a list) -> 'a list
     val list_diff  : ''a list * ''a list -> ''a list
@@ -72,7 +83,9 @@ signature LISTOPS =
     val list_inter : ''a list * ''a list -> ''a list
     val list_inter_eq : ('a * 'a -> bool) * 'a list * 'a list -> 'a list
     val butlast : 'a list -> 'a list
+
     (* these are all left to right *)
+    (* same as List.all, List.exists *)
     val andfold : ('a -> bool) -> 'a list -> bool
     val orfold : ('a -> bool) -> 'a list -> bool
     val andfold' : ('a * 'b -> (bool * 'b)) -> 'b -> 'a list -> bool

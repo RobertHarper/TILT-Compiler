@@ -4,7 +4,8 @@ structure Util :> UTIL =
   struct
     exception UNIMP
 
-    val error = fn s => UtilError.error "util.sml" s
+    (* avoid shadowing error since we export it at a different type! *)
+    fun localerror s = UtilError.error "util.sml" s
 
     fun loop a b = if (a>b) then [] else a::(loop (a+1) b)
     fun count n = loop 0 (n-1)
@@ -14,7 +15,7 @@ structure Util :> UTIL =
 	fun rawSpaces 0 = ""
 	  | rawSpaces 1 = " "
 	  | rawSpaces n = 
-	    let val _ = if (n < 2) then error "rawSpaces given negative number" else ()
+	    let val _ = if (n < 2) then localerror "rawSpaces given negative number" else ()
 		val a = n div 2
 		val b = n - a
 		val aSpace = rawSpaces a
@@ -53,7 +54,7 @@ structure Util :> UTIL =
     fun inc r = (r := (!r) + 1; !r)
     fun oneshot() = ONESHOT(inc oneshot_count, ref NONE)
     fun oneshot_init item = ONESHOT(inc oneshot_count, ref (SOME item))
-    fun oneshot_set(ONESHOT(_,ref (SOME _)),_) = error "oneshot_set called on something already set"
+    fun oneshot_set(ONESHOT(_,ref (SOME _)),_) = localerror "oneshot_set called on something already set"
       | oneshot_set(ONESHOT(_,r as (ref NONE)),item) = r := (SOME item)
     fun oneshot_deref (ONESHOT (_,r)) = !r
     fun eq_oneshot (ONESHOT a,ONESHOT b) = a = b

@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel UTIL_ERROR TextIO *)
+(*$import UTIL_ERROR TextIO *)
 
 (*Pulled out of Util so that Platform can use Error while Util uses Platform.*)
 structure UtilError :> UTIL_ERROR = 
@@ -8,10 +8,11 @@ struct
     val showErrors = ref true
 	
     (* raise_error : string -> 'a *)
-    fun raise_error s = let val _ = if !showErrors
-					then (print "Error: "; print s; print "\n")
-				    else ()
-			in  raise (BUG s)
+    fun raise_error s = let in
+	                   if !showErrors
+			       then (print "Error: "; print s; print "\n")
+			   else ();
+			   raise BUG s
 			end
 	
     (* error : string -> string -> 'a *)
