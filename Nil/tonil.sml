@@ -52,13 +52,13 @@ struct
 
        fun makeLabels n =
 	   let
-	       fun loop i accum = 
-		   if (i >= n) then 
-		       accum
+	       fun loop i = 
+		   if (i > n) then 
+		       nil
 		   else
-		       loop (n + 1) ((Ilutil.generate_tuple_label n) :: accum)
+		       (Ilutil.generate_tuple_label n) :: (loop (i + 1))
 	   in
-	       loop 0 nil
+	       loop 1
 	   end
 
        fun makeVars n =
@@ -475,7 +475,7 @@ struct
 	   (con, Singleton_k(Word_k, con))
        end
 
-     | xcon decs (Il.CON_TUPLE_INJECT il_cons) = 
+     | xcon decs (il_con as (Il.CON_TUPLE_INJECT il_cons)) = 
        let
 	   val (cons, knds) = myunzip (map (xcon decs) il_cons)
 	   val tuple_length = List.length cons
