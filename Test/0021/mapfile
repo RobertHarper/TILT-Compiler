@@ -13,14 +13,11 @@
 
 	when type_of fails to find the runtime variable corresponding to
 	_2364.
-
-	The expected result of this test is Reject because the manager
-	will refuse to link due to the unimplemented unit.
 *)
 source unit ORD_KEY = "bug-key.sml" {}
 source unit ORD_MAP = "bug-map.sml" {ORD_KEY}
 source interface BinaryMapFn = "bug.int" {ORD_KEY ORD_MAP}
-import unit BinaryMapFn : BinaryMapFn
+source unit BinaryMapFn : BinaryMapFn = "map.sml" {ORD_KEY}
 source unit IlTable = "bug-table.sml" {BinaryMapFn}
 source unit IlBlast = "bug.sml" {IlTable}
 make executable "test." ^ $target ^ ".exe" {IlBlast}
