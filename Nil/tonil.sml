@@ -20,7 +20,7 @@ struct
    structure Nil = Nilutil.Nil
 
    open Nil
-   val debug = ref true
+   val debug = ref false
 (*
    val debug = ref (Prim_c (Record_c nil, nil))
    val il_debug = ref (Il.CON_ANY)
@@ -302,6 +302,7 @@ struct
     *)
 
    val xmod_count = ref 0
+   val xcon_count = ref 0
 
    datatype splitting_context = CONTEXT of {NILctx : Nilcontext.context,
 					    vmap   : (var * var) Name.VarMap.map}
@@ -317,19 +318,22 @@ struct
    fun xmod context (args as (il_mod, _)) =
        let
 	   val this_call = ! xmod_count
-	   val _ = (xmod_count := this_call + 1
-(*		    ;print ("Call " ^ (Int.toString this_call) ^ " to xmod\n");
+	   val _ = 
+	       if (!debug) then
+		   (xmod_count := this_call + 1;
+		    
+		    print ("Call " ^ (Int.toString this_call) ^ " to xmod\n");
 		    Ppil.pp_mod il_mod;
-		    print"\n";
-		    Nilcontext.print_context (NILctx_of context);
-		    print"\n"
-*)
-		   )
+		    (* print"\n";
+		     Nilcontext.print_context (NILctx_of context); *)
+		    print"\n")
+	       else ()
+
 	   val result = xmod' context args
 	in
-(*	    print ("Return " ^ (Int.toString this_call) ^ " from xmod\n"); *)
+	    if (!debug) then print ("Return " ^ (Int.toString this_call) ^ " from xmod\n") else ();
 	    result
-       end
+        end
 
    and xmod' context (il_mod as (Il.MOD_VAR var_mod), preferred_name) = 
        let
@@ -382,7 +386,7 @@ struct
 
 	   val {cbnd_cat = cbnd_cat_arg,
 		ebnd_cat = ebnd_cat_arg,
-                name_c = name_arg_c,
+                name_c = name_arg_c as (Var_c var_arg_c),
                 name_r = name_arg_r,
 		knd_c = knd_arg_c,
 		type_r = type_arg_r,
@@ -394,10 +398,10 @@ struct
 
            local
 	       val (Arrow_k(_, [(v_c, _)], con_body_kind)) = knd_fun_c
-	       val argument_c = makeLetC (map Con_cb (flattenCatlist cbnd_cat_arg)) name_c
+	       val argument_c = makeLetC (map Con_cb (flattenCatlist cbnd_cat_arg)) name_arg_c
 	       val reduced_argument_c = Nilstatic.con_reduce (NILctx_of context, argument_c)
 
-               val (AllArrow_c(_,effect,_,_,_,exp_body_type)) = type_fun_r
+               val (AllArrow_c(_,effect,[(var_body_arg_c,_)],_,_,exp_body_type)) = type_fun_r
 
                fun subst v = 
 		   if (Name.eq_var(v_c,v)) then 
@@ -406,22 +410,46 @@ struct
 		       NONE
 
 	       fun subst2 v =
-		   if (Name.eq_var(v_c,v)) then 
-		       SOME (Var_c var_c)
+		   if (Name.eq_var(var_body_arg_c,v)) then 
+		       SOME name_arg_c
 		   else
 		       NONE
 	   in
+
 	       val knd_c = Nilstatic.kind_reduce (NILctx_of context,
 						  Nilutil.substConInKind subst con_body_kind)
-	       val type_r = Nilstatic.con_reduce 
-		   (Nilcontext.insert_kind(NILctx_of context, var_c, knd_c),
-		    Nilutil.substConInCon subst2 exp_body_type)
+
+	       val cbnd_cat = APP[cbnd_cat_fun, 
+				  cbnd_cat_arg,
+				  LIST[(var_c, knd_c, App_c(name_fun_c,[name_arg_c]))]]
+		   
+(*
+               val _ = (print "ZZZ\n";
+			print "type_fun_r = ";
+			Ppnil.pp_con type_fun_r;
+			print "\n";
+			print "name_arg_c = ";
+			Ppnil.pp_con name_arg_c;
+			print "\n";
+			print "constructor bindings = ";
+			Ppnil.pp_bnds (map Con_b (flattenCatlist cbnd_cat));
+			print "\n";
+			print "exp_body_type = ";
+			Ppnil.pp_con exp_body_type;
+			print "\n";
+			Ppnil.pp_con (Nilutil.substConInCon subst2 exp_body_type);
+			Nilcontext.print_context (NILctx_of context))
+*)
+	       val NILctx = NILctx_of context
+	       val NILctx' = (Nilcontext.insert_kind(NILctx, var_arg_c, knd_arg_c))
+                                handle _ => NILctx
+	       val NILctx'' = (Nilcontext.insert_kind(NILctx', var_arg_c, knd_arg_c))
+                                handle _ => NILctx'
+	       val type_r = Nilstatic.con_reduce (NILctx'', Nilutil.substConInCon subst2 exp_body_type)
 	       val valuable = (effect = Total) andalso valuable_fun andalso valuable_arg 
 	   end  
 
-	   val cbnd_cat = APP[cbnd_cat_fun, 
-			      cbnd_cat_arg,
-			      LIST[(var_c, knd_c, App_c(name_fun_c,[name_arg_c]))]]
+
 
            val ebnd_cat = APP[ebnd_cat_fun, 
 			      ebnd_cat_arg,
@@ -742,7 +770,27 @@ struct
 	   (lab :: labs, con :: cons)
        end
 
-   and xcon context (il_con as (Il.CON_VAR var)) = 
+   and xcon context il_con =
+       let
+	   val this_call = ! xcon_count
+	   val _ = 
+	       if (!debug) then
+		   (xcon_count := this_call + 1;
+		    print ("Call " ^ (Int.toString this_call) ^ " to xcon\n");
+		    Ppil.pp_con il_con;
+		    (*
+		     print"\n";
+		     Nilcontext.print_context (NILctx_of context); *)
+		    print"\n")
+	       else ()
+
+	   val result = (xcon' context il_con)
+	in
+	    if (!debug) then print ("Return " ^ (Int.toString this_call) ^ " from xcon\n") else ();
+	    result
+        end
+
+   and xcon' context (il_con as (Il.CON_VAR var)) = 
        let
 	   val con = Var_c var
 	   val kind = (case Nilcontext.find_kind (NILctx_of context, var) of
@@ -756,13 +804,13 @@ struct
 	   (con, kind)
        end
 
-     | xcon context (Il.CON_TYVAR tv) = xcon context (derefTyvar tv)
+     | xcon' context (Il.CON_TYVAR tv) = xcon context (derefTyvar tv)
 
-     | xcon context (Il.CON_OVAR ov) = xcon context (derefOvar ov)
+     | xcon' context (Il.CON_OVAR ov) = xcon context (derefOvar ov)
 
-     | xcon context (Il.CON_FLEXRECORD fr) = xflexinfo context fr
+     | xcon' context (Il.CON_FLEXRECORD fr) = xflexinfo context fr
 
-     | xcon context ((Il.CON_INT intsize) | (Il.CON_UINT intsize)) =
+     | xcon' context ((Il.CON_INT intsize) | (Il.CON_UINT intsize)) =
        let
 	   val con = Prim_c (Int_c intsize, [])
        in
@@ -771,14 +819,14 @@ struct
 	   (con, Word_k Runtime)
        end
 
-     | xcon context (Il.CON_FLOAT floatsize) = 
+     | xcon' context (Il.CON_FLOAT floatsize) = 
        let
 	   val con = Prim_c (BoxFloat_c floatsize, [])
        in
 	   (con, Word_k Runtime)
        end
 
-     | xcon context (Il.CON_ARRAY il_con) = 
+     | xcon' context (Il.CON_ARRAY il_con) = 
        let
 	   val (con', knd') = xcon context il_con 
 	   val con = Prim_c (Array_c, [con'])
@@ -786,7 +834,7 @@ struct
 	   (con, Word_k Runtime)
        end
 
-     | xcon context (Il.CON_VECTOR il_con) = 
+     | xcon' context (Il.CON_VECTOR il_con) = 
        let
 	   val (con', knd') = xcon context il_con 
 	   val con = Prim_c (Vector_c, [con'])
@@ -794,14 +842,14 @@ struct
 	   (con, Word_k Runtime)
        end
 
-     | xcon context (Il.CON_ANY) = 
+     | xcon' context (Il.CON_ANY) = 
        let
 	   val con = Prim_c(Exn_c, [])
        in
 	   (con, Word_k Runtime)
        end
 
-     | xcon context (Il.CON_REF il_con) = 
+     | xcon' context (Il.CON_REF il_con) = 
        let
 	   val (con', knd') = xcon context il_con
 	   val con = Prim_c (Ref_c, [con'])
@@ -809,7 +857,7 @@ struct
 	   (con, Word_k Runtime)
        end
 
-     | xcon context (Il.CON_TAG il_con) = 
+     | xcon' context (Il.CON_TAG il_con) = 
        let
 	   val (con', knd') = xcon context il_con
 	   val con = Prim_c (Exntag_c, [con'])
@@ -817,7 +865,7 @@ struct
 	   (con, Word_k Runtime)
        end
 
-     | xcon context (Il.CON_ARROW (il_con1, il_con2, arr)) =
+     | xcon' context (Il.CON_ARROW (il_con1, il_con2, arr)) =
        let
 	   val (con1, _) = xcon context il_con1
            val (con2, _) = xcon context il_con2
@@ -827,7 +875,7 @@ struct
 	   (con, Word_k Runtime)
        end
 
-     | xcon context (il_con as Il.CON_APP (il_con1, il_con2)) = 
+     | xcon' context (il_con as Il.CON_APP (il_con1, il_con2)) = 
        let
 	   val (con1, _) = xcon context il_con1
            val (con2, _) = xcon context il_con2
@@ -837,7 +885,7 @@ struct
 	   (con, knd)
        end
 
-     | xcon context (Il.CON_MUPROJECT(i, Il.CON_FUN(vars, 
+     | xcon' context (Il.CON_MUPROJECT(i, Il.CON_FUN(vars, 
 						       Il.CON_TUPLE_INJECT cons))) =
        let
 	   fun cont1 NILctx' = 
@@ -858,7 +906,7 @@ struct
 			      cont1)
        end
 
-     | xcon context (Il.CON_MUPROJECT(i, Il.CON_FUN([var], con))) =
+     | xcon' context (Il.CON_MUPROJECT(i, Il.CON_FUN([var], con))) =
        let
 	   fun cont1 NILctx' = 
 	       let
@@ -875,7 +923,7 @@ struct
 	   Nilcontext.c_insert_kind(NILctx_of context, var, Word_k Runtime, cont1)
        end
 
-     | xcon context (Il.CON_RECORD rdecs) = 
+     | xcon' context (Il.CON_RECORD rdecs) = 
        let
 	   val (lbls, cons) = xrdecs context rdecs
 	   val con = Prim_c (Record_c lbls, cons)
@@ -883,7 +931,7 @@ struct
 	   (con, Word_k Runtime)
        end
 
-     | xcon context (Il.CON_FUN (vars, il_con1)) = 
+     | xcon' context (Il.CON_FUN (vars, il_con1)) = 
        let
 	   fun cont1 NILctx' =
 	       let
@@ -919,7 +967,7 @@ struct
 			      cont1)
        end
 
-     | xcon context (Il.CON_SUM {carriers, noncarriers, special}) =
+     | xcon' context (Il.CON_SUM {carriers, noncarriers, special}) =
        let
 	   val known = (case special of
 			       NONE => NONE
@@ -931,7 +979,7 @@ struct
 	   (con, Word_k Runtime)
        end
 
-     | xcon context (il_con as (Il.CON_TUPLE_INJECT il_cons)) = 
+     | xcon' context (il_con as (Il.CON_TUPLE_INJECT il_cons)) = 
        let
 	   val (cons, knds) = myunzip (map (xcon context) il_cons)
 	   val tuple_length = List.length cons
@@ -944,7 +992,7 @@ struct
 	   (con, knd)
        end
 
-     | xcon context (il_con as (Il.CON_TUPLE_PROJECT (i, il_con1))) = 
+     | xcon' context (il_con as (Il.CON_TUPLE_PROJECT (i, il_con1))) = 
        let
 	   val (con1, Record_k seq) = 
 	       xcon context il_con1
@@ -963,7 +1011,7 @@ struct
 	   (con, knd)
        end
 
-     | xcon context (il_con as (Il.CON_MODULE_PROJECT (modv, lbl))) = 
+     | xcon' context (il_con as (Il.CON_MODULE_PROJECT (modv, lbl))) = 
        let
 	   val {cbnd_cat,name_c,...} = 
 	       xmod context (modv, NONE)
@@ -975,7 +1023,7 @@ struct
 	   (con, knd)
        end
     
-     | xcon _ c = (print "Error:  Unrecognized constructor:\n";
+     | xcon' _ c = (print "Error:  Unrecognized constructor:\n";
 		      Ppil.pp_con c;
 		      error "(xcon):  Unrecognized constructor")
    
