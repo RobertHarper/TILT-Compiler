@@ -705,18 +705,6 @@ struct
 		    else loop (waiting, pending, pending', done) (* some more may have become ready now *)
 		end
 	    val (waiting, pending, pending', done) = loop (waiting, [], [], [])
-	    (* Do not chat about stuff that is obviously done. *)
-	    fun neededCompilation (node:label) : bool =
-		let val pdec = get_pdec node
-		    val stable = I.P.D.stable pdec
-		in  not stable
-		end
-	    val done = List.filter neededCompilation done
-	    val _ = if !MasterDiag andalso not (null done) then
-			(print "Already up-to-date: ";
-			 print_strings 20 (map Name.label2longname done);
-			 print "\n")
-		    else ()
 	in  (waiting, pending, pending')
 	end
     fun newState (waiting, pending, working, proceeding, pending', working') : state =

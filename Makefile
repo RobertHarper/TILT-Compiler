@@ -1,10 +1,9 @@
-# Ensure that this Makefile and the scripts ./Bin/tilt-nj and
-# ./Bin/dump-nj have the correct path to the SML/NJ compiler.  The TILT
-# sources compile under SML/NJ versions 110.0.3 and 110.0.7 and under
-# TILT.  If you are compiling with some other SML compiler, then you
-# will probably need to modify our CM files, the script ./Bin/mkheap
+# Ensure ./Bin/smlnj has the correct path to the SML/NJ compiler.  The
+# TILT sources compile under SML/NJ versions 110.0.3 and 110.0.7 and
+# under TILT.  If you are compiling with some other SML compiler, then
+# you will probably need to modify our CM files, the script ./Bin/mkheap
 # used to generate SML/NJ heaps, and perhaps some of the TILT code to
-# account for basis library changes.
+# account for Basis library changes.
 #
 # Ensure that ./Bin/cputype prints sparc, alpha, or unsupported.  (After
 # building an SML/NJ heap for TILT with "make heap", you can use
@@ -20,13 +19,10 @@
 # to PREFIX/bin.
 
 PREFIX=/usr/local
-smlnj=SML_VERSION=110 /usr/local/bin/sml
 mkheap=./Bin/mkheap
 cputype=`./Bin/cputype`
-tiltnj=./Bin/tilt-nj -vv
-master=$(tiltnj)
+tilt=./Bin/tilt-nj -vv
 slaves=:
-purge=$(tiltnj) -pp
 
 all:\
 	tilt-heap\
@@ -42,27 +38,27 @@ all:\
 	runtest
 
 with-slaves: FORCE
-	$(MAKE) 'master=$(tiltnj) -m' 'slaves=./Bin/tilt-slaves' all
+	$(MAKE) 'slaves=./Bin/tilt-slaves' all
 
 FORCE:
 
 # SML/NJ heaps
 
 heap tilt-heap: FORCE
-	$(mkheap) Heaps/tilt Main.main | $(smlnj)
+	$(mkheap) sources.cm Bin/heap/tilt Main.main
 dump-heap: FORCE
-	$(mkheap) Heaps/dump Dump.main | $(smlnj)
+	$(mkheap) sources.cm Bin/heap/dump Dump.main
 
 # TILT-compiled libraries
 
 basis: FORCE
-	$(master) -fBootstrap -lLib/basis Basis/mapfile
+	$(tilt) -fBootstrap -lLib/basis Basis/mapfile
 smlnj-lib: FORCE
-	$(master) -lLib/smlnj-lib Basis/Library/group
+	$(tilt) -lLib/smlnj-lib Basis/Library/group
 ml-yacc-lib: FORCE
-	$(master) -lLib/ml-yacc-lib Parser/Library/group
+	$(tilt) -lLib/ml-yacc-lib Parser/Library/group
 arg: FORCE
-	$(master) -lLib/arg Util/arg.group
+	$(tilt) -lLib/arg Util/arg.group
 
 # TILT runtime
 
@@ -72,21 +68,21 @@ runtime: FORCE
 # TILT-compiled binaries
 
 tilt: FORCE
-	$(master) -oBin/$(cputype)/tilt -c Top Top/mapfile
+	$(tilt) -oBin/$(cputype)/tilt -c Top Top/mapfile
 dump: FORCE
-	$(master) -oBin/$(cputype)/dump -c DumpTop Top/mapfile
+	$(tilt) -oBin/$(cputype)/dump -c DumpTop Top/mapfile
 runtest: FORCE
-	if test -d Test; then $(master) -oBin/$(cputype)/runtest -c Runtest Test/mapfile; fi
+	if test -d Test; then $(tilt) -oBin/$(cputype)/runtest -c Runtest Test/mapfile; fi
 
 # Other targets
 
 clean: FORCE
-	-if test -d Test; then $(purge) Test/mapfile; fi
-	-$(purge) Top/mapfile
-	-$(purge) Util/arg.group
-	-$(purge) Parser/Library/group
-	-$(purge) Basis/Library/group
-	-$(purge) -fBootstrap Basis/mapfile
+	-if test -d Test; then $(tilt) -pp Test/mapfile; fi
+	-$(tilt) -pp Top/mapfile
+	-$(tilt) -pp Util/arg.group
+	-$(tilt) -pp Parser/Library/group
+	-$(tilt) -pp Basis/Library/group
+	-$(tilt) -pp -fBootstrap Basis/mapfile
 
 slaves: FORCE
 	$(slaves) -n 4/localhost
@@ -95,7 +91,7 @@ install: FORCE
 	-mkdir $(PREFIX)/lib
 	-mkdir $(PREFIX)/lib/tilt
 	(cd Runtime && $(MAKE) DEST=$(PREFIX)/lib/tilt/Runtime install)
-	tar cf - Bin Lib Heaps | (cd $(PREFIX)/lib/tilt && tar xf -)
+	tar cf - Bin Lib | (cd $(PREFIX)/lib/tilt && tar xf -)
 	-mkdir $(PREFIX)/man
 	-mkdir $(PREFIX)/man/man1
 	-mkdir $(PREFIX)/man/man6

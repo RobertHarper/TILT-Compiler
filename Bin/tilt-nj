@@ -1,6 +1,5 @@
 #!/bin/sh
 bindir=`dirname "$0"`
 TILTROOT=`cd "$bindir"/..; pwd`
-SML_VERSION=110b
-export TILTROOT SML_VERSION
-exec /usr/local/bin/sml @SMLload'='"$TILTROOT"/Heaps/tilt @SMLname'='tilt ${1+"$@"}
+export TILTROOT
+exec "$bindir"/smlnj @SMLload'='"$bindir"/heap/tilt @SMLname'='tilt ${1+"$@"}

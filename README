@@ -19,9 +19,10 @@ commands in Makefile and Runtime/Makefile and then try
 
 	make
 
-to compile TILT.  On unsupported platforms, the final message will be
-"tilt: unable to link".  This is expected: TILT cross-compiled but did
-not generate any object files.
+to compile TILT.  Unsupported architectures can be used as compilation
+slaves (for any architecture) but TILT can not generate binaries for
+them; on such systems, the final message will be "tilt: unable to
+link".
 
 Once make has finished, the scripts Bin/tilt and Bin/tilt-nj will run
 TILT out of the current directory; alternatively, you can use
@@ -35,28 +36,33 @@ to copy binaries to the directory PREFIX set in Makefile.
 PARALLEL MAKE
 -------------
 
-If your machine is fast and has plenty of memory, then you can
-speed up the installation of TILT by doing the following instead
-of "make".
+If your machine is fast and has plenty of memory, then you can speed
+up the installation of TILT by running extra compilation slaves.
+
+Use "make with-slaves" rather than "make".  If the script
+./Bin/tilt-slave works on your platform, then when once make compiles
+TILT under SML/NJ, you will see a new window running emacs with four
+buffers named *tilt slave n*.  The slaves will contribute to the TILT
+compilation jobs that make starts.
+
+An alternative that does not rely on the script ./Bin/tilt-slave is to
+compile TILT under SML/NJ and then run TILT slaves by hand:
 
 1. Compile TILT with SML/NJ:
 
 	make heap
 
-2. Launch a few compilation slaves:
-
-	./Bin/tilt-slaves -n 3/localhost
-
-If you do not get a window running emacs with three buffers named
-*tilt slave n*, then you can either fix ./Bin/tilt-slave (not
-tilt-slaves) for your site or run the slaves manually by opening new
-windows and executing
+2. Open a new window and run
 
 	./Bin/tilt-nj -s
 
-in the current directory.
+in the current directory.  You can do this a few times.
 
-3. Now run
+3.  If you are compiling on a network file system and have spare
+machines you want to use as slaves, then repeat steps (1) and (2) on
+those machines.
+
+4. Run
 
 	make
 
@@ -77,5 +83,5 @@ CVS server:
 
 The CVS repository contains a few things that are not in the release:
 an old MLRISC backend, some experimental code, regression tests,
-benchmarks, a bugs database, additional (and outdated) documentation,
-and a port of twelf 1.2.
+benchmarks, a bugs database, and additional (but outdated)
+documentation.

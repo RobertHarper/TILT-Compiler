@@ -1,0 +1,9 @@
+#!/bin/sh
+# Used to isolate TILT's makefiles and supporting scripts
+# from the path to SML/NJ.
+
+# Needed at CMU, harmless elsewhere.
+SML_VERSION=110
+export SML_VERSION
+
+exec /usr/local/bin/sml ${1+"$@"}

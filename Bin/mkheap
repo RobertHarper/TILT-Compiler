@@ -1,11 +1,16 @@
 #!/bin/sh
 # For use with SML/NJ 110.0.3 and 110.0.7.
 case $# in
-2)
-	echo 'SMLofNJ.Internals.GC.messages false; CM.make(); SMLofNJ.exportFn ("'"$1"'", '"$2"');'
+3)
+	bindir=`dirname "$0"`
+	echo '
+		SMLofNJ.Internals.GC.messages false;
+		CM.make'\'' "'"$1"'" handle _ => OS.Process.exit OS.Process.failure;
+		SMLofNJ.exportFn ("'"$2"'", '"$3"');
+	' | "$bindir"/smlnj
 	;;
 *)
-	echo 2>&1 'usage: '"$0"' heapbase main | sml-nj'
+	echo 2>&1 'usage: '"$0"' cmfile heapbase main'
 	exit 1
 	;;
 esac
