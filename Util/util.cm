@@ -26,6 +26,7 @@ graphutil.sml
 splay-map-fn.sml
 stats.sig.sml
 stats.sml
+timestamp.sml
 graph.sig.sml
 graph.sml
 crc.sig.sml

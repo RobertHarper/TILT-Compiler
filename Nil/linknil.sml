@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Dummy Typeof_Elim Real CoerceElim *)
+(*$import Prelude TopLevel Util Int Il Name LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilSubst NilError PrimUtil Hoist Reify NilStatic Inline PpnilHtml Measure Vararg Dummy Typeof_Elim Real CoerceElim Timestamp *)
 
 (* Reorder *)
 
@@ -80,6 +80,7 @@ structure Linknil :> LINKNIL  =
 	error "pass called with a false flag"
       | pass filename (ref true, showphase, checkphase, wcheckphase, phasename) (transformer,obj) =
 	let val str = "Starting " ^ phasename ^ ": " ^ filename
+	    val _ = Timestamp.timestamp()
 	    val _ = printBold str
 	    val nilmod = Stats.timer(phasename,transformer) obj
 	    val _ = if !show_size

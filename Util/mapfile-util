@@ -21,6 +21,8 @@ Sequence sequence
 STATS stats.sig
 Stats stats
 
+Timestamp timestamp
+
 TILWORD tilword.sig
 TilWord32 tilword32-native
 TilWord64 tilword64

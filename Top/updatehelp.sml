@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Stats UPDATE_HELP Paths FileCache Info Util TopHelp Compiler Time UnitEnvironment List OS Tools *)
+(*$import Prelude TopLevel Stats UPDATE_HELP Paths FileCache Info Util TopHelp Compiler Time UnitEnvironment List OS Tools Timestamp *)
 
 structure UpdateHelp
     :> UPDATE_HELP
@@ -156,7 +156,8 @@ struct
 
     (* assemble : notes -> unit *)
     fun assemble ({unit, asmFile, objFile, ...} : notes) =
-	let val _ = Help.chat ("  [Assembling " ^ unit ^ " to object file.]\n")
+	let val _ = Timestamp.timestamp()
+	    val _ = Help.chat ("  [Assembling " ^ unit ^ " to object file.]\n")
 	    val _ = Tools.assemble (asmFile, objFile)
 	    val _ = Cache.flushSome [objFile]
 	in

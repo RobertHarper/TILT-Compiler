@@ -434,6 +434,4 @@ structure Stats :> STATS =
 	  print "\n\n"
 	end
 
-
-
    end

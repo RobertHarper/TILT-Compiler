@@ -59,10 +59,10 @@ struct
 	 (case Regmap.find(!stack_res,x) of
 	     SOME i => i
 	   | NONE => 
-		 let val a = !count
-		 in stack_res := Regmap.insert(!stack_res,x,SPILLED_INT(!count));
+		 let val r = SPILLED_INT(!count)
+		 in stack_res := Regmap.insert(!stack_res,x,r);
 		    count := !count + 1;
-		    SPILLED_INT a
+		    r
 		 end)
    end
 

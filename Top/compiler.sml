@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel BinIO TopHelp Int Name Time ListPair Real Listops Paths COMPILER LinkParse Il LinkIl Nil Linknil Rtl Linkrtl Linkalpha Linksparc Target FileCache Util Stats Delay Paths *)
+(*$import Prelude TopLevel BinIO TopHelp Int Name Time ListPair Real Listops Paths COMPILER LinkParse Il LinkIl Nil Linknil Rtl Linkrtl Linkalpha Linksparc Target FileCache Util Stats Delay Paths Timestamp *)
 
 structure Compiler :> COMPILER =
 struct
@@ -8,6 +8,8 @@ struct
     val showWrittenContext = Stats.ff("ShowWrittenContext")
     val writeUnselfContext = Stats.ff("WriteUnselfContext")
     val showImports = Stats.ff("ShowImports")
+    val timestamp = Timestamp.timestamp
+    fun wrap f arg = (timestamp(); f arg)
 
     type unit_paths = Paths.unit_paths
     type il_module = LinkIl.module
@@ -152,6 +154,7 @@ struct
     (* elaborate : {...} -> il_module * bool *)
     fun elaborate {unit, smlFile, intFile, targetIlFile, imports} =
 	let val (ctxt, label_info) = getContext imports
+	    val _ = timestamp()
 	    val _ = Help.chat ("  [Parsing " ^ smlFile ^ "]\n")
 	    val (lines,fp, _, dec) = LinkParse.parse_impl smlFile
 	    val _ = if (lines > 3000) (* XXX: reconsider *)
@@ -167,11 +170,14 @@ struct
 		      let val (_,fp2, _, specs) = LinkParse.parse_inter intFile'
 			  val _ = Help.chat ("  [Warning: constraints currently coerce.  ")
 			  val _ = Help.chat ("Not compatible with our notion of freshness.]\n")
+			  val _ = timestamp()
 			  val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " with constraint]\n"  )
 		      in  LinkIl.elab_dec_constrained(unit,ctxt,fp,dec,fp2,specs)
 		      end
 		   | NONE => 
-		      let val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " non-constrained]\n")
+		      let
+			  val _ = timestamp()
+			  val _ = Help.chat ("  [Elaborating " ^ smlFile ^ " non-constrained]\n")
 		      in  LinkIl.elab_dec(unit,ctxt,fp,dec)
 		      end
 	    val il_module =
@@ -200,13 +206,14 @@ struct
     val il_to_nil = Linknil.il_to_nil
 
     (* nil_to_rtl : string * nil_module -> rtl_module *)
-    val nil_to_rtl = Linkrtl.nil_to_rtl
+    val nil_to_rtl = wrap Linkrtl.nil_to_rtl
 
     (* rtl_to_asm : string * rtl_module -> unit *)
     fun rtl_to_asm arg =
 	let val rtl_to_asm = case Target.getTargetPlatform ()
 			       of Target.TIL_ALPHA => Linkalpha.rtl_to_asm
 				| Target.TIL_SPARC => Linksparc.rtl_to_asm
+	    val rtl_to_asm = wrap rtl_to_asm
 	    val mainLabel = rtl_to_asm arg
 	in  ()
 	end
@@ -216,9 +223,9 @@ struct
 	let val link = (case Target.getTargetPlatform()
 			  of Target.TIL_ALPHA => Linkalpha.link
 			   | Target.TIL_SPARC => Linksparc.link)
+	    val link = wrap link
 	    val local_labels = map (fn un => Rtl.ML_EXTERN_LABEL (un ^ "_unit")) units
 	    val ignoredLabel = link (asmFile, local_labels)
 	in  ()
 	end
-	
 end
