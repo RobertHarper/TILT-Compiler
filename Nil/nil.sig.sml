@@ -3,14 +3,17 @@ sig
   structure Prim : PRIM
   structure Annotation : ANNOTATION
   structure Name : NAME
+
   type var = Name.var
   type label = Name.label
   type annot = Annotation.annotation
   type w32 = Word32.word
   type prim = Prim.prim
-  type ('a,'b) sequence   (* conceptually this is a ('a*'b) list that allows
+  type ('a,'b) sequence = ('a,'b) Util.sequence
+                          (* conceptually this is a ('a*'b) list that allows
 			     fast access using 'a as a key *)
-  type ('a,'b) set        (* sets are used instead of lists in places 
+  type ('a,'b) set = ('a,'b) Util.sequence
+                          (* sets are used instead of lists in places 
 			   where a natural ordering does not exist *)
 
   (* In general, we want to distinguish between functions/arrow types that 
@@ -60,13 +63,13 @@ sig
     | Ref_c                                   (* references *)
     | Exntag_c                                (* exception tags *)
     | Sum_c                                   (* sum types *)
-    | Record_c                                (* records *)
+    | Record_c of label list                  (* records *)
     | Vararg_c of openness * effect           (* helps classify make_vararg and make_onearg *)
 
   and con = 
       Prim_c of primcon * con list                (* Classify term-level values 
                                                        of primitive types *)
-    | Mu_c of var * (var,con) set                 (* Constructors that classify values of
+    | Mu_c of (var,con) set * var                 (* Constructors that classify values of
 						       a recursive type *)
     | Arrow_c of openness * confun                (* open functions and closures *)
     | Code_c of confun                            (* for describing code at the term level: 

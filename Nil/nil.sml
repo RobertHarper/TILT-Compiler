@@ -67,13 +67,13 @@ struct
     | Ref_c                                   (* references *)
     | Exntag_c                                (* exception tags *)
     | Sum_c                                   (* sum types *)
-    | Record_c                                (* records *)
+    | Record_c of label list                  (* records *)
     | Vararg_c of openness * effect           (* helps classify make_vararg and make_onearg *)
 
   and con = 
       Prim_c of primcon * con list                (* Classify term-level values 
                                                        of primitive types *)
-    | Mu_c of var * (var,con) set                 (* Constructors that classify values of
+    | Mu_c of (var,con) set * var                 (* Constructors that classify values of
 						       a recursive type *)
     | Arrow_c of openness * confun                (* open functions and closures *)
     | Code_c of confun                            (* for describing code at the term level: 
