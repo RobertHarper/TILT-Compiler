@@ -1,4 +1,6 @@
-(*$import Prelude TopLevel Array Word32 Name Sequence Listops Nil Prim Util TilWord64 EXPTABLE String BinaryMapFn Ppnil Int TraceInfo *)
+(*$import Array Word32 Name Sequence Listops Nil Prim Util TilWord64 EXPTABLE String BinaryMapFn Ppnil Int TraceInfo *)
+
+(* Maps from expressions and constructors *)
 
 (* Basically revamped from old version of Til *)
 (* This sucks.  There's got to be better ways to do this.

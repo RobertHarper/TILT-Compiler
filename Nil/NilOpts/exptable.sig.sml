@@ -1,4 +1,6 @@
-(*$import Prelude ORD_MAP Nil *)
+(*$import ORD_MAP Nil *)
+
+(* Maps from expressions and constructors *)
 
 signature EXPTABLE =
 sig
