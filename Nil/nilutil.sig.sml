@@ -22,6 +22,8 @@ signature NILUTIL =
     val string_con : Nil.con
     val true_exp : Nil.exp
     val false_exp : Nil.exp
+    val int_con : Nil.con   (* 32-bit ints *)
+    val char_con : Nil.con  (* 8-bit ints *)
 
     val con_free_convar : Nil.con -> Name.var list
     val convar_occurs_free : Name.var * Nil.con -> bool
