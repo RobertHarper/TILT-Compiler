@@ -1,78 +1,78 @@
 #include ../Backend/mapfile
 
 // ----------------- Alpha directory -----------------
-DECALPHA           ../Alpha/decalpha.sig
-DecAlpha           ../Alpha/decalpha
-DecAlphaUtils      ../Alpha/decalphautils
-CallConv           ../Alpha/callconv
-DIVMULT            ../Alpha/divmult.sig
-DivMult            ../Alpha/divmult
-ToAlpha            ../Alpha/toalpha
-TrackStorage       ../Alpha/trackstorage
-Linkalpha          ../Alpha/linkalpha
+DECALPHA           ../Alpha/decalpha.sig.sml
+DecAlpha           ../Alpha/decalpha.sml
+DecAlphaUtils      ../Alpha/decalphautils.sml
+CallConv           ../Alpha/callconv.sml
+DIVMULT            ../Alpha/divmult.sig.sml
+DivMult            ../Alpha/divmult.sml
+ToAlpha            ../Alpha/toalpha.sml
+TrackStorage       ../Alpha/trackstorage.sml
+Linkalpha          ../Alpha/linkalpha.sml
 
 // ----------------- Sparc directory -----------------
-SPARC              ../Sparc/sparc.sig
-Sparc              ../Sparc/sparc
-SparcUtils         ../Sparc/sparcutils
-SparcCallConv      ../Sparc/sparccallconv
-SparcTrackStorage  ../Sparc/sparctrackstorage
-ToSparc            ../Sparc/tosparc
-Linksparc          ../Sparc/linksparc
+SPARC              ../Sparc/sparc.sig.sml
+Sparc              ../Sparc/sparc.sml
+SparcUtils         ../Sparc/sparcutils.sml
+SparcCallConv      ../Sparc/sparccallconv.sml
+SparcTrackStorage  ../Sparc/sparctrackstorage.sml
+ToSparc            ../Sparc/tosparc.sml
+Linksparc          ../Sparc/linksparc.sml
 
 
 // ----------------- Top directory -----------------
-TARGET     target.sig
-Target     target
-TopHelp     tophelp
-PATHS     paths.sig
-Paths     paths
-BACKGROUND     background.sig
-Background     background
-DELAY     delay.sig
-Delay     delay
-POPEN     popen.sig
-Popen     popen
-DIRS     dirs.sig
-Dirs     dirs
-FILECACHE     filecache.sig
-FileCache     filecache
-TOOLS     tools.sig
-Tools     tools
-COMPILER     compiler.sig
-Compiler     compiler
-UNIT_ENVIRONMENT     ue.sig
-UnitEnvironment     ue
-PRELINK     prelink.sig
-Prelink     prelink
-INFO     info.sig
-Info     info
+TARGET     target.sig.sml
+Target     target.sml
+TopHelp     tophelp.sml
+PATHS     paths.sig.sml
+Paths     paths.sml
+BACKGROUND     background.sig.sml
+Background     background.sml
+DELAY     delay.sig.sml
+Delay     delay.sml
+POPEN     popen.sig.sml
+Popen     popen.sml
+DIRS     dirs.sig.sml
+Dirs     dirs.sml
+FILECACHE     filecache.sig.sml
+FileCache     filecache.sml
+TOOLS     tools.sig.sml
+Tools     tools.sml
+COMPILER     compiler.sig.sml
+Compiler     compiler.sml
+UNIT_ENVIRONMENT     ue.sig.sml
+UnitEnvironment     ue.sml
+PRELINK     prelink.sig.sml
+Prelink     prelink.sml
+INFO     info.sig.sml
+Info     info.sml
 // DEPENDENT_FILE     dependentfile.sig
 // FileHelp     filehelp
 // SourceFile     sourcefile
 // IlFile     ilfile
 // AsmFile     asmfile
 // ObjFile     objfile
-UPDATE_HELP     updatehelp.sig
-UpdateHelp     updatehelp
-UPDATE     update.sig
-Update     update
-COMMUNICATION     communication.sig
-Communication     communication
-STATISTICS     statistics.sig
-Statistics     statistics
-MASTER     master.sig
-Master     master
-SLAVE     slave.sig
-Slave     slave
-MANAGER     manager.sig
-Manager     manager
-GETOPT     getopt.sig
-Getopt     getopt
-MAIN     main.sig
-Main     main
-RUN     run.sig
-Run     run
-Top     top TARGET
+UPDATE_HELP     updatehelp.sig.sml
+UpdateHelp     updatehelp.sml
+UPDATE     update.sig.sml
+Update     update.sml
+COMMUNICATION     communication.sig.sml
+Communication     communication.sml
+STATISTICS     statistics.sig.sml
+Statistics     statistics.sml
+MASTER     master.sig.sml
+Master     master.sml
+SLAVE     slave.sig.sml
+Slave     slave.sml
+MANAGER     manager.sig.sml
+Manager     manager.sml
+GETOPT     getopt.sig.sml
+Getopt     getopt.sml
+MAIN     main.sig.sml
+Main     main.sml
+RUN     run.sig.sml
+Run     run.sml
+Top     top.sml TARGET
 
 // Dumpil     dumpil TARGET

@@ -3,5 +3,5 @@
 // ------------- Lil directory -------------------
 
 
-LIL            lil.sig
-Lil            lil
+LIL            lil.sig.sml
+Lil            lil.sml

@@ -1,11 +1,11 @@
-ARITH		arith.sig
-ArithHelp	arith-help
-PrimArith	prim-arith
-IntArith	int-arith
-WordArith	word-arith
-RealArith	real-arith
-OrdArith	ord-arith
-FlooredArith	floored-arith
-Arith		arith
+ARITH		arith.sig.sml
+ArithHelp	arith-help.sml
+PrimArith	prim-arith.sml
+IntArith	int-arith.sml
+WordArith	word-arith.sml
+RealArith	real-arith.sml
+OrdArith	ord-arith.sml
+FlooredArith	floored-arith.sml
+Arith		arith.sml
 
-Test		main
+Test		main.sml

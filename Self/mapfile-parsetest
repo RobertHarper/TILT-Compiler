@@ -1,3 +1,3 @@
 #include mapfile-parse
 
-parsetest parsetest
+parsetest parsetest.sml

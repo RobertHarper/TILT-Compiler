@@ -1,4 +1,4 @@
-OVERLOAD	overload.sig
-OvldDefaults	overload-defaults
-Overload	overload		TARGET
-Test		test			TARGET
+OVERLOAD	overload.sig.sml
+OvldDefaults	overload-defaults.sml
+Overload	overload.sml		TARGET
+Test		test.sml		TARGET

@@ -3,74 +3,74 @@
 
 // ------------ Parser directory ----------------
 
-CONTROL control.sig
-Control control
-StrgHash strghash
-PpQueue ppqueue
-PRETTYPRINT pp.sig
-PrettyPrint pp
-SOURCEMAP sourcemap.sig
-SourceMap sourcemap
-PATHNAMES pathnames.sig
-PathNames pathnames
-SOURCE   source.sig
-Source   source
+CONTROL control.sig.sml
+Control control.sml
+StrgHash strghash.sml
+PpQueue ppqueue.sml
+PRETTYPRINT pp.sig.sml
+PrettyPrint pp.sml
+SOURCEMAP sourcemap.sig.sml
+SourceMap sourcemap.sml
+PATHNAMES pathnames.sig.sml
+PathNames pathnames.sml
+SOURCE   source.sig.sml
+Source   source.sml
 
-ERRORMSG errormsg.sig
-ErrorMsg errormsg
+ERRORMSG errormsg.sig.sml
+ErrorMsg errormsg.sml
 
-SYMBOL symbol.sig
-ENV    env.sig
-Symbol  env
+SYMBOL symbol.sig.sml
+ENV    env.sig.sml
+Symbol  env.sml
 // Symbol symbol
 // FastSymbol fastsymbol
-Fixity fixity
-AST    ast.sig
-Ast    ast
+Fixity fixity.sml
+AST    ast.sig.sml
+Ast    ast.sml
 
 
-ASTHELP asthelp.sig
-AstHelp asthelp
+ASTHELP asthelp.sig.sml
+AstHelp asthelp.sml
 
-PRINTUTIL printutil.sig
-PrintUtil printutil
+PRINTUTIL printutil.sig.sml
+PrintUtil printutil.sml
 
-ASTUTIL astutil.sig
-AstUtil astutil
+ASTUTIL astutil.sig.sml
+AstUtil astutil.sml
 
-NAME    name.sig
-Name    name
-NAMEBLAST    nameblast.sig
-NameBlast    nameblast
-TVClose    tvclose
-NamedForm  namedform
+NAME    name.sig.sml
+Name    name.sml
+NAMEBLAST    nameblast.sig.sml
+NameBlast    nameblast.sml
+TVClose    tvclose.sml
+NamedForm  namedform.sml
 
-INTSTRMAP intstrmap.sig
-IntStrMap intstrmap
+INTSTRMAP intstrmap.sig.sml
+IntStrMap intstrmap.sml
 
-YaccBase   base.sig
-ML_TOKENS  ml.grm.sig
+YaccBase   base.sig.sml
+ML_TOKENS  ml.grm.sig.sml
 
-TokenTable tokentable
-MLLexFun   ml.lex
+TokenTable tokentable.sml
+MLLexFun   ml.lex.sml
 
 
-Stream   stream
-LrTable  lrtable
-LrParser parser2
+Stream   stream.sml
+LrTable  lrtable.sml
+LrParser parser2.sml
 
-MLLrValsFun ml.grm
+MLLrValsFun ml.grm.sml
 
-Join join
-FRONTEND frontend.sig
-FrontEnd frontend
+Join join.sml
+FRONTEND frontend.sig.sml
+FrontEnd frontend.sml
 
 // unused --- FreeTypeVars freetyvars
 // unused --- SortedList sortedlist
 // ppast
 
-LINKPARSE linkparse.sig
-LinkParse linkparse
+LINKPARSE linkparse.sig.sml
+LinkParse linkparse.sml
 
 
 

@@ -1,15 +1,15 @@
 #include mapfile-lib
 
 
-life		life		
-leroy		leroy
-fft		fft
-boyer		boyer
-simple		simple
-tyan		tyan
-msort		msort
-pia		pia
-lexgen		lexgen
-frank		frank
+life		life.sml		
+leroy		leroy.sml
+fft		fft.sml
+boyer		boyer.sml
+simple		simple.sml
+tyan		tyan.sml
+msort		msort.sml
+pia		pia.sml
+lexgen		lexgen.sml
+frank		frank.sml
 
-bench_times	bench_times	TARGET
+bench_times	bench_times.sml	TARGET

@@ -1,7 +1,7 @@
 #include mapfile-twelf
 
-SIGINT		src/server/sigint.sig
-SigINT		src/server/sigint-tilt
-Server	 	src/server/server
-//SERVER	src/server/server
-TwelfServer	src/server/server-tilt
+SIGINT		src/server/sigint.sig.sml
+SigINT		src/server/sigint-tilt.sml
+Server	 	src/server/server.sml
+//SERVER	src/server/server.sml
+TwelfServer	src/server/server-tilt.sml

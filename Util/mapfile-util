@@ -3,48 +3,48 @@
 
 // ------------ Util directory --------------
 
-UTIL_ERROR util-error.sig
-UtilError util-error
+UTIL_ERROR util-error.sig.sml
+UtilError util-error.sml
 
-PLATFORM platform.sig
-Platform platform
+PLATFORM platform.sig.sml
+Platform platform.sml
 
-UTIL util.sig
-Util util
+UTIL util.sig.sml
+Util util.sml
 
-LISTOPS listops.sig
-Listops listops
+LISTOPS listops.sig.sml
+Listops listops.sml
 
-SEQUENCE sequence.sig
-Sequence sequence
+SEQUENCE sequence.sig.sml
+Sequence sequence.sml
 
-STATS stats.sig
-Stats stats
+STATS stats.sig.sml
+Stats stats.sml
 
-Timestamp timestamp
+Timestamp timestamp.sml
 
-TILWORD tilword.sig
-TilWord32 tilword32-native
-TilWord64 tilword64
+TILWORD tilword.sig.sml
+TilWord32 tilword32-native.sml
+TilWord64 tilword64.sml
 
-FORMATTER formatter.sig
-Formatter formatter
+FORMATTER formatter.sig.sml
+Formatter formatter.sml
 
-BINIOUTIL bin_io_util.sig
-BinIoUtil bin_io_util
+BINIOUTIL bin_io_util.sig.sml
+BinIoUtil bin_io_util.sml
 
-CRC crc.sig
-Crc crc-native
+CRC crc.sig.sml
+Crc crc-native.sml
 
-GRAPH graph.sig
-Graph graph
+GRAPH graph.sig.sml
+Graph graph.sml
 
-GRAPHUTIL graphutil.sig
-GraphUtil graphutil
+GRAPHUTIL graphutil.sig.sml
+GraphUtil graphutil.sml
 
-Blaster  blast
+Blaster  blast.sml
 
-Specific specific-til
+Specific specific-til.sml
 
-Trace trace
+Trace trace.sml
 

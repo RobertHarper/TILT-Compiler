@@ -1,3 +1,3 @@
 #include mapfile-nil
 
-niltest niltest
+niltest niltest.sml

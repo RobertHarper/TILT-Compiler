@@ -1,34 +1,34 @@
 #include ../Nil/mapfile-nil
 
 // ----------------- Rtl directory --------------
-RTL rtl.sig
-Rtl rtl
+RTL rtl.sig.sml
+Rtl rtl.sml
 
-RTLTAGS tags.sig
-Rtltags tags
+RTLTAGS tags.sig.sml
+Rtltags tags.sml
 
-PPRTL pprtl.sig
-Pprtl pprtl
+PPRTL pprtl.sig.sml
+Pprtl pprtl.sml
 
-TORTLBASE tortl-base.sig
-TortlBase tortl-base
+TORTLBASE tortl-base.sig.sml
+TortlBase tortl-base.sml
 
-TORTLRECORD tortl-record.sig
-TortlRecord  tortl-record
+TORTLRECORD tortl-record.sig.sml
+TortlRecord  tortl-record.sml
 
-TORTLSUM tortl-sum.sig
-TortlSum  tortl-sum
+TORTLSUM tortl-sum.sig.sml
+TortlSum  tortl-sum.sml
 
 //TORTLVARARG tortl-vararg.sig
 //TortlVararg tortl-vararg
 
-TORTLARRAY tortl-array.sig
-TortlArray tortl-array
+TORTLARRAY tortl-array.sig.sml
+TortlArray tortl-array.sml
 
-TORTL     tortl.sig
-Tortl     tortl
+TORTL     tortl.sig.sml
+Tortl     tortl.sml
 
-LINKRTL linkrtl.sig
-Linkrtl linkrtl
+LINKRTL linkrtl.sig.sml
+Linkrtl linkrtl.sml
 
 

@@ -1,6 +1,6 @@
 #include ../Self/mapfile-lib
-Help 		help
-lexgen		lexgen 		
+Help 		help.sml
+lexgen		lexgen.sml 		
 //life		life		
 //treap		treap		
 //simple		simple		

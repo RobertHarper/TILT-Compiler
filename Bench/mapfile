@@ -1,22 +1,22 @@
 #include mapfile-lib
 
-arithmetic	arithmetic	TARGET
-life		life		
-leroy		leroy		TARGET
-matmult		matmult		TARGET
-quicksort	quicksort	TARGET
-quicksort2	quicksort2	TARGET
-takc		takc		TARGET
-taku		taku		TARGET
-sort		sort		TARGET
-fft		fft		TARGET
-boyer		boyer		TARGET
-simple		simple		TARGET
-pqueens 	pqueens		TARGET
+arithmetic	arithmetic.sml	TARGET
+life		life.sml		
+leroy		leroy.sml	TARGET
+matmult		matmult.sml	TARGET
+quicksort	quicksort.sml	TARGET
+quicksort2	quicksort2.sml	TARGET
+takc		takc.sml	TARGET
+taku		taku.sml	TARGET
+sort		sort.sml	TARGET
+fft		fft.sml		TARGET
+boyer		boyer.sml	TARGET
+simple		simple.sml	TARGET
+pqueens 	pqueens.sml	TARGET
 //iii 		iii		TARGET
-tyan		tyan		TARGET
-msort		msort		TARGET
-pia		pia		TARGET
-lexgen		lexgen		TARGET
-frank		frank		TARGET
-bench_times	bench_times	TARGET
+tyan		tyan.sml	TARGET
+msort		msort.sml	TARGET
+pia		pia.sml		TARGET
+lexgen		lexgen.sml	TARGET
+frank		frank.sml	TARGET
+bench_times	bench_times.sml	TARGET

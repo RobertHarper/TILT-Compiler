@@ -2,59 +2,59 @@
 
 // -------- Elaborator directory -------------
 
-PRIM    prim.sig
-Prim    prim
-PPPRIM  ppprim.sig
-Ppprim  ppprim
-TYVAR   tyvar.sig
-Tyvar   tyvar
+PRIM    prim.sig.sml
+Prim    prim.sml
+PPPRIM  ppprim.sig.sml
+Ppprim  ppprim.sml
+TYVAR   tyvar.sig.sml
+Tyvar   tyvar.sml
 
-IL	il.sig
-Il	il
-PPIL	ppil.sig
-Ppil	ppil
-PRIMUTILPARAM primutilparam.sig 
-IlPrimUtilParam ilprimutilparam
-PRIMUTIL primutil.sig
-PrimUtil primutil
-ILUTIL ilutil.sig
-IlUtil ilutil
+IL	il.sig.sml
+Il	il.sml
+PPIL	ppil.sig.sml
+Ppil	ppil.sml
+PRIMUTILPARAM primutilparam.sig.sml 
+IlPrimUtilParam ilprimutilparam.sml
+PRIMUTIL primutil.sig.sml
+PrimUtil primutil.sml
+ILUTIL ilutil.sig.sml
+IlUtil ilutil.sml
 
-IlTable   iltable
-ILCONTEXT ilcontext.sig
-IlContext ilcontext
-ILCONTEXTEQ ilcontexteq.sig
-IlContextEq ilcontexteq
+IlTable   iltable.sml
+ILCONTEXT ilcontext.sig.sml
+IlContext ilcontext.sml
+ILCONTEXTEQ ilcontexteq.sig.sml
+IlContextEq ilcontexteq.sml
 	
-ERROR error.sig
-Error error
+ERROR error.sig.sml
+Error error.sml
 
-INFIXPARSE infixparse.sig
-InfixParse infixparse
+INFIXPARSE infixparse.sig.sml
+InfixParse infixparse.sml
 
 
 
-ILSTATIC  ilstatic.sig
-IlStatic  ilstatic
+ILSTATIC  ilstatic.sig.sml
+IlStatic  ilstatic.sml
 
-EQUAL equal.sig
-Equal equal
-DATATYPE datatype.sig
-Datatype datatype
-SIGNATURE signature.sig
-Signature signature
+EQUAL equal.sig.sml
+Equal equal.sml
+DATATYPE datatype.sig.sml
+Datatype datatype.sml
+SIGNATURE signature.sig.sml
+Signature signature.sml
 
-PAT pat.sig
-Pat pat
+PAT pat.sig.sml
+Pat pat.sml
 
-TOIL toil.sig
-Toil toil
+TOIL toil.sig.sml
+Toil toil.sml
 
-BASIS basis.sig
-Basis basis
+BASIS basis.sig.sml
+Basis basis.sml
 
-LINKIL linkil.sig
-LinkIl linkil
+LINKIL linkil.sig.sml
+LinkIl linkil.sml
 
 
 

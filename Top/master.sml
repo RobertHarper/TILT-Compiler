@@ -229,7 +229,7 @@ struct
 	    val dir = Dirs.dir mapfile
 	    val findMapfile = Dirs.accessPath (mapfilePath dir, [OS.FileSys.A_READ])
 	    fun relative file = OS.Path.joinDirFile {dir=dir, file=file}
-	    fun mkPaths (unit, filebase) = Paths.sourceUnitPaths {unit=unit, file=relative filebase ^ ".sml"}
+	    fun mkPaths (unit, filebase) = Paths.sourceUnitPaths {unit=unit, file=relative filebase}
 	    val is = TextIO.openIn mapfile
 	    fun dropper s = let val len = size s
 			    in  String.sub(s,0) = #";" orelse

@@ -2,119 +2,115 @@
 
 // ------------- Nil directory -------------------
 
-ANNOTATION annote.sig
-Annotation annote
+ANNOTATION annote.sig.sml
+Annotation annote.sml
 
-TRACEINFO traceinfo.sig
-TraceInfo traceinfo
+TRACEINFO traceinfo.sig.sml
+TraceInfo traceinfo.sml
 
-NIL nil.sig
-Nil nil
+NIL nil.sig.sml
+Nil nil.sml
 
-PPNIL ppnil.sig
-Ppnil ppnil
-PpnilHtml ppnil-html
+PPNIL ppnil.sig.sml
+Ppnil ppnil.sml
+PpnilHtml ppnil-html.sml
 
-NILERROR nilerror.sig
-NilError nilerror
+NILERROR nilerror.sig.sml
+NilError nilerror.sml
 
-NILREWRITE rewrite.sig
-NilRewrite rewrite
-TypedNilRewrite typed_rewrite
+NILREWRITE rewrite.sig.sml
+NilRewrite rewrite.sml
+TypedNilRewrite typed_rewrite.sml
 
-MEASURE measure.sig
-Measure measure
+MEASURE measure.sig.sml
+Measure measure.sml
 
-ALPHA alpha_context.sig
-Alpha alpha_context
+ALPHA alpha_context.sig.sml
+Alpha alpha_context.sml
 
-NILRENAME 	nilrename.sig
-NilRename	nilrename
+NILRENAME 	nilrename.sig.sml
+NilRename	nilrename.sml
 
-NILSUBST subst.sig
-NilSubst subst
+NILSUBST subst.sig.sml
+NilSubst subst.sml
 
-NILDEFS nildefs.sig
-NilDefs nildefs
+NILDEFS nildefs.sig.sml
+NilDefs nildefs.sml
 
-NILUTIL nilutil.sig
-NilUtil nilutil
+NILUTIL nilutil.sig.sml
+NilUtil nilutil.sml
 
-TRAIL trail.sig
-Trail trail
+TRAIL trail.sig.sml
+Trail trail.sml
 
-NILCONTEXTPRE	nilcontextpre.sig
-NilContextPre nilcontextpre
+NILCONTEXTPRE	nilcontextpre.sig.sml
+NilContextPre nilcontextpre.sml
 
-NilPrimUtilParam nilprimutilparam
-NilPrimUtil nilprimutil
+NilPrimUtilParam nilprimutilparam.sml
+NilPrimUtil nilprimutil.sml
 
-NORMALIZE normalize.sig
-Normalize normalize
+NORMALIZE normalize.sig.sml
+Normalize normalize.sml
 
-//NILHNF	nilhnf.sig
-//NilHNF	nilhnf
+NILCONTEXT nilcontext.sig.sml
+NilContext nilcontext.sml
 
-NILCONTEXT nilcontext.sig
-NilContext nilcontext
+BOUNDCHECK	bound_check.sig.sml
+BoundCheck	bound_check.sml
 
-BOUNDCHECK	bound_check.sig
-BoundCheck	bound_check
+TRACEOPS traceops.sig.sml
+TraceOps traceops.sml
 
-TRACEOPS traceops.sig
-TraceOps traceops
+NILSTATIC nilstatic.sig.sml
+NilStatic nilstatic.sml
 
-NILSTATIC nilstatic.sig
-NilStatic nilstatic
+LINEARIZE linearize.sig.sml
+Linearize linearize.sml
 
-LINEARIZE linearize.sig
-Linearize linearize
+REIFY reify.sig.sml
+Reify reify.sml
 
-REIFY reify.sig
-Reify reify
+EXPTABLE NilOpts/exptable.sig.sml
+ExpTable NilOpts/exptable.sml
 
-EXPTABLE NilOpts/exptable.sig
-ExpTable NilOpts/exptable
+TOCLOSURE toclosure.sig.sml
+ToClosure toclosure.sml
 
-TOCLOSURE toclosure.sig
-ToClosure toclosure
+VARARG vararg.sig.sml
+Vararg vararg.sml
 
-VARARG vararg.sig
-Vararg vararg
+OPTIMIZE optimize.sig.sml
+Optimize optimize.sml
 
-OPTIMIZE optimize.sig
-Optimize optimize
+SPECIALIZE specialize.sig.sml
+Specialize specialize.sml
 
-SPECIALIZE specialize.sig
-Specialize specialize
+TONIL tonil.sig.sml
+ToNil tonil.sml
 
-TONIL tonil.sig
-ToNil tonil
+PASS pass.sig.sml
 
-PASS pass.sig
+REDUCE reduce.sig.sml
+Reduce reduce.sml
 
-REDUCE reduce.sig
-Reduce reduce
+Flatten flatten.sml
 
-Flatten flatten
+HOIST hoist.sig.sml
+Hoist hoist.sml
 
-HOIST hoist.sig
-Hoist hoist
+ANALYZE analyze.sig.sml
+Analyze analyze.sml
 
-ANALYZE analyze.sig
-Analyze analyze
+INLINE inline.sig.sml
+Inline inline.sml
 
-INLINE inline.sig
-Inline inline
+Reorder reorder.sml
 
-Reorder reorder
+TYPEOF_ELIM	typeof_elim.sig.sml
+Typeof_Elim	typeof_elim.sml
 
-TYPEOF_ELIM	typeof_elim.sig
-Typeof_Elim	typeof_elim
+COERCEELIM coerce-elim.sig.sml
+CoerceElim coerce-elim.sml
 
-COERCEELIM coerce-elim.sig
-CoerceElim coerce-elim
-
-LINKNIL linknil.sig
-Linknil linknil
-
+LINKNIL linknil.sig.sml
+Linknil linknil.sml

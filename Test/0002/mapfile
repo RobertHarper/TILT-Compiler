@@ -1,10 +1,10 @@
-TOP		top.sig
-Top		top		TARGET
+TOP		top.sig.sml
+Top		top.sml		TARGET
 
-REQUIRED	required.sig
-Required	required	TARGET
+REQUIRED	required.sig.sml
+Required	required.sml	TARGET
 
-OPTIONAL	optional.sig
-Optional	optional	TARGET
+OPTIONAL	optional.sig.sml
+Optional	optional.sml	TARGET
 
-Test		test		TARGET
+Test		test.sml	TARGET
