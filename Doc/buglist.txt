@@ -1,19 +1,9 @@
-(1)  The elaborator erroneously generalizes x in the code below:
-
-	fun id x = id x
-	val x = id 3
-
-(2) parsing for this fails:
-
-	fun f nil x y = 5
-
-
-(3) handle specially datatypes of the form; handle irrefutable case in 
+(1) handle specially datatypes of the form; handle irrefutable case in 
 	patterm matcher
 
 	datatype foo = FOO of int
 	val FOO x = (y : foo)
 
-(4) improve this error msg:
+(2) improve this error msg:
 
 	Error: infixparse.sml: parse_pat on subcall yielded multiple patterns
