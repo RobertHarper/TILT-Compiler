@@ -13,7 +13,8 @@
         Fold constant expressions
 	Convert Sumsw to Intsw
 	Not anormalize (old fear of classifier sizes) 
-*)	
+	Reduce known switch
+*)
 
 structure Optimize
     :> OPTIMIZE =
@@ -27,6 +28,7 @@ struct
 	fun subtimer(str,f) = if (!doTimer) then Stats.subtimer(str,f) else f
 
 
+        (* Generate polymorphic aggregrate handling functions that use PrimOp's *)
 	local
 	    fun make_length (aggregate,constr) = 
 		let val c = Name.fresh_named_var "len_type"
@@ -146,7 +148,7 @@ struct
 				  vector = #2 vectorEntry,
 				  bnds = bnds}
 	    end
-		
+
 	(* A transformation state is threaded through the optimizer maintaining:
 		(1) whether we are currently in a type (as opposed to constructor)
 		(2) a typing context including term and type variables
@@ -162,14 +164,14 @@ struct
 			(ii) optionalE - an equivalent term expression which may be used
 			(iii) mustE - an equivalent term expression which must be used
 			(iv) etaE - an equivalent partially applied curried expression
-			(iv) optionalC - an equialent type expression which may be used
-			(iv) mustC - an equialent type expression which must be used
+			(v) optionalC - an equialent type expression which may be used
+			(vi) mustC - an equialent type expression which must be used
 	  
 		(1) allows some reification to occur
 		(2) allows type reduction and some code transformation to occur
 	        (3) and (4.a) together allow cascading dead code to be eliminated
 		(4.b) allows sum and record projections to be optimized
-		(4.c) allows functions to be uncurried
+		(4.b.iv) allows functions to be uncurried
         *)
 
 	datatype used_state = UNUSED 
@@ -181,13 +183,13 @@ struct
 	                    | ETAe of int * var * (con list * exp list * exp list) list
 	                    | OPTIONALc of con 
                             | MUSTc of con
-	      
-fun pp_alias UNKNOWN = print "unknown"
-| pp_alias (OPTIONALe e) = (print "OPTIONALe "; Ppnil.pp_exp e)
-| pp_alias (MUSTe e) = (print "MUSTe "; Ppnil.pp_exp e)
-| pp_alias (OPTIONALc c) = (print "OPTIONALc "; Ppnil.pp_con c)
-| pp_alias (MUSTc c) = (print "MUSTc "; Ppnil.pp_con c)
-| pp_alias (ETAe _) = print "ETAe ..."
+
+	fun pp_alias UNKNOWN = print "unknown"
+	  | pp_alias (OPTIONALe e) = (print "OPTIONALe "; Ppnil.pp_exp e)
+	  | pp_alias (MUSTe e) = (print "MUSTe "; Ppnil.pp_exp e)
+	  | pp_alias (OPTIONALc c) = (print "OPTIONALc "; Ppnil.pp_con c)
+	  | pp_alias (MUSTc c) = (print "MUSTc "; Ppnil.pp_con c)
+	  | pp_alias (ETAe _) = print "ETAe ..."
 
         type params = {doDead : bool, 
 		       doProjection : int option,
@@ -268,6 +270,9 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	  fun add_vars(state as STATE{mapping,...},vars) =
 		let val r = ref UNUSED
+		    (* This shared ref isn't important because add_vars will only be used with variables that can't be eliminated.
+		     * (i.e., variables bound in coercions)
+		     *)
 		    val mapping = foldl (fn (v,m) => Name.VarMap.insert(m,v,(r,UNKNOWN))) mapping vars
 		in  update_mapping(state,mapping)
 		end
@@ -360,15 +365,12 @@ fun pp_alias UNKNOWN = print "unknown"
 	    end
 *)
           fun valuable (state as STATE {equation=ctxt, ...}, e) = 
-	      let fun valuableList [] = true
-		    | valuableList (e::rest) = valuable(state,e) andalso valuableList rest
-	      in  (case e of
-		       App_e(_,Var_e v,_,elist,eflist) =>
-			   (case NilContext.find_con (ctxt,v) of
-				AllArrow_c{effect=Total,...} => valuableList (elist @ eflist)
-			      | _ => false)
-		     | _ => not (NilDefs.effect e))
-	      end
+	      (case e of
+		   App_e(_,Var_e v,_,elist,eflist) =>
+		       (case NilContext.find_con (ctxt,v) of
+			    AllArrow_c{effect=Total,...} => Listops.andfold (fn e => valuable (state, e)) (elist @ eflist)
+			  | _ => false)
+		 | _ => not (NilDefs.effect e))
 
 	  fun add_availE(state as STATE{mapping,current,curry_processed,equation,avail,params},e,v) = 
 	      if (#doCse params andalso valuable(state,e))
@@ -380,7 +382,7 @@ fun pp_alias UNKNOWN = print "unknown"
 				    #2 avail)}
 	      else state
 
-	
+	  (* Look up constructor level record projection *)
 	  fun lookup_cproj(state,v,labs) = 
 	      let fun loop c [] = SOME c
 		    | loop (Crecord_c lclist) (l::rest) =
@@ -478,6 +480,16 @@ fun pp_alias UNKNOWN = print "unknown"
 
 	type wrap = var * effect * recursive * (var * kind) list * bool *
 	            (var * niltrace * con) list * var list * con
+        (* 1: Function name
+	 * 2: Functione effect
+	 * 3: Function recursion status
+	 * 4: Formal constructor parameters
+	 * 5: isDependent
+	 * 6: Formal term parameters
+	 * 7: Formal float parameters
+	 * 8: Result type
+	 *)
+
 	fun extract_lambdas vf = 
 	    let val e = make_lambda vf
 		fun loop acc e = 
@@ -550,7 +562,8 @@ fun pp_alias UNKNOWN = print "unknown"
 
 
 
-	(*Apply the given function to the result of looking up 
+	(*Apply the given function (of type state -> exp -> 'a)
+	 * to the result of looking up 
 	 * aliases and reducing let bnds@(x=e) in x  => let bnds in e.
 	 *
 	 * If f is applied, it is guaranteed to be applied to the first 
@@ -582,6 +595,9 @@ fun pp_alias UNKNOWN = print "unknown"
 		  | _ => f state e)
 	  in de_alias_e e
 	  end
+
+	(*** Code for Sumsw to Intsw conversion ***)
+
 	(* Given a de-aliased expression, 
 	 * check to see if it is an integer comparison with a constant
 	 * and if so return the operands and the size.
@@ -640,7 +656,7 @@ fun pp_alias UNKNOWN = print "unknown"
 			 
 		     end
 	       | _ => NONE)
-	    end	     
+	    end
 
 
 	fun flattenBnds [] = []
@@ -776,8 +792,7 @@ fun pp_alias UNKNOWN = print "unknown"
 		  let
 		    val res = 
 		      case lookup_alias(state,v) of
-			OPTIONALc c => (use_var(state,v); con)
-		      | MUSTc c => do_con state c
+			MUSTc c => do_con state c
 		      | _ => (use_var(state,v); con)
 		  in res
 		  end
@@ -830,6 +845,7 @@ fun pp_alias UNKNOWN = print "unknown"
 					   end)
 			   val alias = (case NilUtil.strip_annotate c of
 					  Var_c _ => MUSTc c
+					             (* Must use the old variable instead of the new one bound here later *)
 					| _ => OPTIONALc c)
 			   val state = (case NilUtil.strip_annotate c of
 					 Var_c _ => state
@@ -844,7 +860,7 @@ fun pp_alias UNKNOWN = print "unknown"
 							  Single_k (#2(extractCbnd cbnd)))
 					   val (vklist,state') = do_vklist state' vklist
 					in  (Open_cb(v,vklist, do_con state' c), state)
-					end	
+					end
 	      | Code_cb(v,vklist,c) => let val state = add_var(state,v)
 					   val state' = enter_var(state,v)
 					   val state = add_kind(state,v,
@@ -853,7 +869,7 @@ fun pp_alias UNKNOWN = print "unknown"
 				        in  (Code_cb(v,vklist, do_con state' c), state)
 					end)
 
-		 
+
 	and rewrite_uncurry ((name,function),orig_state) : (var * function) list * state =
 	    let val uncurry_name = Name.fresh_named_var ((Name.var2name name) ^ "_uncurry")
 		val state = add_curry_pair(orig_state,name,uncurry_name)
@@ -924,7 +940,8 @@ fun pp_alias UNKNOWN = print "unknown"
 		val elist = map (do_exp state) elist
 	    in  Prim_e(PrimOp(constr t), [],clist, elist)
 	    end
-		 
+
+	(* Convert some inject's to inject_known's *)
 	and do_inject (state : state) (k, clist, elist) = 
 	    let fun default() = Prim_e(NilPrimOp (inject k),[],
 				       map (do_con state) clist, 
@@ -937,7 +954,7 @@ fun pp_alias UNKNOWN = print "unknown"
 				| MUSTe e => [e]
 				| _ => elist)
 		       | _ => elist)
-	    in  
+	    in
 	     (case elist of
 		 [] => do_prim state (NilPrimOp(inject_known k),[],clist,[])
 	       | [injectee] =>
@@ -1020,7 +1037,7 @@ fun pp_alias UNKNOWN = print "unknown"
 	       | (PrimOp(sub t), _) => do_aggregate (state,sub,t,clist,elist)
 	       | (PrimOp(update t), _) => do_aggregate (state,update,t,clist,elist)
 	       | (PrimOp(length_table t), _) => do_aggregate (state,length_table,t,clist,elist)
-	       | (NilPrimOp unroll, [Prim_e(NilPrimOp roll,_,_,[e])]) => do_exp state e
+	       | (NilPrimOp unroll, [Prim_e(NilPrimOp roll,_,_,[e])]) => do_exp state e (* Convert this to Fold/Unfold? *)
 	       | (NilPrimOp (unbox_float _), [Prim_e(NilPrimOp (box_float _),_,_,[e])]) => do_exp state e
 	       | (NilPrimOp (make_vararg oe), [Prim_e(NilPrimOp (make_onearg _), _, _, [e])]) => do_exp state e
 	       | (NilPrimOp (make_onearg oe), [Prim_e(NilPrimOp (make_vararg _), _, _, [e])]) => do_exp state e
@@ -1039,8 +1056,7 @@ fun pp_alias UNKNOWN = print "unknown"
 	    case exp of
 		  Var_e v =>
 			 (case lookup_alias(state,v) of
-				  OPTIONALe e => (use_var(state,v); exp)
-				| MUSTe e => do_exp state e
+				  MUSTe e => do_exp state e
 				| _ => (use_var(state,v); exp))
 		| Const_e v => 
 		         (case v of
@@ -1077,7 +1093,8 @@ fun pp_alias UNKNOWN = print "unknown"
 					       map (do_exp state) elist, 
 					       map (do_exp state) eflist)
 			 (* assumes anormalization by not performing purity check *)
-			 fun do_eta (uncurry,args) = 			     let val (cargs,eargs,fargs) = Listops.unzip3 args
+			 fun do_eta (uncurry,args) = 
+			     let val (cargs,eargs,fargs) = Listops.unzip3 args
 				 val cargs = Listops.flatten cargs
 				 val eargs = Listops.flatten eargs
 				 val fargs = Listops.flatten fargs
@@ -1208,6 +1225,9 @@ fun pp_alias UNKNOWN = print "unknown"
 				     (Let_e(Sequential,
 					    [Exp_b(bound,TraceUnknown,arg)],
 					    Option.valOf default)))
+				 (* This valOf looks like it could cause a crash, but perhaps the elaborator just doesn't
+				  * generate code that will tickle this.
+				  *)
 		      | _ => let
 				 val sumtype = do_con state sumtype
 				 val result_type = do_con state result_type
@@ -1237,7 +1257,7 @@ fun pp_alias UNKNOWN = print "unknown"
 			      in  Switch_e(Intsw_e {size=size,arg=arg, arms=arms,default=default,
 						    result_type=result_type})
 			      end)
-			  
+
 	    in
 	    (case switch of
 		 Intsw_e int_sw => int_switch int_sw
@@ -1313,8 +1333,8 @@ fun pp_alias UNKNOWN = print "unknown"
 	         (a) check record arguments are variables
 		 (b) check inject argument are variables 
 		 (c) rewrite project to project_known
-		 If NONE is returned, the binding does not need to be rewrritten.
-		 Otherwise, SOME bindings are returned.  The original bindings
+		 If NONE is returned, the binding does not need to be rewritten.
+		 Otherwise, SOME bindings are returned.  The original binding
 		   is guaranteed not to occur in this list.  This prevents looping. *)
 	      fun rewrite_bnd(v,niltrace,e) =
 		  (case e of
@@ -1322,6 +1342,7 @@ fun pp_alias UNKNOWN = print "unknown"
 	                 let fun check(Var_e v) = ()
 			       | check (Const_e v) = ()
 			       | check _ = error "record argument is not a variable"
+			     val _ = app check elist
 			 in  NONE
 			 end
 
