@@ -77,7 +77,7 @@
 0077 [closed]	Memory corruption error.
 0078 [open]	Particularly bad code generation.
 0079 [closed]	Signed comparison of pointers.
-0080 [open]	Phase splitting fails on some files.
+0080 [closed]	Phase splitting fails on some files.
 0081 [closed]	Compiled compiler seg faults.
 0082 [open]	Type of thunk prematurely made a rigid record.
 0083 [open]	Backend liveness analysis is too conservative.
@@ -144,7 +144,7 @@
 0148 [closed]	type specification error
 0149 [open]	type checking error
 0150 [open]	parsing problem on non-corner case
-0151 [open]	name clash problem in ld
+0151 [closed]	name clash problem in ld
 0152 [open]	Incorrect matching of eqtype specs.
 0153 [open]	Sharing abstract type and eqtype specs is broken.
 0154 [closed]	Equality allowed on non-eqtypes by elaborator.
@@ -158,3 +158,4 @@
 0162 [open]	Queue.delete is broken.
 0163 [open]	Pattern compiler causing elaborator to bomb.
 0164 [closed]	Garbage collector skipping global roots.
+0165 [open]	Elaborator shadowing variables.
