@@ -1,0 +1,16 @@
+Number: 0168
+Title:       Real.fromString does not handle nan and inf correctly
+Keywords:    <optional - e.g. "modules", "types", "IO", "reals">
+Submitter:   leaf
+Date:        07/21/03
+Version:     <TILT version number>
+System:      <e.g. solaris,alpha,linux>
+Severity:    <critical, major, minor, cosmetic>
+Problem:     <description of problem>
+Code:        <SML source code to reproduce the bug>
+Transcript:  <transcript of execution demonstating the bug>
+Comments:    <additional comments>
+Fix:         <optional - but you get extra credit>
+Test: *
+Owner: *
+Status: open
