@@ -34,9 +34,9 @@ fun dump pxr pxi =
   for(0,15,fn i => 
       (print_int i; 
        print " ";
-       print_real (sub1(pxr,i+1)); 
+       print_real (sub(pxr,i+1)); 
        print " "; 
-       print_real (sub1(pxi,i+1));
+       print_real (sub(pxi,i+1));
        print_newline()))
 
 
@@ -52,8 +52,8 @@ let val i = ref 2
 in  
   if n <> np then (
     for (np+1,n,fn i=>
-      (update1(px,i,0.0); 
-       update1(py,i,0.0)));
+      (update(px,i,0.0); 
+       update(py,i,0.0)));
     print_string "Use "; print_int n;
     print_string " point fft"; print_newline()
   ) else ();
@@ -83,23 +83,23 @@ in
 		      val i1 = i0 + n4 
 		      val i2 = i1 + n4 
 		      val i3 = i2 + n4 
-		      val r1 = sub1(px,i0) - sub1(px,i2) 
-		      val _ = update1(px,i0,sub1(px,i0) + sub1(px,i2))
-		      val r2 = sub1(px,i1) - sub1(px,i3) 
-		      val _ = update1(px,i1,sub1(px,i1) + sub1(px,i3))
-		      val s1 = sub1(py,i0) - sub1(py,i2) 
-		      val _ = update1(py,i0,sub1(py,i0) + sub1(py,i2))
-		      val s2 = sub1(py,i1) - sub1(py,i3) 
-		      val _ = update1(py,i1,sub1(py,i1) + sub1(py,i3))
+		      val r1 = sub(px,i0) - sub(px,i2) 
+		      val _ = update(px,i0,sub(px,i0) + sub(px,i2))
+		      val r2 = sub(px,i1) - sub(px,i3) 
+		      val _ = update(px,i1,sub(px,i1) + sub(px,i3))
+		      val s1 = sub(py,i0) - sub(py,i2) 
+		      val _ = update(py,i0,sub(py,i0) + sub(py,i2))
+		      val s2 = sub(py,i1) - sub(py,i3) 
+		      val _ = update(py,i1,sub(py,i1) + sub(py,i3))
 		      val s3 = r1 - s2 
 		      val r1 = r1 + s2 
 		      val s2 = r2 - s1 
 		      val r2 = r2 + s1 
 		  in
-		      update1(px,i2,r1*cc1 - s2*ss1);
-		      update1(py,i2,~s2*cc1 - r1*ss1);
-		      update1(px,i3,s3*cc3 + r2*ss3);
-		      update1(py,i3,r2*cc3 - s3*ss3);
+		      update(px,i2,r1*cc1 - s2*ss1);
+		      update(py,i2,~s2*cc1 - r1*ss1);
+		      update(px,i3,s3*cc3 + r2*ss3);
+		      update(py,i3,r2*cc3 - s3*ss3);
 		      i0r := i0 + !id
 		  end;
 	     is := 2 * !id - !n2 + j; 
@@ -123,13 +123,13 @@ in
 	      while !i0r <= n do
 		  let val i0 = !i0r 
 		      val i1 = i0 + 1 
-		      val r1 = sub1(px,i0) 
-		      val _ = update1(px,i0,r1 + sub1(px,i1))
-		      val _ = update1(px,i1,r1 - sub1(px,i1))
-		      val r1 = sub1(py,i0) 
+		      val r1 = sub(px,i0) 
+		      val _ = update(px,i0,r1 + sub(px,i1))
+		      val _ = update(px,i1,r1 - sub(px,i1))
+		      val r1 = sub(py,i0) 
 		  in
-		      update1(py,i0,r1 + sub1(py,i1));
-		      update1(py,i1,r1 - sub1(py,i1));
+		      update(py,i0,r1 + sub(py,i1));
+		      update(py,i1,r1 - sub(py,i1));
 		      i0r := i0 + !id
 		  end;
 	      is := 2 * !id - 1; 
@@ -148,15 +148,15 @@ in
   in
     for (1,n-1,fn i =>
     (if i < !j then (
-      let val xt1 = sub1(px,!j) 
-	  val xt2 = sub1(px,i)
-	  val _ = update1(px,!j,xt2)
-	  val _ = update1(px,i,xt1)
-	  val yt1 = sub1(py,!j) 
-	  val yt2 = sub1(py,i)
+      let val xt1 = sub(px,!j) 
+	  val xt2 = sub(px,i)
+	  val _ = update(px,!j,xt2)
+	  val _ = update(px,i,xt1)
+	  val yt1 = sub(py,!j) 
+	  val yt2 = sub(py,i)
       in
-	  update1(py,!j,yt2);
-	  update1(py,i,yt1)
+	  update(py,!j,yt2);
+	  update(py,i,yt1)
       end)
      else ();
      let val k = ref(n div 2) 
@@ -176,24 +176,24 @@ fun test np =
   (print_int np; print_string "... "; 
   let val enp = real np 
       val npm = np div 2 - 1
-      val pxr = array1 ((np+2), 0.0)
-      val pxi = array1 ((np+2), 0.0)
+      val pxr = array ((np+2), 0.0)
+      val pxi = array ((np+2), 0.0)
       val t = pi / enp
-      val _ = update1(pxr,1,(enp - 1.0) * 0.5)
-      val _ = update1(pxi,1,0.0)
+      val _ = update(pxr,1,(enp - 1.0) * 0.5)
+      val _ = update(pxi,1,0.0)
       val n2 = np div 2 
-      val _ = update1(pxr,n2+1,~0.5)
-      val _ = update1(pxi,n2+1,0.0)
+      val _ = update(pxr,n2+1,~0.5)
+      val _ = update(pxi,n2+1,0.0)
   in
       for (1,npm,fn i =>
       let val j = np - i 
-	  val _ = update1(pxr,i+1,~0.5)
-	  val _ = update1(pxr,j+1,~0.5)
+	  val _ = update(pxr,i+1,~0.5)
+	  val _ = update(pxr,j+1,~0.5)
 	  val z = t * (real i)
 	  val y = ~0.5 * (cos(z)/sin(z)) 
       in
-	   update1(pxi,i+1,y);
-	   update1(pxi,j+1,~y)
+	   update(pxi,i+1,y);
+	   update(pxi,j+1,~y)
       end);
 (*
   print "\n"; print "before fft: \n";
@@ -210,13 +210,13 @@ fun test np =
       val ki = ref 0 
   in
       for (0,np-1,fn i =>
-      let val a = abs_real(sub1(pxr,i+1) - (real i))
+      let val a = abs_real(sub(pxr,i+1) - (real i))
       in
 	   if !zr < a then 
 	       (zr := a; 
 		kr := i)
 	   else ();
-	   let val a = abs_real(sub1(pxi,i+1))
+	   let val a = abs_real(sub(pxi,i+1))
 	   in
 	       if !zi < a then 
 		   (zi := a; 
