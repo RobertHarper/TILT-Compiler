@@ -31,8 +31,8 @@ adds associations for the standard basis library to a mapfile. Most
 basis structures, signatures, and functors are defined in a unit of
 the same name. Examples include List, LIST, and TextIO. The exceptions
 are IO_SIG, OS_SIG, and SML90_SIG which provide signatures IO, OS, and
-SML90. The logical names IO, OS, and SML90 provide the corresponding
-structures. The logical names Prelude and TopLevel together provide the
+SML90. The unit names IO, OS, and SML90 provide the corresponding
+structures. The units named Prelude and TopLevel together provide the
 terms and types bound at the top level like print, map, etc.
 
 An import list is a specialized comment placed as the first line of an
