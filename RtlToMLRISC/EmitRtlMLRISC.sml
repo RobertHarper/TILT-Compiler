@@ -31,7 +31,9 @@ functor EmitRtlMLRISC(
 	  sharing type IntegerConvention.id =
 		       CallConventionBasis.id =
 		       ExternalConvention.id =
+		       FloatAllocation.id =
 		       FloatConvention.id =
+		       IntegerAllocation.id =
 		       IntegerLiveness.id =
 		       MLRISCPseudo.id =
 		       RegisterMap.id =
@@ -39,6 +41,8 @@ functor EmitRtlMLRISC(
 		       RegisterTraceMap.id
 	      and type MLRISCConstant.const =
 		       CallConventionBasis.offset =
+		       FloatAllocation.offset =
+		       IntegerAllocation.offset =
 		       RegisterSpillMap.offset =
 		       StackFrame.offset
 	      and type MLRISCPseudo.pseudo_op =
@@ -52,9 +56,6 @@ functor EmitRtlMLRISC(
 		       ExternalConvention.rexp
 	      and type MLTreeExtra.MLTree.stm =
 		       CallConventionBasis.stm
-	      and type RegisterSpillMap.map =
-		       FloatAllocation.spillMap =
-		       IntegerAllocation.spillMap
 	      and type Rtl.data =
 		       TraceTable.Machine.Rtl.data
 	      and type Rtl.label =
@@ -168,16 +169,14 @@ functor EmitRtlMLRISC(
 
 	      val label' = LocalLabel.translate label
 	    in
-	      print("calllabel: "^Label.nameOf label'^"\n");
-	      print("framesize: "^Int.toString framesize^"\n");
-	      print("retaddpos: "^Int.toString retaddpos^"\n");
+	      print(Label.nameOf label'^"("^Int.toString framesize^"): ");
 	      app (fn(Machine.R reg, trace) =>
-		     print("$"^Int.toString reg^" => "^
-			   TraceTable.trace2string trace^"\n")) regtrace;
+		     print("$"^Int.toString reg^"=>"^
+			   TraceTable.trace2string trace^" ")) regtrace;
 	      app (fn(offset, trace) =>
-		     print(Int.toString offset^"(sp) => "^
-			   TraceTable.trace2string trace^"\n")) stacktrace;
-	      print "----------\n";
+		     print(Int.toString offset^"(sp)=>"^
+			   TraceTable.trace2string trace^" ")) stacktrace;
+	      print "\n";
 	    end ??? *)
 	    infosRef := TraceTable.CALLINFO info:: !infosRef
 
@@ -319,7 +318,25 @@ functor EmitRtlMLRISC(
       (*
        * The mapping from MLRISC pseudo-registers to spill offsets.
        *)
-      val spillMap = IntegerAllocation.spillMap
+      val spillMap = RegisterSpillMap.map()
+
+      (*
+       * The set of MLRISC pseudo-registers that have been spilled by MLRISC.
+       *)
+      val spillStateMap = RegisterMap.map(fn _ => ())
+
+      (*
+       * Register spill and reload lookup functions with the register
+       * allocator.
+       *)
+      local
+	fun retain lookup id =
+	      (RegisterMap.insert spillStateMap (id, ()); lookup id)
+      in
+	val _ = IntegerAllocation.setLookup(
+		  retain(RegisterSpillMap.lookupSpill spillMap),
+		  retain(RegisterSpillMap.lookupReload spillMap))
+      end
 
       (*
        * Return an MLRISC register number for a given Rtl register id.
@@ -336,10 +353,11 @@ functor EmitRtlMLRISC(
 	    RegisterTraceMap.lookup lookupGeneral traceMap register
 
       local
-	val spill      = Machine.ACTUAL4 o MLRISCConstant.valueOf o
-			 RegisterSpillMap.lookupReload spillMap
-	val trace      = RegisterTraceMap.trace spill traceMap
-	val testReload = RegisterSpillMap.testReload spillMap
+	val spill          = Machine.ACTUAL4 o MLRISCConstant.valueOf o
+			     RegisterSpillMap.lookupReload spillMap
+	val trace          = RegisterTraceMap.trace spill traceMap
+	val testReload     = RegisterSpillMap.testReload spillMap
+	val testSpillState = RegisterMap.test spillStateMap
       in
 	(*
 	 * Return the representations of the live loaded integer
@@ -351,7 +369,7 @@ functor EmitRtlMLRISC(
 	fun traceLoaded physical =
 	      let
 		fun traceLoaded1(id, loaded) = 
-		      case testReload id of
+		      case testSpillState id of
 			SOME _ => loaded
 		      | NONE   => (Machine.R(physical id), trace id)::loaded
 	      in
@@ -443,13 +461,39 @@ functor EmitRtlMLRISC(
 	    end
 
       (*
-       * Return the polymorphic spill predicate for a given list of register
-       * ids.
-       * ids -> the register ids to return the polymorphic spill predicate of
-       * <- a function that returns true if a given id must be spilled for
-       *    polymorphic values
+       * Append spill statements after moves to polymorphic value descriptor
+       * pseudo-registers in a given list of mltree values.
+       * ids     -> the pseudo-registers that are live across call sites
+       * mltrees -> the mltree values to transform
+       * <- mltrees with appended spills
        *)
-      val polySpills = RegisterTraceMap.polySpills traceMap
+      local
+	val lookupSpill = RegisterSpillMap.lookupSpill spillMap
+	val polySpills  = RegisterTraceMap.polySpills traceMap
+
+	fun spill id = CallConventionBasis.storeStack (lookupSpill id) id
+
+	fun spillPolyTree polys (MLTree.CODE code) =
+	      let
+		fun spillPoly id = if polys id then [spill id] else []
+
+		fun spillPolyStatement(MLTree.MV(id, _)) =
+		      spillPoly id
+		  | spillPolyStatement(MLTree.COPY(idList, _)) =
+		      foldr (splice spillPoly) [] idList
+		  | spillPolyStatement _ =
+		      []
+
+		fun spillPolyStatement' statement =
+		      statement::spillPolyStatement statement
+	      in
+		MLTree.CODE(foldr (splice spillPolyStatement') [] code)
+	      end
+	  | spillPolyTree _ mltree =
+	      mltree
+      in
+	fun spillPolys ids = map (spillPolyTree (polySpills ids))
+      end
 
       (*
        * Reset the source-based mappings of the integer register translation.
@@ -477,7 +521,14 @@ functor EmitRtlMLRISC(
       (*
        * The mapping from MLRISC pseudo-registers to spill offsets.
        *)
-      val spillMap = FloatAllocation.spillMap
+      val spillMap = RegisterSpillMap.map()
+
+      (*
+       * Register spill and reload lookup functions with the register
+       * allocator.
+       *)
+      val _ = FloatAllocation.setLookup(RegisterSpillMap.lookupSpill spillMap,
+					RegisterSpillMap.lookupReload spillMap)
     in
       (*
        * Return an MLRISC floating-point register number for a given Rtl
@@ -1455,41 +1506,6 @@ functor EmitRtlMLRISC(
 	  end
 
     (*
-     * Append spill statements after moves to polymorphic value descriptor
-     * pseudo-registers in a given list of mltree values.
-     * polys   -> the polymorphic value descriptor registers
-     * mltrees -> the mltree values to transform
-     * <- mltrees with appended spills
-     * move this to the Register structure ???
-     *)
-    local
-      val lookupSpill = RegisterSpillMap.lookupSpill IntegerAllocation.spillMap
-
-      fun spill id = CallConventionBasis.storeStack (lookupSpill id) id
-
-      fun spillPolyTree polys (MLTree.CODE code) =
-	    let
-	      fun spillPoly id = if polys id then [spill id] else []
-
-	      fun spillPolyStatement(MLTree.MV(id, _)) =
-		    spillPoly id
-		| spillPolyStatement(MLTree.COPY(idList, _)) =
-		    foldr (splice spillPoly) [] idList
-		| spillPolyStatement _ =
-		    []
-
-	      fun spillPolyStatement' statement =
-		    statement::spillPolyStatement statement
-	    in
-	      MLTree.CODE(foldr (splice spillPolyStatement') [] code)
-	    end
-	| spillPolyTree _ mltree =
-	    mltree
-    in
-      fun spillPolys polys = map (spillPolyTree polys)
-    end
-
-    (*
      * Refine the liveness information in the call site pseudo-operations of
      * a given procedure.
      * procedure <-> the procedure to refine the call site liveness
@@ -1616,13 +1632,12 @@ functor EmitRtlMLRISC(
 		*)
 	       val procedure = enter@body@exit
 	       val _	     = updateCallSites procedure
-
-	       (*
-		* determine which polymorphic values need to induce spills
-		*)
-	       val polys = Register.polySpills(callSiteLive procedure)
 	     in
-	       spillPolys polys procedure
+	       (*
+		* spill polymorphic value descriptors that are used by call
+		* sites
+		*)
+	       Register.spillPolys (callSiteLive procedure) procedure
 	     end)
 	    protect reset
   end
