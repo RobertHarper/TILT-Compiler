@@ -12,7 +12,8 @@ struct
 	      FrontEnd.PARSE dec => dec
 	    | result => raise Parse result
 
-      fun close_dec dec = (TVClose.closeDec dec; dec)
+      fun tvscope_dec dec = (TVClose.closeDec dec; dec)
+      fun named_form_dec dec = NamedForm.namedForm dec
   end
 end;
 (*

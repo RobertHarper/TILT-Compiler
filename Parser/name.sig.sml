@@ -52,4 +52,8 @@ signature NAME =
     structure TagMap : ORD_MAP
     sharing type TagMap.Key.ord_key = tag
 
+    type vpath = var * label list
+    structure PathMap : ORD_MAP
+    sharing type PathMap.Key.ord_key = vpath
+
   end

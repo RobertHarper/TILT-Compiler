@@ -109,6 +109,24 @@ structure Name :> NAME =
 				    type ord_key = var
 				    val compare = compare_var
 				end
+      type vpath = var * label list
+      structure PathKey : ORD_KEY = 
+	  struct
+	      type ord_key = vpath
+	      fun compare_labels([],[]) = EQUAL
+		| compare_labels ([],_) = LESS
+		| compare_labels(_,[]) = GREATER
+		| compare_labels(a1::b1,a2::b2) = 
+		  (case (compare_label(a1,a2)) of
+		       LESS => LESS
+		     | GREATER => GREATER
+		     | EQUAL => compare_labels(b1,b2))
+	      fun compare((v1,l1),(v2,l2)) = 
+		  case (compare_var(v1,v2)) of
+		      LESS => LESS
+		    | GREATER => GREATER
+		    | EQUAL => compare_labels(l1,l2)
+	  end
       structure LabelKey : ORD_KEY = struct
 					 type ord_key = label
 					 val compare = compare_label
@@ -120,5 +138,5 @@ structure Name :> NAME =
       structure VarMap = LocalSplayMapFn(VarKey) 
       structure LabelMap = LocalSplayMapFn(LabelKey) 
       structure TagMap = LocalSplayMapFn(TagKey) 
-
+      structure PathMap = LocalSplayMapFn(PathKey) 
   end
