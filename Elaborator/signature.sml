@@ -261,10 +261,15 @@ structure Signature :> SIGNATURE =
 	end
 
 
-      (* labels is a list of typeslot paths (relative to the sdecs) to type components;
-	 we search for the one that occurs first and then transparently 
-	 type-abbreviate all of the rest to the first one if it is abstract or equivalent *)
+      (* lpath_list is a list of paths (relative to the sdecs) to structure components.
+	 We search for the one that occurs first (call it X), which gets stored in target,
+         and then make all the others share its types by giving them SIGNAT_OF(X).
+	 The implementation is made somewhat complicated because how each structure refers
+         to X depends on where that structure appears relative to X in the signature.
 
+         This function is called by xsig_sharing_structure_fast when the structures being
+         shared basically all have equivalent signatures, so SIGNAT_OF is safe.
+       *)
       fun xsig_sharing_rewrite_structure (context,sdecs,lpath_list,sigopt) = 
 	  (* using a ref like this is error-prone; should change this *)
 	  let val target = ref(sigopt, NONE)
@@ -599,7 +604,13 @@ structure Signature :> SIGNATURE =
 	sdecsAbstractEqual
       end
 
-  (* Derek: Why is this so much faster? *)
+  (* Fast is a misnomer.  This function first checks whether the paths to be
+     shared have the same flexible type components and if, after sharing those
+     components, the resulting signatures are _equivalent_.  If so, then
+     the idea is that using SIGNAT_OF should work, so
+     xsig_sharing_rewrite_structure is called to put in the appropriate SIGNAT_OF's.
+     Otherwise, each type component is just shared individually the old-fashioned way.
+   *)
   and xsig_sharing_structure_fast(ctxt,sdecs,lpath1, lpath2: lpath) : sdecs = 
       let
 	  val mjunk = fresh_named_var "mjunk_sharing_structure"
@@ -969,6 +980,7 @@ structure Signature :> SIGNATURE =
 				       (error_region_with "polymorphic value specification but module component";
 					pp_signat signat;
 					NONE)
+			         (* --- Coercion from exception constructor to value spec --- *)
 				 | SOME con_actual => 
 				       if (sub_con(ctxt,con_actual,con_spec)) then
 					   let val exp = path2exp(join_path_labels(path_actual, lbls @ [mk_lab]))

@@ -66,7 +66,7 @@ struct
 
     datatype movability = Movable | Immovable
 
-*    fun mergeMovabilities (Movable, Movable) = Movable 
+    fun mergeMovabilities (Movable, Movable) = Movable 
       | mergeMovabilities _ = Immovable
 
     (************************************************************************
