@@ -4,29 +4,22 @@
  * ========================================================================= *)
 
 functor AlphaStandardConvention(
-	  structure Basis:	       CALL_CONVENTION_BASIS
-					 where type id = int
-	  structure FloatConvention:   FLOAT_CONVENTION
-					 where type id = int
-	  structure IntegerConvention: INTEGER_CONVENTION
-					 where type id = int
-	  structure MLTreeExtra:       MLTREE_EXTRA
-	  structure StackFrame:	       STACK_FRAME
-
-	  sharing type MLTreeExtra.MLTree.mltree = Basis.mltree
-	      and type MLTreeExtra.MLTree.stm	 = Basis.stm
-	      and type StackFrame.offset	 = Basis.offset
-	      and type StackFrame.frame		 = Basis.frame
+	  structure FloatConvention:   FLOAT_CONVENTION where type id = int
+	  structure IntegerConvention: INTEGER_CONVENTION where type id = int
 	) :> CALL_CONVENTION
-	       where type id	     = Basis.id
-		 and type register   = Basis.register
-		 and type assignment = Basis.assignment
-		 and type frame	     = StackFrame.frame
-		 and type rexp	     = MLTreeExtra.MLTree.rexp
-		 and type mltree     = MLTreeExtra.MLTree.mltree
+	       where type id	     = AlphaCallConventionBasis.id
+		 and type register   = AlphaCallConventionBasis.register
+		 and type assignment = AlphaCallConventionBasis.assignment
+		 and type frame	     = AlphaCallConventionBasis.frame
+		 and type rexp	     = AlphaMLTreeExtra.MLTree.rexp
+		 and type mltree     = AlphaMLTreeExtra.MLTree.mltree
 	  = struct
 
   (* -- structures --------------------------------------------------------- *)
+
+  structure Basis	= AlphaCallConventionBasis
+  structure MLTreeExtra = AlphaMLTreeExtra
+  structure StackFrame	= AlphaStandardFrame
 
   structure MLTree = MLTreeExtra.MLTree
 
