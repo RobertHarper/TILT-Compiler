@@ -143,7 +143,7 @@ void stack_init()
 #ifdef CACHE_DEBUG
 int XXXcount, XXXhit[100], XXXmiss[100];
 int XXXmissValCursor = 0, XXXmissVal[64];
-#endif CACHE_DEBUG
+#endif /* CACHE_DEBUG */
 
 INLINE(LookupCallinfo)
 Callinfo_t *LookupCallinfo(Proc_t *proc, val_t retAdd)

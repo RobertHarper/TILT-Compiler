@@ -126,7 +126,7 @@ void Stacklet_KillReplica(Stacklet_t *stacklet)
     Stacklet_Copy(stacklet);
   while (stacklet->state == Copying)
     ;
-  CompareAndSwap(&stacklet->state, InactiveCopied, ActiveCopied);
+  CompareAndSwap((int*) &stacklet->state, InactiveCopied, ActiveCopied);
   assert(stacklet->state == Inconsistent ||
 	 stacklet->state == ActiveCopied);
 }
@@ -202,7 +202,7 @@ int Stacklet_Copy(Stacklet_t *stacklet)
 {
   StackletState_t state;
 
-  state = CompareAndSwap(&stacklet->state, Pending, Copying);
+  state = CompareAndSwap((int*) &stacklet->state, Pending, Copying);
   if (state == Pending) {
     int activeSize = (stacklet->baseTop - stacklet->baseCursor) * sizeof(val_t);
     mem_t primaryBottom = stacklet->baseBottom + (primaryStackletOffset / sizeof(val_t));

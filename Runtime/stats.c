@@ -184,14 +184,14 @@ static int which[2000];
 static int data[2000];
 int cursor = 0;
 
-void initTimeList()
+void initTimeList(void)
 {
-  bzero(times, sizeof(times));
-  bzero(which, sizeof(which));
-  bzero(data, sizeof(data));
+  memset(times, 0, sizeof(times));
+  memset(which, 0, sizeof(which));
+  memset(data, 0, sizeof(data));
 }
 
-void resetTimeList()
+void resetTimeList(void)
 {
   cursor = 0;
 }
@@ -226,7 +226,7 @@ double addTimeList(void *procVoid, int w, int d)
   return t;
 }
 
-static void show_time_statistic_header()
+static void show_time_statistic_header(void)
 {
   printf("                               Sum (s)        Count     Min(ms)   Avg(ms)  Max(ms)\n");
   printf("         -------------|-----------------------------------------------------------\n");
@@ -341,7 +341,7 @@ void add_statString(char *msg)
   assert(statStringCursor < sizeof(statString));
 }
 
-void stats_init()
+void stats_init(void)
 {   
   statString[0] = 0;
   initTimeList();
@@ -362,7 +362,7 @@ const char *collectorTypeString(void)
 
 
 
-void stats_finish()
+void stats_finish(void)
 { 
   int i;
   FILE *fd;
