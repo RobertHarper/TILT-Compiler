@@ -204,7 +204,7 @@ functor Ppnil(structure Nil : NIL
     and pp_exp exp = 
 	(case exp of
 	     Var_e var => pp_var var
-	   | Const_e v => Ppprim.pp_value' pp_exp v
+	   | Const_e v => Ppprim.pp_value' pp_exp pp_con v
 	   | Prim_e (prim,cons,expsopt) => HOVbox([(case prim of
 							PrimOp p => pp_prim' p
 						      | NilPrimOp p => pp_nilprimop p),

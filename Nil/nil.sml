@@ -126,7 +126,7 @@ struct
 
   and exp =                                          (* Term-level constructs *)
       Var_e of var                                        (* Term-level variables *)
-    | Const_e of exp Prim.value                           (* Term-level constants *)
+    | Const_e of (con,exp) Prim.value                     (* Term-level constants *)
     | Let_e of letsort * bnd list * exp                   (* Binding construct *)
     | Prim_e of allprim * (con list) * (exp list) option  (* allow primops to be partially applied *)
     | Switch_e of switch                                  (* Switch statements *)
