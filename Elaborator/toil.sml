@@ -166,7 +166,7 @@ structure Toil
 	   | SOME {stamp,carried_type=SOME _} => true)
 
     fun parse_pats context pats = 
-	(case InfixParse.parse_pat(fixity context,is_non_const context, pats) of
+	(case InfixParse.parse_pat(Context_Fixity context,is_non_const context, pats) of
 	     SOME result => result
 	   | NONE => (error_region();
 		      print "cannot parse pattern\n";
@@ -709,7 +709,7 @@ val _ = print "plet0\n"
 		 val expr = Ast.LetExp {dec=Ast.SeqDec decs,expr=expr}
 	     in  xexp(context,expr)
 	     end
-       | Ast.FlatAppExp _ => (case InfixParse.parse_exp(fixity context, exp) of
+       | Ast.FlatAppExp _ => (case InfixParse.parse_exp(Context_Fixity context, exp) of
 				  SOME exp' => xexp(context,exp')
 				| NONE => (error_region();
 					   print "cannot parse FlatAppExp\n";
@@ -759,25 +759,26 @@ val _ = print "plet0\n"
 	     end
 
        | Ast.AppExp {argument,function} => 
-	     let val (e1',con1,va1) = xexp(context,function)
-		 val (e2',con2,va2) = xexp(context,argument)
+	     let val (e1,con1,va1) = xexp(context,function)
+		 val (e2,con2,va2) = xexp(context,argument)
 		 val arrow = oneshot()
 		 val rescon = fresh_con context
 		 val funcon = CON_ARROW([con2],rescon,false,arrow)
-		 fun red (exp as (OVEREXP (c,_,oe))) = 
-		     ((case c of 
-			   CON_OVAR ocon => overload_help false (peek_region(),ocon)
-			 | _ => false);
-		      (case (oneshot_deref oe) of
-			   SOME exp => exp
-			 | NONE => exp))
-		   | red exp = exp
+		 fun constrain (OVEREXP (CON_OVAR ocon,_,_)) = 
+			   (overload_help false (peek_region(),ocon); ())
+		   | constrain _ = ()
 	     in  if (semi_sub_con(context,funcon,con1))
 		     then (let val va3 = (case oneshot_deref arrow of
 					      NONE => (oneshot_set(arrow,PARTIAL); false)
 					    | SOME PARTIAL => false
 					    | SOME TOTAL => true)
-			   in  (beta_reduce(red e1',red e2'), con_deref rescon,
+			       val _ = constrain e1
+			       val _ = constrain e2
+			       val exp = APP(e1,e2)
+			   in  ((case exp_reduce exp of
+				     NONE => exp
+				   | SOME e => e),
+				con_deref rescon,
 				va1 andalso va2 andalso va3)
 			   end)
 		 else
@@ -1822,7 +1823,7 @@ val _ = print "plet0\n"
 	      (case reduce_signat context (xsigexp(context,Ast.AugSig(s,rest))) of
 		   s as SIGNAT_STRUCTURE (popt,sdecs) => 
 		       let val mjunk = MOD_VAR(fresh_named_var "mjunk")
-		       in (case (Sdecs_Lookup' context (mjunk,sdecs,map symbol_label syms)) of
+		       in (case (Sdecs_Lookup_Open context (mjunk,sdecs,map symbol_label syms)) of
 			       SOME(labels,PHRASE_CLASS_CON(_,k,_,_)) => 
 				   let val sym_vars = map (fn tv => 
 							   let val sym = AstHelp.tyvar_strip tv
@@ -2040,19 +2041,15 @@ val _ = print "plet0\n"
 		    | (Ast.VarFct (path,_)) => parse_error "functor signatures not handled"
 		    | (Ast.FctFct {params=[(argnameopt,sigexp)],body,constraint}) =>
 			  let 
-			      val _ = print "FCTFCT 1\n"
 			      val arglabel = (case argnameopt of
 						  NONE => to_open(fresh_internal_label "FunctorArg")
 						| SOME s => symbol_label s)
 			      val funid = symbol_label name
 			      val argvar = fresh_named_var "funct_arg"
 			      val signat = xsigexp(context,sigexp)
-			      val _ = print "FCTFCT 2\n"
 			      val self_signat = SelfifySig context (PATH (argvar,[]), signat)
 			      val context' = add_context_mod(context,arglabel,argvar, self_signat)
-			      val _ = print "FCTFCT 3\n"
 			      val (sbnd_ce_list,m',s') = xstrexp(context',body,constraint)
-			      val _ = print "FCTFCT 4\n"
 			      val v = fresh_named_var "functor_var"
 			      val sbnd = SBND(funid,BND_MOD(v,false,MOD_FUNCTOR(PARTIAL, argvar,signat,m',s')))
 			      val sdec = SDEC(funid,DEC_MOD(v,false,SIGNAT_FUNCTOR(argvar,signat,s',
@@ -2083,9 +2080,8 @@ val _ = print "plet0\n"
 	     val (_,context) = add_context_sbnd_ctxts(context,sbnd_ce_list)
 	 in  if (Sig_IsSub(context, sig_actual, sig_target))
 		 then (sbnd_ce_list,module, sig_target)
-	     else let val _ = print "SIGSEAL 1\n"
-		      val mod_result = Signature.xcoerce_seal(polyinst,context,module,sig_actual,sig_target)
-		      val _ = print "SIGSEAL 2\n"
+	     else let val mod_result = Signature.xcoerce_seal(polyinst,context,
+							      module,sig_actual,sig_target)
 		  in  (sbnd_ce_list, mod_result, sig_target)
 		  end
 	 end
@@ -2196,31 +2192,13 @@ val _ = print "plet0\n"
      and xstrbinds (islocal : bool) (context : context, strbs : Ast.strb list) 
 	 : (sbnd option * context_entry) list =
        let val strbs = map strb_strip strbs
-	   val islocal = false
 	   fun help (n,(strexp,constraint)) = 
 	       let val v = fresh_named_var "strbindvar"
 		   val l = symbol_label n
-		   fun alias_case path = 
-		       (case Context_Lookup_Labels(context,map symbol_label path) of
-			    SOME (_,PHRASE_CLASS_MOD _) =>
-				[(NONE, CONTEXT_ALIAS(l,map symbol_label path))]
-			  | _ => (error_region();
-				  print "unbound structure: ";
-				  AstHelp.pp_path path;
-				  print "\n";
-				  []))
-	       in  (case (islocal,strexp) of
-			(true,Ast.VarStr path) => alias_case path
-		      | (true,Ast.MarkStr(Ast.VarStr path, r)) => let val _ = push_region r
-								  val res = alias_case path
-								  val _ = pop_region()
-							      in  res
-							      end
-		      | _ => let val (sbnd_ce_list,m,s) = xstrexp(context,strexp,constraint)
-				 val rest = [(SOME(SBND(l,BND_MOD(v,false,m))),
-					      CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))]
-			     in  sbnd_ce_list @ rest
-			     end)
+		   val (sbnd_ce_list,m,s) = xstrexp(context,strexp,constraint)
+		   val rest = [(SOME(SBND(l,BND_MOD(v,false,m))),
+				CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))]
+	       in  sbnd_ce_list @ rest
 	       end
        in flatten(map help strbs)
        end
@@ -2327,11 +2305,7 @@ val _ = print "plet0\n"
       in result
       end
     
-    val xdec = fn (ctxt,fp,dec) => let val _ = print "calling to xdec\n"
-				       val res = overload_wrap fp (xdec false) (ctxt,dec)
-				       val _ = print "returning from xdec\n"
-				   in  res
-				   end
+    val xdec = fn (ctxt,fp,dec) => overload_wrap fp (xdec false) (ctxt,dec)
     val xexp = fn (ctxt,fp,exp) => overload_wrap fp xexp (ctxt,exp)
     val xstrexp = fn (ctxt,fp,strexp,sigc) => overload_wrap fp xstrexp (ctxt,strexp,sigc)
     val xspec = fn (ctxt,fp,specs) => overload_wrap fp xspec (ctxt,specs)

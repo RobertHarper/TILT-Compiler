@@ -143,10 +143,13 @@ structure LinkIl :> LINKIL  =
 	fun initial_context() = 
 	  (case (!cached_initial_context) of
 	       SOME ctxt => ctxt
-	     | _ => let val (empty, sbnd_entries) = Basis.initial_context()
+	     | _ => let val (initial_context, sbnd_entries) = Basis.initial_context()
+(*
 			val entries = map #2 sbnd_entries
-			fun folder (entry,ctxt) = IlContext.add_context_entries(ctxt,[IlStatic.SelfifyEntry ctxt entry])
-			val initial_context = foldl folder empty entries
+			fun folder (entry,ctxt) = 
+			    IlContext.add_context_entries(ctxt,[IlStatic.SelfifyEntry ctxt entry])
+			val initial_context = foldl folder initial_context entries
+ *)
 			val _ = cached_initial_context := (SOME initial_context)
 		    in  initial_context
 		    end)

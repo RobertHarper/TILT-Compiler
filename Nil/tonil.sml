@@ -1818,12 +1818,16 @@ end (* local defining splitting context *)
 	   | _ => app)
        end
 
-     | xexp' context (Il.APP (il_exp1, il_exp2)) = 
-       let
-	   val exp1 = xexp context il_exp1
-	   val exp2 = xexp context il_exp2
-       in  App_e (Open, exp1, [], [exp2], [])
-       end	   
+           
+     | xexp' context (il_exp as (Il.APP (il_exp1, il_exp2))) = 
+         (case IlUtil.exp_reduce il_exp of
+	      NONE => 
+		  let
+		      val exp1 = xexp context il_exp1
+		      val exp2 = xexp context il_exp2
+		  in  App_e (Open, exp1, [], [exp2], [])
+		  end	   
+	    | SOME il_exp => xexp' context il_exp)
 
      | xexp' context (Il.FIX (is_recur, il_arrow, fbnds)) = 
        let
@@ -2323,16 +2327,15 @@ end (* local defining splitting context *)
 			    val nil_con = 
 				(case il_conopt of
 				     NONE => NONE
-				   | SOME il_con =>
-					 ((SOME (xcon context il_con)) handle _ => NONE))
+				   | SOME il_con => SOME (xcon context il_con))
 			    val it = ImportType(l,v,(case nil_con of
 						 NONE => kind
 					       | SOME c => Single_k c))
-			in  (it::imports,
-			     case nil_con of 
-				 NONE => update_NILctx_insert_kind(context, v, kind)
-			       | SOME c => 
-				     update_NILctx_insert_kind_equation(context, v, c))
+			    val context = 
+				(case nil_con of 
+				     NONE => update_NILctx_insert_kind(context, v, kind)
+				   | SOME c => update_NILctx_insert_kind_equation(context, v, c))
+			in  (it::imports, context)
 			end
 		  | Il.PHRASE_CLASS_MOD (_,is_polyfun,il_sig) => 
 			let
@@ -2352,15 +2355,14 @@ end (* local defining splitting context *)
 		  | Il.PHRASE_CLASS_SIG(v,il_sig) => 
 			(imports,update_insert_sig(context,v,il_sig))
 		  | _ => (imports,context))
-	   fun folder (v,acc) =
-	       let val SOME(l,pc) = IlContext.Context_Lookup'(HILctx,v)
-	       in  if ((IlUtil.is_dt l)
-		       orelse (IlUtil.is_nonexport l))
-		       then acc
-		   else dopc(v,l,pc,acc)
+	   fun folder (p,acc) =
+	       let val SOME(l,pc) = IlContext.Context_Lookup_Path(HILctx,p)
+	       in  (case (IlUtil.is_dt l, IlUtil.is_nonexport l, p) of
+			(false, false, PATH(v,[])) => dopc(v,l,pc,acc)
+		      | _ => acc)
 	       end
 	   val (rev_imports,context) = foldl folder ([],empty_splitting_context()) 
-	                                  (IlContext.Context_Varlist HILctx)
+	                                  (IlContext.Context_Ordering HILctx)
        in  (rev rev_imports, context)
        end
 
@@ -2395,8 +2397,8 @@ end (* local defining splitting context *)
 	    val _ = 
 		if (!full_debug) then
 		    (print "\nInitial HIL context varlist:\n";
-		     app (fn v => (print "  "; Ppnil.pp_var v; print "\n")) 
-		     (IlContext.Context_Varlist HILctx);
+		     app (fn p => (print "  "; Ppil.pp_path p; print "\n")) 
+		     (IlContext.Context_Ordering HILctx);
 		     print "\n";
 		     print "\nInitial HIL context:\n";
 		     Ppil.pp_context HILctx;

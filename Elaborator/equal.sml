@@ -66,7 +66,10 @@ struct
 			    val (eqexp,_) = self (fieldcon,fieldcon)
 			    val e1 = RECORD_PROJECT(VAR v1,lbl,con')
 			    val e2 = RECORD_PROJECT(VAR v2,lbl,con')
-			in  beta_reduce(eqexp,exp_tuple[e1,e2])
+			    val exp = APP(eqexp,exp_tuple[e1,e2])
+			in  (case exp_reduce exp of
+				 NONE => exp
+			       | SOME e => e)
 			end
 		    fun folder (rdec,exp) = 
 			let val exp' = help rdec
@@ -107,7 +110,10 @@ struct
 							   let val c = List.nth(carriers,i-noncarriers)
 							       val (eqexp,_) = self(c,c)
 							       val e = SUM_TAIL(i,sumc,VAR var')
-							   in  beta_reduce(eqexp, exp_tuple[e,e])
+							       val exp = APP(eqexp,exp_tuple[e,e])
+							   in  (case exp_reduce exp of
+								    SOME e => e
+								  | NONE => exp)
 							   end
 						   else true_exp
 				     val arms2 = map0count 
@@ -144,7 +150,11 @@ struct
 		    val _ = if (eq_con(ctxt,vc,ac))
 				then ()
 			    else (elab_error "Prelude vector_eq is bad")
-		in  (beta_reduce(e,#1 (self (c,c))), con_eqfun con')
+		    val exp = APP(e, #1 (self (c,c)))
+		in  ((case exp_reduce exp of
+			  NONE => exp
+			| SOME e => e),
+		     con_eqfun con')
 		end
 	  | CON_REF c => (ETAILPRIM(eq_ref,[c]), con_eqfun con')
 	  | CON_MODULE_PROJECT(m,l) => 
@@ -277,7 +287,10 @@ struct
 		  val e2 = RECORD_PROJECT(VAR var,generate_tuple_label 2,var_con)
 		  val e1' = UNROLL(name_con,expanded_con,e1)
 		  val e2' = UNROLL(name_con,expanded_con,e2)
-		  val exp = beta_reduce(expv',exp_tuple[e1',e2'])
+		  val exp = APP(expv',exp_tuple[e1',e2'])
+		  val exp = (case exp_reduce exp of
+				 NONE => exp
+			       | SOME e => e)
 		  val fbnd = FBND(var_eq,var,var_con,con_bool,exp)
 	      in  (fbnd, con_eqfun name_con)
 	      end

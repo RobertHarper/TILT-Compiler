@@ -393,7 +393,7 @@ structure Signature :> SIGNATURE =
 					   SelfifySig context (PATH (mjunk_var,[]),
 							       SIGNAT_STRUCTURE(NONE,sdecs)))
 	    val (labels1,s1) = 
-		(case Context_Lookup_Path(context,PATH(mjunk_var,labs1)) of
+		(case Context_Lookup_Path_Open(context,PATH(mjunk_var,labs1)) of
 		     SOME(PATH(_,labels1 as _::_),PHRASE_CLASS_MOD(_,_,s1)) => (labels1,s1)
 		   | _ => (error_region();
 			   print "can't where non-existent or non-structure component\n";
@@ -409,7 +409,7 @@ structure Signature :> SIGNATURE =
 		let val labs = labels1 @ plabs
 		in  (case follow_labels (NONE,sdecs,context) (labels1 @ plabs) of
 		       ABSTRACT (labs,_) => 
-			 (case (Sdecs_Lookup' context (m2,sdecs2,plabs)) of
+			 (case (Sdecs_Lookup_Open context (m2,sdecs2,plabs)) of
 			      SOME(_,PHRASE_CLASS_CON(c,_,_,_)) => 
 				  xsig_where_type(context,sdecs,labs,c,k)
 			    | _ => (error_region();
@@ -459,7 +459,7 @@ structure Signature :> SIGNATURE =
 	  val SIGNAT_STRUCTURE(_,sdecs') = s
 	  val ctxt' = add_context_mod'(ctxt,mjunk,s)
 	  fun path2triple p = 
-	      (case (Sdecs_Lookup' ctxt' (MOD_VAR mjunk,sdecs',p)) of
+	      (case (Sdecs_Lookup_Open ctxt' (MOD_VAR mjunk,sdecs',p)) of
 		   SOME(lpath,PHRASE_CLASS_MOD(_,_,s)) => 
 		       let 
 			   val vpath = join_path_labels(mpath,lpath)
@@ -561,7 +561,7 @@ structure Signature :> SIGNATURE =
   and xsig_sharing_type(ctxt,sdecs,paths) : sdecs = 
       let val mjunk = MOD_VAR(fresh_named_var "mjunk_sharing_type")
 	  fun path2label p = 
-	      (case (Sdecs_Lookup' ctxt (mjunk,sdecs,p)) of
+	      (case (Sdecs_Lookup_Open ctxt (mjunk,sdecs,p)) of
 		   SOME(labs,_) => follow_labels (NONE,sdecs,ctxt) labs
 		 | NONE => (error_region();
 			    print "sharing type given non-existent path ";
@@ -800,7 +800,10 @@ structure Signature :> SIGNATURE =
 
 	  val coerced = ref false
 	  fun coerce (false,_) = ()
-	    | coerce (true,str) = (print "coerced because of "; print str; print "\n"; coerced := true)
+	    | coerce (true,str) = (if (!debug)
+				       then (print "coerced because of "; print str; print "\n")
+				   else ();
+				   coerced := true)
 
 	   val _ = if (Listops.eq_list (fn (SDEC(l1,_),SDEC(l2,_)) => eq_label(l1,l2),
 					sdecs_actual, sdecs_target))
@@ -824,7 +827,7 @@ structure Signature :> SIGNATURE =
 				print "sdecs_target = \n"; pp_sdecs sdecs_target; print "\n")
 		      else ()
 	  in
-	      fun actual_self_lookup lbl = Sdecs_Lookup' ctxt (self, sdecs_actual_self, [lbl])
+	      fun actual_self_lookup lbl = Sdecs_Lookup_Open ctxt (self, sdecs_actual_self, [lbl])
 	  end
 		  
 

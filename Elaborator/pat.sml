@@ -8,6 +8,7 @@ structure Pat
 
     val do_result_type = Stats.tt("PatResultType")
     val debug = Stats.ff("Pattern_debug")
+    val diag = Stats.ff("Patter_diag")
 
     type polyinst = Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list 
     type typecompile = Il.context * Ast.ty -> Il.con
@@ -464,7 +465,9 @@ structure Pat
 	  val (names,noncarriers,carrier) = 
 	      (case (IlStatic.con_head_normalize(context,sumtype)) of
 		   CON_SUM{names,noncarriers,carrier,special} => (names,noncarriers,carrier)
-		 | _ => error "sumcon not reducible to SUM_CON")
+		 | c => (print "sumcon not reducible to SUM_CON: ";
+			 pp_con c; print "\n";
+			 error "sumcon not reducible to SUM_CON"))
       in  fun mk_ssumcon i = CON_SUM{names=names,
 				     noncarriers=noncarriers,
 				     carrier=carrier,
@@ -543,7 +546,10 @@ structure Pat
 
       val exhaustive = List.all (fn NONE => false | SOME _ => true) expopt_list
 
-      val arg = IlUtil.beta_reduce(expose_exp,casearg)
+      val arg = APP(expose_exp,casearg)
+      val arg = (case IlUtil.exp_reduce arg of
+		     NONE => arg
+		   | SOME e => e)
 
       val case_exp = 
 	  (CASE{sumtype=sumtype,
@@ -996,12 +1002,16 @@ structure Pat
 	    exception CannotFlatten
 	    fun getvar(_,VAR v) = v
 	      | getvar(d,OVEREXP(_,_,one)) = getvar(d,valOf(oneshot_deref one))
-	      | getvar _ = (print "getvar-cannot flatten\n";
+	      | getvar _ = (if (!diag)
+				then print "pat.sml: getvar cannot flatten\n"
+			    else ();
 			    raise CannotFlatten)
 	    fun flatten acc (RECORD le_list) = (acc,(map getvar le_list))
 	      | flatten acc (OVEREXP(_,_,one)) = flatten acc (valOf(oneshot_deref one))
 	      | flatten acc (LET (bnds, rest)) = flatten (acc @ bnds) rest
-	      | flatten _ _ = (print "flatten-cannot flatten\n";
+	      | flatten _ _ = (if (!diag)
+				   then print "pat.sml: flatten cannot flatten\n"
+			       else ();
 			       raise CannotFlatten)
 	    fun irrefutable_case (bnds,vlist) = 
 		let (* val table = Listops.zip vlist boundsyms *)

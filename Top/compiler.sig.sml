@@ -13,7 +13,7 @@ signature COMPILER =
    val debug_asm : bool ref (* use the -g flag in call to assembler *)
    val keep_asm : bool ref  (* don't erase the asm *)
    val uptoElaborate : bool ref
-   val uptoNil : bool ref
+   val uptoPhasesplit : bool ref
    val uptoRtl : bool ref
 
    val compile : context * string * (sbnd option * context_entry) list * context -> unit

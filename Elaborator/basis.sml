@@ -50,8 +50,9 @@ structure Basis
 	  val entries = ref []
 	  fun add_ce ce = (entries := ((NONE,ce)::(!entries)); 
 			   context := (add_context_entries(!context,[ce])))
-	  fun add_sbnd(sbnd,sdec) = (entries := ((SOME sbnd, CONTEXT_SDEC sdec) :: (!entries));
-				     context := add_context_sdec(!context, IlStatic.SelfifySdec (!context) sdec))
+	  fun add_sbnd(sbnd,sdec) = 
+	      (entries := ((SOME sbnd, CONTEXT_SDEC sdec) :: (!entries));
+	       context := add_context_sdec(!context, IlStatic.SelfifySdec (!context) sdec))
 
 	  fun mk_var_lab str = symbol_label(Symbol.varSymbol str)
 	  fun mk_tyc_lab str = symbol_label(Symbol.tycSymbol str)
@@ -393,7 +394,8 @@ structure Basis
 		     else ()
 	  end
 
-      in  (!context, !entries)
+
+      in  (!context, rev (!entries))
       end
 
 

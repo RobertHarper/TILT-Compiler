@@ -114,14 +114,13 @@ signature IL =
 	CONTEXT_SDEC   of sdec
       | CONTEXT_SIGNAT of label * var * signat
       | CONTEXT_FIXITY of fixity_table
-      | CONTEXT_ALIAS of label * label list
       | CONTEXT_OVEREXP of label * var * (con * exp) list
 
-    and context = CONTEXT of  {flatlist : context_entry list,
-			       fixity_list : fixity_table,
-			       label_list : (path * phrase_class) Name.LabelMap.map,
-			       var_list : (label * phrase_class) Name.VarMap.map * var list,
-			       alias_list : label list Name.LabelMap.map}
+    and context = CONTEXT of  {fixityList : fixity_table,
+			       labelMap : (path * phrase_class) Name.LabelMap.map,
+			       pathMap  : (label * phrase_class) Name.PathMap.map,
+			       ordering : path list}
+
 
     and phrase_class = PHRASE_CLASS_EXP     of exp * con * exp option * bool
                      | PHRASE_CLASS_CON     of con * kind * con option * bool

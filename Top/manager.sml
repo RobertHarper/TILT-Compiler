@@ -30,7 +30,7 @@ struct
 
   fun chat_imports skip imports =
       let fun f(i,n) = (chat i; chat "  ";
-			if (n > 0 andalso n mod 8 = 0) then chat "\n     " else (); n+1)
+			if (n > 0 andalso n mod 8 = 0) then chat "\n         " else (); n+1)
       in  foldl f skip imports
       end
 
@@ -275,13 +275,13 @@ struct
   fun readContext unit = 
       let val r = get_context unit
       in  (case !r of
-	       SOME (i,ctxt) => (print "readContext: incache = "; print unit; print "\n";
-		                 r := SOME(Int.min(i+2,!cache_context),ctxt); ctxt)
+	       SOME (i,ctxt) => (r := SOME(Int.min(i+2,!cache_context),ctxt); 
+		                 (true,ctxt))
 	     | NONE => let val uifile = base2ui (get_base unit)
 			   val ctxt = readContextRaw uifile
 			   val _ = if (!cache_context>0) 
                                    then r:=SOME(2,ctxt) else ()
-		       in  ctxt
+		       in  (false,ctxt)
 		       end)
       end
 
@@ -295,12 +295,16 @@ struct
 
 
   fun getContext (lines, imports) = 
-      let val _ = Name.reset_varmap()
+      let 
+	  val _ = Name.reset_varmap()
 	  val _ = tick_cache()
-	  val _ = (chat "  [Creating context from imports: ";
-	           chat_imports 4 imports;
-	           chat "]\n")
-          val ctxts = List.map readContext imports
+          val cached_ctxts = map readContext imports
+	  val ctxts = map #2 cached_ctxts
+	  val cached = List.mapPartial (fn (imp,(true,_)) => SOME imp
+	                                 | _ => NONE) (Listops.zip imports cached_ctxts)
+	  val _ = (chat "  [These imports were cached: ";
+		   chat_imports 4 cached;
+		   chat "]\n")
 	  val _ = if (lines > 1000) then flush_cache() else ()
 	  val _ = chat ("  [Adding contexts now]\n")
 	  val initial_ctxt = Elaborator.initial_context()
@@ -308,22 +312,6 @@ struct
       in  context
       end
 
-
-(*
-    fun bincopy (is,os) = 
-	let fun loop() = (BinIO_Util.copy(is,os); if (BinIO.endOfStream is) then () else loop())
-	in  loop()
-	end
-
-    fun emitter in_file os = 
-         let 
-         (* val _ = (print "mk_emitter on file "; print in_file; print "\n") *)
-            val is = BinIO.openIn in_file
-         in 
-            bincopy(is,os); 
-            BinIO.closeIn is
-         end
-*)
 
   fun elab_constrained(ctxt,sourcefile,fp,dec,fp2,specs,least_new_time) =
       let 
@@ -335,21 +323,7 @@ struct
   fun elab_nonconstrained(unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
       case Elaborator.elab_dec(pre_ctxt, fp, dec)
 	of SOME(new_ctxt, sbnd_entries) => 
-	    let
-(*
-         	val same = 
-		(exists uiFile andalso
-		 Elaborator.IlContextEq.eq_context(new_ctxt, readContext unit))
-		val _ = if same 
-			    then (if Time.<(modTime uiFile, least_new_time)
-				      then 
-					  (print "OS.FileSys.setTime does not seem to work: conservatively using current time for now!\n";
-					   OS.FileSys.setTime(uiFile, NONE))
-(* OS.FileSys.setTime(uiFile, SOME least_new_time) *)
-				  else ())
-			else
-*)
-                val _ =      (chat ("[writing " ^ uiFile);
+	    let val _ =      (chat ("[writing " ^ uiFile);
 			      writeContext (unit, new_ctxt);
 			      chat "]\n")
 	    in (new_ctxt,sbnd_entries)

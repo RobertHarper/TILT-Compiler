@@ -16,6 +16,7 @@ structure Til : COMPILER =
 	
     val debug_asm = ref false
     val keep_asm = Stats.ff("keep_asm")
+    val compress_asm = Stats.tt("compress_asm")
     fun as_flag() = 
 	(case !platform of
 	     TIL_ALPHA => if (!debug_asm) then " -g " else ""
@@ -30,7 +31,9 @@ structure Til : COMPILER =
 		((OS.FileSys.fileSize o_file > 0) handle _ => false)
 	in if success
 	       then (if (!keep_asm)
-			 then (Util.system compress_command; ())
+			 then (if (!compress_asm)
+				   then (Util.system compress_command; ())
+			       else ())
 		     else (Util.system rm_command; ()))
 	   else error "assemble. System command as failed"
 	end
@@ -45,7 +48,6 @@ structure Til : COMPILER =
 	exception Stop
 	val uptoElaborate = Stats.ff("UptoElaborate")
 	val uptoPhasesplit = Stats.ff("UptoPhasesplit")
-	val uptoNil = Stats.ff("UptoNil")
 	val uptoRtl = Stats.ff("UptoRtl")
 	val uptoAlpha = Stats.ff("UptoAlpha")
 	val uptoAsm = Stats.ff("UptoAsm")
@@ -54,18 +56,21 @@ structure Til : COMPILER =
 	    let val sFile = unitName ^ ".s"
 		val oFile = unitName ^ ".o"
 		val _ = if (!uptoElaborate) then raise Stop else ()
-		val sdecs = LinkIl.IlContext.context_to_sdecs ctxt'
 		val nilmod = (if !uptoPhasesplit 
 				 then Linknil.phasesplit
 			     else Linknil.il_to_nil) (unitName, (ctxt, sbnd_entries))
-		val _ = if (!uptoPhasesplit orelse !uptoNil) then raise Stop else ()
+		val _ = if !uptoPhasesplit then raise Stop else ()
 		val rtlmod = Linkrtl.nil_to_rtl (unitName,nilmod)
 		val _ = if (!uptoRtl) then raise Stop else ()
 		val rtl_to_asm = 
 		    (case !platform of
-			 TIL_ALPHA => Linkalpha.rtl_to_asm)
-(*		       | MLRISC_ALPHA => AlphaLink.rtl_to_asm
-		       | MLRISC_SPARC => SparcLink.rtl_to_asm)*)
+			 TIL_ALPHA => Linkalpha.rtl_to_asm
+		       | _ => error "commented out")
+(*
+		       | MLRISC_ALPHA => AlphaLink.rtl_to_asm 
+		       | MLRISC_SPARC => SparcLink.rtl_to_asm)
+*)
+
 		val _ = rtl_to_asm(unitName ^ ".s", rtlmod)    (* creates unitName.s file with main label
 								     * `unitName_doit' *)
 

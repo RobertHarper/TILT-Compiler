@@ -889,7 +889,7 @@ structure Datatype
 	      | NONE => NONE)
 
        fun help path = 
-	   (case (Context_Lookup_Path(context,path)) of
+	   (case (Context_Lookup_Path_Open(context,path)) of 
 		(SOME(_,PHRASE_CLASS_CON(_,_,SOME c,inline))) => if inline then c else path2con path
 	      | NONE => path2con path)
        
@@ -910,7 +910,8 @@ structure Datatype
 	   
        val expose_path = join_path_labels(datatype_path,[expose_lab])
        val expose_exp = 
-	   (case (Context_Lookup_Path(context,expose_path), sbnds_sdecs_cons_opt) of
+	   (case 
+		(Context_Lookup_Path_Open(context,expose_path), sbnds_sdecs_cons_opt) of 
 		(SOME(_,PHRASE_CLASS_EXP(_,_,SOME e,_)),_) => e
 	      | (SOME(_,PHRASE_CLASS_MOD(_,true,s)),SOME(sbnds,_,_)) =>
 		    (case s of

@@ -57,21 +57,12 @@ signature ILSTATIC =
 
    (* ----- Useful structure-related helper functions ------- *)	    
    (* ----- Sdecs_Lookup' looks inside starred structure --------- *)
-	datatype phrase = 
-	    PHRASE_EXP of Il.exp
-	  | PHRASE_CON of Il.con
-	  | PHRASE_MOD of Il.mod
-	  | PHRASE_SIG of Il.var * Il.signat
-	  | PHRASE_OVEREXP of (Il.con * Il.exp) list
-
     val Context_Lookup_Labels : Il.context * Il.label list -> (Il.path * Il.phrase_class) option
-    val Context_Lookup_Path : Il.context * Il.path -> (Il.path * Il.phrase_class) option
+    val Context_Lookup_Path_Open : Il.context * Il.path -> (Il.path * Il.phrase_class) option
     val Sdecs_Lookup  : Il.context -> Il.mod * Il.sdecs * Il.label list -> 
 	                            (Il.label list * Il.phrase_class) option
-    val Sdecs_Lookup' : Il.context -> Il.mod * Il.sdecs * Il.label list -> 
-                                   (Il.label list * Il.phrase_class) option
-    val Sbnds_Lookup  : Il.context -> Il.sbnds * Il.label list -> 
-	                            (Il.label list * phrase) option
+    val Sdecs_Lookup_Open : Il.context -> Il.mod * Il.sdecs * Il.label list -> 
+	                            (Il.label list * Il.phrase_class) option
 
     (* ---- Selfification needed before inserting into contexts ----- *)
     val SelfifySig : Il.context -> Il.path * Il.signat -> Il.signat

@@ -265,7 +265,7 @@ struct
 			   NONE => []
 			 | SOME e => [String "= ", pp_exp e]))
 	       | PHRASE_CLASS_CON  (c,k,copt,inline) =>
-		     help (if inline then "PC_EXP_INLINE" else "PC_CON(") ")"
+		     help (if inline then "PC_CON_INLINE" else "PC_CON(") ")"
 		     ([pp_con c, String ": ", pp_kind k] @
 		      (case copt of
 			   NONE => []
@@ -522,19 +522,21 @@ struct
     val pp_sdecs' = help (pp_sdecs [])
     val pp_phrase_class' = help (pp_phrase_class true [])
 
-    fun pp_context_entry' (CONTEXT_ALIAS _) = String "CONTEXT_ALIAS ???"
-      | pp_context_entry' (CONTEXT_SDEC sdec) = HOVbox[String "CONTEXT_SDEC: ", pp_sdec [] sdec]
+    fun pp_context_entry' (CONTEXT_SDEC sdec) = HOVbox[String "CONTEXT_SDEC: ", pp_sdec [] sdec]
       | pp_context_entry' (CONTEXT_SIGNAT (l,v,s)) = HOVbox[String "CONTEXT_SIGNAT: ",
 							    pp_label l, String " > ", pp_var v,
 							    String " = ", pp_signat [] s]
       | pp_context_entry' (CONTEXT_FIXITY _) = String "CONTEXT_FIXITY ???"
       | pp_context_entry' (CONTEXT_OVEREXP _) = String "CONTEXT_OVEREXP ???"
 
-    fun pp_context' (CONTEXT{label_list,...}) = 
-	let val label_pathpc_list = Name.LabelMap.listItemsi label_list
-	    fun doer(lbl,(path,pc)) = HOVbox[pp_label lbl,
+    fun pp_context' (CONTEXT{pathMap, ordering, ...}) = 
+	let fun lookup (PATH p) = let val SOME (lab,pc) = Name.PathMap.find(pathMap,p)
+				  in  (lab,p,pc)
+				  end
+	    val label_pathpc_list = map lookup (rev ordering)
+	    fun doer(lbl,path,pc) = HOVbox[pp_label lbl,
 					   String " --> ",
-					   pp_path path,
+					   pp_path (PATH path),
 					   String " = ",
 					   pp_phrase_class true [] pc]
 	in  pp_list doer label_pathpc_list ("[",", ", "]", true)

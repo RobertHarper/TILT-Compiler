@@ -729,41 +729,32 @@ struct
 	    blastInList (fn() => blastInPair blastInLabel blastInFixity) 
 
 
-	fun blastOutLabelList label_list = 
+	fun blastOutLabelMap label_list = 
 	    NameBlast.blastOutLabelmap (curOut()) (fn _ => blastOutPair blastOutPath blastOutPC) label_list
-	fun blastInLabelList () = 
-	    (tab "blastLabelList\n"; 
-	    NameBlast.blastInLabelmap (curIn()) (fn _ => blastInPair blastInPath blastInPC))
+	fun blastInLabelMap () = 
+	    NameBlast.blastInLabelmap (curIn()) (fn _ => blastInPair blastInPath blastInPC)
 
-	fun blastOutVarList (vmap,vlist) = 
-	    (NameBlast.blastOutVarmap (curOut()) (fn _ => blastOutPair blastOutLabel blastOutPC) vmap;
-	     blastOutList blastOutVar vlist)
+	fun blastOutPathMap pathMap =
+	    (NameBlast.blastOutPathmap (curOut()) (fn _ => blastOutPair blastOutLabel blastOutPC) pathMap)
 
-	fun blastInVarList () = 
-	    let val _ = tab "blastInVarList\n";
-		val vmap = NameBlast.blastInVarmap (curIn()) (fn _ => blastInPair blastInLabel blastInPC) 
-		val vlist = blastInList blastInVar 
-	    in  (vmap, vlist)
-	    end
+	fun blastInPathMap () = 
+	    NameBlast.blastInPathmap (curIn()) (fn _ => blastInPair blastInLabel blastInPC)
 
-
-
-    fun blastOutContext os (CONTEXT {flatlist, fixity_list, label_list, var_list, alias_list}) = 
+    fun blastOutContext os (CONTEXT {fixityList, labelMap, pathMap, ordering}) = 
 	(cur_out := (SOME os);
-	 if Name.LabelMap.numItems alias_list = 0
-	     then ()
-	 else error "Blasting out context with non-empty alias_list";
-	 blastOutFixityTable fixity_list;
-	 blastOutLabelList label_list;
-	 blastOutVarList var_list)
+	 blastOutFixityTable fixityList;
+	 blastOutLabelMap labelMap;
+	 blastOutPathMap pathMap;
+	 blastOutList blastOutPath ordering)
 
     fun blastInContext is = 
 	let val _ = cur_in := (SOME is)
-	    val fixity_list = blastInFixityTable ()
-	    val label_list = blastInLabelList ()
-	    val var_list = blastInVarList ()
-	in CONTEXT {flatlist = [], fixity_list = fixity_list, label_list = label_list, 
-		    var_list = var_list, alias_list = Name.LabelMap.empty}
+	    val fixityList = blastInFixityTable ()
+	    val labelMap = blastInLabelMap ()
+	    val pathMap = blastInPathMap ()
+	    val ordering = blastInList blastInPath
+	in CONTEXT {fixityList = fixityList, labelMap = labelMap,
+		    pathMap = pathMap, ordering = ordering}
 	end
 
 
@@ -808,8 +799,12 @@ struct
 
 
 	fun extend_vm_context (c : context, c' : context, vm) : vm * var list =
-	    let val vlist = Context_Varlist c
-		val vlist' = Context_Varlist c'
+	    let val ord = Context_Ordering c
+		val ord' = Context_Ordering c'
+		fun getVar(PATH(v,[])) = SOME v
+		  | getVar _ = NONE
+		val vlist = List.mapPartial getVar ord
+		val vlist' = List.mapPartial getVar ord'
 		fun mapper ctxt v = (case Context_Lookup'(ctxt,v) of
 				    SOME (l,_) => (* () this too conservative? *)
 					if (IlUtil.is_nonexport l)

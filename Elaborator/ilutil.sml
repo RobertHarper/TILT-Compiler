@@ -631,17 +631,19 @@ structure IlUtil
 	  fun wrap f_obj (obj,subst) = if (subst_is_empty subst)
 					   then obj
 				       else f_obj (handlers (ref 0) subst) obj
+	  fun wrap' f_obj (obj,subst) = if (subst_is_empty subst)
+					    then (0,obj)
+					else let val r = ref 0 
+						 val obj = f_obj (handlers r subst) obj
+					     in  (!r, obj)
+					     end
       in 
 	  val exp_subst = wrap f_exp
 	  val con_subst = wrap f_con
 	  val mod_subst = wrap f_mod
 	  val sig_subst = wrap f_signat
-	  fun con_subst' (c,subst) = if (subst_is_empty subst)
-					 then (0,c)
-				     else let val r = ref 0 
-					      val con = f_con (handlers r subst) c
-					  in  (!r, con)
-					  end
+	  val con_subst' = wrap' f_con
+	  val sig_subst' = wrap' f_signat
       end
 
 
@@ -874,30 +876,40 @@ structure IlUtil
       end
 
 
-    fun beta_reduce(x : exp, y : exp) : exp =
-	let fun red (exp as (OVEREXP (c,_,oe))) = 
-		      (case (oneshot_deref oe) of
-			   SOME exp => exp
-			 | NONE => exp)
-		   | red exp = exp
-	    val def = APP(x,y)
-	in (case (red x, red y) of
-	     (ETAPRIM(p,cs),RECORD rbnds) => PRIM(p,cs,map #2 rbnds)
-	   | (ETAILPRIM(ip,cs),RECORD rbnds) => ILPRIM(ip,cs,map #2 rbnds)
-	   | (x as ETAPRIM(p,cs),y) =>
-		     (case (IlPrimUtil.get_type' p cs) of
-			  CON_ARROW([_],_,_,_) => PRIM(p,cs,[y])
-			| _ => def)
-	   | (x as ETAILPRIM(ip,cs),y) =>
-		     (case (IlPrimUtil.get_iltype' ip cs) of
-			 CON_ARROW([_],_,_,_) => ILPRIM(ip,cs,[y])
-			| _ => def)
-	   | (FIX (false,_,[FBND(name,arg,argtype,bodytype,body)]), VAR argvar) => 
-			  exp_subst(body, subst_add_expvar(empty_subst, arg, VAR argvar))
-	   | (FIX (false,_,[FBND(name,arg,argtype,bodytype,body)]), y) => 
-			  LET([BND_EXP(arg,y)],body)
-	   | _ => def)
-	end
+    fun exp_reduce e : exp option = 
+	(case e of
+	     OVEREXP(_,_,oe) =>
+		 (case (oneshot_deref oe) of
+		      SOME exp => (case exp_reduce exp of
+				       NONE => SOME exp
+				     | SOME e => SOME e)
+		    | NONE => NONE)
+	   | APP(e1, e2) => 
+		 let val (ch1,e1) = (case exp_reduce e1 of
+					 NONE => (false,e1)
+				       | SOME e => (true,e))
+		     val (ch2,e2) = (case exp_reduce e2 of
+					 NONE => (false,e2)
+				       | SOME e => (true,e))
+		     val def = if (ch1 orelse ch2) then SOME(APP(e1,e2)) else NONE
+		 in (case (e1,e2) of
+			 (ETAPRIM(p,cs),RECORD rbnds) => SOME(PRIM(p,cs,map #2 rbnds))
+		       | (ETAILPRIM(ip,cs),RECORD rbnds) => SOME(ILPRIM(ip,cs,map #2 rbnds))
+		       | (ETAPRIM(p,cs),y) =>
+			     (case (IlPrimUtil.get_type' p cs) of
+				  CON_ARROW([_],_,_,_) => SOME(PRIM(p,cs,[y]))
+				| _ => def)
+		       | (ETAILPRIM(ip,cs),y) =>
+			      (case (IlPrimUtil.get_iltype' ip cs) of
+				   CON_ARROW([_],_,_,_) => SOME(ILPRIM(ip,cs,[y]))
+				 | _ => def)
+		       | (FIX (false,_,[FBND(name,arg,argtype,bodytype,body)]), VAR argvar) => 
+				   SOME(exp_subst(body, subst_add_expvar(empty_subst, arg, VAR argvar)))
+		       | (FIX (false,_,[FBND(name,arg,argtype,bodytype,body)]), y) => 
+				   SOME(LET([BND_EXP(arg,y)],body))
+		       | _ => def)
+		 end
+	   | _ => NONE)
 
 
   end;

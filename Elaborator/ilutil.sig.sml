@@ -56,7 +56,7 @@ signature ILUTIL =
     val make_seq : (exp * con) list -> exp * con
     val prim_etaexpand : (Prim.prim * con list) -> exp
     val ilprim_etaexpand : (Prim.ilprim * con list) -> exp
-    val beta_reduce : exp * exp -> exp
+    val exp_reduce : exp -> exp option
 
     val con_bool : con
     val con_eqfun : con -> con
@@ -146,6 +146,9 @@ signature ILUTIL =
     val con_subst : con * subst -> con
     val mod_subst : mod * subst -> mod
     val sig_subst : signat * subst -> signat
+
+    val con_subst' : con * subst -> int * con  (* int indicates number of substitutions performed *)
+    val sig_subst' : signat * subst -> int * signat
 
     (* ------------ Functions that compute FV --------- *)
     type free = var list * var list * var list
