@@ -1,0 +1,14 @@
+group 
+
+structure LinkTAL
+
+is
+
+../smlnj-lib.cm             (* ------ SML/NJ library ------- *)
+../Util/util.cm             (* ------ Our own utilities ---- *)
+../Elaborator/elaborator.cm (* ------ Elaborator Stuff ----- *)
+../Lil/lil.cm               (* ------ Nil Stuff ------------ *)
+../Backend/backend.cm
+
+
+linktal.sml

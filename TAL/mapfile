@@ -1,0 +1,5 @@
+include group "../Util/mapfile-util"
+include group "../Lil/mapfile"
+include group "../Parser/mapfile-parse"
+
+source unit LinkTAL = "linktal.sml" { Stats Lil TextIO }
