@@ -35,7 +35,8 @@ env.sml         (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj
 symbol.sml      (* split off portion of env.sml *)
 fastsymbol.sml      (* split off portion of env.sml *)
 *)
-printutil.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/printutil.sig *)
+(* printutil.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/printutil.sig *) *)
+printutil.sig.sml
 printutil.sml   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/printutil.sml *)
 strghash.sml    (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/strghash.sml *)
 ppqueue.sml     (* mod  of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/ppqueue.sml  *)
@@ -43,7 +44,8 @@ control.sig.sml     (* partial copy of /afs/cs.cmu.edu/project/fox-17/port/109.2
 control.sml     (* partial copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/build/control.sml *)
 pp.sig.sml
 pp.sml          (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/pp.sml *)
-sourcemap.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sourcemap.sig *)
+(* sourcemap.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sourcemap.sig *) *)
+sourcemap.sig.sml
 sourcemap.sml   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sourcemap.sml *)
 source.sig.sml  (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/source.sig *)
 source.sml      (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/source.sml *)
@@ -51,9 +53,10 @@ pathnames.sig.sml (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-
 pathnames.sml   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/pathnames.sml *)
 errormsg.sig.sml  (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/errormsg.sig *)
 errormsg.sml    (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/errormsg.sml *)
-intstrmap.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/intstrmap.sig *)
+(* intstrmap.sig   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/intstrmap.sig *) *)
+intstrmap.sig.sml
 intstrmap.sml   (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/intstrmap.sml *)
-sortedlist.sml  (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sortedlist.sml *)
+(* sortedlist.sml  (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/util/sortedlist.sml *) *)
 fixity.sml      (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/basics/fixity.sml *)
 
 
@@ -68,7 +71,8 @@ ml.lex.sml     (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/
 tokentable.sml (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/sml-nj/lex/tokentable.sml *)
 
 (* /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/sources.cm   *)
-base.sig       (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/base.sig *)
+(* base.sig       (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/base.sig *) *)
+base.sig.sml
 parser2.sml    (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/parser2.sml *)
 join.sml       (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/join.sml *)
 lrtable.sml       (* copy of /afs/cs.cmu.edu/project/fox-17/port/109.25/src/ml-yacc/lib/lrtable.sml *)
