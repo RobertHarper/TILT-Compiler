@@ -265,7 +265,7 @@ m0103	pass	modules
 m0104	fail	special constants
 m0105	pass	semicolon parsing
 m0106	pass	sharing
-m0107	skip	binary io
+m0107	pass	binary io
 m0108	fail	[Bug #0138] date and time
 m0109	fail	[Bug #0139] file system
 m0111	pass	signatures
