@@ -265,7 +265,7 @@ struct
           val afterLenMask = fresh_code_label "afterLenMask"
 	  val _ = add_instr(LI(0w0,len))
 	  val _ = add_instr(LI(0w0,mask))
-	  val _ = add_instr(BCNDI(EQ,record,IMM empty_record_int,afterLenMask,false))
+	  val _ = add_instr(BCNDSI(EQ,record,IMM empty_record_int,afterLenMask,false))
 	  (* Non-empty record required tag extraction to compute len and mask *)
 	  val tag = alloc_regi NOTRACE_INT
 	  val tmp = alloc_regi NOTRACE_INT
@@ -295,7 +295,7 @@ struct
 									we are copying *)
 	  val _ = add_instr(MV(len, current))
 	  val _ = add_instr(ILABEL copyLoop)
-	  val _ = add_instr(BCNDI(EQ,current, IMM 0, afterLoop, false))
+	  val _ = add_instr(BCNDSI(EQ,current, IMM 0, afterLoop, false))
 	  val _ = add_instr(SUB(current, IMM 1, current))
 	  val rLoc = alloc_regi LOCATIVE
 	  val rTypeLoc = alloc_regi LOCATIVE

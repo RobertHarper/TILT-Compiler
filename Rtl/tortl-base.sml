@@ -789,7 +789,7 @@ struct
   fun ifthenelse (reg, thenInstr, elseInstr) = 
       let val elsel = fresh_code_label "else_case"
 	  val afterl = fresh_code_label "after_ite"
-      in  (add_instr(BCNDI(EQ,reg,IMM 0,elsel,false));
+      in  (add_instr(BCNDSI(EQ,reg,IMM 0,elsel,false));
 	   app add_instr thenInstr;
 	   add_instr(BR afterl);
 	   add_instr(ILABEL elsel);

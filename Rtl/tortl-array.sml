@@ -139,9 +139,9 @@ struct
 	  val charl = fresh_code_label "sub_char"
 	  val wordl = fresh_code_label "sub_word"
 	  val ptrl = fresh_code_label "sub_ptr"
-	  val _ = (add_instr(BCNDI(EQ, r, IMM 11, floatl, false));
-		   add_instr(BCNDI(EQ, r, IMM 2, wordl, false));
-		   add_instr(BCNDI(EQ, r, IMM 0, charl, false)))
+	  val _ = (add_instr(BCNDSI(EQ, r, IMM 11, floatl, false));
+		   add_instr(BCNDSI(EQ, r, IMM 2, wordl, false));
+		   add_instr(BCNDSI(EQ, r, IMM 0, charl, false)))
 
 	  val _ = add_instr(ILABEL ptrl)
 	  val (I destip,ptr_state) = ptrcase(state)
@@ -262,9 +262,9 @@ struct
 	   val intl = fresh_code_label "update_int"
 	   val charl = fresh_code_label "update_char"
 	   val ptrl = fresh_code_label "update_ptr"
-	   val _ = (add_instr(BCNDI(EQ, r, IMM 11, floatl, false));
-		    add_instr(BCNDI(EQ, r, IMM 2, intl, false));
-		    add_instr(BCNDI(EQ, r, IMM 0, charl, false)))
+	   val _ = (add_instr(BCNDSI(EQ, r, IMM 11, floatl, false));
+		    add_instr(BCNDSI(EQ, r, IMM 2, intl, false));
+		    add_instr(BCNDSI(EQ, r, IMM 0, charl, false)))
 
 	   val _ = add_instr(ILABEL ptrl)
 	   val _ = xupdate_ptr(state) (vl1,vl2,vl3)
@@ -296,10 +296,10 @@ struct
 	  val done = fresh_code_label "loaded_tag"
 	  val _ = add_instr(ILABEL load_nonstall)
 	  val _ = add_instr(LOAD32I(REA(obj,~4),tag))
-	  val _ = add_instr(BCNDI(EQ,tag,IMM (TilWord32.toInt Rtltags.stall),load_nonstall,true))
+	  val _ = add_instr(BCNDSI(EQ,tag,IMM (TilWord32.toInt Rtltags.stall),load_nonstall,true))
 	  val _ = add_instr(ILABEL load_tag)
 	  val _ = add_instr(ANDB(tag, IMM 3, low2))
-	  val _ = add_instr(BCNDI(NE,low2,IMM 0,done,true))        (* if low 2 bits not zero, then not a forwarding pointer *)
+	  val _ = add_instr(BCNDSI(NE,low2,IMM 0,done,true))        (* if low 2 bits not zero, then not a forwarding pointer *)
 	  val _ = add_instr(LOAD32I(REA(tag,~4),tag))              (* tag is actually a forwarding pointer so load true tag *)
 	  val _ = add_instr(BR load_tag)                           (* must branch back in case of multiple forwarding as in gen. collector *)
 	  val _ = add_instr(ILABEL done)
@@ -345,9 +345,9 @@ struct
 	  val charl = fresh_code_label "length_char"
 	  val wordl = fresh_code_label "length_word"
 	  val ptrl = fresh_code_label "length_ptr"
-	  val _ = (add_instr(BCNDI(EQ, con_ir, IMM 11, floatl, false));
-		   add_instr(BCNDI(EQ, con_ir, IMM 2, wordl, false));
-		   add_instr(BCNDI(EQ, con_ir, IMM 0, charl, false));
+	  val _ = (add_instr(BCNDSI(EQ, con_ir, IMM 11, floatl, false));
+		   add_instr(BCNDSI(EQ, con_ir, IMM 2, wordl, false));
+		   add_instr(BCNDSI(EQ, con_ir, IMM 0, charl, false));
 		   add_instr(ILABEL ptrl);
 		   if (!mirrorPtrArray) then
 		       add_instr(SRL(tag,IMM (3+Rtltags.mirror_ptr_array_len_offset),len))
@@ -396,7 +396,7 @@ struct
 	    (* if array is too large, call runtime to allocate *)
 	    let	val tmp' = alloc_regi(NOTRACE_INT)
 	    in	add_instr(LI(TilWord32.fromInt ((maxByteRequest div 4) - 2),tmp'));  (* gctemp in words *)
-		add_instr(BCNDI(LE, gctemp, REG tmp', fsmall_alloc, true))
+		add_instr(BCNDSI(LE, gctemp, REG tmp', fsmall_alloc, true))
 	    end;
 	    (* call the runtime to allocate large array *)
 	    add_instr(CALL{call_type = C_NORMAL,
@@ -428,7 +428,7 @@ struct
 	    add_instr(STORE64F(REA(tmp,0),fr));  (* initialize value *)
 	    add_instr(SUB(i,IMM 1,i));
 	    add_instr(ILABEL fbottom);
-	    add_instr(BCNDI(GE,i,IMM 0,ftop,true));
+	    add_instr(BCNDSI(GE,i,IMM 0,ftop,true));
 	    add_instr(ILABEL fafter);
 	    (LOCATION(REGISTER(false, I dest)),
 	     new_gcstate state)   (* after all this allocation, we cannot merge *)
@@ -465,7 +465,7 @@ struct
 	  add_instr(STORE32I(RREA(dest,byteOffset),v));         (* initialize field *)
 	  add_instr(SUB(byteOffset,IMM 4,byteOffset));          (* decrement byte offset *)
 	  add_instr(ILABEL loopBottom);
-	  add_instr(BCNDI(GE,byteOffset,IMM 0,loopTop,true));   (* check if byte offset still positive *)
+	  add_instr(BCNDSI(GE,byteOffset,IMM 0,loopTop,true));  (* check if byte offset still positive *)
 	  add_instr(ILABEL gafter);
 	  new_gcstate state                                     (* must occur after heapptr incremented *)
       end
@@ -518,7 +518,7 @@ struct
 		val _ = let val dataMax = alloc_regi(NOTRACE_INT)
 			in  add_instr(LI(TilWord32.fromInt ((maxByteRequest div 4)-2),
 					 dataMax));
-			    add_instr(BCNDI(LE, wordlen, REG dataMax, ismall_alloc, true))
+			    add_instr(BCNDSI(LE, wordlen, REG dataMax, ismall_alloc, true))
 			end
 		val _ = add_instr(CALL{call_type = C_NORMAL,
 				    func = LABEL' (C_EXTERN_LABEL "alloc_bigintarray"),
@@ -560,7 +560,7 @@ struct
 		val _ = let val dataMax = alloc_regi(NOTRACE_INT)
 			in  add_instr(LI(TilWord32.fromInt ((maxByteRequest div 4) - 2),
 					 dataMax));
-			    add_instr(BCNDI(LE, wordLen, REG dataMax, psmall_alloc, true))
+			    add_instr(BCNDSI(LE, wordLen, REG dataMax, psmall_alloc, true))
 			end
 		val _ = add_instr(CALL{call_type = C_NORMAL,
 				       func = LABEL' (C_EXTERN_LABEL "alloc_bigptrarray"),
@@ -591,9 +591,9 @@ struct
 	val floatl = fresh_code_label "array_float"
 	val intl = fresh_code_label "array_int"
 	val charl = fresh_code_label "array_char"
-	val _ = (add_instr(BCNDI(EQ, r, IMM 11, floatl, false));
-		 add_instr(BCNDI(EQ, r, IMM 2, intl, false));
-		 add_instr(BCNDI(EQ, r, IMM 0, charl, false)))
+	val _ = (add_instr(BCNDSI(EQ, r, IMM 11, floatl, false));
+		 add_instr(BCNDSI(EQ, r, IMM 2, intl, false));
+		 add_instr(BCNDSI(EQ, r, IMM 0, charl, false)))
 	val ptr_state = 
 	    let val (term,state) = xarray_ptr(state) (vl1,vl2opt)
 		val LOCATION(REGISTER(_, I tmp)) = term
