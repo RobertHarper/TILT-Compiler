@@ -86,11 +86,11 @@ functor RtlRegisterTraceMap(
     val traceGlobalRec	= Trace o TraceTable.TRACE_GLOBAL_REC
     val traceImpossible = Trace TraceTable.TRACE_IMPOSSIBLE
 
-    fun tracePath lookup (Rtl.Var_p register) =
+    fun tracePath lookup (Rtl.Projvar_p(register, [])) =
 	  traceStack lookup register
       | tracePath lookup (Rtl.Projvar_p register) =
 	  traceStackRec lookup register
-      | tracePath _ (Rtl.Label_p label) =
+      | tracePath _ (Rtl.Projlabel_p(label, [])) =
 	  traceGlobal label
       | tracePath _ (Rtl.Projlabel_p label) =
 	  traceGlobalRec label
