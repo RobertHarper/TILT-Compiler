@@ -4,29 +4,23 @@
  *
  *)
 
-structure Char :> CHAR where type char = char
-                         and type string = string =
-  struct
+structure Char :> CHAR
+    where type char = char
+    where type string = string =
+struct
 
     val int32touint32 = TiltPrim.int32touint32
     val && = TiltPrim.&&
     val uplus = TiltPrim.uplus
     val ult = TiltPrim.ult
+    val ilt = TiltPrim.ilt
+    val igt = TiltPrim.igt
     val unsafe_sub8 = TiltPrim.unsafe_sub8
     val unsafe_update8 = TiltPrim.unsafe_update8
     val unsafe_vsub = TiltPrim.unsafe_vsub
     val unsafe_vsub8 = TiltPrim.unsafe_vsub8
     val unsafe_array8 = TiltPrim.unsafe_array8
-;(*
-    structure C = InlineT.Char
 
-    val op + = InlineT.DfltInt.+
-    val op - = InlineT.DfltInt.-
-    val op * = InlineT.DfltInt.*
-
-    val itoc : int -> char = InlineT.cast
-    val ctoi : char -> int = InlineT.cast
-*)
     val itoc = TiltPrim.int32touint8
     val ctoi = ord
 
@@ -156,6 +150,37 @@ structure Char :> CHAR where type char = char
     fun toLower c = if (isUpper c) then itoc(ctoi c + offset) else c
 
   (* conversions between characters and printable representations *)
+    fun digit (c:char) : int = ord c - 48
+
+    fun hdigit (c:char) : int =
+	let val n = ord c
+	in  if ilt(n,65) then n - 48
+	    else if ilt(n,97) then n - 55
+	    else n - 87
+	end
+
+    fun numtochar (rep:'a, base:int, revdigits:int list) : (char * 'a) option =
+	let fun loop (ds:int list, m:int, n:int) : (char * 'a) option =
+		(case ds of
+		    nil => if igt(n,maxOrd) then NONE else SOME(chr n,rep)
+		|   d::ds => loop(ds,m*base,n+d*m))
+	in  loop(revdigits,1,0)
+	end handle Overflow => NONE
+
+    (*
+	Removes a prefix of zeros so that scanC can handle escapes like
+	\x00000000000001 without causing numtochar to overflow when it
+	computes base^i for digit i.
+    *)
+    fun dropzeros (revdigits:int list) : int list =
+	let val digits = rev revdigits
+	    fun skip (ds:int list) : int list =
+		(case ds of
+		    0 :: ds => skip ds
+		|   _ => rev ds)
+	in  skip digits
+	end
+	    
     fun scan getc rep = let
 	  fun get2 rep = (case (getc rep)
 		 of (SOME(c1, rep')) => (case (getc rep')
@@ -164,35 +189,59 @@ structure Char :> CHAR where type char = char
 		      (* end case *))
 		  | _ => NONE
 		(* end case *))
+	  fun get4 rep =
+		(case (get2 rep) of
+		    SOME (c1,c2,rep) =>
+			(case (get2 rep) of
+			    SOME (c3,c4,rep) => SOME(c1,c2,c3,c4,rep)
+			|   NONE => NONE)
+		|   NONE => NONE)
 	  in
 	    case (getc rep)
 	     of NONE => NONE
 	      | (SOME(#"\\", rep')) => (case (getc rep')
 		   of NONE => NONE
+		    | (SOME(#"a", rep'')) => (SOME(#"\a", rep''))
+		    | (SOME(#"b", rep'')) => (SOME(#"\b", rep''))
+		    | (SOME(#"t", rep'')) => (SOME(#"\t", rep''))
+		    | (SOME(#"n", rep'')) => (SOME(#"\n", rep''))
+		    | (SOME(#"v", rep'')) => (SOME(#"\v", rep''))
+		    | (SOME(#"f", rep'')) => (SOME(#"\f", rep''))
+		    | (SOME(#"r", rep'')) => (SOME(#"\r", rep''))
 		    | (SOME(#"\\", rep'')) => (SOME(#"\\", rep''))
 		    | (SOME(#"\"", rep'')) => (SOME(#"\"", rep''))
-		    | (SOME(#"n", rep'')) => (SOME(#"\n", rep''))
-		    | (SOME(#"t", rep'')) => (SOME(#"\t", rep''))
 		    | (SOME(#"^", rep'')) => (case (getc rep'')
 			 of NONE => NONE
 	    		  | (SOME(c, rep''')) =>
 			      if ((#"@" <= c) andalso (c <= #"_"))
-			        then SOME(chr(ord c - ord #"@"), rep''')
+			        then SOME(chr(ord c - 64), rep''')
 			        else NONE
 			(* end case *))
+		    | (SOME(#"u", rep)) =>
+			(case (get4 rep) of
+			    NONE => NONE
+			|   SOME (d1,d2,d3,d4,rep) =>
+				if isHexDigit d1 andalso isHexDigit d2 andalso
+				    isHexDigit d3 andalso isHexDigit d4
+				then numtochar(rep,16,[hdigit d4,hdigit d3,hdigit d2,hdigit d1])
+				else NONE)
 		    | (SOME(d1, rep'')) => if (isDigit d1)
 			then (case (get2 rep'')
-			   of SOME(d2, d3, rep''') => let
-				fun cvt d = (ord d - ord #"0")
-				in
-				  if (isDigit d2 andalso isDigit d3)
-				    then SOME(
-				      chr(100*(cvt d1)+10*(cvt d2)+(cvt d3)),
-				      rep''')
-				    else NONE
-			        end
+			   of SOME(d2, d3, rep''') =>
+				if isDigit d2 andalso isDigit d3
+				then numtochar(rep''',10,[digit d3,digit d2,digit d1])
+				else NONE
 			    | NONE => NONE
 			  (* end case *))
+			else if (isSpace d1) then
+			    let fun loop rep =
+				    (case (getc rep) of
+					SOME (#"\\",rep) => scan getc rep
+				    |	SOME (c,rep) =>
+					    if isSpace c then loop rep else NONE
+				    |	NONE => NONE)
+			    in  loop rep''
+			    end
 			else NONE
 		  (* end case *))
 	      | (SOME(#"\"", rep')) => NONE	(* " *)
@@ -216,7 +265,6 @@ structure Char :> CHAR where type char = char
       | toString c =
 	  if (isPrint c)
 	    then unsafe_vsub (PreString.chars, int32touint32(ord c))
-(** NOTE: we should probably recognize the control characters **)
 	    else let
 	      val c' = ord c
 	      in
@@ -226,7 +274,69 @@ structure Char :> CHAR where type char = char
 		    unsafe_vsub (PreString.chars, int32touint32(c'+64)))
 	      end
 
-    fun fromCString s = raise TiltExn.LibFail "Char.fromCString not implemented"
+    fun scanC getc rep =
+	(case (getc rep) of
+	    NONE => NONE
+	|   SOME (#"\\",rep) =>
+		(case (getc rep) of
+		    NONE => NONE
+		|   SOME (#"a",rep) => SOME(#"\a",rep)
+		|   SOME (#"b",rep) => SOME(#"\b",rep)
+		|   SOME (#"t",rep) => SOME(#"\t",rep)
+		|   SOME (#"n",rep) => SOME(#"\n",rep)
+		|   SOME (#"v",rep) => SOME(#"\v",rep)
+		|   SOME (#"f",rep) => SOME(#"\f",rep)
+		|   SOME (#"r",rep) => SOME(#"\r",rep)
+		|   SOME (#"?",rep) => SOME(#"?",rep)
+		|   r as SOME (#"\\",rep) => r
+		|   r as SOME (#"\"",rep) => r
+		|   r as SOME (#"'",rep) => r
+		|   SOME (#"^",rep) =>
+			(case (getc rep) of
+			    NONE => NONE
+			|   SOME (c,rep) =>
+				let val n = ord c
+				in  if ilt(63,n) andalso ilt(n,96) then
+					SOME(chr(n - 64),rep)
+				    else NONE
+				end)
+		|   SOME (#"x",rep) =>
+			let fun cvt (rep,revdigits:int list) =
+				(case revdigits of
+				    nil => NONE
+				|   _ => numtochar(rep,16,dropzeros revdigits))
+			    fun scan (rep,acc) =
+				(case (getc rep) of
+				    NONE => cvt(rep,acc)
+				|   SOME(c,rep') =>
+					if isHexDigit c then
+					    scan(rep',hdigit c::acc)
+					else cvt(rep,acc))
+			in  scan(rep,nil)
+			end
+		|   SOME (d1,rep) =>
+			let fun cvt (rep,revdigits:int list) =
+				numtochar(rep,8,revdigits)
+			    fun isOctal (c:char) : bool =
+				let val n = ord c
+				in  ilt(47,n) andalso ilt(n,56)
+				end
+			    fun scan (0,rep,acc) = cvt(rep,acc)
+			      | scan (n,rep,acc) =
+				(case (getc rep) of
+				    NONE => cvt(rep,acc)
+				|   SOME(c,rep') =>
+					if isOctal c then
+					    scan(n-1,rep',digit c::acc)
+					else cvt(rep,acc))
+			in  if isOctal d1 then
+				scan(2,rep,[digit d1])
+			    else NONE
+			end)
+	|   SOME (#"\"",rep) => NONE
+	|   r as SOME (c,rep) => if isPrint c then r else NONE)
+
+    val fromCString = StringCvt.scanString scanC
 
     fun toCString #"\a" = "\\a"
       | toCString #"\b" = "\\b"
@@ -239,9 +349,15 @@ structure Char :> CHAR where type char = char
       | toCString #"\\" = "\\\\"
       | toCString #"?" = "\\?"
       | toCString #"'" = "\\'"
-      | toCString c = if (isPrint c)
-	  then unsafe_vsub (PreString.chars, int32touint32(ord c))
-	  else PreString.concat2("\\", itoa (ord c))
+      | toCString c =
+	let val n = ord c
+	in  if (isPrint c) then
+		unsafe_vsub (PreString.chars, int32touint32 n)
+	    else
+		let val s = NumFormat.fmtInt StringCvt.OCT n
+		    val s = StringCvt.padLeft #"0" 3 s
+		in  PreString.concat2("\\",s)
+		end
+	end
 
-
-  end (* Char *)
+end
