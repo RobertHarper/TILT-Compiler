@@ -118,3 +118,4 @@
 0118 [open]	syntax discrepancies
 0119 [open]	discrepancies on byte/char tests
 0120 [open]	zero-sized word8array
+0121 [open]	nonexhaustive binding failure in optimize1
