@@ -49,7 +49,16 @@ Transcript:
 Comments:
 	Probably, either the phase splitter or the coercion compiler
 	has a wrong idea about HIL invariants wrt shadowing.
+	
+	[Leaf] The relevant comment from the phase-splitter code:
+           (* Unfortunately, the HIL may duplicate variables, and the flattening
+              of modules may put duplicates that used to have disjoint scopes
+              into overlapping scopes. *)
+	It is not clear whether this is handled uniformly enough or not. 
+
 Fix:
+	[Leaf] I will discuss this with Chris Stone.
+
 Test:
 Owner: swasey
 Status: open

@@ -43,7 +43,7 @@
 0043 [open]	Assembler warnings on Alpha.
 0044 [open]	TILT on alpha fails TestBasis/Dynamic tests.
 0045 [closed]	Equality for datatypes.
-0046 [open]	Generativity.
+0046 [closed]	Generativity.
 0047 [closed]	Mishandling ref in patterns.
 0048 [closed]	Datatype elaboration problems.
 0049 [closed]	Datatype optimizer problems.

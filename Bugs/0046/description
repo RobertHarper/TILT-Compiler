@@ -15,7 +15,9 @@ Problem:
 Code:
 Transcript:
 Comments:
+	[Leaf] This was from the hybrid interpretation
 Fix:
+	[Leaf] The move to the opaque interpretation fixed this.
 Test:
 Owner: swasey
-Status: open
+Status: closed

@@ -14,10 +14,16 @@ Code:
 	See PhasesplitBug.tar.gz
 Transcript:
 Comments:
-	I handed this off to Leaf and Mark.
+	[Leaf] The issue is that the phase-splitter currently lifts
+        out all the sdecs that don't have an associated sbnd and processes
+        them first.  Unfortunately, this doesn't work if extern specs
+        refer to types defined in the file.  
 
-	They punted on it.
 Fix:
+	[Leaf] It is likely that these specs can be processed in
+	order,though there are some complications having to do with
+	the filtering of unused elements. 
+
 Test:
-Owner: swasey
+Owner: leaf
 Status: open
