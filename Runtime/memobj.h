@@ -89,22 +89,14 @@ typedef struct range__t range_t;
 void SetRange(range_t *range, mem_t low, mem_t high);
 
 /* static inline InRange(mem_t addr, range_t *range)  */
-#ifdef alpha_osf
-static        int InRange(mem_t addr, range_t *range)
-#pragma inline InRange
-#else
-static inline int InRange(mem_t addr, range_t *range)
-#endif
+INLINE(InRange)
+int InRange(mem_t addr, range_t *range)
 {
   return ((unsigned int)addr - (unsigned int)range->low <= range->diff);
 }
 
-#ifdef alpha_osf
-static        int NotInRange(mem_t addr, range_t *range) 
-#pragma inline NotInRange
-#else
-static inline int NotInRange(mem_t addr, range_t *range) 
-#endif
+INLINE(NotInRange)
+int NotInRange(mem_t addr, range_t *range) 
 {
   return ((unsigned int)addr - (unsigned int)range->low > range->diff);
 }
@@ -126,6 +118,12 @@ struct Heap__t
 };
 
 typedef struct Heap__t Heap_t;
+
+INLINE(inHeap)
+int inHeap(ptr_t v, Heap_t *heap)
+{
+  return (((val_t) v - (val_t) heap->bottom) < heap->size);
+}
 
 Heap_t* Heap_Alloc(int MinSize, int MaxSize);
 Heap_t* GetHeap(ptr_t);
@@ -162,6 +160,7 @@ void Heap_Resize(Heap_t *, long newSize, int reset);  /* Resizes the heap, makin
 int Heap_GetSize(Heap_t *res);                        /* Current size */
 int Heap_GetMaximumSize(Heap_t *res);                 /* Maximum size */
 int Heap_GetAvail(Heap_t *res);                       /* Space unused under current size */
+int Heap_GetUsed(Heap_t *res);                        /* Space used or allocated to processor */
 void PadHeapArea(mem_t bottom, mem_t top);
 void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *cursor, mem_t *top);
 

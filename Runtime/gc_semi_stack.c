@@ -77,7 +77,6 @@ static void stop_copy(Proc_t *proc)
   proc->majorRange.stop = toSpace->top;
 
   /* Write list can be ignored */
-  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   process_writelist(proc,NULL,NULL);
 
   /* The "first" processor is in charge of the globals. */
@@ -149,7 +148,6 @@ void GC_SemiStack(Proc_t *proc, Thread_t *th)
    int numRequest = DivideDown(Heap_GetAvail(fromSpace), minOffRequest);
    int roundSize = RoundUp(th->requestInfo, (numRequest ? numRequest : 1) * minOffRequest);
 
-  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   process_writelist(proc,NULL,NULL);
   if (GCSatisfiable(proc,th))   
     return;

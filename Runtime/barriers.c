@@ -4,13 +4,14 @@
 #include "barriers.h"
 
 
-Barriers_t *createBarriers(int size, int phase)
+Barriers_t *createBarriers(int numProc, int maxBarrier)
 {
   Barriers_t *b = (Barriers_t *) malloc(sizeof(Barriers_t));
-  b->size = size;
-  b->phase = phase;
-  assert(phase >= 3);
-  b->barriers = (long *) calloc(phase, sizeof(long));
+  b->numProcessor = numProc;
+  b->maxBarrier = maxBarrier;
+  b->phase = maxBarrier;
+  assert(b->phase >= 3);
+  b->barriers = (long *) calloc(b->maxBarrier, sizeof(long));
   return b;
 }
 
@@ -20,11 +21,11 @@ int strongBarrier(Barriers_t *b, int *whichRef)
   int index = FetchAndAdd(&b->barriers[which], 1);
   *whichRef = (which + 1) % b->phase;
   if (collectDiag >= 2)
-    printf("Waiting at barrier %d for %d more processors\n", which, b->size - b->barriers[which]);
-  while (b->barriers[which] < b->size) 
+    printf("Waiting at barrier %d for %d more processors\n", which, b->numProcessor - b->barriers[which]);
+  while (b->barriers[which] < b->numProcessor)
     flushStore();
-  assert(b->barriers[which] == b->size);
-  b->barriers[which ? which - 1 : b->phase - 1] = 0;  /* Reset previous phases's counter */
+  assert(b->barriers[which] == b->numProcessor);
+  b->barriers[which ? which - 1 : b->phase - 1] = 0;  /* Reset previous phase's counter */
   flushStore();
   return index;
 }

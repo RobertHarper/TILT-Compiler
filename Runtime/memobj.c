@@ -484,6 +484,11 @@ int Heap_GetAvail(Heap_t *h)
   return (sizeof (val_t)) * (h->top - h->cursor);
 }
 
+int Heap_GetUsed(Heap_t *h)
+{
+  return (sizeof (val_t)) * (h->cursor - h->bottom);
+}
+
 void Heap_Reset(Heap_t *h)
 {
   h->cursor = h->bottom;

@@ -127,7 +127,7 @@ extern int rootLocFetchSize;             /* Number of root locs to fetch from gl
 extern int objFetchSize;                 /* Number of objects to fetch from global pool */
 extern int segFetchSize;                 /* Number of (large object) segments to fetch from global pool */
 extern int doCopyCopySync;               
-extern int doAgressive;
+extern int doAgressive, doMinorAgressive;
 extern int localWorkSize;
 extern int arraySegmentSize;             /* If zero, not splitting large arrays.
 					    An array of more than arraySegmentSize bytes is considered large and

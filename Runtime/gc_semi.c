@@ -69,8 +69,6 @@ static void GCCollect_Semi(Proc_t *proc)
 
   proc->segmentType |= MajorWork | FlipOn | FlipOff;
 
-  /* Write list can be ignored */
-  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   process_writelist(proc, NULL, NULL); /* Get globals; discard backpointers */
 
   /* Compute the roots from the stack and register set */
@@ -133,7 +131,6 @@ void GC_Semi(Proc_t *proc, Thread_t *th)
     proc->allocLimit = fromSpace->top;
     fromSpace->cursor = fromSpace->top;
   }
-  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   process_writelist(proc,NULL,NULL);
   if (GCSatisfiable(proc,th))
     return;

@@ -147,8 +147,6 @@
 
 */
 
-int doAgressive = 1; /* Agressive: Use the Off -> On -> Commit protocol.
-			Conservative: Use Off -> Commit protocol. */
 
 /* -------------- Helper Function - should be moved??? XXXXXXXXXXXX --------------- */
 INLINE(flipRootLoc)
@@ -424,6 +422,7 @@ void GCRelease_SemiConc(Proc_t *proc)
     if (collectDiag >= 2)
       printf("Proc %d: Scanning/Replicating %d to %d\n",proc->procid,allocCurrent,allocStop);
 
+    procChangeState(proc, GCReplicate);
     proc->segUsage.bytesReplicated += sizeof(val_t) * (allocStop - allocCurrent);
     while (allocCurrent + 1 <= allocStop) { /* There may be no data for empty array */
       int objSize;
@@ -436,7 +435,7 @@ void GCRelease_SemiConc(Proc_t *proc)
       while (tag == SEGPROCEED_TAG || tag == SEGSTALL_TAG)
 	tag = *(++obj); /* Skip past segment tags */
       obj++;            /* Skip past object tag */
-      objSize = splitAlloc_copyCopySync_primaryStack(proc,obj,&proc->majorObjStack,&proc->majorRange,fromSpace); 
+      objSize = alloc_copyCopySync_primaryStack(proc,obj,&proc->majorRange,&proc->majorObjStack);
       if (objSize == 0) {
 	mem_t dummy = NULL;
 	objSize = objectLength(obj, &dummy);
@@ -448,6 +447,7 @@ void GCRelease_SemiConc(Proc_t *proc)
 
   if (collectDiag >= 2)
     printf("Proc %d: Processing writes from %d to %d\n",proc->procid,writelistCurrent,writelistStop);
+  procChangeState(proc, GCWrite);
   while (writelistCurrent < writelistStop) {
     ptr_t primary = *writelistCurrent++, replica;
     int byteDisp = (int) *writelistCurrent++;
@@ -465,8 +465,7 @@ void GCRelease_SemiConc(Proc_t *proc)
       continue;
     if (!inHeap(primary, fromSpace))
       continue;
-    /* copy1_copyCopySync_replicaStack(proc,primary,&proc->majorObjStack,&proc->majorRange,fromSpace);  XXXXXXX */
-    splitAlloc1_copyCopySync_primaryStack(proc,primary,&proc->majorObjStack,&proc->majorRange,fromSpace); 
+    alloc1_copyCopySync_primaryStack(proc,primary,&proc->majorObjStack,&proc->majorRange,fromSpace); 
     replica = (ptr_t) primary[-1];
     tag = replica[-1];
     byteLen = GET_ANY_ARRAY_LEN(tag);
@@ -486,8 +485,8 @@ void GCRelease_SemiConc(Proc_t *proc)
       ptr_t replicaField = primaryField;
       /* Snapshot-at-the-beginning (Yuasa) write barrier requires copying prevPtrVal 
 	 even if it might die to prevent the mutator from hiding live data */
-      splitAlloc1_copyCopySync_primaryStack(proc,possPrevPtrVal, &proc->majorObjStack, &proc->majorRange, fromSpace);
-      locSplitAlloc1_copyCopySync_primaryStack(proc,&replicaField, &proc->majorObjStack, &proc->majorRange, fromSpace);
+      alloc1_copyCopySync_primaryStack(proc,possPrevPtrVal, &proc->majorObjStack, &proc->majorRange, fromSpace);
+      locAlloc1_copyCopySync_primaryStack(proc,&replicaField, &proc->majorObjStack, &proc->majorRange, fromSpace);
       replica[wordDisp] = (val_t) replicaField;  /* update replica with replicated object */
       break;
     }
@@ -542,13 +541,11 @@ static void do_work(Proc_t *proc, int workToDo)
     }
     while (!recentWorkDone(proc, localWorkSize) &&
 	   (rootLoc = (ploc_t) popStack(proc->rootLocs)) != NULL) 
-      /* XXX locCopy1_copyCopySync_replicaStack(proc,rootLoc,&proc->majorObjStack,&proc->majorRange,fromSpace);  */
-      locSplitAlloc1_copyCopySync_primaryStack(proc,rootLoc,&proc->majorObjStack,&proc->majorRange,fromSpace);
+      locAlloc1_copyCopySync_primaryStack(proc,rootLoc,&proc->majorObjStack,&proc->majorRange,fromSpace);
     while (!recentWorkDone(proc, localWorkSize) &&
 	   (globalLoc = (ploc_t) popStack(proc->globalLocs)) != NULL) {
       ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
-      /* XXX locCopy1_copyCopySync_replicaStack(proc,replicaLoc,&proc->majorObjStack,&proc->majorRange,fromSpace);   */
-      locSplitAlloc1_copyCopySync_primaryStack(proc,replicaLoc,&proc->majorObjStack,&proc->majorRange,fromSpace);  
+      locAlloc1_copyCopySync_primaryStack(proc,replicaLoc,&proc->majorObjStack,&proc->majorRange,fromSpace);  
       proc->segUsage.globalsProcessed++;
     }
     while (updateWorkDone(proc) < workToDo) {
@@ -556,15 +553,13 @@ static void do_work(Proc_t *proc, int workToDo)
       ptr_t gray = popStack3(&proc->majorSegmentStack,(ptr_t *)&start,(ptr_t *)&end);
       if (gray == NULL)
 	break;
-	transferScanSegment_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(proc,gray,start,end,
+	transferScanSegment_copyWriteSync_locAlloc1_copyCopySync_primaryStack(proc,gray,start,end,
 										   &proc->majorObjStack,&proc->majorSegmentStack,
 										   &proc->majorRange, fromSpace); 
     }
     while (!recentWorkDone(proc, localWorkSize) && 
 	   ((gray = popStack(&proc->majorObjStack)) != NULL)) {
-      /* XXX scanObj_locCopy1_copyCopySync_replicaStack(proc,gray,&proc->majorObjStack,
-	 &proc->majorRange, fromSpace); */
-      transferScanObj_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(proc,gray,&proc->majorObjStack,
+      transferScanObj_copyWriteSync_locAlloc1_copyCopySync_primaryStack(proc,gray,&proc->majorObjStack,
 									     &proc->majorSegmentStack,
 									     &proc->majorRange, fromSpace); 
     }
@@ -657,7 +652,7 @@ void GC_SemiConc(Proc_t *proc, Thread_t *th)
        goto fail;	 
      case GCPendingOff:
        do_work(proc, MAXINT);
-       CollectorOff(proc);                             
+       CollectorOff(proc);
        goto retry;
     default: 
       assert(0);
@@ -713,8 +708,8 @@ void GCInit_SemiConc()
   reducedSize = expandedToReduced(expandedSize, majorCollectionRate);
   Heap_Resize(fromSpace, reducedSize, 1);
   Heap_Resize(toSpace, reducedSize, 1);
-  workStack = SharedStack_Alloc(100, 16 * 1024, 4 * 1024, 64 * 1024, 16 * 1024);
-  barriers = createBarriers(NumProc, doAgressive ? 10 : 7);
+  workStack = SharedStack_Alloc(100, 16 * 1024, 12 * 1024, 64 * 1024, 16 * 1024);
+  barriers = createBarriers(NumProc, 10);
   arraySegmentSize = 2 * 1024;
   mirrorGlobal = 1;
 }

@@ -141,6 +141,7 @@ struct option_entry table[] =
    1, "localWorkSize", &localWorkSize, "Number of items to work on from local shared stack before accessing shared work stack",
    1, "doCopyCopySync", &doCopyCopySync, "Perform copy-copy synchronization for parallel/concurrent collectiors",
    1, "doAgressive", &doAgressive, "Use 2 phase concurrent collection",
+   1, "doMinorAgressive", &doMinorAgressive, "Use 2 phase concurrent collection for minor collections",
    3, "majorCollectionRate", &majorCollectionRate, "Rate of concurrent collector",
 #ifdef solaris
    1, "perfType", &perfType, "Type of performance counters",

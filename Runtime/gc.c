@@ -72,9 +72,15 @@ double ptrFieldScanWeight = 4.0;
 double globalWeight = 6.0;
 double stackSlotWeight = 10.0;
 double pageWeight = 100.0;
-int arraySegmentSize = 0;         /* Either zero for off or must be greater than the compiler's maxByteRequest - notion of large array */
+int arraySegmentSize = 0;         /* If zero, not splitting arrays into segments.
+				     If non-zero, must be greater than the compiler's maxByteRequest */
 int localWorkSize = 4096;
 int usageCount = 50;
+
+/* Agressive: Use the Off -> On -> Commit protocol.
+   Conservative: Use Off -> Commit protocol. */
+int doAgressive = 1; 
+int doMinorAgressive = 0; 
 
 double minorCollectionRate = 2.0;   /* Ratio of minor coll rate to alloc rate */
 double majorCollectionRate = 2.0;   /* Ratio of major coll rate to alloc rate */
@@ -540,7 +546,6 @@ void GCFromScheduler(Proc_t *proc, Thread_t *th)
 
 void GCReleaseThread(Proc_t *proc)
 {  
-  procChangeState(proc, GCRelease);
   (*GCReleaseFun)(proc);
 }
 

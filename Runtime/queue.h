@@ -97,6 +97,13 @@ int lengthStack(Stack_t *oStack)
   return oStack->cursor;
 }
 
+
+INLINE(sizeStack)
+int sizeStack(Stack_t *oStack)
+{
+  return oStack->size;
+}
+
 INLINE(pushStack)
 void pushStack(Stack_t *oStack, ptr_t item)
 {

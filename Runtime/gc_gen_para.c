@@ -97,7 +97,6 @@ static void GCCollect_GenPara(Proc_t *proc)
   /* Get local ranges ready for use; check local stack empty; reset root lists */
   assert(isEmptyStack(&proc->minorObjStack));
   assert(isEmptyStack(&proc->majorObjStack));
-  assert(isEmptyStack(proc->rootLocs));
 
   /* All processors compute thread-specific roots in parallel
      and determine whether a major GC has been requested. */
@@ -136,9 +135,6 @@ static void GCCollect_GenPara(Proc_t *proc)
   }
   strongBarrier(barriers, &proc->barrierPhase);
 
-  procChangeState(proc, GC);
-
-  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   if (GCType == Minor) {
     process_writelist(proc, nursery, fromSpace);
     if (isFirst)
@@ -149,6 +145,8 @@ static void GCCollect_GenPara(Proc_t *proc)
     if (isFirst)
       major_global_scan(proc);
   }
+
+  procChangeState(proc, GC);
 
   if (GCType == Minor) {
     if (IsNullCopyRange(&proc->minorRange))   /* First minor GC (after a major GC) */
@@ -162,25 +160,25 @@ static void GCCollect_GenPara(Proc_t *proc)
   assert(primaryGlobalOffset == 0);
   if (GCType == Minor) {
     while (rootLoc = (ploc_t) popStack(proc->rootLocs)) 
-      locCopy1_copyCopySync_primaryStack(proc, rootLoc,
+      locCopy1_copyCopySync_replicaStack(proc, rootLoc,
+					 &proc->minorObjStack,&proc->minorRange,nursery);
+    while (globalLoc = (ploc_t) popStack(proc->globalLocs))
+      locCopy1_copyCopySync_replicaStack(proc, globalLoc,
 					 &proc->minorObjStack,&proc->minorRange,nursery);
     while (PRObj = popStack(proc->backObjs)) {
       /* Not transferScanObj_* since this object is a primaryReplica.
          Since this is a stop-copy collector, we can use _locCopy_ immediately */
-      scanObj_locCopy1_copyCopySync_primaryStack(proc, PRObj, &proc->minorObjStack,&proc->minorRange,nursery);
+      scanObj_locCopy1_copyCopySync_replicaStack(proc, PRObj, &proc->minorObjStack,&proc->minorRange,nursery);
     }
-    while (globalLoc = (ploc_t) popStack(proc->globalLocs))
-      locCopy1_copyCopySync_primaryStack(proc, globalLoc,
-					 &proc->minorObjStack,&proc->minorRange,nursery);
   }
   else { /* Major collection */
     while (rootLoc = (ploc_t) popStack(proc->rootLocs)) 
-      locCopy2L_copyCopySync_primaryStack(proc, rootLoc,
+      locCopy2L_copyCopySync_replicaStack(proc, rootLoc,
+					  &proc->majorObjStack,&proc->majorRange,nursery,fromSpace,largeSpace);
+    while (globalLoc = (ploc_t) popStack(proc->globalLocs)) 
+      locCopy2L_copyCopySync_replicaStack(proc, globalLoc,
 					  &proc->majorObjStack,&proc->majorRange,nursery,fromSpace,largeSpace);
     resetStack(proc->backObjs);
-    while (globalLoc = (ploc_t) popStack(proc->globalLocs)) 
-      locCopy2L_copyCopySync_primaryStack(proc, globalLoc,
-					  &proc->majorObjStack,&proc->majorRange,nursery,fromSpace,largeSpace);
   }
 
   /* Move everything from local stack to global stack to balance work; note the omitted popSharedStack */
@@ -205,13 +203,13 @@ static void GCCollect_GenPara(Proc_t *proc)
     if (GCType == Minor) {
       while (!recentWorkDone(proc, localWorkSize) &&
 	     ((gray = popStack(&proc->minorObjStack)) != NULL)) 
-	(void) transferScanObj_locCopy1_copyCopySync_primaryStack(proc,gray,&proc->minorObjStack,&proc->minorRange,nursery);
+	scanObj_locCopy1_copyCopySync_replicaStack(proc,gray,&proc->minorObjStack,&proc->minorRange,nursery);
     }
     else {
       while (!recentWorkDone(proc, localWorkSize) &&
 	     ((gray = popStack(&proc->majorObjStack)) != NULL)) 
-	(void) transferScanObj_locCopy2L_copyCopySync_primaryStack(proc,gray,&proc->majorObjStack,&proc->majorRange,
-								  nursery,fromSpace,largeSpace);
+	scanObj_locCopy2L_copyCopySync_replicaStack(proc,gray,&proc->majorObjStack,&proc->majorRange,
+						    nursery,fromSpace,largeSpace);
     }
     globalEmpty = pushSharedStack(0,workStack, 
 				  &proc->threads, proc->globalLocs, proc->rootLocs,
@@ -251,7 +249,7 @@ static void GCCollect_GenPara(Proc_t *proc)
 	Proc_t *p = getNthProc(i);;
 	copied += bytesCopied(&p->cycleUsage) + bytesCopied(&p->segUsage);
       }
-      liveRatio = (double) (copied) / (double) (nursery->cursor - nursery->bottom); 
+      liveRatio = (double) (copied) / (double) Heap_GetUsed(nursery);
       add_statistic(&proc->minorSurvivalStatistic, liveRatio);
     }
     else {
@@ -274,6 +272,7 @@ static void GCCollect_GenPara(Proc_t *proc)
 
   /* Resume normal scheduler work and start mutators */
   strongBarrier(barriers, &proc->barrierPhase);
+
 }
 
 void GC_GenPara(Proc_t *proc, Thread_t *th)
@@ -289,6 +288,13 @@ void GC_GenPara(Proc_t *proc, Thread_t *th)
       if (proc->allocStart != NULL)
 	return;
     }   
+  }
+  /* Process write list if we can; now can we resume mutator? */
+  if (2 * lengthStack(proc->rootLocs) < sizeStack(proc->rootLocs)) 
+    process_writelist(proc,nursery,fromSpace);
+  if (th->request != MajorGCRequestFromC) {
+    if (GCSatisfiable(proc,th))
+      return;
   }
   GCCollect_GenPara(proc);
   GetHeapArea(nursery,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);

@@ -463,7 +463,8 @@ void thread_init()
     reset_histogram(&proc->gcFlipTransitionHistogram);
     reset_statistic(&proc->gcStackStatistic);
     reset_statistic(&proc->gcGlobalStatistic);
-    reset_statistic(&proc->gcReleaseStatistic);
+    reset_statistic(&proc->gcWriteStatistic);
+    reset_statistic(&proc->gcReplicateStatistic);
     SetCopyRange(&proc->minorRange, proc, NULL, NULL, NULL, NULL, 0);
     SetCopyRange(&proc->majorRange, proc, NULL, NULL, NULL, NULL, 0);
     proc->numCopied = proc->numShared = proc->numContention = 0;
@@ -489,7 +490,8 @@ static char* state2str(ProcessorState_t procState)
   case GC: return "GC";
   case GCStack: return "GCStack";
   case GCGlobal: return "GCGlboal";
-  case GCRelease: return "GCRelease";
+  case GCWrite: return "GCWrite";
+  case GCReplicate: return "GCReplicate";
   case GCWork: return "GCWork";
   default : return "unknownProcState";
   }
@@ -575,8 +577,12 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
     add_statistic(&proc->gcGlobalStatistic, diff);
     assert(procState != Mutator && procState != Scheduler);
     break;
-  case GCRelease:
-    add_statistic(&proc->gcReleaseStatistic, diff);
+  case GCWrite:
+    add_statistic(&proc->gcWriteStatistic, diff);
+    assert(procState != Mutator);
+    break;
+  case GCReplicate:
+    add_statistic(&proc->gcReplicateStatistic, diff);
     assert(procState != Mutator);
     break;
   }

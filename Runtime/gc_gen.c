@@ -87,7 +87,6 @@ void GCCollect_Gen(Proc_t *proc)
   paranoid_check_all(nursery, fromSpace, NULL, NULL, largeSpace);
 
   /* Get all roots */
-  assert(isEmptyStack(proc->rootLocs));
   procChangeState(proc, GCStack);
   ResetJob();
   totalUnused += sizeof(val_t) * (proc->allocLimit - proc->allocCursor);
@@ -103,17 +102,19 @@ void GCCollect_Gen(Proc_t *proc)
   proc->segmentType |= (FlipOn | FlipOff | ((GCType == Minor) ? MinorWork : MajorWork));
 
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
-  procChangeState(proc, GCGlobal);
   if (GCType == Minor) {            
-    process_writelist(proc, nursery, fromSpace); /* Get globals and backpointers */
+    procChangeState(proc, GCGlobal);
     minor_global_scan(proc);
+    procChangeState(proc, GC);
+    process_writelist(proc, nursery, fromSpace); /* Get globals and backpointers */
   }
   else {
-    process_writelist(proc, NULL, NULL);  /* Get globals; Backpointers can be ignored on major GC */
+    procChangeState(proc, GCGlobal);
     major_global_scan(proc);
+    procChangeState(proc, GC);
+    process_writelist(proc, NULL, NULL);  /* Get globals; Backpointers can be ignored on major GC */
   }
 
-  procChangeState(proc, GC);
 
   /* Perform just a minor GC */
   if (GCType == Minor) {
@@ -139,14 +140,13 @@ void GCCollect_Gen(Proc_t *proc)
     ClearCopyRange(&proc->minorRange);
     paranoid_check_all(nursery, fromSpace, fromSpace, NULL, largeSpace);
     liveRatio = (double) (bytesCopied(&proc->cycleUsage) + bytesCopied(&proc->segUsage)) / 
-                (double) (nursery->cursor - nursery->bottom); 
+                (double) (Heap_GetUsed(nursery));
     add_statistic(&proc->minorSurvivalStatistic, liveRatio);
   }
   else if (GCType == Major) {
     mem_t scanStart = toSpace->bottom;
     int toSpaceSize = Heap_GetMaximumSize(toSpace);
-    int maxLive = (sizeof (val_t)) * (fromSpace->cursor - fromSpace->bottom) +
-                  (sizeof (val_t)) * (nursery->top - nursery->bottom);
+    int maxLive = Heap_GetUsed(fromSpace) + Heap_GetUsed(nursery);
 
     if (maxLive >= toSpaceSize) {
       printf("WARNING: GC failure possible since maxPossibleLive = %d > toSpaceSize = %d\n",
@@ -201,12 +201,14 @@ void GCCollect_Gen(Proc_t *proc)
   if (GCType == Major) 
     NumMajorGC++;
   NumGC++;
+
 }
 
 void GC_Gen(Proc_t *proc, Thread_t *th)
 {
   assert(proc->userThread == NULL);
   assert(th->proc == NULL);
+
   /* First time */
   if (proc->allocLimit == StartHeapLimit) {
     proc->allocStart = nursery->bottom;
@@ -214,6 +216,8 @@ void GC_Gen(Proc_t *proc, Thread_t *th)
     proc->allocLimit = nursery->top;
     nursery->cursor = nursery->top;
   }
+  if (2 * lengthStack(proc->rootLocs) < sizeStack(proc->rootLocs)) 
+    process_writelist(proc,nursery,fromSpace);
   /* Check for forced Major GC's */
   if (th->request != MajorGCRequestFromC &&
       GCSatisfiable(proc,th))

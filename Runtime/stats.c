@@ -228,8 +228,8 @@ double addTimeList(void *procVoid, int w, int d)
 
 static void show_time_statistic_header(void)
 {
-  printf("                               Sum (s)        Count     Min(ms)   Avg(ms)  Max(ms)\n");
-  printf("         -------------|-----------------------------------------------------------\n");
+  printf("                                Sum (s)        Count     Min(ms)   Avg(ms)  Max(ms)\n");
+  printf("         --------------|-----------------------------------------------------------\n");
 }
 
 static void show_time_statistic(char *str, Statistic_t *s, double totalSum)
@@ -241,7 +241,7 @@ static void show_time_statistic(char *str, Statistic_t *s, double totalSum)
 
   if (s->sum == 0.0)
     return;
-  printf("         %s |   %8.2lf", str, partialSum);
+  printf("         %s |   %8.3f", str, partialSum);
   if (totalSum >= 0.0) {
     if (percent == 100.0)
       printf(" ( 100%%)");
@@ -253,10 +253,24 @@ static void show_time_statistic(char *str, Statistic_t *s, double totalSum)
   printf("   %6d      %6.2f    %6.2f   %6.2f\n", s->count, s->min, s->sum/s->count, s->max);
 }
 
+static void show_double(double f)
+{
+  printf((f >= 1000.0) ? "%6.0f" : 
+	 ((f >= 100.0) ? "%6.1 f" : 
+	  ((f >= 1.0) ? "%6.2f" : "%6.3f")) , f);
+}
+
 static void show_statistic(char *str, Statistic_t *s)
 {
-  if (s->count > 0)
-    printf("       %s   %6.2f < %6.2f < %6.2f\n", str, s->min, s->sum/s->count, s->max);
+  if (s->count > 0) {
+    printf("       %s   ", str);
+    show_double(s->min);
+    printf(" < ");
+    show_double(s->sum/s->count);
+    printf(" < ");
+    show_double(s->max);
+    printf("\n");
+  }
 }
 
 static void show_history(char *name, History_t *h)
@@ -399,19 +413,20 @@ void stats_finish(void)
       printf("         Copied     = %8.0f kb\n", proc->bytesCopiedStatistic.sum / 1024.0); 
       printf("         Work       = %8.0f kw\n", proc->workStatistic.sum / 1024.0);
       show_time_statistic_header();
-      printf("          Total       |   %8.2lf\n", proc->totalTimer.last / 1000.0);
-      show_time_statistic(" Scheduler  ", &proc->schedulerStatistic, proc->totalTimer.last);
-      show_time_statistic(" Mutator    ", &proc->mutatorHistogram.stat, proc->totalTimer.last);
-      show_time_statistic(" GCNone     ", &proc->gcNoneStatistic, proc->totalTimer.last);
-      show_time_statistic(" GCWork     ", &proc->gcWorkHistogram.stat, proc->totalTimer.last);
+      printf("          Total        |   %8.3f\n", proc->totalTimer.last / 1000.0);
+      show_time_statistic(" Scheduler   ", &proc->schedulerStatistic, proc->totalTimer.last);
+      show_time_statistic(" Mutator     ", &proc->mutatorHistogram.stat, proc->totalTimer.last);
+      show_time_statistic(" GCNone      ", &proc->gcNoneStatistic, proc->totalTimer.last);
+      show_time_statistic(" GCWork      ", &proc->gcWorkHistogram.stat, proc->totalTimer.last);
       if (information >= 2) {
-	show_time_statistic("  GCRelease ", &proc->gcReleaseStatistic, proc->gcWorkHistogram.stat.sum);
-	show_time_statistic("  GCGlobal  ", &proc->gcGlobalStatistic, proc->gcWorkHistogram.stat.sum);
-	show_time_statistic("  GCStack   ", &proc->gcStackStatistic, proc->gcWorkHistogram.stat.sum);
-	show_time_statistic("  GCMajor   ", &proc->gcMajorWorkHistogram.stat, proc->gcWorkHistogram.stat.sum);
-	show_time_statistic("  GCFlipBoth", &proc->gcFlipBothHistogram.stat, proc->gcWorkHistogram.stat.sum);
-	show_time_statistic("  GCFlipOn  ", &proc->gcFlipOnHistogram.stat, proc->gcWorkHistogram.stat.sum);
-	show_time_statistic("  GCFlipOff ", &proc->gcFlipOffHistogram.stat, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCReplicate", &proc->gcReplicateStatistic, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCWrite    ", &proc->gcWriteStatistic, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCGlobal   ", &proc->gcGlobalStatistic, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCStack    ", &proc->gcStackStatistic, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCMajor    ", &proc->gcMajorWorkHistogram.stat, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCFlipBoth ", &proc->gcFlipBothHistogram.stat, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCFlipOn   ", &proc->gcFlipOnHistogram.stat, proc->gcWorkHistogram.stat.sum);
+	show_time_statistic("  GCFlipOff  ", &proc->gcFlipOffHistogram.stat, proc->gcWorkHistogram.stat.sum);
       }
       if (information >= 3) {
 	show_histogram(" GCWork Histogram", &proc->gcWorkHistogram);

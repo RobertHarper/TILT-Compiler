@@ -182,7 +182,7 @@ typedef struct Thread__t
    The remaining GC* states are substates of GC.
  */
 typedef enum ProcessorState__t {Scheduler, Mutator, GC, Done,
-				GCStack, GCGlobal, GCRelease, GCWork} ProcessorState_t;
+				GCStack, GCGlobal, GCReplicate, GCWork, GCWrite} ProcessorState_t;
 /* Each segment might be no collection, minor, or major. 
    Independently, it migth invole flipping the collector on or off or both */
 #define MinorWork 1
@@ -246,7 +246,8 @@ typedef struct Proc__t
   Histogram_t        mutatorHistogram;
   Statistic_t        gcStackStatistic;
   Statistic_t        gcGlobalStatistic;
-  Statistic_t        gcReleaseStatistic;
+  Statistic_t        gcWriteStatistic;
+  Statistic_t        gcReplicateStatistic;
   Statistic_t        gcNoneStatistic;
   Histogram_t        gcWorkHistogram;
   Histogram_t        gcMajorWorkHistogram;

@@ -2,9 +2,10 @@
 #define _barrier_h
 
 typedef struct Barriers__t {
-  int size;      /* Number of processors to synchronize */
-  int phase;     /* Number of phases >= 3 */
-  long *barriers; /* Number of processors at each phase barrier */
+  int numProcessor;   /* Number of processors to synchronize */
+  int maxBarrier;     /* Total number of barrier */
+  long *barriers;     /* Number of processors at each barrier */
+  int phase;          /* Number of barriers we are using. Must be >= 3.  Reset with lastStrongBarrier. */
 } Barriers_t;
 
 Barriers_t *createBarriers(int size, int phase);

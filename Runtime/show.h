@@ -18,10 +18,4 @@ void memdump(char *title, unsigned int *start, int len, unsigned int *target);
 
 int inHeaps(ptr_t v, Heap_t **legalHeaps, Bitmap_t **legalStarts);
 
-INLINE(inHeap)
-int inHeap(ptr_t v, Heap_t *heap)
-{
-  return (((val_t) v - (val_t) heap->bottom) < heap->size);
-}
-
 #endif

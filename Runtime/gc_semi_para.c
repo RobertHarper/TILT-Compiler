@@ -85,8 +85,6 @@ static void stop_copy(Proc_t *proc)
   assert(isEmptyStack(proc->rootLocs));
   SetCopyRange(&proc->majorRange, proc, toSpace, expandCopyRange, dischargeCopyRange, NULL, 0);
 
-  /* Write list can be ignored */
-  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   process_writelist(proc,NULL,NULL);
 
   /* The "first" processor is in charge of the globals. */
@@ -182,7 +180,6 @@ void GC_SemiPara(Proc_t *proc, Thread_t *th)
   /* Threads should not be mapped */
   assert(proc->userThread == NULL);
   assert(th->proc == NULL);
-  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   process_writelist(proc,NULL,NULL);
   if (GCSatisfiable(proc,th))   
     return;

@@ -260,9 +260,9 @@ tag_t acquireOwnership(Proc_t *proc, ptr_t white, tag_t tag, CopyRange_t *copyRa
 }
 
 
-
 INLINE(genericAlloc)
-int genericAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy, int doCopyCopy, int skipSpaceCheck, int splitLarge)
+int genericAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy, 
+		 int doCopyCopy, int skipSpaceCheck)
 {
   ptr_t obj;                       /* forwarded object */
   tag_t tag = white[-1];           /* original tag */
@@ -294,8 +294,9 @@ int genericAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy, 
     mem_t region = allocFromCopyRange(copyRange, objByteLen, NoWordAlign, skipSpaceCheck);
     obj = region + 1;
     if (doCopy)
-      for (i=0; i<numFields; i++)     /* Copy fields */
+      for (i=0; i<numFields; i++) {    /* Copy fields */
 	obj[i] = white[i];
+	}
     obj[-1] = tag;                    /* Write tag last */
     white[-1] = (val_t) obj;        /* Store forwarding pointer last */
     /* Sparc TSO order guarantees forwarding pointer will be visible only after fields are visible */
@@ -312,7 +313,8 @@ int genericAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy, 
   else if (TYPE_IS_ARRAY(type)) {
     int i, arrayByteLen = GET_ANY_ARRAY_LEN(tag);
     int dataByteLen = RoundUp(arrayByteLen, 4);
-    int numTags = 1 + (splitLarge ? (arrayByteLen > arraySegmentSize ? DivideUp(arrayByteLen,arraySegmentSize) : 0) : 0);
+    int numTags = 1 + ((arraySegmentSize > 0) ? 
+		       (arrayByteLen > arraySegmentSize ? DivideUp(arrayByteLen,arraySegmentSize) : 0) : 0);
     int objByteLen = dataByteLen + 4 * numTags;
     Align_t align = (type == QUAD_ARRAY_TYPE) ? ((numTags & 1) ? OddWordAlign : EvenWordAlign) : NoWordAlign;
     mem_t region = allocFromCopyRange(copyRange, objByteLen, align, skipSpaceCheck);
@@ -339,43 +341,100 @@ int genericAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy, 
 
 int copy(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
-  return genericAlloc(proc, white, copyRange, 1, 0, 0, 0);
+  return genericAlloc(proc, white, copyRange, 1, 0, 0);
 }
 
 int alloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
-  return genericAlloc(proc, white, copyRange, 0, 0, 0, 0);
+  return genericAlloc(proc, white, copyRange, 0, 0, 0);
 }
 
-int splitAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
+int alloc_primaryStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
 {
-  return genericAlloc(proc, white, copyRange, 0, 0, 0, 1);
+  int bytesCopied = genericAlloc(proc, white, copyRange, 0, 0, 0);
+  if (bytesCopied) {
+    /* XXX   proc->segUsage.pagesTouched += Heap_TouchPage(from,white);   */
+    pushStack(grayStack, white);
+  }
+  return bytesCopied;
 }
 
 int copy_noSpaceCheck(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
-  return genericAlloc(proc, white, copyRange, 1, 0, 1, 0);
+  return genericAlloc(proc, white, copyRange, 1, 0, 1);
 }
 
+int copy_noSpaceCheck_replicaStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
+{
+  int bytesCopied = genericAlloc(proc, white, copyRange, 1, 0, 1);
+  if (bytesCopied) {
+    pushStack(grayStack, (ptr_t) white[-1]);
+  }
+  return bytesCopied;
+}
 
 int copy_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
-  return genericAlloc(proc, white, copyRange, 1, 1, 0, 0);
+  return genericAlloc(proc, white, copyRange, 1, 1, 0);
+}
+
+int copy_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
+{
+  int bytesCopied = genericAlloc(proc, white, copyRange, 1, 1, 0);
+  if (bytesCopied) {
+    /* XXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
+    pushStack(grayStack, (ptr_t) white);
+  }
+  return bytesCopied;
+}
+
+int copy_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
+{
+  int bytesCopied = genericAlloc(proc, white, copyRange, 1, 1, 0);
+  if (bytesCopied) {
+    /* XXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
+    pushStack(grayStack, (ptr_t) white[-1]);
+  }
+  return bytesCopied;
 }
 
 int copy_noSpaceCheck_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
-  return genericAlloc(proc, white, copyRange, 1, 1, 1, 0);
+  return genericAlloc(proc, white, copyRange, 1, 1, 1);
+}
+
+int copy_noSpaceCheck_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
+{
+  int bytesCopied = genericAlloc(proc, white, copyRange, 1, 1, 1);
+  if (bytesCopied) {
+    pushStack(grayStack, (ptr_t) white[-1]);
+  }
+  return bytesCopied;
 }
 
 int alloc_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
 {
-  return genericAlloc(proc, white, copyRange, 0, 1, 0, 0);
+  return genericAlloc(proc, white, copyRange, 0, 1, 0);
 }
 
-int splitAlloc_copyCopySync(Proc_t *proc, ptr_t white, CopyRange_t *copyRange)
+int alloc_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
 {
-  return genericAlloc(proc, white, copyRange, 0, 1, 0, 1);
+  int bytesCopied = genericAlloc(proc, white, copyRange, 0, 1, 0);
+  if (bytesCopied) {
+    /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
+    pushStack(grayStack, white);
+  }
+  return bytesCopied;
+}
+
+int alloc_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, Stack_t *grayStack)
+{
+  int bytesCopied = genericAlloc(proc, white, copyRange, 0, 1, 0);
+  if (bytesCopied) {
+    /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
+    pushStack(grayStack, (ptr_t) white[-1]);
+  }
+  return bytesCopied;
 }
 
 /* ------------------------------------------------------- */
@@ -389,6 +448,13 @@ void process_writelist(Proc_t *proc, Heap_t *from, Heap_t *to)
 {
   ploc_t curLoc = proc->writelistStart;
   ploc_t end = proc->writelistCursor;
+
+  procChangeState(proc, GCWrite);
+  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
+  proc->writelistCursor = proc->writelistStart;
+  if (curLoc < end) 
+    proc->segmentType |= MinorWork;
+
   while (curLoc < end) {
     /* Each writelist entry has 3 values */
     ptr_t obj = (ptr_t) (*(curLoc++)), data;
@@ -418,7 +484,6 @@ void process_writelist(Proc_t *proc, Heap_t *from, Heap_t *to)
       pushStack(proc->rootLocs, (ptr_t) field);
     }
   }
-  proc->writelistCursor = proc->writelistStart;
 }
 
 
@@ -600,12 +665,10 @@ typedef enum Transfer__t {NoTransfer, Transfer, SelfTransfer} Transfer_t;
 typedef enum StackType__t {PrimaryStack, ReplicaStack} StackType_t;
 typedef enum CopyWrite__t {NoCopyWrite, DoCopyWrite} CopyWrite_t;
 typedef enum CopyCopy__t {NoCopyCopy, DoCopyCopy} CopyCopy_t;
-typedef enum SplitLarge__t {NoSplitLarge, DoSplitLarge} SplitLarge_t;
 
 /* The generic scanning function with compile-time parameters.
    primaryOrReplicaGray - The primary or replica gray object is passed in
    start, end - if start <> end, large object is indicated; in bytes
-   splitLarge - if true, then large arrays are split
    Transfer - if NoTransfer, primary is unknown and object is replica
               if Transfer, object was primary and the replica is uninitialized
 	      if SelfTransfer, object is primary and replica (MIRROR_PTR)
@@ -622,7 +685,7 @@ void doField(Proc_t *proc, ploc_t field, Stack_t *localStack, CopyRange_t *copyR
 	     Heap_t *from_range, Heap_t *from2_range, Heap_t *large_range,
 	     CopyCopy_t copyCopy, CopyWrite_t copyWrite, 
 	     LocAllocCopy_t locAllocCopy, SourceSpaceCheck_t sourceSpaceCheck, 
-	     Transfer_t transfer, StackType_t stackType, SplitLarge_t splitLarge, SpaceCheck_t spaceCheck)
+	     Transfer_t transfer, StackType_t stackType, SpaceCheck_t spaceCheck)
 {
   switch (locAllocCopy) {
   case LocAlloc:
@@ -631,24 +694,19 @@ void doField(Proc_t *proc, ploc_t field, Stack_t *localStack, CopyRange_t *copyR
     assert(spaceCheck == SpaceCheck);
     switch (sourceSpaceCheck) {
     case OneSpace:
-      if (splitLarge == DoSplitLarge)
-	locSplitAlloc1_copyCopySync_primaryStack(proc,field,localStack,copyRange,from_range);
-      else
-	locAlloc1_copyCopySync_primaryStack(proc,field,localStack,copyRange,from_range);
+      locAlloc1_copyCopySync_primaryStack(proc,field,localStack,copyRange,from_range);
       break;
     case OneSpaceLarge:
-      assert(splitLarge == DoSplitLarge);
-      locSplitAlloc1L_copyCopySync_primaryStack(proc,field,localStack,copyRange,from_range, large_range);
+      locAlloc1L_copyCopySync_primaryStack(proc,field,localStack,copyRange,from_range, large_range);
       break;
     case TwoSpaceLarge:
-      assert(splitLarge == NoSplitLarge);
       locAlloc2L_copyCopySync_primaryStack(proc,field,localStack,copyRange,from_range,from2_range,large_range);
       break;
-    default : assert(0);
+    default : 
+      assert(0);
     }
     break;
   case LocCopy:
-    assert(splitLarge == NoSplitLarge);
     switch (sourceSpaceCheck) {
     case OneSpace: 
       if (stackType == PrimaryStack) {
@@ -677,9 +735,11 @@ void doField(Proc_t *proc, ploc_t field, Stack_t *localStack, CopyRange_t *copyR
       break;
     case TwoSpaceLarge: 
       assert(copyCopy == DoCopyCopy);
-      assert(stackType == PrimaryStack);
       assert(spaceCheck == SpaceCheck);
-      locCopy2L_copyCopySync_primaryStack(proc,field,localStack,copyRange,from_range,from2_range,large_range); 
+      if (stackType == PrimaryStack)
+	locCopy2L_copyCopySync_primaryStack(proc,field,localStack,copyRange,from_range,from2_range,large_range); 
+      else
+	locCopy2L_copyCopySync_replicaStack(proc,field,localStack,copyRange,from_range,from2_range,large_range); 
       break;
     default: assert(0);
     }
@@ -688,7 +748,6 @@ void doField(Proc_t *proc, ploc_t field, Stack_t *localStack, CopyRange_t *copyR
     assert(copyCopy == DoCopyCopy);
     assert(stackType == PrimaryStack);
     assert(spaceCheck == SpaceCheck);
-    assert(splitLarge == NoSplitLarge);
     switch (sourceSpaceCheck) {
       case OneSpace: copy1_copyCopySync_primaryStack(proc,*field,localStack,copyRange,from_range); break;
       default: assert(0);
@@ -704,7 +763,7 @@ void genericScan(Proc_t *proc,
 		 Heap_t *from_range, Heap_t *from2_range, Heap_t *large_range,
 		 CopyCopy_t copyCopy, CopyWrite_t copyWrite, 
 		 LocAllocCopy_t locAllocCopy, SourceSpaceCheck_t sourceSpaceCheck, 
-		 Transfer_t transfer, StackType_t stackType, SplitLarge_t splitLarge, SpaceCheck_t spaceCheck)
+		 Transfer_t transfer, StackType_t stackType, SpaceCheck_t spaceCheck)
 {
   /* If performing transfer, we are given primaryGray and must copy fields into replicaGray */
   ptr_t primaryGray = (transfer == NoTransfer) ? NULL : 
@@ -733,7 +792,7 @@ void genericScan(Proc_t *proc,
 	  doField(proc, (ploc_t) replicaGray + i, localStack, copyRange,
 		  from_range, from2_range, large_range,
 		  copyCopy, copyWrite, locAllocCopy, sourceSpaceCheck, 
-		  transfer, stackType, splitLarge, spaceCheck);
+		  transfer, stackType, spaceCheck);
 	}
       }
       proc->segUsage.fieldsScanned += fieldlen - ptrFields;
@@ -744,7 +803,7 @@ void genericScan(Proc_t *proc,
       int arrayByteLen = GET_ANY_ARRAY_LEN(tag);  
       int byteLen = RoundUp(arrayByteLen, 4);      /* Int array length might not be multiple of 4 */
       int fieldLen = DivideUp(byteLen, 4);         /* In words for all array types */
-      int large =  (splitLarge == DoSplitLarge) && (byteLen > arraySegmentSize);
+      int large =  (arraySegmentSize > 0) && (byteLen > arraySegmentSize);
       int syncIndex = large ? -(2+DivideUp(start,arraySegmentSize)) : -1; /* Use normal tag or segment tag */
       int firstField = 0, lastField = fieldLen;
 
@@ -802,7 +861,7 @@ void genericScan(Proc_t *proc,
 	  doField(proc, (ploc_t) replicaField, localStack, copyRange,
 		  from_range, from2_range, large_range,
 		  copyCopy, copyWrite, locAllocCopy, sourceSpaceCheck, 
-		  transfer, stackType, splitLarge, spaceCheck);
+		  transfer, stackType, spaceCheck);
 	  /* Both fields must be up-to-date */
 	  if ((transfer == Transfer) && (!isPtrArray)) 
 	    replicaGray[i + primaryOffset / sizeof(val_t)] = (val_t) (*replicaField);
@@ -841,7 +900,7 @@ void scanObj_copy1_copyCopySync_primaryStack(Proc_t *proc, ptr_t replicaGray, St
 {
   genericScan(proc, replicaGray, 0, 0, localStack, NULL,  copyRange,
 	      from_range, NULL, NULL,
-	      DoCopyCopy, NoCopyWrite, Copy, OneSpace, NoTransfer, PrimaryStack, NoSplitLarge, SpaceCheck);
+	      DoCopyCopy, NoCopyWrite, Copy, OneSpace, NoTransfer, PrimaryStack, SpaceCheck);
 }
 
 void scanObj_locCopy1_copyCopySync_primaryStack(Proc_t *proc, ptr_t replicaGray, Stack_t *localStack, CopyRange_t *copyRange,
@@ -849,7 +908,7 @@ void scanObj_locCopy1_copyCopySync_primaryStack(Proc_t *proc, ptr_t replicaGray,
 {
   genericScan(proc, replicaGray, 0, 0, localStack, NULL,  copyRange,
 	      from_range, NULL, NULL,
-	      DoCopyCopy, NoCopyWrite, LocCopy, OneSpace, NoTransfer, PrimaryStack, NoSplitLarge, SpaceCheck);
+	      DoCopyCopy, NoCopyWrite, LocCopy, OneSpace, NoTransfer, PrimaryStack, SpaceCheck);
 }
 
 void scanObj_locCopy1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t replicaGray, Stack_t *localStack, CopyRange_t *copyRange,
@@ -857,7 +916,7 @@ void scanObj_locCopy1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t replicaGray
 {
   genericScan(proc, replicaGray, 0, 0, localStack, NULL,  copyRange,
 	      from_range, NULL, large_range,
-	      DoCopyCopy, NoCopyWrite, LocCopy, OneSpaceLarge, NoTransfer, PrimaryStack, NoSplitLarge, SpaceCheck);
+	      DoCopyCopy, NoCopyWrite, LocCopy, OneSpaceLarge, NoTransfer, PrimaryStack, SpaceCheck);
 }
 
 void transferScanObj_locCopy1_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, Stack_t *localStack, CopyRange_t *copyRange,
@@ -865,7 +924,7 @@ void transferScanObj_locCopy1_copyCopySync_primaryStack(Proc_t *proc, ptr_t prim
 {
   genericScan(proc, primaryGray, 0, 0, localStack, NULL,  copyRange,
 	      from_range, NULL, NULL,
-	      DoCopyCopy, NoCopyWrite, LocCopy, OneSpace, Transfer, PrimaryStack, NoSplitLarge, SpaceCheck);
+	      DoCopyCopy, NoCopyWrite, LocCopy, OneSpace, Transfer, PrimaryStack, SpaceCheck);
 }
 
 
@@ -874,7 +933,15 @@ void scanObj_locCopy1_copyCopySync_replicaStack(Proc_t *proc, ptr_t replicaGray,
 {
   genericScan(proc, replicaGray, 0, 0, localStack, NULL,  copyRange,
 	      from_range, NULL, NULL,
-	      DoCopyCopy, NoCopyWrite, LocCopy, OneSpace, NoTransfer, ReplicaStack, NoSplitLarge, SpaceCheck);
+	      DoCopyCopy, NoCopyWrite, LocCopy, OneSpace, NoTransfer, ReplicaStack, SpaceCheck);
+}
+
+void scanObj_locCopy2L_copyCopySync_replicaStack(Proc_t *proc, ptr_t replicaGray, Stack_t *localStack, CopyRange_t *copyRange,
+						 Heap_t *nursery_range, Heap_t *from_range, Heap_t *large_range)
+{
+  genericScan(proc, replicaGray, 0, 0, localStack, NULL,  copyRange,
+	      nursery_range, from_range, large_range,
+	      DoCopyCopy, NoCopyWrite, LocCopy, TwoSpaceLarge, NoTransfer, ReplicaStack, SpaceCheck);
 }
 
 
@@ -883,7 +950,7 @@ void scanObj_locCopy1_noSpaceCheck_copyCopySync_replicaStack(Proc_t *proc, ptr_t
 {
   genericScan(proc, replicaGray, 0, 0, localStack, NULL,  copyRange,
 	      from_range, NULL, NULL,
-	      DoCopyCopy, NoCopyWrite, LocCopy, OneSpace, NoTransfer, ReplicaStack, NoSplitLarge, NoSpaceCheck);
+	      DoCopyCopy, NoCopyWrite, LocCopy, OneSpace, NoTransfer, ReplicaStack, NoSpaceCheck);
 }
 
 void scanObj_locCopy1_noSpaceCheck_replicaStack(Proc_t *proc, ptr_t replicaGray, Stack_t *localStack, CopyRange_t *copyRange,
@@ -891,7 +958,7 @@ void scanObj_locCopy1_noSpaceCheck_replicaStack(Proc_t *proc, ptr_t replicaGray,
 {
   genericScan(proc, replicaGray, 0, 0, localStack, NULL,  copyRange,
 	      from_range, NULL, NULL,
-	      NoCopyCopy, NoCopyWrite, LocCopy, OneSpace, NoTransfer, ReplicaStack, NoSplitLarge, NoSpaceCheck);
+	      NoCopyCopy, NoCopyWrite, LocCopy, OneSpace, NoTransfer, ReplicaStack, NoSpaceCheck);
 }
 
 
@@ -901,16 +968,7 @@ void selfTransferScanObj_locAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t
 {
   genericScan(proc, primaryGray, 0, 0, localStack, segmentStack,  copyRange,
 	      from_range, NULL, NULL,
-	      DoCopyCopy, NoCopyWrite, LocAlloc, OneSpace, SelfTransfer, PrimaryStack, NoSplitLarge, SpaceCheck);
-}
-
-void selfTransferScanObj_locSplitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, 
-								 Stack_t *localStack, Stack_t *segmentStack, CopyRange_t *copyRange,
-							Heap_t *from_range)
-{
-  genericScan(proc, primaryGray, 0, 0, localStack, segmentStack,  copyRange,
-	      from_range, NULL, NULL,
-	      DoCopyCopy, NoCopyWrite, LocAlloc, OneSpace, SelfTransfer, PrimaryStack, DoSplitLarge, SpaceCheck);
+	      DoCopyCopy, NoCopyWrite, LocAlloc, OneSpace, SelfTransfer, PrimaryStack, SpaceCheck);
 }
 
 void transferScanObj_locCopy2L_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, Stack_t *localStack, CopyRange_t *copyRange,
@@ -918,30 +976,30 @@ void transferScanObj_locCopy2L_copyCopySync_primaryStack(Proc_t *proc, ptr_t pri
 {
   genericScan(proc, primaryGray, 0, 0, localStack, NULL,  copyRange,
 	      from_range, from2_range, large_range,
-	      DoCopyCopy, NoCopyWrite, LocCopy, TwoSpaceLarge, Transfer, PrimaryStack, NoSplitLarge, SpaceCheck);
+	      DoCopyCopy, NoCopyWrite, LocCopy, TwoSpaceLarge, Transfer, PrimaryStack, SpaceCheck);
 }
 
 
-void transferScanObj_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, 
+void transferScanObj_copyWriteSync_locAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, 
 								       Stack_t *objStack, Stack_t *segmentStack, CopyRange_t *copyRange,
 								       Heap_t *from_range)
 {
   genericScan(proc, primaryGray, 0, 0, objStack, segmentStack,  copyRange,
 	      from_range, NULL, NULL,
-	      DoCopyCopy, DoCopyWrite, LocAlloc, OneSpace, Transfer, PrimaryStack, DoSplitLarge, SpaceCheck);
+	      DoCopyCopy, DoCopyWrite, LocAlloc, OneSpace, Transfer, PrimaryStack, SpaceCheck);
 }
 
 
 
 
-void transferScanObj_copyWriteSync_locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, 
+void transferScanObj_copyWriteSync_locAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, 
 									     Stack_t *objStack, Stack_t *segmentStack, 
 									     CopyRange_t *copyRange,
 									     Heap_t *from_range, Heap_t *large_range)
 {
   genericScan(proc, primaryGray, 0, 0, objStack, segmentStack, copyRange,
 	      from_range, NULL, large_range,
-	      DoCopyCopy, DoCopyWrite, LocAlloc, OneSpaceLarge, Transfer, PrimaryStack, DoSplitLarge, SpaceCheck);
+	      DoCopyCopy, DoCopyWrite, LocAlloc, OneSpaceLarge, Transfer, PrimaryStack, SpaceCheck);
 }
 
 void scanObj_copyWriteSync_locCopy1_copyCopySync_replicaStack(Proc_t *proc, ptr_t replicaGray, 
@@ -951,50 +1009,48 @@ void scanObj_copyWriteSync_locCopy1_copyCopySync_replicaStack(Proc_t *proc, ptr_
 {
   genericScan(proc, replicaGray, 0, 0, objStack, segmentStack, copyRange,
 	      from_range, NULL, large_range,
-	      DoCopyCopy, DoCopyWrite, LocCopy, OneSpaceLarge, NoTransfer, ReplicaStack, DoSplitLarge, SpaceCheck);
+	      DoCopyCopy, DoCopyWrite, LocCopy, OneSpaceLarge, NoTransfer, ReplicaStack, SpaceCheck);
 }
 
-void transferScanSegment_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, int start, int end,
+void transferScanSegment_copyWriteSync_locAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, int start, int end,
 									   Stack_t *objStack, Stack_t *segmentStack, CopyRange_t *copyRange,
 									   Heap_t *from_range)
 {
   genericScan(proc, primaryGray, start, end, objStack, segmentStack,  copyRange,
 	      from_range, NULL, NULL,
-	      DoCopyCopy, DoCopyWrite, LocAlloc, OneSpace, Transfer, PrimaryStack, DoSplitLarge, SpaceCheck);
+	      DoCopyCopy, DoCopyWrite, LocAlloc, OneSpace, Transfer, PrimaryStack, SpaceCheck);
 }
 
 
-void selfTransferScanSegment_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, int start, int end,
+void selfTransferScanSegment_copyWriteSync_locAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, int start, int end,
 									   Stack_t *objStack, Stack_t *segmentStack, CopyRange_t *copyRange,
 									   Heap_t *from_range)
 {
   genericScan(proc, primaryGray, start, end, objStack, segmentStack,  copyRange,
 	      from_range, NULL, NULL,
-	      DoCopyCopy, DoCopyWrite, LocAlloc, OneSpace, SelfTransfer, PrimaryStack, DoSplitLarge, SpaceCheck);
+	      DoCopyCopy, DoCopyWrite, LocAlloc, OneSpace, SelfTransfer, PrimaryStack, SpaceCheck);
 }
 
 
 
-
-
-void transferScanSegment_copyWriteSync_locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, int start, int end,
+void transferScanSegment_copyWriteSync_locAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, int start, int end,
 										 Stack_t *objStack, Stack_t *segmentStack, CopyRange_t *copyRange,
 										 Heap_t *from_range, Heap_t *large_range)
 {
   genericScan(proc, primaryGray, start, end, objStack, segmentStack,  copyRange,
 	      from_range, NULL, large_range,
-	      DoCopyCopy, DoCopyWrite, LocAlloc, OneSpace, Transfer, PrimaryStack, DoSplitLarge, SpaceCheck);
+	      DoCopyCopy, DoCopyWrite, LocAlloc, OneSpace, Transfer, PrimaryStack, SpaceCheck);
 }
 
 
 
-void selfTransferScanSegment_copyWriteSync_locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, int start, int end,
+void selfTransferScanSegment_copyWriteSync_locAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, int start, int end,
 										 Stack_t *objStack, Stack_t *segmentStack, CopyRange_t *copyRange,
 										 Heap_t *from_range, Heap_t *large_range)
 {
   genericScan(proc, primaryGray, start, end, objStack, segmentStack,  copyRange,
 	      from_range, NULL, large_range,
-	      DoCopyCopy, DoCopyWrite, LocAlloc, OneSpace, SelfTransfer, PrimaryStack, DoSplitLarge, SpaceCheck);
+	      DoCopyCopy, DoCopyWrite, LocAlloc, OneSpace, SelfTransfer, PrimaryStack, SpaceCheck);
 }
 
 
