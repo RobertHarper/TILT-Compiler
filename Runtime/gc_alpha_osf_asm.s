@@ -11,6 +11,8 @@
 	.align	4
 	.globl	load_regs		# helper function used locally and in service_alpha_osf_asm.s
 	.globl	save_regs		# helper function used locally and in service_alpha_osf_asm.s
+	.globl  NewStackletFromML	# called from ML mutator function prologs
+	.globl  PopStackletFromML	# (installed by runtime) called before ML mutator function epilogs
 	.globl	GCFromML		# called from ML mutator
 	.globl	returnFromGCFromML	# used by scheduler to go back to ML
 	.globl	GCFromC			# called from C function including those of runtime
@@ -210,7 +212,73 @@ load_regs_ok:
 	ret	$31, ($26), 1	
 .set at
 	.end	load_regs	
-		
+
+ # ----------------- NewStackletFromML --------------------------------------------------------------------
+ # When an ML function A calls B, the prolog of B checks if a new stacklet is necessary.  If so, this routine is called.
+ # Rra:	 The return address back to B comes in the normal return address register
+ # Rat2: The return address of B back to A is saved in Rat2
+ # Rat:	 Rat (normal temp) contains offset above highest argument retrieved from previous frame for additional arguments
+ # does not use a stack frame 
+ # -----------------------------------------------------------------------------------------------------
+	.ent	NewStackletFromML
+	.frame $sp, 0, $26
+	.prologue 0
+NewStackletFromML:
+.set noat
+	stq	$0,  MLsaveregs_disp(THREADPTR_REG)	# save $0, $1, $26, $29 manually
+	stq	$1,  MLsaveregs_disp+8(THREADPTR_REG)	
+	stq	$26, MLsaveregs_disp+RA_DISP(THREADPTR_REG)
+	stq	$29, MLsaveregs_disp+232(THREADPTR_REG)
+	br	$gp, NewStackletFromMLgetgp1
+NewStackletFromMLgetgp1:
+	ldgp	$gp, 0($gp)				# compute self-gp for save_regs/c call
+	addq	THREADPTR_REG, MLsaveregs_disp, $0	# use ML save area of thread pointer
+	bsr	save_regs
+	mov	THREADPTR_REG, CFIRSTARG_REG		# pass user thread pointer as arg
+	mov	ASMTMP_REG, CSECONDARG_REG		# pass max offset we need to copy
+	ldq	ASMTMP_REG, proc_disp(THREADPTR_REG)	# get system thread pointer
+	ldq	$sp, (ASMTMP_REG)			# run on system thread stack
+	jsr	$26, NewStackletFromMutator
+	br	$gp, NewStackletFromMLgetgp2
+NewStackletFromMLgetgp2:
+	ldgp	$gp, 0($gp)				# compute self-gp for abort
+	jsr	abort
+	nop
+.set at
+	.end	NewStackletFromML
+
+
+ # ----------------- PopStackletFromML --------------------------------------------------------------------
+ # return address comes in normal return address register
+ # does not use a stack frame 
+ # -----------------------------------------------------------------------------------------------------
+	.ent	PopStackletFromML
+	.frame $sp, 0, $26
+	.prologue 0
+PopStackletFromML:
+.set noat
+	stq	$0,  MLsaveregs_disp(THREADPTR_REG)	# save $0, $1, $26, $29 manually
+	stq	$1,  MLsaveregs_disp+8(THREADPTR_REG)	
+	stq	$26, MLsaveregs_disp+RA_DISP(THREADPTR_REG)
+	stq	$29, MLsaveregs_disp+232(THREADPTR_REG)
+	br	$gp, PopStackletFromMLgetgp1
+PopStackletFromMLgetgp1:
+	ldgp	$gp, 0($gp)				# compute self-gp for save_regs/c call
+	addq	THREADPTR_REG, MLsaveregs_disp, $0	# use ML save area of thread pointer
+	bsr	save_regs
+	mov	THREADPTR_REG, CFIRSTARG_REG		# pass user thread pointer as arg
+	ldq	ASMTMP_REG, proc_disp(THREADPTR_REG)	# get system thread pointer
+	ldq	$sp, (ASMTMP_REG)			# run on system thread stack
+	jsr	$26, PopStackletFromMutator		
+	br	$gp, PopStackletFromMLgetgp2
+PopStackletFromMLgetgp2:
+	ldgp	$gp, 0($gp)				# compute self-gp for abort
+	jsr	abort
+	nop
+.set at
+	.end	PopStackletFromML
+
+
  # ----------------- GCFromML ---------------------------------
  # return address comes in normal return address register
  # temp register contains heap pointer + request size
