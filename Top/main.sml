@@ -3,7 +3,7 @@
 structure Main : MAIN =
 struct
 
-    val usage = "usage: tilt [-?vs] [-t platform] [-fr flag] [-cm mapfile] [-S [num/]host] [mapfile ...]"
+    val usage = "usage: tilt [-?vs] [-t platform] [-fr flag] [-cCm mapfile] [-S [num/]host] [mapfile ...]"
     val version = "TILT version 0.1 (alpha8)\n"
 
     datatype cmd =
@@ -12,6 +12,7 @@ struct
       | SetFlag of string		(* -f flag *)
       | ResetFlag of string		(* -r flag *)
       | Clean of string			(* -c mapfile *)
+      | CleanAll of string		(* -C mapfile *)
       | Master of string		(* -m mapfile *)
       | Slave				(* -s *)
       | Slaves of int * string		(* -S [num/]host *)
@@ -30,6 +31,7 @@ struct
       | runCmd (SetFlag flag) = Stats.bool flag := true
       | runCmd (ResetFlag flag) = Stats.bool flag := false
       | runCmd (Clean mapfile) = Manager.purge mapfile
+      | runCmd (CleanAll mapfile) = Manager.purgeAll mapfile
       | runCmd (Master mapfile) = Manager.master mapfile
       | runCmd (Slave) = Manager.slave ()
       | runCmd (Slaves arg) = Manager.slaves [arg]
@@ -81,6 +83,7 @@ struct
 			   Getopt.Arg   (#"f", SetFlag),
 			   Getopt.Arg   (#"r", ResetFlag),
 			   Getopt.Arg   (#"c", Clean),
+			   Getopt.Arg   (#"C", CleanAll),
 			   Getopt.Arg   (#"m", Master),
 			   Getopt.Noarg (#"s", Slave),
 			   Getopt.Arg   (#"S", Slaves o slavesArg),
