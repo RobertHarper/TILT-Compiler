@@ -638,8 +638,12 @@ structure Machine =
 		 NONE => error "no Rpv for Alpha"
 	       | SOME x => x)
 
-   fun increase_stackptr sz = SPECIFIC(LOADI(LDA, Rsp, sz, Rsp))
-   fun decrease_stackptr (sz : int) = SPECIFIC(LOADI(LDA, Rsp, ~sz, Rsp))
+   fun increase_stackptr sz = if (sz >= 0)
+				  then [SPECIFIC(LOADI(LDA, Rsp, sz, Rsp))]
+			      else error "increase_stackptr given negative stack size"
+   fun decrease_stackptr sz = if (sz >= 0)
+				  then [SPECIFIC(LOADI(LDA, Rsp, ~sz, Rsp))]
+			      else error "decrease_stackptr given negative stack size"
    fun std_entry_code() = [SPECIFIC(LOADI(LDGP, Rgp, 0, pv))]
    fun std_return_code(NONE) = [SPECIFIC(LOADI(LDGP, Rgp, 0, Rra))]
      | std_return_code(SOME sra) = [SPECIFIC(LOADI(LDGP, Rgp, 0, sra))]

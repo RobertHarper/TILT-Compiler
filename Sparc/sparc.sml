@@ -577,8 +577,13 @@ structure Machine =
    fun extern_decl s = ""
 
 
-   fun increase_stackptr sz = SPECIFIC(INTOP(ADD, Rsp, IMMop sz, Rsp))
-   fun decrease_stackptr sz = SPECIFIC(INTOP(SUB, Rsp, IMMop sz, Rsp))
+   fun increase_stackptr sz = if (sz >= 0)
+				  then [SPECIFIC(INTOP(ADD, Rsp, IMMop sz, Rsp))]
+			      else error "increase_stackptr given negative stack size"
+   fun decrease_stackptr sz = if (sz >= 0)
+				  then [BASE(MOVE(Rsp, Rframe)),
+					SPECIFIC(INTOP(SUB, Rsp, IMMop sz, Rsp))]
+			      else error "decrease_stackptr given negative stack size"
    fun std_entry_code() = []
    fun std_return_code(NONE) = []
      | std_return_code(SOME sra) = []

@@ -10,7 +10,8 @@
 		
 	.section ".text"
 	.globl	gc_raw
-	.globl	context_restore
+	.globl	returnFromGC
+	.globl	returnFromYield
 	.globl	old_alloc
 	.globl	cur_alloc_ptr
 	.globl	save_regs
@@ -125,7 +126,7 @@ save_regs_ok:
 
 
 save_regs_forC:		
- 	stw	%r1 , [THREADPTR_REG+4]		! g1 - no std role(volatile);     EXNPTR
+	stw	%r1 , [THREADPTR_REG+4]		! g1 - no std role(volatile);     EXNPTR
 						! g2 - reserved for app software; THREADPTR
 	ld	[THREADPTR_REG+8], %r1		! use g1 as temp
 	cmp	%r1, %r2			! check that g2 consistent with pointed to struct
@@ -145,7 +146,7 @@ save_regs_forC_ok:
 	ld	[THREADPTR_REG+4], %r1		! restore g1 which we use as temp
 	mov	1, %l0
 	st	%l0, [THREADPTR_REG + notinml_disp]	! set notInML to one
-	mov	THREADPTR_REG, %l0		! when calling C code, %l0 will be retained but %g2 destroyed
+	mov	THREADPTR_REG, %l0		! when calling C code, %l0 (but not %g2) is unmodified
 	retl
 	nop	
         .size save_regs_forC,(.-save_regs_forC)
@@ -290,21 +291,21 @@ load_regs_forC_ok:
 	.proc	07
 	.align  4
 gc_raw:
+	flushw
 	stw	LINK_REG, [THREADPTR_REG + LINK_DISP] ! save link value
 	call	save_regs
 	nop
+	ld	[THREADPTR_REG + ASMTMP_DISP], ASMTMP_REG
+	ld	[THREADPTR_REG + ALLOCPTR_DISP], ALLOCPTR_REG
+	sub	ASMTMP_REG, ALLOCPTR_REG, ASMTMP_REG
+	stw	ASMTMP_REG, [THREADPTR_REG + request_disp]
 	ld	[THREADPTR_REG + sysThread_disp], CFIRSTARG_REG ! use CFIRSTARG as temp
 	ld	[CFIRSTARG_REG], SP_REG 	        ! run on system thread stack
-	mov	THREADPTR_REG, CFIRSTARG_REG      ! pass user thread pointer as arg
+	mov	THREADPTR_REG, CFIRSTARG_REG		! pass user thread pointer as arg
 	call	gc					! call runtime GC
 	nop
-	mov	RESULT_REG, THREADPTR_REG ! THREADPTR_REG is returned by call to gc
-	call	load_regs                       ! restore regs
+	call	abort
 	nop
-	ld	[THREADPTR_REG + LINK_DISP], LINK_REG ! restore link value
-	retl
-	nop
-	
 	.size gc_raw,(.-gc_raw)
 
 
@@ -365,29 +366,37 @@ load_regs2:
  ! --------------------------------------------------------
 	.proc	07
 	.align  4
-
-	.globl loop
-context_restore:
+returnFromGC:
+	flushw
 	mov	CFIRSTARG_REG, THREADPTR_REG
  	call 	load_regs
  	nop
 	ld	[THREADPTR_REG + LINK_DISP], LINK_REG
 	retl
 	nop
-	.size context_restore,(.-context_restore)
+	call	abort
+	nop	
+	.size returnFromGC,(.-returnFromGC)
 
+ ! --------------------------------------------------------
+ ! Called from the runtime with the thread pointer argument
+ ! --------------------------------------------------------
 	.proc	07
-	.align	4
-loop:
-	ba	loop
+	.align  4
+returnFromYield:
+	flushw	
+	mov	CFIRSTARG_REG, THREADPTR_REG
+	mov	THREADPTR_REG, %l0			! Calls from C expect thread reg in %l0
+	ld	[THREADPTR_REG + SP_DISP], SP_REG	
+	ld	[THREADPTR_REG + LINK_DISP], LINK_REG
+	retl
 	nop
-	.size loop,(.-loop)
+	call	abort
+	nop
+	.size returnFromYield,(.-returnFromYield)
 		
 .data
 .align 4
-temptemptemp:
-	.word	55
-	
 cur_alloc_ptr:	
 	.word	0
 	.word	0

@@ -17,6 +17,7 @@
 #define thunk_disp     longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize
 #define nextThunk_disp longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize+ptrsize
 #define numThunk_disp  longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize+ptrsize+longsize
+#define request_disp  longsize*32+8*32+longsize+ptrsize+ptrsize+longsize+doublesize+ptrsize+longsize+longsize
 
 #ifndef _inside_stack_h
 #ifndef _asm_
@@ -58,6 +59,7 @@ struct Thread__t
   value_t            *thunks;          /* Array of num_add unit -> unit */
   long               nextThunk;        /* Index of next unstarted thunk.  Initially zero. */
   long               numThunk;         /* Number of thunks.  At least one. */
+  long               request;          /* Why pre-empted? */
 
   /* ---- The remaining fields not accessed by assembly code ---- */
 
@@ -67,7 +69,6 @@ struct Thread__t
   long                tid;              /* Thread ID */
   long                id;               /* Structure ID */
   long                status;           /* Thread status */
-  long                request;          /* Why pre-empted? */
   struct Thread__t   *parent;
   value_t            oneThunk;         /* Avoid allocation by optimizing for common case */
   Queue_t            *reg_roots;
@@ -106,7 +107,7 @@ Thread_t *NextJob(void);
 void thread_init(void);
 void thread_go(value_t *thunks, int numThunk);
 void Interrupt(struct ucontext *);
-void scheduler(void);
+void scheduler(SysThread_t *); /* Unmap systhread if mapped */
 void Finish(void);
 Thread_t *YieldRest(void);
 

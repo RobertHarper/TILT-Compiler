@@ -730,7 +730,7 @@ struct
 			    
 		      fun stack_fixup_code1 () = 
 			(map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots) 
-		      val stack_fixup_code2 = [increase_stackptr stackframe_size]
+		      val stack_fixup_code2 = increase_stackptr stackframe_size
 			
 		      val no_moddef_info = { regs_modified = [] : register list,
 					     regs_destroyed = [] : register list,
@@ -789,8 +789,8 @@ struct
 		       let val callee_restore_code = 
 			 map (fn (reg,sloc) => pop(reg,sloc)) callee_save_slots
 			   val res : instruction list = callee_restore_code @ 
-			     [increase_stackptr stackframe_size,
-			      BASE(RET(false, 1))]
+			       (increase_stackptr stackframe_size) @
+			       [BASE(RET(false, 1))]
 		       in  res
 		       end
 		  | BASE(RTL HANDLER_ENTRY) => []
@@ -1073,8 +1073,8 @@ struct
 		  val BLOCK {instrs,...} = (case Labelmap.find(block_map,name) of
 						SOME bl => bl | NONE => error "missing block")
 		  val reversed_i = ((std_entry_code()) @
-				    [decrease_stackptr stackframe_size,
-				     BASE(PUSH_RET(SOME(fixStackOffset RETADD_POS)))] @
+				    (decrease_stackptr stackframe_size) @
+				     [BASE(PUSH_RET(SOME(fixStackOffset RETADD_POS)))] @
 				    (map (fn (r, i) => push(r, i)) callee_save_slots))
 		  val ordered_i = rev (map NO_ANN reversed_i)
 		in instrs := !instrs @ ordered_i

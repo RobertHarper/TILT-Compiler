@@ -300,7 +300,7 @@ value_t *forward_gen_locatives(value_t *to_ptr,
 void gc_gen(Thread_t *curThread, int isMajor)
 {
   int regmask = 0;
-  SysThread_t *sysThread = curThread->sysThread;
+  SysThread_t *sysThread = getSysThread();
   long *saveregs = curThread->saveregs;
   int allocptr = sysThread->alloc;
   int alloclimit = sysThread->limit;
@@ -312,11 +312,9 @@ void gc_gen(Thread_t *curThread, int isMajor)
   value_t to_allocptr;
 
   /* Check for first time heap value needs to be initialized */
-  assert(sysThread->userThread == curThread);
+  assert(sysThread->userThread == NULL);
   if (alloclimit == StartHeapLimit)
     {
-      saveregs[ALLOCPTR] = nursery->bottom;
-      saveregs[ALLOCLIMIT] = nursery->top;
       sysThread->alloc = nursery->bottom;
       sysThread->limit = nursery->top;
       return;
@@ -377,7 +375,7 @@ void gc_gen(Thread_t *curThread, int isMajor)
 	  value_t *to_ptr = (value_t *)old_alloc_ptr;
 
 	  assert(old_alloc_ptr >= old_fromheap->alloc_start);
-	  assert(old_fromheap->top - old_alloc_ptr > (saveregs[ALLOCPTR] - nursery->bottom));
+	  assert(old_fromheap->top - old_alloc_ptr > (nursery->top - nursery->bottom));
 
 	  SetRange(&from_range,nursery->bottom, nursery->top);
 	  SetRange(&from2_range,0,0);
@@ -553,9 +551,9 @@ void gc_gen(Thread_t *curThread, int isMajor)
     Heap_Unprotect(old_fromheap);
     debug_after_collect(nursery, old_fromheap);
 
-    saveregs[ALLOCPTR] = nursery->bottom;
-    saveregs[ALLOCLIMIT] = nursery->top;
-    curThread->sysThread->limit = nursery->top;
+
+    sysThread->alloc = nursery->bottom;
+    sysThread->limit = nursery->top;
 
   if (GCtype != Minor)
     NumMajorGC++;

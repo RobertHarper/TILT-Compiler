@@ -15,7 +15,7 @@
 
 
 
-Thread_t    *Threads;                  /* array of NumUserThread user threads */
+Thread_t    *Threads;                         /* array of NumUserThread user threads */
 static SysThread_t *SysThreads;               /* array of NumSystemThread system threads */
 
 static int totalThread = 0;                   /* Number of create user threads */
@@ -40,6 +40,7 @@ void LocalLock(void)
   while (!TestAndSet(&local_lock)) /* No need to flush */
     ;
   assert(local_lock == 1);
+  flushStore();
 }
 
 void LocalUnlock(void)
@@ -136,6 +137,7 @@ void ReleaseJob(SysThread_t *sth)
   sth->userThread = NULL;
   th->sysThread = NULL;
   flushStore();                          /* make sure thread info is flushed to memory */
+  assert(th->status >= 1);               /* THread was mapped and running so could not be ready or done */
   FetchAndAdd(&(th->status),-1);         /* Release after flush; note that FA always goes to mem */
   if (diag)
     printf("Thread %d released; status = %d\n",th->tid,th->status);
@@ -175,6 +177,19 @@ void DeleteJob(SysThread_t *sth)
 
 
 /* --------------------- Helpers ---------------------- */
+void check(char *str, SysThread_t *sth)
+{
+  int i;
+  for (i=0; i<NumThread; i++) {
+    value_t t = Threads[i].oneThunk;
+    if (t != 0 && t < 1000000) {
+      printf("Proc %d: check at %s failed: Threads[%d].oneThunk = %d mapped to sysThread %d\n",
+	     sth->stid,str,i,t,Threads[i].sysThread);
+      assert(0);
+    }
+  }
+}
+
 
 SysThread_t *getSysThread()
 {
@@ -226,6 +241,7 @@ void fillThread(Thread_t *th, int i)
 
 void resetThread(Thread_t *th, Thread_t *parent, value_t *thunks, int numThunk)
 {
+  assert(&(Threads[th->id]) == th);
   th->tid = FetchAndAdd(&totalThread,1);
   th->parent = parent;
   th->request = 0;
@@ -245,6 +261,9 @@ void resetThread(Thread_t *th, Thread_t *parent, value_t *thunks, int numThunk)
       th->nextThunk = 0;
       th->numThunk = numThunk;
     }
+  if (numThunk == 0)
+    assert(thunks >= 1000000);
+  check("threadcreate_mid",getSysThread());
   if (th->stackchain == NULL)
     th->stackchain = StackChain_Alloc(); 
   QueueClear(th->snapshots[0].roots);
@@ -323,6 +342,8 @@ Thread_t *thread_create(Thread_t *parent, value_t *thunks, int numThunk)
     assert(0);
   }
   assert(th->status == 0);
+  if (numThunk == 0)
+    assert(thunks >= 1000000);
   resetThread(th, parent, thunks, numThunk);
   return th;
 }
@@ -353,9 +374,11 @@ void save_regs_fail(int memValue, int regValue)
 }
 
 
-void work(SysThread_t *sth)
+static void work(SysThread_t *sth)
 {
   Thread_t *th = sth->userThread;
+
+  check("workstart",sth);
 
   /* System thread should not be mapped */
   assert(th == NULL);
@@ -400,7 +423,7 @@ void work(SysThread_t *sth)
 	assert(th->saveregs[ALLOCPTR] <= th->saveregs[ALLOCLIMIT]);
       }
 
-      assert(th->thunks[0] >= 100000);
+      check("workstart",sth);
       start_client(th,(value_t *)th->thunks, th->numThunk);
 
       assert(0);
@@ -409,36 +432,37 @@ void work(SysThread_t *sth)
     {
       int request = th->request;
       value_t stack_top = th->stackchain->stacks[0]->top;
-      if (request == -1) { /* Yield put us here */
+      if (request == -1) {      /* Yield put us here; return as though from C */
 #ifdef solaris
-	th->saveregs[16] = (long) th;  /* load_regs_forC on solairs expects thread pointer in %l0 */
+	th->saveregs[16] = (long) th;  /* load_regs_forC on solaris expects thread pointer in %l0 */
 #endif	
+	th->saveregs[ALLOCPTR] = sth->alloc;
+	th->saveregs[ALLOCLIMIT] = sth->limit;
+	returnFromYield(th);
       }
       else if (request >= 0) { /* GC request */
 	if (request + sth->alloc >= sth->limit) {
 	  if (diag)
 	    printf("Proc %d: cannot resume user thread %d; need %d, only have %d; calling GC\n",
-		 sth->processor, th->tid, request, sth->limit - sth->alloc);
-	  gc(th); /* this call will not return if real gc */
-	  if (!(request + sth->alloc < sth->limit))
-	    printf("request = %d  alloc = %d  limit = %d\n",
-		   request, sth->alloc, sth->limit);
-	  assert(request + sth->alloc < sth->limit);
+		 sth->stid, th->tid, request, sth->limit - sth->alloc);
+	  assert(request < pagesize);
+	  th->saveregs[ALLOCPTR] = sth->alloc;
+	  th->saveregs[ALLOCLIMIT] = sth->limit;
+	  gc(th); /* map the thread as though calling from gc_raw */
+	  assert(0);
 	}
+	th->saveregs[ALLOCPTR] = sth->alloc;
+	th->saveregs[ALLOCLIMIT] = sth->limit;
+	if (diag)
+	  printf("Proc %d: resuming user thread %d (%d) with request = %d  and %d < %d\n",
+		 sth->stid, th->tid,th->id,
+		 request, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
+	check("workresume",sth);
+	returnFromGC(th);
       }
-      else {
-	printf("Odd request %d\n",request);
-	assert(0);
-      }
-      th->saveregs[ALLOCPTR] = sth->alloc;
-      th->saveregs[ALLOCLIMIT] = sth->limit;
-      if (diag)
-	printf("Proc %d: resuming user thread %d (%d) with request = %d  and %d < %d\n",
-	       sth->processor, th->tid,th->id,
-	       request, th->saveregs[ALLOCPTR], th->saveregs[ALLOCLIMIT]);
-      context_restore(th);
+      printf("Odd request %d\n",request);
+      assert(0);
     }
-
   assert(0);
 }
 
@@ -459,6 +483,7 @@ static void* systhread_go(void* unused)
   work(st);
   assert(0);
 }
+
 
 void thread_go(value_t *thunks, int numThunk)
 {
@@ -521,17 +546,29 @@ int showIntRef(value_t v)
 
 int threadID()
 {
-  return getSysThread()->userThread->tid;
+  SysThread_t *sth = getSysThread();
+  Thread_t *th = sth->userThread;
+  int temp = sth->stid;
+  temp = 1000 * temp + th->tid;
+  temp = 1000 * temp + th->id;
+  return temp;
 }
 
-void Spawn(value_t thunk)
+Thread_t *SpawnRest(value_t thunk)
 {
   SysThread_t *sth = getSysThread();
   Thread_t *parent = sth->userThread;
   Thread_t *child = NULL;
 
+  assert(sth->stack - ((int) &sth) < 1024);   /* stack frame for this function should be < 1K */
   assert(parent->sysThread == sth);
+  check("Spawnstart",sth);
+  if (thunk < 1000000) {
+    printf("Proc %d: Thread %d: Spawn given bad thunk %d\n",
+	   sth->stid, parent->tid, thunk);
+  }
   child = thread_create(parent,(value_t *)thunk, 0);    /* zero indicates passing one actual thunk */
+  check("Spawnmid",sth);
 
   if (collector_type != Parallel) {
     printf("!!! Spawn called in a sequential collector\n");
@@ -541,16 +578,25 @@ void Spawn(value_t thunk)
   if (diag)
     printf("Proc %d: user thread %d spawned user thread %d (status = %d)\n",
 	   sth->stid,parent->tid,child->tid,child->status);
+  check("Spawnend",sth);
+  return parent;
 }
 
+/* This should not be called by the mutator directly.  
+   Rather start_client returns here after swithcing to system thread stack. */
 void Finish()
 {
   SysThread_t *sth = getSysThread();
   Thread_t *th = sth->userThread;
+  assert(((int)sth->stack - (int)(&sth)) < 1024); /* THis function's frame should not be more than 1K. */
+  check("Finishstart",sth);
   if (diag) printf("Proc %d: finished user thread %d\n",sth->stid,th->tid);
+  /*
   gc_finish();
   stats_finish_thread(&sth->stacktime,&sth->gctime,&sth->majorgctime);
+  */
   DeleteJob(sth);
+  check("Finishend",sth);
   work(sth);
   assert(0);
 }
@@ -559,9 +605,11 @@ void Finish()
 Thread_t *YieldRest()
 {
   SysThread_t *sth = getSysThread();
+  check("YieldReststart",sth);
   sth->userThread->request = -1;               /* Record why this thread pre-empted */
   sth->userThread->saveregs[RESULT] = 256; /* ML representation of unit */
   ReleaseJob(sth);
+  check("YieldRestend",sth);
   work(sth);
   assert(0);
 }
@@ -579,14 +627,15 @@ void Interrupt(struct ucontext *uctxt)
   return;
 }
 
-void scheduler()
+/* Releases current user thread if mapped */
+void schedulerRest(SysThread_t *sth)
 {
-  SysThread_t *sth = getSysThread();
-  Thread_t *th = sth->userThread;
-  if (th != NULL) {
-    assert(th->status >= 1);
+  SysThread_t *self = getSysThread();
+  Thread_t *th = self->userThread;
+  assert((self->stack - (int) (&self)) < 1024); /* Check that we are running on own stack */
+  assert(sth == self);
+  if (th != NULL)
     ReleaseJob(sth);
-  }
   work(sth);
   assert(0);
 }

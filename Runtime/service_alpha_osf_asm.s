@@ -16,6 +16,8 @@
 	.globl  FetchAndAdd
 	.globl  TestAndSet
 	.globl  Yield
+	.globl  Spawn
+	.globl  scheduler
 	.globl	flushStore
 
  # XXX dummy function	
@@ -142,12 +144,49 @@ Yield_getgp:
 	ldl	$at, sysThread_disp(THREADPTR_REG) # get system thread pointer
 	ldl	$sp, ($at)		        # run on system thread stack
 	jsr	$26, YieldRest			# no need to restore $gp after this call
-	ldgp	$gp, 0($26)			# compute correct gp for self	
-	bsr	load_regs			# THREADPTR_REG is a callee-save register
-	ldq	$26, 208(THREADPTR_REG)	# note that this is return address of Yield
-	ret	$31, ($26), 1	
+	br	$gp, Yield_getgp2
+Yield_getgp2:	
+	ldgp	$gp, 0($gp)			# compute correct gp for self	
+	jsr	abort
 .set at			
 	.end	Yield
+
+
+	.ent	Spawn
+	.frame $sp, 0, $26
+	.prologue 0
+Spawn:	
+.set noat
+	stq	$26, 208(THREADPTR_REG)	# note that this is return address of Spawn
+	br	$gp, Spawn_getgp
+Spawn_getgp:	
+	ldgp	$gp, 0($gp)			# compute correct gp for self	
+	ldl	$at, sysThread_disp(THREADPTR_REG) # get system thread pointer
+	ldl	$sp, ($at)		        # run on system thread stack
+	jsr	$26, SpawnRest			# no need to restore $gp after this call
+	ldgp	$gp, 0($26)			# compute correct gp for self	
+	bsr	load_regs			# THREADPTR_REG is a callee-save register
+	ldq	$26, 208(THREADPTR_REG)		# note that this is return address of Spawn
+	ret	$31, ($26), 1	
+.set at			
+	.end	Spawn
+
+	.ent	scheduler
+	.frame $sp, 0, $26
+	.prologue 0
+scheduler:
+	br	$gp, scheduler_getgp
+scheduler_getgp:	
+	ldgp	$gp, 0($gp)			# compute correct gp for self		
+.set noat
+	ldl	$sp, (CFIRSTARG_REG)	        # run on system thread stack
+	jsr	$26, schedulerRest		# no need to restore $gp after this call
+	br	$gp, scheduler_getgp2
+scheduler_getgp2:	
+	ldgp	$gp, 0($gp)			# compute correct gp for self			
+	jsr	abort
+.set at			
+	.end	scheduler
 
 
 

@@ -2,15 +2,15 @@
 #include "thread.h"
 
 void gc_init(void);
-Thread_t *gc(Thread_t *curThread); /* Returns the current thread */
+void gc(Thread_t *curThread); /* Does not return; goes to scheduler; argument may be NULL  */
 void gc_finish(void);
 void poll(void);
 
 /* Specific collectors */
 void poll_para(void);
-void gc_semi(Thread_t *curThread);
-void gc_gen(Thread_t *curThread, int);
-void gc_para(Thread_t *curThread);
+void gc_semi(Thread_t *curThread);     /* Does return */
+void gc_gen(Thread_t *curThread, int); /* Does return */
+void gc_para(SysThread_t *);           /* Does not return; goes to scheduler */
 void gc_init_semi(void);
 void gc_init_gen(void);
 void gc_init_para(void);

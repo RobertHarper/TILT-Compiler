@@ -20,7 +20,9 @@
 	.globl	load_iregs
 	.globl	save_regs_forC
 	.globl	load_regs_forC
-	
+	.globl	returnFromGC	
+	.globl	returnFromYield
+
  # ----------------- save_regs---------------------------------
  # ----------------- save_iregs--------------------------------
  # save_regs saves entire register set (excluding the return address register)
@@ -195,20 +197,22 @@ gc_raw:
 .set noat
 	stq	$26, RA_DISP(THREADPTR_REG)	# note that this is return address of gc_raw
 	bsr	save_regs
+	ldl	$at, ASMTMP_DISP(THREADPTR_REG)
+	ldl	ALLOCPTR_REG, ALLOCPTR_DISP(THREADPTR_REG)
+	subl	$at, ALLOCPTR_REG, $at
+	stl	$at, request_disp(THREADPTR_REG)
 	br	$gp, gc_raw_getgp
 gc_raw_getgp:	
 	ldgp	$gp, 0($gp)			# compute correct gp for self
 	ldl	$at, sysThread_disp(THREADPTR_REG) # get system thread pointer
 	ldl	$sp, ($at)		        # run on system thread stack
 	mov	THREADPTR_REG, $16		# pass user thread pointer as arg
-.set at
 	jsr	$26, gc				# no need to restore $gp after this call
-	ldgp	$gp, 0($26)			# compute correct gp for self	
-.set noat
-	bsr	load_regs                       # THREADPTR_REG is a callee-save register
-	ldq	$26, RA_DISP(THREADPTR_REG)	# note that this is return address of gc_raw
-	ret	$31, ($26), 1	
-.set at			
+	br	$gp, gc_raw_getgp2
+gc_raw_getgp2:	
+	ldgp	$gp, 0($gp)			# compute correct gp for self
+	jsr	abort
+.set at
 	.end	gc_raw
 
 
@@ -275,15 +279,27 @@ no_limit_reset:
  # --------------------------------------------------------
  # Called from the runtime with the thread pointer argument
  # --------------------------------------------------------
-	.ent	context_restore	
+	.ent	returnFromGC
 .set noat
-context_restore:
-	mov	$16, THREADPTR_REG
+returnFromGC:	
+	mov	CFIRSTARG_REG, THREADPTR_REG
 	bsr 	load_regs
 	ldq	$26, RA_DISP(THREADPTR_REG)
-	ret	$31, ($26), 1	
+	ret	$31, ($26), 1
+	jsr	abort	
 .set at
-	.end	context_restore	
+	.end	returnFromGC
+
+ # Yield was called as a C function	
+	.ent	returnFromYield	
+.set noat
+returnFromYield:	
+	mov	CFIRSTARG_REG, THREADPTR_REG
+	ldq	$26, RA_DISP(THREADPTR_REG)
+	ret	$31, ($26), 1
+	jsr	abort	
+.set at
+	.end	returnFromYield
 
 
 .data

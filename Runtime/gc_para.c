@@ -308,7 +308,8 @@ static void stop_copy(SysThread_t *sysThread)
     ;
   numReadyThread = 0;
 
-  scheduler();
+  scheduler(sysThread);
+  assert(0);
 }
 
 void poll_para()
@@ -317,54 +318,32 @@ void poll_para()
     stop_copy(getSysThread());
 }
 
-void gc_para(Thread_t *curThread)
+void gc_para(SysThread_t *sysThread)
 {
-  SysThread_t *sysThread = curThread->sysThread;
   int stid = sysThread->stid;
-  int tid = curThread->tid;
-  long *saveregs = curThread->saveregs;
-  value_t *alloc = (value_t *) saveregs[ALLOCPTR];
-  value_t *limit = (value_t *) saveregs[ALLOCLIMIT];
   value_t *tmp1, *tmp2;
-  int req_size = curThread->request;
 
-  flushStore();                          /* make sure thread info is flushed to memory */
-
-  if (!(alloc <= limit)) 
-    printf("alloc = %d   limit = %d\n",alloc,limit);
-  assert(alloc <= limit);    
-  assert(writelist_cursor <= writelist_end); /* XXX writelist is not synchronized */
-  assert(req_size >= 0);
-
-
+  assert(sysThread->userThread == NULL);
+  assert(writelist_cursor >= writelist_start);
+  assert(writelist_cursor <= writelist_end);   /* It's okay not to synchornize since */
+  writelist_cursor = writelist_start;          /* Write list is irrelevnat in a semispace collector */
 
   /* See if we can grab another page from the fromspace; if not, then it's time to stop and copy */
   GetHeapArea(fromheap,pagesize,&tmp1,&tmp2);
   if (tmp1) {
     sysThread->alloc = (int)tmp1;
     sysThread->limit = (int)tmp2;
-    saveregs[ALLOCPTR] = (long)tmp1;
-    saveregs[ALLOCLIMIT] = (long)tmp2;
     if (diag) {
-      printf("Proc %d: user thread %d: Mutator grabbed a page at %d\n",
-	     stid,tid,saveregs[ALLOCPTR]);
+      printf("Proc %d: Grabbed a page at %d\n",stid,tmp1);
     }
-    if (req_size > pagesize) {
-      printf("req_size = %d   <=  pagesize = %d\n",req_size,pagesize);
-      assert(0);
-    }
-    flushStore();                          /* make sure thread info is flushed to memory */
-    return;
+    scheduler(sysThread);
+    assert(0);
   }
 
   if (diag)
-    printf("Proc %d: user thread %d: invoking stop-and-copy; requesting %d\n",
-	   stid,tid, req_size);
-
-  sysThread->alloc = saveregs[ALLOCPTR];
-  FetchAndAdd(&curThread->status,-1);
-  sysThread->userThread = NULL;
+    printf("Proc %d: Invoking stop-and-copy\n",stid);
   stop_copy(sysThread);
+  assert(0);
 }
 
 

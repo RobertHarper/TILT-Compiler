@@ -143,10 +143,10 @@ value_t alloc_bigfloatarray_semi(int log_len, double init_val, int ptag)
 /* --------------------- Semispace collector --------------------- */
 
 
-void gc_semi(Thread_t *curThread)
+void gc_semi(Thread_t *curThread) /* Not mapped */
 {
   int i;  
-  SysThread_t *sysThread = curThread->sysThread;
+  SysThread_t *sysThread = getSysThread();
   long *saveregs = curThread->saveregs;
   int allocptr = sysThread->alloc;
   int alloclimit = sysThread->limit;
@@ -159,12 +159,15 @@ void gc_semi(Thread_t *curThread)
   assert(0); /* unimplemented */
 #endif
 
-  assert(sysThread->userThread == curThread);
+  assert(sysThread->userThread == NULL);
+  assert(curThread->sysThread == NULL);
+  assert(writelist_cursor >= writelist_start);
+  assert(writelist_cursor <= writelist_end);
+  writelist_cursor = writelist_start;          /* Write list irrelevnat in a semispace collector */
+
   /* Check for first time heap value needs to be initialized */
   if (sysThread->limit == StartHeapLimit)
     {
-      saveregs[ALLOCPTR] = fromheap->bottom;
-      saveregs[ALLOCLIMIT] = fromheap->top;
       sysThread->alloc = fromheap->bottom;
       sysThread->limit = fromheap->top;
       return;
@@ -243,10 +246,11 @@ void gc_semi(Thread_t *curThread)
 	show_heap("FINAL TO",toheap->bottom,to_ptr,toheap->top);
       }
 #endif
-#ifdef PARANOID
-  paranoid_check_stack(curThread,fromheap);
-  paranoid_check_heap(fromheap,toheap);
-#endif
+
+    if (paranoid) {
+      paranoid_check_stack(curThread,fromheap);
+      paranoid_check_heap(fromheap,toheap);
+    }
 
   /* Resize the tospace by using the oldspace size and liveness ratio */
     {
@@ -283,12 +287,10 @@ void gc_semi(Thread_t *curThread)
   /* Switch roles of from-space and tospace-space */
   Heap_Protect(fromheap);
   typed_swap(Heap_t *, fromheap, toheap);
-  fromheap->alloc_start = fromheap->bottom;
 
-  /* Update thread's allocation variables */
-  saveregs[ALLOCPTR] = fromheap->alloc_start;
-  saveregs[ALLOCLIMIT] = fromheap->top;
-  sysThread->limit = fromheap->alloc_start;
+  /* Update systhread's allocation variables */
+  fromheap->alloc_start = to_ptr;
+  sysThread->alloc = fromheap->alloc_start;
   sysThread->limit = fromheap->top;
 
   NumGC++;

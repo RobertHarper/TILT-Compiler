@@ -236,9 +236,10 @@ void GetHeapArea(Heap_t *heap, int size, value_t **bottom, value_t **top)
   }
   else
     heap->alloc_start = end;
-  pthread_mutex_unlock(heap->lock);
   *bottom = (value_t *)start;
   *top = (value_t *)end;
+  flushStore();
+  pthread_mutex_unlock(heap->lock);
 }
 
 Heap_t* GetHeap(value_t add)

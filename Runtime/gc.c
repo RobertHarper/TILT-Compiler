@@ -16,7 +16,8 @@
 #include "stats.h"
 #include "gcstat.h"
 
-
+/* XXX for temp debugging */
+extern int NumThread;
 
 
 /* use generational by default */
@@ -429,29 +430,49 @@ void poll()
   return;
 }
 
-Thread_t *gc(Thread_t *curThread)
+
+void gc(Thread_t *curThread)
 {
+  SysThread_t *self = getSysThread();
+
+  if (curThread != NULL) {
+    /* Called from gc_raw; need to unmap first */ 
+    SysThread_t *sth = curThread->sysThread;
+    assert(self == sth);
+    assert(sth->userThread == curThread);
+    assert(curThread->request >= 0);    /* Check that request consistent with call from gc_raw */
+    assert(curThread->request < 8192);  /* Large objects shouldn't get here */
+    ReleaseJob(sth);
+  }
+
+  assert((self->stack - (int) (&self)) < 1024); /* Check that we are running on own stack */
 
   /* If thread preempted, not a real GC */
-  if (curThread->saveregs[ALLOCLIMIT] == StopHeapLimit) {
-      scheduler();
+  if ((curThread != NULL) && 
+      (curThread->saveregs[ALLOCLIMIT] == StopHeapLimit)) {
+      scheduler(self);
       assert(0);
     }
 
-  /* If real GC, then store request size */
-  curThread->request = curThread->saveregs[ASMTMP] - curThread->saveregs[ALLOCPTR];
-  assert(curThread->request >= 0);
-
   switch (collector_type) 
     {
-    case Semispace : { gc_semi(curThread); break; }
-    case Generational : { gc_gen(curThread,0); break; }
-    case Parallel : { flushStore();
-                      gc_para(curThread); 
-                      break; }
+    case Semispace : 
+      assert(curThread != NULL);
+      gc_semi(curThread); 
+      scheduler(self);
+      assert(0);
+      break; 
+    case Generational : 
+      assert(curThread != NULL);
+      gc_gen(curThread,0);
+      scheduler(self); 
+      assert(0);
+      break; 
+    case Parallel :     
+      gc_para(self); /* Does not return */
+      break; 
     }
-
-  return curThread;
+  assert(0);
 }
 
   

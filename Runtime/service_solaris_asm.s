@@ -84,6 +84,7 @@ GetTick:
 	.proc	07
 	.align	4
 start_client:
+	flushw
 	mov	%o0, THREADPTR_REG		! initialize thread ptr outside loop
 	call	load_regs			! restore dedicated pointers like
 						! heap pointer, heap limit, and stack pointer
@@ -120,6 +121,7 @@ start_client_retadd_val:					! used by stack.c
 	call	save_regs					! need to save register set to get 
 								!   alloction pointer into thread state
 	nop
+	flushw
 	ld	[THREADPTR_REG + sysThread_disp], ASMTMP_REG	! get system thread pointer
 	ld	[ASMTMP_REG], SP_REG				! run on system thread stack	
 	call	Finish
@@ -134,24 +136,55 @@ start_client_retadd_val:					! used by stack.c
 
 	
  ! -------------------------------------------------------------------------------
- ! Yield - called by mutator as a C function 
- ! (1) Don't call save_regs and load_regs
- ! (2) Make sure %l0 contains thread pointer for use by save_regs_forC
+ ! Yield is called by mutator like a C function so save_regs_forC has been called
  ! -------------------------------------------------------------------------------
 	.proc	07
 	.align	4
 Yield:
+	flushw
 	st	LINK_REG, [THREADPTR_REG + LINK_DISP]    ! note that this is return address of Yield
 	ld	[THREADPTR_REG + sysThread_disp],ASMTMP_REG ! get system thread pointer into temp
 	ld	[ASMTMP_REG], SP_REG			! run on system thread stack
-	call	YieldRest				! no need to restore $gp after this call
+	call	YieldRest				
 	nop
-	mov	%o0, THREADPTR_REG			! user thread pointer returned
-	mov	%o0, %l0				! fix %l0 for use by save_regs_forC
-	ld	[THREADPTR_REG + LINK_DISP], LINK_REG	! note that this is return address of Yield
+	call	abort					! we do not return from YieldRest
+	nop
+	.size	Yield,(.-Yield)
+
+ ! -------------------------------------------------------------------------------
+ ! Spawn is called by mutator like a C function so save_regs_forC has been called
+ ! Switch to system stack here
+ ! -------------------------------------------------------------------------------
+	.globl  Spawn
+	.proc	07
+	.align	4
+Spawn:
+	flushw	
+	st	LINK_REG, [THREADPTR_REG + LINK_DISP]    ! note that this is return address of Spawn
+	ld	[THREADPTR_REG + sysThread_disp],ASMTMP_REG ! get system thread pointer into temp
+	ld	[ASMTMP_REG], SP_REG			! run on system thread stack
+	call	SpawnRest
+	nop
+	mov	RESULT_REG, THREADPTR_REG
+	ld	[THREADPTR_REG + SP_DISP], SP_REG	! back to user thread stack
+	ld	[THREADPTR_REG + LINK_DISP], LINK_REG	
+	mov	THREADPTR_REG, %l0			! load_regs_forC expects thread pointer in l0
 	retl
 	nop
 	.size	Yield,(.-Yield)
+
+
+	.globl  scheduler
+	.proc	07
+	.align	4
+scheduler:	
+	flushw	
+	ld	[CFIRSTARG_REG], SP_REG			! run on system thread stack
+	call	schedulerRest
+	nop
+	call	abort
+	nop
+	.size	scheduler,(.-scheduler)
 
 
 
