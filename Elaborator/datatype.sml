@@ -24,7 +24,6 @@ functor Datatype(structure Il : IL
     fun make_eqcon c = CON_ARROW([con_tuple[c,c]], con_bool, false, oneshot_init PARTIAL)
 
 
-
     (* ------------------------------------------------------------------
       The datatype compiler for compiling a single stronglg-connected type.
       ------------------------------------------------------------------ *)
@@ -786,6 +785,8 @@ functor Datatype(structure Il : IL
      --------------------------------------------------------- *)
     type lookup = (Il.context * Il.label list -> (Il.mod * Il.signat) option) 
     exception NotConstructor
+    datatype path_or_con = PATH of path | CON of con
+
     fun constr_lookup context (p : Ast.path) =
 	(SOME
 	 let 
@@ -823,11 +824,24 @@ functor Datatype(structure Il : IL
 	      | _ => (print "datatype_constr_lookup failed with sdecs = \n";
 		      pp_sdecs sdecs; print "\n")
 *)
+	    val internal_type_sdec:: expose_sdec :: _ = sdecs
 	    val (internal_type_lab,type_path) = 
-		(case sdecs of
-		     (SDEC(internal_type_lab,DEC_CON(_,_,SOME c)))::_ =>
+		(case internal_type_sdec of
+		     (SDEC(internal_type_lab,DEC_CON(_,_,SOME c))) =>
 			 (internal_type_lab, con2path c)
 		   | _ => raise NotConstructor)
+	    val sum_path =
+		(case expose_sdec of
+		     SDEC(_,DEC_EXP(_,CON_ARROW(_,c,_,_))) => (PATH(con2path c)
+							       handle _ => CON c)
+		   | SDEC(_,DEC_MOD(_,SIGNAT_FUNCTOR(_,_,SIGNAT_STRUCTURE(_,sdecs),_))) =>
+			 (case sdecs of
+			      [SDEC(_,DEC_EXP(_,CON_ARROW(_,CON_APP(c,_),_,_)))] => 
+	                                 (PATH(con2path c) handle _ => CON c)
+			    | _ => raise NotConstructor)
+		   | _ => raise NotConstructor)
+
+
 
 	    val type_lab = symbol_label(Symbol.tycSymbol (Name.label2name internal_type_lab))
 	    val num_constr = (length sdecs) - 2
@@ -859,7 +873,7 @@ functor Datatype(structure Il : IL
 	    in  
 (* this path could get shadowed so we can't get the type_path this way *)
 (*		val type_path = get_path type_lab *)
-		val sum_path = get_path sum_lab
+(*		val sum_path = get_path sum_lab *)
 		val ssum_path = map get_path ssum_lab
 	    end
 
@@ -978,7 +992,9 @@ functor Datatype(structure Il : IL
 	   end
        
        val tycon = help type_path
-       val sumtycon = help sum_path
+       val sumtycon = (case sum_path of
+			   PATH p => help p
+			 | CON c => c)
        val ssumtycon = map help ssum_path
        val (ssumcon,sumcon,datacon) = (case sbnds_sdecs_cons_opt of
 					   NONE => (ssumtycon,sumtycon,tycon)

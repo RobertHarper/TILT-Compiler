@@ -338,6 +338,7 @@ functor Pat(structure Il : IL
 	val rcons = map (fn _ => fresh_con context) syms
  	val rbnds = letprojecthelp(var1,rvars,rcons,syms)
 	val lc = sort_labelpair (zip syms rcons)
+(* val _ = (print "FLEX is "; print (Bool.toString flex); print "\n") *)
 	val argcon = if flex 
 			 then CON_FLEXRECORD(ref (FLEXINFO(Tyvar.get_stamp(),false,lc)))
 		     else CON_RECORD lc
@@ -361,11 +362,11 @@ functor Pat(structure Il : IL
 		(sub_con(context,c,!rescon)) orelse
 		(rescon := supertype (!rescon);
 		sub_con(context,c,!rescon))
+	  val v = fresh_named_var "exnarg_var"
 	  fun helper ((path,stamp,carried_type,patopt),arm : arm) = 
 	      let val con = (case carried_type of 
 				 SOME c => c
 			       | _ => con_unit)
-		  val v = fresh_var()
 		  val (e,c) =
 		      (case patopt of
 			   NONE => match(args,[arm],def)
@@ -412,6 +413,7 @@ functor Pat(structure Il : IL
       val casearg = VAR casevar
       val rescon_var = fresh_named_var "rescon_var"
       val rescon = ref(fresh_con context)
+      val rsvar = fresh_named_var "sumswitch_arg"
       fun check_rescon c = 
 		(sub_con(context,c,!rescon)) orelse
 		(rescon := supertype (!rescon);
@@ -436,7 +438,6 @@ functor Pat(structure Il : IL
 	         Ppil.pp_con casecon; print "\n\nand context = \n";
 		  Ppil.pp_context context; print "\n\n")
 *)
-	  val rsvar = fresh_var()
 
 	in (case (relevants : arm list, arg_type) of
 	      ([],_) => NONE
