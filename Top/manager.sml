@@ -129,7 +129,7 @@ struct
 	(case Util.substring ("-to-", name) of
 	     NONE => NONE
 	   | SOME pos => if (String.sub(name,0) = #"!" orelse
-			     String.sub(name,0) = #"?")
+			     String.sub(name,0) = #"@")
 			     then NONE
 			 else let val from = String.substring(name,0,pos)
 				  val to = String.substring(name, pos+2, (size name) - (pos + 2))
@@ -178,7 +178,7 @@ struct
     fun receive channel : message option =
 	if (exists channel)
 	    then let val filename = channelToName channel
-		     val temp = "?" ^ filename
+		     val temp = "@" ^ filename
 		     val _ = remove temp
 		     val _ = OS.FileSys.rename{old=filename, new=temp}
 		     val fd = TextIO.openIn temp
