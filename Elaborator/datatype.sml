@@ -37,7 +37,7 @@ structure Datatype
         (* ---- speculate it is an eq-permitting datatype ------ *)
 	val is_eq = ref true
 
-	fun fresh_named_var_inline s = fresh_named_var(s ^ "_inline")
+	fun fresh_named_var_inline s = IlUtil.to_dt_var(fresh_named_var s)
 	fun fresh_named_var_transparent s = if transparent then fresh_named_var_inline s
 					    else fresh_named_var s
 

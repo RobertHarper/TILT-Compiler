@@ -1753,7 +1753,7 @@ structure Toil
 				    val innersig = SIGNAT_STRUCTURE(NONE,
 								    [SDEC(it_lab,
 									  DEC_EXP(fresh_var(),eq_con))])
-				in  DEC_MOD(eq_var,true,SIGNAT_FUNCTOR(vpoly,sigpoly,innersig,PARTIAL))
+				in  DEC_MOD(eq_var,true,SIGNAT_FUNCTOR(vpoly,sigpoly,innersig,TOTAL))
 				end)
 					    
 		       val eq_sdec = SDEC(eq_label, eq_dec)
