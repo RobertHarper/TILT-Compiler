@@ -132,8 +132,10 @@ end
 	      | step (G, s, (Gml.Oper p) :: c ) = 
 		step (case T.opers ?? p of
 			  NONE => raise Eval ("??? unknown operator: " ^ p)
-			| SOME f => (G, f s, c))
-	      | step _ = raise Unimplemented
+			| SOME f => (G, f s, c)) 
+		     handle Match => 
+			 raise Eval ("inappropriate stack for " ^ p ^
+				     "(caught Match)")
 	in
             step (empty_context, nil, rev el)
 	end

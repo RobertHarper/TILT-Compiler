@@ -39,6 +39,9 @@ struct
 	"rotatey", "rotatez", "light", "pointlight", "spotlight",
 	"union", "intersect", "difference", "render" ] *)
       
+  val bool = lit "true" return (Bool true)
+          || lit "false" return (Bool false)
+		
   val literal = anyWord wth Var
       
   fun array () = (lit "[" >> repeat ($exp) << lit "]") 
@@ -50,6 +53,7 @@ struct
       alt [ anyNumber wth Int,
 	    anyFloat wth Real,
 	    anyString wth String,
+	    bool,
 	    oper,
 	    binder,
 	    literal,
