@@ -1,31 +1,26 @@
-(*$import List Int ILCONTEXT Il Util Name Listops Ppil Stats IlUtil *)
+(*$import List Int ILCONTEXT Il Util Name Listops Ppil Stats IlUtil Fixity Option *)
+
 structure IlContext :> ILCONTEXT =
 struct
 
     open Il Util Name Listops Ppil IlUtil
+    type fixity = Fixity.fixity
 	
     val error = fn s => error "ilcontext.sml" s
+	
     val debug = Stats.ff("IlcontextDebug")
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
-    (* --------------- BASICS ------------------------------- *)
-    type var_seq_map = (label * phrase_class) VarMap.map * var list
-    fun var_seq_insert ((m,s),v,value) = (VarMap.insert(m,v,value),v::s)
-    val empty_context = CONTEXT{fixityMap = LabelMap.empty,
-				overloadMap = LabelMap.empty,
-				labelMap = LabelMap.empty,
-				pathMap = PathMap.empty,
-				ordering = []}
-
+    val IlcontextChecks = Stats.ff "IlcontextChecks"
+    fun sanitycheck t = if (!IlcontextChecks) then (t(); ()) else ()
+	    
+    (* Setting this to true currently does not work.  Once it does, we
+       should kill off the "false" code and the flag. *)
+    val NoOpenInternalPaths = Stats.ff "NoOpenInternalPaths" (* XXX *)
+	
     (* ------ Type equivalence needed to ensure overloading resolvable by distinct types ------- *)
     local 
 	val Ceq_con = ref (NONE : (context * con * con -> bool) option)
-    in
-	fun installHelpers{eq_con} = 
-	    ((case !Ceq_con of
-		 NONE => ()
-	       | SOME _ => (print "WARNING: IlContext.installHelpers called more than once.\n"));
-	     Ceq_con := SOME eq_con)
 	fun eq_con arg = let val SOME eq_con = !Ceq_con
 			 in  eq_con arg
 			 end
@@ -33,7 +28,12 @@ struct
 	fun sub ctxt (exp1, exp2) = Listops.list_diff_eq(eq ctxt, exp1, exp2)
 	fun add ctxt (exp1, exp2) = Listops.list_sum_eq(eq ctxt, exp1, exp2)
 	fun expanded f (o1, o2) = ovld_collapse (f (ovld_expand o1, ovld_expand o2))
-	
+    in
+	fun installHelpers{eq_con} = 
+	    ((case !Ceq_con of
+		 NONE => ()
+	       | SOME _ => (print "WARNING: IlContext.installHelpers called more than once.\n"));
+	     Ceq_con := SOME eq_con)
 	fun ovld_add (label, ctxt, ovld1 as OVLD (_, d1), ovld2 as OVLD (_, d2)) =
 	    let val _ = case (d1, d2)
 			  of (SOME _, SOME _) =>
@@ -48,220 +48,560 @@ struct
 	fun ovld_sub (ctxt, ovld1, ovld2) = expanded (sub ctxt) (ovld1, ovld2)
     end
 
-    (* ---------------- LOOKUP RULES --------------------------- 
-     The lookup rules can return item from different grammatical classes
-     so we need some additional datatypes to package up the results 
-     --------------------------------------------------------- *)
+    (* ----------- signature utilities ----------------------------  *)
 
-(*    type phrase_class_p = path * phrase_class *)
+    fun Context_Lookup_Var_Raw (ctxt : context, v : var) : (label * phrase_class) option =
+	let val CONTEXT {varMap,...} = ctxt
+	in  VarMap.find (varMap, v)
+	end
 
+    (*
+	When a module variable is looked up, its signature is
+	transformed and memoized.  The transformations are (deep)
+	reduction, local variable elimination, and selfification.
+	Reduction is also needed when a starred structure is bound.
+    *)
+    local
 
-    fun Context_Fixity (CONTEXT {fixityMap,...}) = fixityMap
-    fun Context_Ordering (CONTEXT {ordering,...}) = rev ordering
-    fun Context_Lookup_Overload (CONTEXT {overloadMap, ...}, lab) = LabelMap.find(overloadMap, lab)
-    fun Context_Lookup_Label (CONTEXT {labelMap, ...}, lab) = LabelMap.find(labelMap, lab)
-    fun Context_Lookup_Path (CONTEXT {pathMap, ...}, PATH path) = PathMap.find(pathMap, path)
-    fun Context_Lookup_Var (CONTEXT {pathMap, ...}, v) = PathMap.find(pathMap, (v,[]))
+	(* An "lvs" is a substitution from local variables to bound
+	   paths.  This is the book-keeping needed to project
+	   componenets from a bound structure.*)
 
+	type lvs = mod * subst
 
-    (* --------------------- EXTENDERS ---------------------------------------- *)
-    fun add_context_fixity(CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering}, label, fixity) = 
-	CONTEXT({fixityMap = LabelMap.insert(fixityMap,label,fixity),
-		 overloadMap = overloadMap,
-		 labelMap = labelMap,
-		 pathMap = pathMap,
-		 ordering = ordering})
+	fun lvs (m : mod) : lvs = (m, empty_subst)
 
-    (* expands out the definition of a signature variable *)
-    fun reduce_sigvar ctxt v =
-	(case (Context_Lookup_Var(ctxt,v)) of
-	     SOME(_,PHRASE_CLASS_SIG(v,s)) => s
-	   | _ => error "reduce_sigvar found unbound sigvar")
+	fun lvs_extend ((m,subst) : lvs, sdec) : lvs =
+	    let val SDEC(l,dec) = sdec
+		val p = (m,l)
+		val subst = 
+		    (case dec
+		       of DEC_EXP (v,_,_,_) =>
+			   (* The only local expression variables that
+			      may appear in inlined expressions are
+			      coercions.  *)
+			   if is_coercion l
+			       then subst_add_expvar (subst, v, MODULE_PROJECT p)
+			   else subst
+			| DEC_CON (v,_,_,_) => subst_add_convar (subst, v, CON_MODULE_PROJECT p)
+			| DEC_MOD (v,_,_) => subst_add_modvar (subst, v, MOD_PROJECT p))
+	    in  (m,subst)
+	    end
 
-    (* reduce_signat recursively reduces an arbitrary signature to its "meat" by
-       1) expanding signature variables to their definitions
-       2) projecting out the selfified component of a SIGNAT_SELF
-       3) looking up the signature of X in SIGNAT_OF(X)
-     *)
-    fun reduce_signat ctxt (SIGNAT_VAR v) = reduce_signat ctxt (reduce_sigvar ctxt v)
-      | reduce_signat ctxt (SIGNAT_SELF (p, unself, self)) = reduce_signat ctxt self
-      | reduce_signat ctxt (SIGNAT_OF (PATH(v,labs))) = 
-	  let val s = (case Context_Lookup_Var(ctxt,v) of
-			   SOME(_,PHRASE_CLASS_MOD(_,_,s)) => s
-			 | _ => error ("SIGNAT_OF(" ^ (Name.var2string v) ^ ",...) unbound"))
-	      fun project (l, s) = 
-		  let fun find l [] = error "cannot find label in SIGNAT_OF"
-			| find l ((SDEC(l',DEC_MOD(_,_,s)))::rest) = if eq_label(l,l') then s else find l rest
-			| find l (_::rest) = find l rest
-		  in  (case (reduce_signat ctxt s) of
-			   SIGNAT_STRUCTURE sdecs => find l sdecs
-			 | _ => error "ill-formed SIGNAT_OF")
-		  end
-	  in  reduce_signat ctxt (foldl project s labs)
-	  end
-      | reduce_signat ctxt s = s
+	(* Rewrite SIGNAT_OF(localvar.labs) as SIGNAT_OF(v.labs')
+	   where v is bound in the ambient context. *)
+	fun lvs_rewrite ((_,subst) : lvs, s : signat) : signat =
+	    (case s
+	       of SIGNAT_OF _ => sig_subst(s, subst)
+		| _ => s)
 
-    (* prepare for the possible shadowing of a label by changing occurrences of it in the
-       current context to a dummy label
-     *)
-    fun shadow (overloadMap, labelMap, pathMap, lab) = 
-	let val overloadMap = 
-	    (case (LabelMap.find(overloadMap,lab)) of
-		   NONE => overloadMap
-		 | SOME celist => #1(LabelMap.remove(overloadMap,lab)))
-	in  (case (LabelMap.find(labelMap,lab)) of
-		   NONE => (overloadMap, labelMap, pathMap)
-		 | SOME (PATH p,_) => 
-		       let val newlab = fresh_internal_label(label2name' lab)
-			   (* Derek: Why do we look p up in pathMap instead of just using the phrase class from labelMap? *)
-		       in  (case PathMap.find(pathMap,p) of
-				NONE => error "inconsistent context"
-			      | SOME (_, pc) => 
-				    let val pathMap = PathMap.insert(pathMap,p,(newlab, pc))
-					val (labelMap,_) = LabelMap.remove(labelMap, lab)
-					val labelMap = LabelMap.insert(labelMap, newlab,(PATH p, pc))
-				    in  (overloadMap, labelMap, pathMap)
-				    end)
+	fun lvs_recurse ((m,subst) : lvs, l : label, s : signat) : lvs =
+	    let val subst = (case s
+			       of SIGNAT_VAR _ => empty_subst
+				| SIGNAT_OF _ => empty_subst
+				| _ => subst)
+		val m = MOD_PROJECT (m,l)
+	    in  (m,subst)
+	    end
+
+	fun lvs_subst (lvs : lvs) : subst = #2 lvs
+
+	fun lvs_mod (lvs : lvs) : mod = #1 lvs
+
+	(* Recursively eliminates non-binding occurrences of local
+	   variables in an sdecs, replacing them with paths.  This may
+	   be a bad idea but it is currently assumed by other parts of
+	   the elaborator.  *)
+    
+	fun eliminate (lvs, s : signat) : signat =
+	    (case s
+	       of SIGNAT_STRUCTURE sdecs =>
+		   let val (sdecs,_) = foldl_acc eliminate' lvs sdecs
+		   in  SIGNAT_STRUCTURE sdecs
+		   end
+		| _ => sig_subst(s,lvs_subst lvs))
+
+	and eliminate' (sdec, lvs) : sdec * lvs =
+	    let val SDEC (l,dec) = sdec
+		val subst = lvs_subst lvs
+		val EXP = fn e => exp_subst(e,subst)
+		val CON = fn c => con_subst(c,subst)
+		val OPT = Option.map
+		val dec = (case dec
+			     of DEC_EXP (v,c,eopt,inline) => DEC_EXP (v,CON c,OPT EXP eopt,inline)
+			      | DEC_CON (v,k,copt,inline) => DEC_CON (v,k,OPT CON copt,inline)
+			      | DEC_MOD (v,poly,s) =>
+				 let val s = eliminate (lvs_recurse (lvs,l,s), s)
+				 in  DEC_MOD (v,poly,s)
+				 end)
+	    in  (SDEC (l,dec), lvs_extend (lvs,sdec))
+	    end
+
+	(* Recursively apply the HS self rules.
+	   If decs |- m : s and s' = selfify(m,s),
+           then decs |- m : s' and s' is transparant.
+	*)
+    
+	fun selfify (m : mod, s : signat) : signat =
+	    (case s
+	       of SIGNAT_STRUCTURE sdecs => SIGNAT_STRUCTURE (map (selfify' m) sdecs)
+		| _ => s)
+		 
+	and selfify' (m : mod) (sdec : sdec) : sdec =
+	    let val SDEC (l,dec) = sdec
+		val dec = (case dec
+			     of DEC_EXP _ => dec
+			      | DEC_CON (v,k,copt,inline) =>
+				 let val copt = (case copt
+						   of NONE => SOME (CON_MODULE_PROJECT (m,l))
+						    | SOME _ => copt)
+				 in  DEC_CON(v,k,copt,inline)
+				 end
+			      | DEC_MOD (v,poly,s) =>
+				 let val s = selfify (MOD_PROJECT(m,l), s)
+				 in  DEC_MOD(v,poly,s)
+				 end)
+	    in  SDEC(l,dec)
+	    end
+
+	(*
+           Reduce_signat reduces an arbitrary structure signature to
+           an sdecs.  It uses the following helpers.
+
+	   Reduce_sigvar reduces a structure signature of the form
+	   SIGNAT_VAR(v) to an sdecs by looking up the signature v.
+		 
+	   Reduce_sigof reduces a structure signature of the form
+	   SIGNAT_OF(X) to an sdecs by looking up and selfifying the
+	   signature of X.
+
+	   Reduce_sigof_fast reduces a structure signature of the form
+	   SIGNAT_OF(v.labs) to an sdecs when v is in the context's
+	   memo table.  That table stores deeply reduced, selfified
+	   signatures that have no occurrences of local variables.
+	   From such a signature, we simply have to project out the
+	   right component.
+        *)
+
+	fun lookup (arg : context * var) : phrase_class =
+	    (case Context_Lookup_Var_Raw arg
+	       of SOME(_,pc) => pc
+		| NONE => error ("unbound module variable " ^ var2string (#2 arg)))
+	
+	fun reduce_sigof_fast (ctxt : context, v : var, labs : labels) : signat option =
+	    let val CONTEXT {memo, ...} = ctxt
+		fun project (l : label, s : signat) : signat =
+		    let val sdecs = (case s
+				       of SIGNAT_STRUCTURE sdecs => sdecs
+					| _ => error "reduce_sigof_fast projecting from non-structure component")
+			val sdecopt = find_sdec (sdecs,l)
+		    in  (case sdecopt
+			   of SOME (SDEC(_,DEC_MOD(_,_,s))) => s
+			    | SOME _ => error "projecting from non-module component in reduce_sigof_fast"
+			    | NONE => error "cannot find label in reduce_sigof_fast")
+		    end
+	    in  (case VarMap.find(!memo, v)
+		   of NONE => NONE
+		    | SOME signat => SOME (foldl project signat labs))
+	    end
+
+	fun reduce_signat (ctxt : context, s : signat) : signat =
+	    (case s
+	       of SIGNAT_VAR v => reduce_sigvar (ctxt,v)
+		| SIGNAT_OF (PATH(v,labs)) => (case reduce_sigof_fast (ctxt, v, labs)
+						 of SOME s' => s'
+						  | NONE => reduce_sigof (ctxt,v,labs))
+		| _ => s)
+
+	and reduce_sigvar (ctxt : context, v : var) : signat =
+	    let val s = (case lookup (ctxt, v)
+			   of PHRASE_CLASS_SIG (_,s) => s
+			    | _ => error "SIGNAT_VAR with non-signature var")
+	    in  reduce_signat (ctxt, s)
+	    end
+
+	and reduce_sigof (ctxt : context, v : var, labs : labels) : signat =
+	    let val signat = (case lookup (ctxt,v)
+				of PHRASE_CLASS_MOD (_,_,s) => s
+				 | _ => error "SIGNAT_OF projecting from non-module")
+		val signat = selfify (MOD_VAR v, signat)
+		    
+		(* We have to continue selfifying after reduction.
+		   For SIGNAT_OF, this is taken care of by the
+		   recursive call. *)
+		fun reduce_and_selfify (lvs, s) =
+		    let val s' = reduce_signat (ctxt, s)
+			val selfified = (case s
+					   of SIGNAT_VAR _ => false
+					    | _ => true)
+		    in  if selfified then s'
+			else selfify (lvs_mod lvs, s')
+		    end
+		fun project (l : label, (lvs, s : signat)) : lvs * signat =
+		    let val s = reduce_and_selfify (lvs,s)
+			val sdecs = (case s
+				       of SIGNAT_STRUCTURE sdecs => sdecs
+					| _ => error "SIGNAT_OF projecting from non-structure component")
+			fun find (nil,_) = error "cannot find label in SIGNAT_OF"
+			  | find ((sdec as SDEC(l',dec)) :: rest,lvs) =
+			    if eq_label (l,l') then
+				let val s = (case dec
+					       of DEC_MOD(_,_,s) => s
+						| _ => error "SIGNAT_OF projecting from non-module component")
+				    val s = lvs_rewrite (lvs, s)
+				    val lvs = lvs_recurse (lvs,l,s)
+				in  (lvs,s)
+				end
+			    else find (rest, lvs_extend (lvs,sdec))
+		    in  find (sdecs,lvs)
+		    end
+		val lvs = lvs (MOD_VAR v)
+		val (lvs,s) = foldl project (lvs,signat) labs
+		val s = sig_subst (s, lvs_subst lvs)
+	    in  reduce_and_selfify (lvs, s)
+	    end
+
+	(* Deep_reduce applies reduce_signat recursively so that any
+           substructure signatures are also sdecs.  *)
+	    
+	fun deep_reduce (ctxt : context, lvs, s : signat) : signat =
+	    (case reduce_signat (ctxt,s)
+	       of SIGNAT_STRUCTURE sdecs =>
+		   let val (sdecs,_) = foldl_acc (deep_reduce' ctxt) lvs sdecs
+		   in  SIGNAT_STRUCTURE sdecs
+		   end
+		| s => s)
+
+	and deep_reduce' (ctxt : context) (sdec, lvs) : sdec * lvs =
+	    (case sdec
+	       of SDEC (l,DEC_MOD(v,poly,s)) =>
+		   let val s = lvs_rewrite (lvs, s)
+		       val s = deep_reduce (ctxt, lvs_recurse (lvs,l,s), s)
+		       val lvs = lvs_extend (lvs,sdec)
+		       val sdec = SDEC (l,DEC_MOD (v,poly,s))
+		   in  (sdec,lvs)
+		   end
+		| _ => (sdec,lvs))
+		 
+    in
+	fun transform (ctxt : context, v : var, s : signat) : signat =
+	    let val CONTEXT {memo, ...} = ctxt
+	    in
+		(case VarMap.find (!memo,v)
+		   of SOME s' => s'
+		    | NONE =>
+		       let val m = MOD_VAR v
+			   val lvs = lvs m
+			   val s' = deep_reduce (ctxt,lvs,s)
+			   val s' = eliminate (lvs,s')
+			   val s' = selfify (m,s')
+			   val _ = memo := VarMap.insert (!memo,v,s')
+(*
+			   val _ = debugdo(fn () =>
+					   (print "\n\ntransformed "; pp_mod m;
+					    print " : "; pp_signat s; print "\n";
+					    print "to : "; pp_signat s'; print "\n\n"))
+*)
+		       in  s'
 		       end)
+	    end
+	    
+	val deep_reduce : context * mod * signat -> signat =
+	    (fn (ctxt,m,s) => deep_reduce (ctxt, lvs m, s))
+    end
+
+    (* ----------- context extenders ----------------------------  *)
+    val empty_context = CONTEXT{varMap = VarMap.empty,
+				ordering = nil,
+				labelMap = LabelMap.empty,
+				memo = ref VarMap.empty,
+				fixityMap = LabelMap.empty,
+				overloadMap = LabelMap.empty}
+
+    type varMap = (label * phrase_class) VarMap.map
+    type labelMap = vpath LabelMap.map
+    type overloadMap = ovld LabelMap.map
+	
+    (* Prepare for the possible shadowing of a label. *)
+    fun shadow (vm : varMap, lm : labelMap, om : overloadMap, l : label)
+	: varMap * labelMap * overloadMap =
+	(case (LabelMap.find(om,l), LabelMap.find(lm,l))
+	   of (SOME _, NONE) =>
+	       let val (om,_) = LabelMap.remove(om,l)
+	       in  (vm,lm,om)
+	       end
+	    | (NONE, SOME vpath) =>
+	       let val (lm,_) = LabelMap.remove(lm,l)
+		   val (vm,lm) =
+		       (case vpath
+			  of (v,nil) =>
+			      let val newlab = fresh_internal_label(label2name' l)
+				  val SOME (_,pc) = VarMap.find (vm,v)
+				  val vm = VarMap.insert (vm,v,(newlab,pc))
+				  val lm = LabelMap.insert (lm,newlab,vpath)
+			      in  (vm,lm)
+			      end
+			   | _ => (vm,lm))
+	       in  (vm,lm,om)
+	       end
+	    | (NONE, NONE) => (vm,lm,om)
+	    | (SOME _, SOME _) => error "overloadMap and labelMap labels not disjoint")
+
+    local
+	fun print_binding (l, v, pc) = (pp_label l; print " > "; pp_var v;
+					print " : "; pp_phrase_class pc)
+
+	(* Check that the free variables of pc are all bound in ctxt. *)
+	fun check_free (ctxt : context, l : label, v : var, pc : phrase_class) : unit =
+	    let val CONTEXT {varMap, ...} = ctxt
+		fun bound v' = isSome (VarMap.find (varMap, v'))
+		fun ck v' = if bound v' then ()
+			    else (debugdo (fn () =>
+					   (print "unbound variable "; pp_var v';
+					    print " detected while adding:\n";
+					    print_binding (l,v,pc); print "\n"));
+				  error "unbound variable detected")
+	    in  VarSet.app ck (classifier_free pc)
+	    end
+	
+	(* Check that v is not bound in context. *)
+	fun check_shadow (ctxt : context, l : label, v : var, pc : phrase_class) : unit =
+	    let val CONTEXT {varMap, ...} = ctxt
+	    in  (case VarMap.find (varMap,v)
+		   of NONE => ()
+		    | SOME (l',pc') =>
+		       (debugdo (fn () =>
+				 (print "shadowing "; print_binding (l',v,pc');
+				  print "\nwith "; print_binding (l,v,pc);
+				  print "\n"));
+			error "variable shadowing"))
+	    end
+	
+    in
+	(* Extend context with l > v:pc.  Ignores starred structures. *)
+	fun add' (arg : context * label * var * phrase_class) : context =
+	    let val _ = sanitycheck(fn () =>
+				    (check_free arg;
+				     check_shadow arg))
+		val (ctxt,l,v,pc) = arg
+		val CONTEXT {varMap, ordering, labelMap, memo,
+			     fixityMap, overloadMap} = ctxt
+		val (varMap,labelMap,overloadMap) = shadow (varMap,labelMap,overloadMap,l)
+		val varMap = VarMap.insert (varMap,v,(l,pc))
+		val ordering = v :: ordering
+		val labelMap = LabelMap.insert (labelMap,l,(v,nil))
+(*
+		val _ = debugdo(fn () =>
+				(print "\n\nextending context with ";
+				 print_binding (l,v,pc); print "\n\n"))
+*)
+	    in  CONTEXT{varMap = varMap,
+			ordering = ordering,
+			labelMap = labelMap,
+			memo = ref (!memo),
+			fixityMap = fixityMap,
+			overloadMap = overloadMap}
+	    end
+    end
+
+    local
+	(* Extend labelMap with top-level labels visible by the star
+	   convention. *)
+	fun add_labels (v : var, labs : labels, s : signat, labelMap) : labelMap =
+	    (case s
+	       of SIGNAT_STRUCTURE sdecs => foldl (add_labels' (v,labs)) labelMap sdecs
+		| _ => labelMap)
+	     
+	and add_labels' (v : var, labs : labels) (sdec, labelMap) : labelMap =
+	    let val SDEC(l,dec) = sdec
+		val labs = labs @ [l]
+		val labelMap = (if !NoOpenInternalPaths andalso is_label_internal l
+				    then labelMap
+				else LabelMap.insert (labelMap,l,(v,labs)))
+	    in
+		(case (is_open l,dec)
+		   of (true,DEC_MOD (_,_,s)) => add_labels (v,labs,s,labelMap)
+		    | _ => labelMap)
+	    end
+    in
+	
+	(* Extend context with l > v:pc.  When a structure with a
+	   starred label is added, its componenets are added to the
+	   labelMap.  *)
+	
+	fun add (ctxt : context, l : label, v : var, pc : phrase_class) : context =
+	    let val ctxt = add' (ctxt,l,v,pc)
+	    in  (case (is_open l, pc)
+		  of (true,PHRASE_CLASS_MOD(m,_,s)) =>
+		      let val CONTEXT {varMap, ordering, labelMap, memo,
+				       fixityMap, overloadMap} = ctxt
+			  val labelMap = add_labels (v,nil,deep_reduce (ctxt,m,s),labelMap)
+		      in  CONTEXT{varMap = varMap,
+				  ordering = ordering,
+				  labelMap = labelMap,
+				  memo = ref (!memo),
+				  fixityMap = fixityMap,
+				  overloadMap = overloadMap}
+		      end
+		   | _ => ctxt)
+	    end
+    end
+
+    (* Add a top-level label that maps to the given bound variable.
+       Ignores starred structures.  *)
+   
+    fun add_context_label (context, label, var) : context =
+	let val CONTEXT {varMap, ordering, labelMap, memo,
+			 fixityMap, overloadMap} = context
+	    val _ = sanitycheck(fn () =>
+				(case VarMap.find (varMap, var)
+				   of SOME _ => ()
+				    | NONE =>
+				       (debugdo (fn () =>
+						 (print "unbound variable "; pp_var var;
+						  print " detected while adding label ";
+						  pp_label label; print "\n"));
+					error "unbound variable in add_context_label")))
+	    val (varMap,labelMap,overloadMap) = shadow (varMap,labelMap,overloadMap,label)
+	    val labelMap = LabelMap.insert (labelMap,label,(var,nil))
+	in  CONTEXT{varMap = varMap,
+		    ordering = ordering,
+		    labelMap = labelMap,
+		    memo = ref (!memo),
+		    fixityMap = fixityMap,
+		    overloadMap = overloadMap}
 	end
-
-    (* add_sdec is the basic context extension routine.
-       In addition to extending the context, it adds an entry in the labelMap
-       (and a corresponding one in the pathMap) for every (sub-)component of the sdec
-       visible by open lookup.
-     *)
-    fun add_sdec'(ctxt, pathopt, sdec as (SDEC(l,dec))) = 
-	let fun mk_path v = (case pathopt of
-				 NONE => PATH(v,[])
-			       | SOME p => join_path_labels(p,[l]))
-	    fun help(CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering},
-		     v, from_path, pc_maker) =
-		let val path = mk_path v
-		    val obj = from_path path
-		    val pc = pc_maker obj
-		    val PATH vpath = path
-		    val (overloadMap, labelMap, pathMap) = shadow(overloadMap, labelMap, pathMap, l)
-		    val labelMap = LabelMap.insert(labelMap,l,(path,pc))
-		    val pathMap = PathMap.insert(pathMap,vpath,(l,pc))
-		    val ordering = path :: ordering
-		in CONTEXT{fixityMap = fixityMap,
-			   overloadMap = overloadMap,
-			   labelMap = labelMap,
-			   pathMap = pathMap,
-			   ordering = ordering}
-		end
-	    fun sdec_help v (sdec,ctxt) = add_sdec'(ctxt,SOME(mk_path v),sdec)
-	in case dec of
-	    DEC_EXP(v,c,eopt,inline) => help(ctxt, v, path2exp, 
-					     fn obj => PHRASE_CLASS_EXP(obj, c, eopt, inline))
-	  | DEC_CON(v,k,copt,inline) => help(ctxt, v, path2con, 
-					     fn obj => PHRASE_CLASS_CON(obj, k, copt, inline))
-	  | DEC_MOD (v,b,s as SIGNAT_FUNCTOR _) => help(ctxt,v, path2mod, 
-						   fn obj => (PHRASE_CLASS_MOD(obj,b,s)))
-	  | DEC_MOD (v,b,s) =>
-		  let val _ = (case s of
-				   SIGNAT_SELF _ => ()
-				 | _ => (print "adding non-selfified signature to context: "; pp_sdec sdec; print "\n";
-					 error "adding non-selfified signature to context"))
-		      val ctxt = help(ctxt, v, path2mod, fn obj => (PHRASE_CLASS_MOD(obj, b,s)))
-		  in  if (is_open l) 
-			  then let val sdecs = (case (reduce_signat ctxt s) of
-						    SIGNAT_STRUCTURE sdecs => sdecs
-						  | _ => error "open label - not struct sig")
-			       in  foldl (sdec_help v) ctxt sdecs
-			       end
-		      else ctxt
-		  end
+	
+    fun add_context_sdec (ctxt : context, sdec) : context =
+	let val SDEC (l,dec) = sdec
+	    val (v,pc) = (case dec
+			    of DEC_EXP (v,c,eopt,inline) => (v,PHRASE_CLASS_EXP (VAR v,c,eopt,inline))
+			     | DEC_CON (v,k,copt,inline) => (v,PHRASE_CLASS_CON (CON_VAR v,k,copt,inline))
+			     | DEC_MOD (v,poly,s) => (v,PHRASE_CLASS_MOD (MOD_VAR v,poly,s)))
+	in  add (ctxt,l,v,pc)
 	end
-
-    fun add_sdec(ctxt, sdec) = add_sdec'(ctxt,NONE,sdec)
-
-    fun add_context_sig(CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering},
-			l, v, signat) = 
-	let val pc = PHRASE_CLASS_SIG(v,signat)
-	    val path = (v,[])
-	    val (overloadMap,labelMap, pathMap) = shadow(overloadMap,labelMap, pathMap, l)
-	in  CONTEXT({fixityMap = fixityMap,
-		     overloadMap = overloadMap,
-		     labelMap = Name.LabelMap.insert(labelMap,l,(PATH path, pc)),
-		     pathMap = Name.PathMap.insert(pathMap,path,(l, pc)),
-		     ordering = (PATH path)::ordering})
+    
+    fun add_context_exp (ctxt,l,v,c) = add_context_sdec (ctxt,SDEC(l,DEC_EXP(v,c,NONE,false)))
+    fun add_context_con (ctxt,l,v,k,copt) = add_context_sdec (ctxt,SDEC(l,DEC_CON(v,k,copt,false)))
+    fun add_context_mod (ctxt,l,v,s) = add_context_sdec (ctxt,SDEC(l,DEC_MOD(v,false,s)))
+	
+    fun add_context_sdec' (sdec, ctxt) = add_context_sdec (ctxt, sdec)
+    fun add_context_sdecs (ctxt, sdecs) = foldl add_context_sdec' ctxt sdecs
+	
+    fun anon_label () = fresh_internal_label "anon"
+    fun dec2sdec dec = SDEC(anon_label(), dec)
+	
+    fun add_context_exp' (ctxt,v,c) = add_context_exp (ctxt,anon_label(),v,c)
+    fun add_context_con' (ctxt,v,k,copt) = add_context_con (ctxt,anon_label(),v,k,copt)
+    fun add_context_mod' (ctxt,v,s) = add_context_mod (ctxt,anon_label(),v,s)
+    fun add_context_dec (ctxt,dec) = add_context_sdec (ctxt,dec2sdec dec)
+    fun add_context_decs (ctxt,decs) = add_context_sdecs (ctxt,map dec2sdec decs)
+	
+    fun add_context_sig (ctxt,l,v,s) = add (ctxt,l,v,PHRASE_CLASS_SIG (v,s))
+	
+    fun add_context_fixity (ctxt : context, l : label, fixity) : context =
+	let val CONTEXT {varMap, ordering, labelMap, memo,
+			 fixityMap, overloadMap} = ctxt
+	    val fixityMap = LabelMap.insert (fixityMap,l,fixity)
+	in  CONTEXT {varMap = varMap,
+		     ordering = ordering,
+		     labelMap = labelMap,
+		     memo = ref (!memo),
+		     fixityMap = fixityMap,
+		     overloadMap = overloadMap}
 	end
-
-    fun add_context_overexp(ctxt as CONTEXT {fixityMap, overloadMap, labelMap, pathMap, ordering},
-			    l, ovld2) = 
-	let val ovld1 = (case Name.LabelMap.find(overloadMap, l) of
+    
+    fun add_context_overexp (ctxt : context, l : label, ovld2 : ovld) : context =
+	let val CONTEXT {varMap, ordering, labelMap, memo,
+			 fixityMap, overloadMap} = ctxt
+	    val ovld1 = (case Name.LabelMap.find(overloadMap, l) of
 			     SOME ovld1 => ovld1
 			   | NONE => OVLD ([], NONE))
 	    val ovld3 = ovld_add(l,ctxt,ovld1,ovld2)
+	    val (varMap,labelMap,overloadMap) = shadow (varMap,labelMap,overloadMap,l)
 	    val overloadMap = LabelMap.insert(overloadMap, l, ovld3)
-	in  CONTEXT({fixityMap = fixityMap,
-		     overloadMap = overloadMap,
+	in  CONTEXT {varMap = varMap,
+		     ordering = ordering,
 		     labelMap = labelMap,
-		     pathMap = pathMap,
-		     ordering = ordering})
+		     memo = ref (!memo),
+		     fixityMap = fixityMap,
+		     overloadMap = overloadMap}
+	end
+    
+    fun add_context_entry (ctxt : context, entry : context_entry) : context = 
+	(case entry
+	   of CONTEXT_SDEC sdec => add_context_sdec (ctxt,sdec)
+	    | CONTEXT_SIGNAT (l,v,s) => add_context_sig (ctxt,l,v,s)
+	    | CONTEXT_FIXITY (l,f) => add_context_fixity (ctxt,l,f)
+	    | CONTEXT_OVEREXP (l,ovld) => add_context_overexp (ctxt,l,ovld))
+	     
+    fun add_context_entry' (entry,ctxt) = add_context_entry (ctxt,entry)
+    fun add_context_entries (ctxt, entries) = foldl add_context_entry' ctxt entries
+	
+    (* ----------- context access ----------------------------  *)
+
+    local
+	fun varEntry (varMap) (v : var) : context_entry =
+	    let val SOME (l,pc) = VarMap.find (varMap,v)
+		val sdec = fn dec => CONTEXT_SDEC (SDEC(l,dec))
+	    in
+		(case pc
+		   of PHRASE_CLASS_EXP (_,c,eopt,inline) => sdec (DEC_EXP(v,c,eopt,inline))
+		    | PHRASE_CLASS_CON (_,k,copt,inline) => sdec (DEC_CON(v,k,copt,inline))
+		    | PHRASE_CLASS_MOD (_,poly,s) => sdec (DEC_MOD(v,poly,s))
+		    | PHRASE_CLASS_SIG (_,s) => CONTEXT_SIGNAT (l,v,s))
+	    end
+	     
+	fun varEntries (varMap, ordering) : context_entry list =
+	    map (varEntry varMap) (rev ordering)
+
+	fun overloadEntries overloadMap : context_entry list =
+	    map CONTEXT_OVEREXP (LabelMap.listItemsi overloadMap)
+
+	fun fixityEntries fixityMap : context_entry list =
+	    map CONTEXT_FIXITY (LabelMap.listItemsi fixityMap)
+    in
+	fun list_entries (ctxt : context) : context_entry list =
+	    let val CONTEXT {varMap,ordering,fixityMap,overloadMap,...} = ctxt
+	    in  List.concat [fixityEntries fixityMap,
+			     varEntries (varMap,ordering),
+			     overloadEntries overloadMap]
+	    end
+    end
+
+    type fixityMap = fixity LabelMap.map
+    fun Context_Fixity (ctxt : context) : fixityMap =
+	let val CONTEXT {fixityMap,...} = ctxt
+	in  fixityMap
 	end
 
-    fun add_context_entry(ctxt, entry) = 
-	(case entry of
-	     CONTEXT_FIXITY (l,f) => add_context_fixity(ctxt,l,f)
-	   | CONTEXT_SDEC sdec => add_sdec(ctxt,sdec)
-	   | CONTEXT_SIGNAT (l,v,s) => add_context_sig(ctxt,l,v,s)
-	   | CONTEXT_OVEREXP(l,ovld) => add_context_overexp(ctxt,l,ovld))
+    fun find (ctxt : context, v : var) : (label * phrase_class) option =
+	let val CONTEXT {varMap, ...} = ctxt
+	in  VarMap.find (varMap, v)
+	end
+    
+    fun Context_Lookup_Var (ctxt : context, v : var) : (label * phrase_class) option =
+	(case Context_Lookup_Var_Raw (ctxt,v)
+	   of SOME (l,PHRASE_CLASS_MOD(m,poly,s)) =>
+	       SOME (l,PHRASE_CLASS_MOD(m,poly,transform(ctxt,v,s)))
+	    | answer => answer)
+	     
+    fun Context_Lookup_Label (ctxt : context, l : label) : path option =
+	let val CONTEXT {labelMap, ...} = ctxt
+	in  Option.map PATH (LabelMap.find (labelMap, l))
+	end
 
-    fun add_context_entry'(entry,ctxt) = add_context_entry(ctxt,entry)
-    fun add_context_entries (ctxt, entries) = foldl add_context_entry' ctxt entries
-    fun add_context_sdec(ctxt,sdec) = add_sdec(ctxt,sdec)
+    fun Context_Lookup_Overload (ctxt : context, l : label) : ovld option =
+	let val CONTEXT {overloadMap, ...} = ctxt
+	in  LabelMap.find (overloadMap, l)
+	end
 
-    fun add_context_sdec'(sdec,ctxt) = add_sdec(ctxt,sdec)
-    fun add_context_sdecs (ctxt, sdecs) = foldl add_context_sdec' ctxt sdecs
-
-    fun anon_label () = fresh_internal_label "anon"
-    fun dec2sdec dec = SDEC(anon_label(),dec)
-    fun decs2sdecs decs = map dec2sdec decs
-    fun add_context_decs(ctxt, decs) = add_context_sdecs(ctxt, decs2sdecs decs)
-    fun add_context_dec(ctxt, dec) = add_context_decs(ctxt,[dec])
-
-    fun add_context_exp(c, l, v, con) = add_context_sdec(c,SDEC(l,DEC_EXP(v,con,NONE,false)))
-    fun add_context_mod(c, l, v, signat) = add_context_sdec(c,SDEC(l,DEC_MOD(v,false,signat)))
-    fun add_context_con(c, l, v, kind, conopt) = 
-	add_context_sdec(c,SDEC(l,DEC_CON(v,kind,conopt,false)))
-
-    fun add_context_exp'(c, v, con) = add_context_exp(c,anon_label(), v, con)
-    fun add_context_mod'(c, v, signat) = add_context_mod(c,anon_label(), v, signat)
-    fun add_context_con'(c, v, kind, conopt) = add_context_con(c,anon_label(), v, kind, conopt)
-    fun add_context_sig'(c, v, signat) = add_context_sig(c,anon_label(), v, signat)
+    (* XXX: This will go away soon.  It is only needed by IlContextEq.  *)
+    fun Context_Ordering (ctxt : context) : var list =
+	let val CONTEXT {ordering, ...} = ctxt
+	in  rev ordering
+	end
 	
-    (* pcSubst straightforwardly performs a substitution on a phrase class.
-       Shouldn't this function be in IlUtil?
-     *)
-    fun pcSubst(pc,subst) = 
-	(case pc of
-	     PHRASE_CLASS_EXP(e,con,eopt,inline) => 
-		 let val e = exp_subst(e,subst)
-		     val con = con_subst(con,subst)
-		     val eopt = (case eopt of
-				     NONE => NONE
-				   | SOME e => SOME(exp_subst(e,subst)))
-		 in  PHRASE_CLASS_EXP(e,con,eopt,inline)
-		 end
-	   | PHRASE_CLASS_CON(con,kind,copt,inline) => 
-		 let val con = con_subst(con,subst)
-		     val copt = (case copt of
-				     NONE => NONE
-				   | SOME c => SOME(con_subst(c,subst)))
-		 in  PHRASE_CLASS_CON(con,kind,copt,inline)
-		 end
-	   | PHRASE_CLASS_MOD(m,b,signat) => 
-		 let val m = mod_subst(m,subst)
-		     val signat = sig_subst(signat,subst)
-		 in  PHRASE_CLASS_MOD(m,b,signat)
-		 end
-	   | PHRASE_CLASS_SIG (v,s) => 
-		 let val s = sig_subst(s,subst)
-		 in  PHRASE_CLASS_SIG(v,s)
-		 end)
-
     fun con_exp_subst subst (c,e) = (con_subst(c,subst), exp_subst(e,subst))
     fun ovld_subst subst (OVLD (celist, default)) = OVLD (map (con_exp_subst subst) celist, default)
 
@@ -272,34 +612,18 @@ struct
        If either condition is not already true, a substitution is produced and
           the substitution is applied to partial context.
     *)
-    fun alphaVaryPartialContext 
-	(CONTEXT{labelMap = lm1, pathMap = pm1, ...},
-	 (CONTEXT{fixityMap = fm2, overloadMap = om2, labelMap = lm2, pathMap = pm2, ordering = ord2}, unresolved)) 
-	: partial_context option = 
-	let 
-	    fun folder (vsubst,subst) (PATH p,(lm,pm,ord)) =
-		let val (lab,pc) = (case Name.PathMap.find(pm2, p) of
-					   SOME lab_pc => lab_pc
-					 | NONE => (print "missing path ";
-						    pp_path (PATH p); print "\n";
-						    error "missing path"))
-		    val (v,labs) = p
-		    val v = (case VarMap.find(vsubst,v) of
-				 NONE => v
-			       | SOME v' => v')
-		    val p = (v,labs)
-		    val pc = pcSubst(pc,subst)
-		    val lm = LabelMap.insert(lm,lab,(PATH p,pc))
-		    val pm = Name.PathMap.insert(pm,p,(lab,pc))
-		in (lm, pm, (PATH p)::ord)
-		end
+    fun alphaVaryPartialContext (ctxt1 : context, (ctxt2,unresolved) : partial_context) : partial_context option =
+	let
+	    val CONTEXT {varMap = vm1, labelMap = lm1, ...} = ctxt1
+	    val CONTEXT {varMap = vm2, ordering = ord2, labelMap = lm2,
+			 fixityMap = fm2, overloadMap = om2, ...} = ctxt2
             (* ---- Using the current unresolved of the partial context and the context,
 	       ---- compute the substitution of the unresolved variables on the partial context
 	       ---- to match the corresponding variables of the context and 
 	       ---- generate a new unresolved list. *)
 	    fun unresolvedFolder (v,l,(unresolved,vsubst)) =
 		(case Name.LabelMap.find(lm1,l) of
-		     SOME (PATH(v',[]), pc) =>
+		     SOME (v',[]) =>
 			 (VarMap.insert(unresolved, v', l),
 			 if (eq_var(v,v'))
 			     then vsubst
@@ -308,14 +632,13 @@ struct
 	    val (unresolved,unresolvedVsubst) = Name.VarMap.foldli unresolvedFolder
 		                                (VarMap.empty, VarMap.empty) unresolved
             (* ---- Compute the substitution to avoid clashes of bound variables ------- *)
-	    fun clashFolder ((v,[]), (l, pc), vsubst) = 
-		(case PathMap.find(pm1, (v, [])) of
+	    fun clashFolder (v, (l, pc), vsubst) = 
+		(case VarMap.find(vm1, v) of
 		     NONE => vsubst
 		   | SOME _ => let val v' = fresh_named_var "clash" (* derived_var v *)
 			       in  VarMap.insert(vsubst,v,v')
 			       end)
-	      | clashFolder (_, _, vsubst) = vsubst
-	    val clashVsubst = Name.PathMap.foldli clashFolder VarMap.empty pm2
+	    val clashVsubst = Name.VarMap.foldli clashFolder VarMap.empty vm2
 	    (* ----- Compute the final substitution by combining unresolved and clash ---- *)
 	    local
 		fun folder(v,v',subst) = 
@@ -334,66 +657,62 @@ struct
 	in  if (subst_is_empty final_subst)
 		then NONE
 	    else 
-		let val (labelMap,pathMap,ordering) = 
-		    foldr (folder (final_vsubst,final_subst)) (LabelMap.empty,PathMap.empty,[]) ord2
+		let val vsubst = fn v => (case VarMap.find(final_vsubst,v)
+					    of NONE => v
+					     | SOME v' => v')
+		    val pcsubst = fn pc => pc_subst(pc,final_subst)
+		    val varMap = (VarMap.foldli
+				  (fn (v,(lab,pc),vm) =>
+				   let val v = vsubst v
+				       val pc = pcsubst pc
+				       val vm = VarMap.insert (vm,v,(lab,pc))
+				   in  vm
+				   end) VarMap.empty vm2)
+		    val ordering = map vsubst ord2
+		    val labelMap = LabelMap.map (fn (v,labs) => (vsubst v, labs)) lm2
 		    val overloadMap = LabelMap.map (ovld_subst final_subst) om2
-		in  SOME (CONTEXT{fixityMap = fm2,
-				  overloadMap = overloadMap,
+		in  SOME (CONTEXT{varMap = varMap,
+				  ordering = ordering,
 				  labelMap = labelMap,
-				  pathMap = pathMap,
-				  ordering = ordering}, 
+				  memo = ref VarMap.empty,
+				  fixityMap = fm2,
+				  overloadMap = overloadMap},
 			  unresolved)
 		end 
 	end
 
-    fun pcAddFree(pc,set) = 
-	(case pc of
-	     PHRASE_CLASS_EXP (e,c,eopt,_) => 
-		 let val set = VarSet.union(set, exp_free e)
-		     val set = VarSet.union(set, con_free c) 
-		 in  (case eopt of
-			  NONE => set
-			| SOME e => VarSet.union(set, exp_free e))
-		 end
-	   | PHRASE_CLASS_CON (c,_,copt,_) => 
-		let val set = VarSet.union(set, con_free c) 
-		in (case copt of
-			NONE => set
-		      | SOME c => VarSet.union(set, con_free c))
-		end
-	   | PHRASE_CLASS_MOD (m,_,s) => 
-		let val set = VarSet.union(set, mod_free m) 
-		in  VarSet.union(set, sig_free s)
-		end
-	   | PHRASE_CLASS_SIG (_, s) => VarSet.union(set, sig_free s))
+    fun pcAddFree (pc : phrase_class, set : VarSet.set) : VarSet.set =
+	VarSet.union (set, pc_free pc)
 
     (* is_open_internal_path checks if a path consists of a sequence of open labels ending with
        an internal label. *)
-    fun is_open_internal_path (_,PATH(v,[])) = false
-      | is_open_internal_path (pathmap,PATH(v,labs)) = 
+    fun is_open_internal_path (_,(v,[])) = false
+      | is_open_internal_path (varmap,(v,labs)) = 
 	(case labs of
-	     [lab] => (case PathMap.find(pathmap,(v,[])) of
-			   NONE => (print "Could not find "; pp_var v; print "\n"; error "is_open_internal_path failed")
+	     [lab] => (case VarMap.find(varmap,v) of
+			   NONE => (print "Could not find "; pp_var v; print "\n";
+				    error "is_open_internal_path failed")
 			 | SOME (l,_) => is_open l andalso is_label_internal lab)
 	   | _ => let val len = length labs
 		  in is_open (List.nth(labs, len - 2)) andalso is_label_internal (List.nth(labs, len - 1))
 		  end)
 
     (* adding the partial context to the context *)
-    fun plus_context (ctxt as CONTEXT{fixityMap = fm1, overloadMap = om1,
-				      labelMap = lm1, pathMap = pm1, ordering = ord1},
-		      orig_pctxt : partial_context)
-	: partial_context option * context = 
+    fun plus_context (ctxt1 : context, orig_pctxt : partial_context) : partial_context option * context = 
 	let
+(*
 	    val _ = debugdo (fn () => (print "plus PARTIAL CONTEXT:\n";
 				       pp_pcontext orig_pctxt;
 				       print "\n\n"))
-	    val pctxt_option = alphaVaryPartialContext(ctxt, orig_pctxt)
-	    val (CONTEXT{fixityMap = fm2, overloadMap = om2,
-			 labelMap = lm2, pathMap = pm2, ordering = ord2}, 
-		 unresolved) = (case pctxt_option of
-				    NONE => orig_pctxt (* alpha-varying not needed *)
-				  | SOME pctxt => pctxt)
+*)
+	    val CONTEXT {varMap = vm1, ordering = ord1, labelMap = lm1,
+			 memo = ref memo1, fixityMap = fm1, overloadMap = om1} = ctxt1
+	    val pctxt_option = alphaVaryPartialContext(ctxt1, orig_pctxt)
+	    val (ctxt2, unresolved) = (case pctxt_option
+					 of NONE => orig_pctxt (* alpha-varying not needed *)
+					  | SOME pctxt => pctxt)
+	    val CONTEXT {varMap = vm2, ordering = ord2, labelMap = lm2,
+			 fixityMap = fm2, overloadMap = om2, ...} = ctxt2
 	    val fixityMap = LabelMap.unionWithi
 		            (fn (l, _, _) => error ("fixityMap not disjoint at " ^ (label2name l)))
 			    (fm1,fm2)
@@ -402,117 +721,99 @@ struct
                open_internal_path.  Why is this the right thing?
              *)
 	    val labelMap = LabelMap.unionWithi 
-		            (fn (l,(p1,pc1),second as (p2,pc2)) => 
-			     if (is_open_internal_path(pm1,p1) orelse
-				 is_open_internal_path(pm2,p2))
-				 then second
-			     else (print "p1 = "; pp_path p1; print " :\n";
-				   pp_phrase_class pc1; print "\n\n";
-				   print "p2 = "; pp_path p2; print " :\n";
-				   pp_phrase_class pc2; print "\n\n";
+		            (fn (l,p1,p2) =>
+			     if not (!NoOpenInternalPaths) andalso
+				 (is_open_internal_path(vm1,p1) orelse
+				  is_open_internal_path(vm2,p2))
+				 then p2
+			     else (print "p1 = "; pp_path (PATH p1); print "\n";
+				   print "p2 = "; pp_path (PATH p2); print "\n";
 				   error ("labelMap not disjoint at " ^ (label2name l))))
 			     (lm1,lm2)
-	    val pathMap = PathMap.unionWithi 
-			    (fn (p,(l,_),(l',_)) => (print "pathMap not disjoint at label ";
+	    val varMap = VarMap.unionWithi
+		            (fn (v,(l,_),(l',_)) => (print "varMap not disjoint at label ";
 						     Ppil.pp_label l;
 						     print " and label' ";
 						     Ppil.pp_label l';
-						     print " and path ";
-						     Ppil.pp_path (PATH p);
+						     print " and var ";
+						     Ppil.pp_var v;
 						     print "\n";
-						     error "pathMap not disjoint"))
-			     (pm1,pm2)
+						     error "varMap not disjoint"))
+			     (vm1,vm2)
+	    (* Ignore (empty) table in the partial context. *)
+	    val memoMap = memo1
+		
 	    (* orderings are backwards *)
 	    val ordering = ord2 @ ord1
-	    val almostFinalContext = CONTEXT{fixityMap = fixityMap,
-					     overloadMap = Name.LabelMap.empty,
+	    val almostFinalContext = CONTEXT{varMap = varMap,
+					     ordering = ordering,
 					     labelMap = labelMap,
-					     pathMap = pathMap,
-					     ordering = ordering}
+					     memo = ref memoMap,
+					     fixityMap = fixityMap,
+					     overloadMap = Name.LabelMap.empty}
 	    val overloadMap = LabelMap.unionWithi
                      	      (fn (l, ovld1, ovld2) =>
-			       (
-(*
-				print "almostFinalContext is ";
-				pp_context almostFinalContext;
-				print "\n\n\n";
-				print "ovld1 is "; pp_ovld ovld1; print "\n";
-				print "ovld2 is "; pp_ovld ovld2; print "\n";
-*)
-				ovld_add(l,almostFinalContext,ovld1,ovld2)))
+			       (ovld_add(l,almostFinalContext,ovld1,ovld2)))
 			      (om1,om2)
 	in  (pctxt_option,
-	     CONTEXT{fixityMap = fixityMap,
-		     overloadMap = overloadMap,
+	     CONTEXT{varMap = varMap,
+		     ordering = ordering,
 		     labelMap = labelMap,
-		     pathMap = pathMap,
-		     ordering = ordering})
+		     memo = ref memoMap,
+		     fixityMap = fixityMap,
+		     overloadMap = overloadMap})
 	end 
-(*
-    fun plus_context (ctxt, partial_ctxts) 
-	: partial_context option list * context = 
-	(debugdo (fn() => (print "plus CONTEXT:\n";
-			   pp_context ctxt;
-			   print "\n\n"));
-	 foldl_list plus ctxt partial_ctxts)
-*)  
-    fun show_varset str set = 
-	(print str; print ": ";
-	 VarSet.app (fn v => (Ppil.pp_var v; print "  ")) set;
-	 print "\n")
 
-    (* The context has cycles because of selfification *)
-    fun reachableVars(pathMap, black, gray) = 
+    fun reachableVars(varMap, black, gray) = 
 	if (VarSet.isEmpty gray)
 	    then black
 	else 
 	    let 
-(*		val _ = show_varset "Gray" gray *)
 		val black = VarSet.union(black, gray)
 		fun folder (v,s) = 
-		    (case PathMap.find(pathMap,(v,[])) of
+		    (case VarMap.find(varMap,v) of
 			 SOME (_, pc) => pcAddFree(pc,s)
 		       | _ => s)
 (* error ("reachableVars could not find free variable " ^ (Name.var2string v)) *)
 		val freeVars = VarSet.foldl folder VarSet.empty gray  
-		fun pred v = (case PathMap.find(pathMap,(v,[])) of
+		fun pred v = (case VarMap.find(varMap,v) of
 				  SOME _ => true
 				| _ => false)
 		val temp = VarSet.filter pred freeVars         (* one step from old gray *)
-(*		val _ = show_varset "temp" temp *)
 		val gray = VarSet.difference(temp, black)      (* there might be loops *)
-	    in  reachableVars(pathMap,black,gray)
+	    in  reachableVars(varMap,black,gray)
 	    end
 
     fun sub_context (bigger : Il.context, smaller : Il.context) : Il.partial_context = 
 	let 
-	    val CONTEXT{fixityMap=f1, overloadMap=om1, labelMap=l1, pathMap=p1, ordering=o1} = bigger
-	    val CONTEXT{fixityMap=f2, overloadMap=om2, labelMap=l2, pathMap=p2, ordering=o2} = smaller
-	    val f3 = LabelMap.filteri (fn (l1,_) => (case LabelMap.find(f2,l1) of
-							 NONE => true
-						       | SOME _ => false)) f1
-	    val om3 = LabelMap.mapi (fn (l1, ovld1) => (case LabelMap.find(om2, l1) of
-							    NONE => ovld1
-							  | SOME ovld2 => ovld_sub(bigger,ovld1,ovld2))) om1
-	    val om3 = LabelMap.filteri (fn (l3, OVLD ([],_)) => false
-	                                 | _ => true) om3
-	    val o3 = List.filter (fn PATH vpath => (case PathMap.find(p2,vpath) of
-							NONE => true
-						      | SOME _ => false)) o1
+	    val CONTEXT{varMap=v1, ordering=o1, labelMap=l1, fixityMap=f1, overloadMap=om1, ...} = bigger
+	    val CONTEXT{varMap=v2, ordering=o2, labelMap=l2, fixityMap=f2, overloadMap=om2, ...} = smaller
+	    val v3 = VarMap.filteri (fn (v,_) => 
+				     (case VarMap.find(v2,v)
+					of NONE => true
+					 | SOME _ => false)) v1
+	    val o3 = List.filter (fn v => (case VarMap.find(v2,v)
+					     of NONE => true
+					      | SOME _ => false)) o1
 	    val l3 = LabelMap.filteri (fn (l,_) => 
-					    (case LabelMap.find(l2,l) of
-						 NONE => true
-					       | SOME _ => false)) l1
-	    val p3 = PathMap.filteri (fn (p,_) => 
-					   (case PathMap.find(p2,p) of
-						NONE => true
-					      | SOME _ => false)) p1
-	    val diff = CONTEXT{fixityMap = f3, overloadMap = om3,
-			       labelMap = l3, pathMap = p3, ordering = o3} 
-	    val roots = PathMap.foldli 
-		          (fn ((v,[]),_,s) => VarSet.add(s,v)
-			    | (_,_,s) => s)
-		          VarSet.empty p3
+				       (case LabelMap.find(l2,l)
+					  of NONE => true
+					   | SOME _ => false)) l1
+	    val f3 = LabelMap.filteri (fn (l1,_) => (case LabelMap.find(f2,l1)
+						       of NONE => true
+							| SOME _ => false)) f1
+	    val om3 = LabelMap.mapi (fn (l1, ovld1) => (case LabelMap.find(om2, l1)
+							  of NONE => ovld1
+							   | SOME ovld2 => ovld_sub(bigger,ovld1,ovld2))) om1
+	    val om3 = LabelMap.filter (fn (OVLD ([],_)) => false
+	                                | _ => true) om3
+	    (* There is no reason to retain the memo table; it should not
+	       be written to disk. *)
+	    val diff = CONTEXT {varMap = v3, ordering = o3, labelMap = l3,
+				fixityMap = f3, overloadMap = om3, memo = ref VarMap.empty}
+	    val roots = (VarMap.foldli 
+			 (fn (v,_,s) => VarSet.add(s,v))
+			 VarSet.empty v3)
 	    val reachable = LabelMap.foldl
 		           (fn (OVLD (celist,_),reach) =>
 			      foldl (fn ((c,e),reach) => 
@@ -521,33 +822,26 @@ struct
 				     in  VarSet.union(VarSet.union(reach,cFree),eFree)
 				     end) reach celist)
 			   VarSet.empty om3
-	    val reachable = reachableVars(p1, reachable, roots)
+	    val reachable = reachableVars(v1, reachable, roots)
 	    val keepVars = VarSet.difference(reachable, roots)
 	    val unresolved = VarSet.foldl
 		                  (fn (v,vm) => 
-				   (case PathMap.find(p1, (v,[])) of
-					SOME (l, _) => VarMap.insert(vm,v,l)
-				      | NONE => error "Missing variable in sub_context"))
+				   (case VarMap.find(v1,v)
+				      of SOME (l, _) => VarMap.insert(vm,v,l)
+				       | NONE => error "Missing variable in sub_context"))
 				  Name.VarMap.empty keepVars
-(*
-	    val _ = print ("sub_context: " ^
-			   Int.toString(PathMap.numItems p2) ^
-			   " items in smaller context. " ^ 
-			   (Int.toString (VarMap.numItems unresolved))
-			   ^ " items in unresolved of smaller context.\n")
-*)
 	in  (diff, unresolved)
 	end
 
-    fun gc_context ((context, (CONTEXT{pathMap,...}, _), sbndopt_entry) : Il.module) : Il.context = 
-	let val exclude = PathMap.foldli
-		          (fn ((v,[]),_,s) => VarSet.add(s,v)
-			    | (_,_,s) => s)
-		          VarSet.empty pathMap
-	    val roots = PathMap.foldli
-		          (fn ((v,[]),(_,pc),s) => pcAddFree(pc,s)
-			    | (_,_,s) => s)
-		          VarSet.empty pathMap
+    fun gc_context (module : Il.module) : Il.context = 
+	let val (ctxt1, (ctxt2,_), sbndopt_entry) = module
+	    val CONTEXT {varMap, ...} = ctxt2
+	    val exclude = VarMap.foldli
+		          (fn (v,_,s) => VarSet.add(s,v))
+		          VarSet.empty varMap
+	    val roots = VarMap.foldli
+		          (fn (v,(_,pc),s) => pcAddFree(pc,s))
+		          VarSet.empty varMap
 	    fun folder ((sbndopt,entry),roots) = 
 		let val roots = (case sbndopt of
 				     NONE => roots
@@ -556,29 +850,29 @@ struct
 		end
 	    val roots = foldl folder roots sbndopt_entry
 	    val roots = VarSet.difference(roots, exclude)
-	    val CONTEXT{pathMap, labelMap, ordering, overloadMap, fixityMap} = context
-	    val roots = PathMap.foldli
-		          (fn ((v,[]),(l,_),s) => if Name.keep_import l
-						      then VarSet.add(s,v)
-						  else s
-			    | (_,_,s) => s)
-			  roots pathMap
-	    val reachable = reachableVars(pathMap, VarSet.empty, roots)
-	    fun isReachable (v,_) = Name.VarSet.member(reachable,v)
-	    val pathMap_orig = pathMap (* used for the print statements below *)
-	    val pathMap = PathMap.filteri (fn (p,_) => isReachable p) pathMap_orig
-	    val labelMap = LabelMap.filteri (fn (_, (PATH p, _)) => isReachable p) labelMap
-	    val ordering = List.filter (fn PATH p => isReachable p) ordering
+	    val CONTEXT{varMap, ordering, labelMap, overloadMap, fixityMap, ...} = ctxt1
+	    val roots = VarMap.foldli
+		          (fn (v,(l,_),s) => if Name.keep_import l
+						 then VarSet.add(s,v)
+					     else s)
+			  roots varMap
+	    val reachable = reachableVars(varMap, VarSet.empty, roots)
+	    fun isReachable v = Name.VarSet.member(reachable,v)
+	    val varMap_orig = varMap (* used for the print statements below *)
+	    val varMap = VarMap.filteri (fn (v,_) => isReachable v) varMap_orig
+	    val labelMap = LabelMap.filteri (fn (_,(v,_)) => isReachable v) labelMap
+	    val ordering = List.filter isReachable ordering
 	    val _ = print ("gc_context: " ^
-			   Int.toString(PathMap.numItems pathMap_orig) ^
+			   Int.toString(VarMap.numItems varMap_orig) ^
 			   " items in original context.  " ^ 
-			   (Int.toString (PathMap.numItems pathMap))
+			   (Int.toString (VarMap.numItems varMap))
 			   ^ " items in reduced context.\n")
-	in  CONTEXT{pathMap = pathMap,
-		    overloadMap = overloadMap,
-		    labelMap = labelMap,
+	in  CONTEXT{varMap = varMap,
 		    ordering = ordering,
-		    fixityMap = fixityMap}
+		    labelMap = labelMap,
+		    memo = ref VarMap.empty, (* laziness *)
+		    fixityMap = fixityMap,		    
+		    overloadMap = overloadMap}
 	end
 
     (* Invariant: If f : label_info then f is 1-1. *)
@@ -605,28 +899,31 @@ struct
 	end
     
     fun map_labels (li : label_info) (l : label) : label =
-	(case Name.LabelMap.find (li, l)
-	   of NONE => (debugdo (fn () =>
-				(print "map_labels: "; pp_label l;
-				 print " -> "; pp_label l; print "\n"));
-		       l)
-	    | SOME l' => (debugdo (fn () =>
-				   (print "map_labels: "; pp_label l;
-				    print " -> "; pp_label l'; print "\n"));
-			  l'))
-    fun map_context_labels (CONTEXT{pathMap, overloadMap, labelMap, ordering, fixityMap}, li) =
+	let val l' = (case Name.LabelMap.find (li, l)
+			of NONE => l
+			 | SOME l' => l')
+(*
+	    val _ = debugdo (fn () =>
+			     (print "map_labels: "; pp_label l;
+			      print " -> "; pp_label l'; print "\n"))
+*)
+	in  l'
+	end
+
+    fun map_context_labels (CONTEXT{varMap, ordering, labelMap, memo=ref memoMap, fixityMap, overloadMap}, li) =
 	let val lookup = map_labels li
 	    fun folder (l, v, map) = Name.LabelMap.insert (map, lookup l, v)
 	    fun changeDomain map = Name.LabelMap.foldli folder Name.LabelMap.empty map
-	    val pathMap = Name.PathMap.map (fn (l,v) => (lookup l, v)) pathMap
+	    val varMap = Name.VarMap.map (fn (l,pc) => (lookup l, pc)) varMap
 	    val overloadMap = changeDomain overloadMap
 	    val labelMap = changeDomain labelMap
 	    val fixityMap = changeDomain fixityMap
-	in  CONTEXT{pathMap = pathMap,
-		    overloadMap = overloadMap,
-		    labelMap = labelMap,
+	in  CONTEXT{varMap = varMap,
 		    ordering = ordering,
-		    fixityMap = fixityMap}
+		    labelMap = labelMap,
+		    memo = ref memoMap,
+		    fixityMap = fixityMap,
+		    overloadMap = overloadMap}
 	end
     fun map_partial_context_labels ((context, frees), li) =
 	let val context = map_context_labels (context, li)
@@ -643,12 +940,12 @@ struct
 	     binds)
 	end
 
-    fun list_labels (CONTEXT{fixityMap, labelMap, pathMap, ...}) : label list =
+    fun list_labels (CONTEXT{varMap, labelMap, ...}) : label list =
 	let
 	    (* We do not have to add the domain of overloadMap because
 	       the elaborator resolves overloading. *)
-	    fun addPath (l : label, (p,pc) : path * phrase_class, acc) =
-		if is_open_internal_path(pathMap,p)
+	    fun addPath (l : label, p : vpath, acc) =
+		if not (!NoOpenInternalPaths) andalso is_open_internal_path(varMap,p)
 		    then acc
 		else
 		    let val (c,r) = Name.make_cr_labels l
@@ -657,214 +954,19 @@ struct
 	in  Name.LabelMap.foldli addPath nil labelMap
 	end
     
-    fun removeNonExport (CONTEXT{pathMap, overloadMap, labelMap, ordering, fixityMap}, frees) = 
-	let val ordering = List.filter (fn PATH p => let val SOME(l,_) = Name.PathMap.find(pathMap,p)
+    fun removeNonExport (CONTEXT{varMap, overloadMap, labelMap, ordering, fixityMap, ...}, frees) = 
+	let val ordering = List.filter (fn v => let val SOME(l,_) = Name.VarMap.find(varMap,v)
 						in  not (is_nonexport l)
 						end) ordering
-	    val pathMap = Name.PathMap.filteri (fn (_,(l,_)) => not(is_nonexport l)) pathMap
+	    val varMap = Name.VarMap.filteri (fn (_,(l,_)) => not(is_nonexport l)) varMap
 	    val labelMap = Name.LabelMap.filteri (fn (l,_) => not(is_nonexport l)) labelMap
 	    val frees = Name.VarMap.filteri (fn (_, l) => not(is_nonexport l)) frees
-	in  (CONTEXT{pathMap = pathMap,
-		    overloadMap = overloadMap,
-		    labelMap = labelMap,
-		    ordering = ordering,
-		    fixityMap = fixityMap},
+	in  (CONTEXT{varMap = varMap,
+		     ordering = ordering,
+		     labelMap = labelMap,
+		     memo = ref VarMap.empty, (* laziness *)
+		     fixityMap = fixityMap,
+		     overloadMap = overloadMap},
 	     frees)
 	end
-
-
-   local
-       (* The state running through a (un-)selfification consists of
-          1) selfify, which is true if we are selfifying and false if we are unselfifying,
-          2) ctxt, which is only used in selfification and accumulates the selfified decs for
-             only the module components of the signature being selfified.  The only uses of the 
-	     context are in expanding references to signature variables and, more interestingly,
-             in expanding SIGNAT_OF's.  Only the module components need to be accumulated in
-             the context, because expanding SIGNAT_OF only needs to lookup module variables.
-          3) subst, which keeps a running substitution of selfified paths for local variables
-             in selfification, or the inverse substitution for unselfification.
-        *)
-       type state = {selfify : bool,
-		     ctxt : context,
-		     subst : subst}
-
-       fun initial_state (selfify,ctxt) = {selfify = selfify, 
-					   ctxt = ctxt,
-					   subst = empty_subst}
-
-       fun isempty_state ({subst,...}:state) = subst_is_empty subst
-
-       fun add_exp (state, _, NONE) = state
-	 | add_exp ({ctxt, selfify, subst}, v, SOME p) =
-	   {ctxt = ctxt, selfify = selfify,
-	    subst = if selfify then subst_add_expvar(subst, v, path2exp p)
-		    else subst_add_exppath(subst, p, VAR v)}
-
-       fun add_con (state, _, NONE) = state
-	 | add_con ({ctxt, selfify, subst}, v, SOME p) = 
-	   {ctxt = ctxt, selfify = selfify,
-	    subst = if selfify 
-			then subst_add_convar(subst, v, path2con p)
-		    else subst_add_conpath(subst, p, CON_VAR v)}
-	   
-       fun add_mod ({ctxt, selfify, subst}, v, s, pathOpt) = 
-	   {ctxt = if selfify then add_context_mod'(ctxt, v, s) else ctxt,
-	    selfify = selfify,
-	    subst = (case pathOpt of
-			 NONE => subst
-		       | SOME p => if selfify 
-				       then subst_add_modvar(subst, v, path2mod p)
-				   else subst_add_modpath(subst, p, MOD_VAR v))}
-
-       (* The popt parameter of sdec_folder (and the self parameter of TransformSig)
-          stand for the optional selfification path.  If there is one, we use it and
-          keep tacking labels on the end of it when we recurse into a structure.  If
-          there isn't one, we just carry out the substitution built so far.
-        *)
-       fun sdec_folder popt (sdec as (SDEC(l,dec)), state as {selfify,subst,...} : state) =
-	   let val popt = mapopt (fn p => join_path_labels(p,[l])) popt
-	   val res = (case dec of
-		    DEC_EXP(v,c,eopt,inline) => 
-			let val c = con_subst(c,subst)
-			    val eopt = (case eopt of
-					    NONE => NONE
-					  | SOME e => SOME(exp_subst(e,subst)))
-			    val dec = DEC_EXP(v,c,eopt,inline)
-                            (* The only local expression variables that may appear in inlined expressions
-                               are coercions...presumably.  Do we know this? *)
-			    val state = if is_coercion l then add_exp(state,v,popt) else state
-			in  (SDEC(l,dec), state)
-			end
-		  | DEC_CON(v,k,copt,inline) => 
-		     let 
-			 val copt = 
-                             (* Derek: What the hell does this comment mean? *)
-			     (case copt of  (*  if we do this, Unselfify is hard to write. *)
-				  NONE => (case popt of
-					       NONE => NONE
-					     | SOME p => SOME(path2con p))
-				| SOME c => 
-				      let val c' = con_subst(c,subst)
-				      in  (case (selfify, popt) of
-					       (false, SOME p) => if eq_cpath(c', path2con p)
-								      then NONE
-								  else SOME c'
-					     | _ => SOME c')
-				      end)
-			 val dec = DEC_CON(v,k,copt,inline)
-			 val state = add_con(state,v,popt)
-		     in (SDEC(l,dec), state)
-		     end
-		  | DEC_MOD(v,b,s) => 
-		     let val s' = TransformSig state (popt,s)
-			 val dec = DEC_MOD(v,b,s')
-                         (* It is important to use the selfified signature s' instead of s, to ensure
-                            that only selfified signatures get added to the context. *)
-			 val state = add_mod(state,v,s',popt)
-		     in (SDEC(l,dec), state)
-		     end)
-	   in  res
-	   end
-		    
-       and TransformSig (state as {selfify,subst,ctxt}) (self: path option, signat : signat) : signat = 
-	   (case (selfify, signat) of
-		(true, SIGNAT_SELF (p, unselfSigOpt, selfSig)) => 
-		    if (case self of
-			    SOME self => eq_path(p,self)
-			  | _ => false)
-			then signat
-		    else (* We must traverse selfSig to perform the rest of the substitution even
-			    though there are already no internal variable use from within selfSig.
-			  *)
-			let val selfSig = TransformSig state (NONE, selfSig)
-			in  SIGNAT_SELF(p, NONE, selfSig)
-			end
-	      | (false, SIGNAT_SELF(_, SOME unselfSig, _)) => unselfSig
-
-	      (* Is this correct??? -leaf *)
-	      | (false, SIGNAT_SELF(_, NONE, selfSig)) => TransformSig state (self, selfSig)
-	      | (true, SIGNAT_VAR v) => let val expanded = reduce_sigvar ctxt v
-					    val SIGNAT_SELF(p, _, selfSig) = TransformSig state (self, expanded)
-					in  SIGNAT_SELF(p, SOME signat, selfSig)
-					end
-	      | (false, SIGNAT_VAR v) => signat
-	      | (_, SIGNAT_OF p) => let val m = path2mod p
-					val m = mod_subst(m, subst)
-				    in  (case (selfify, mod2path m) of
-					     (false, NONE) => signat
-					   | (false, SOME p) => SIGNAT_OF p
-					   | (true, NONE) => error "SelfifySig got non-path from SIGNAT_OF"
-					   | (true, SOME p) => let val s = SIGNAT_OF p
-								   val sFull = reduce_signat ctxt signat
-								   val SIGNAT_SELF(_,_,sFull) = TransformSig state (self, sFull)
-							       in  (case self of
-									NONE => s 
-								      | SOME self => SIGNAT_SELF(self, SOME s, sFull))
-							       end)
-				    end
-	      | (_, SIGNAT_FUNCTOR (v,s1,s2,a)) => 
-				    let val s1 = if (isempty_state state) then s1 else TransformSig state (NONE,s1)
-					val s2 = if (isempty_state state) then s2 else TransformSig state (NONE,s2)
-					val s = SIGNAT_FUNCTOR(v,s1,s2,a)
-                                        (* Derek: Why bother selfifying a generative functor? *)
-					val res = (case (selfify,self) of
-					     (true, SOME self) => SIGNAT_SELF(self, NONE, s)
-					   | _ => s)
-				    in  res
-				    end
-	      | (_, SIGNAT_STRUCTURE sdecs) =>
-				    let val (sdecs,_) = foldl_acc (sdec_folder self) state sdecs
-					val s = SIGNAT_STRUCTURE sdecs
-				    in  (case (selfify, self) of
-					     (true, SOME self) => SIGNAT_SELF(self, NONE, s)
-					   | _ => s)
-				    end)
-
-
-   in
-
-       fun UnselfifySig ctxt (p : path, signat : signat) = 
-	   TransformSig (initial_state (false, ctxt)) (SOME p,signat)
-	   
-       fun SelfifySig ctxt (p : path, signat : signat) = 
-	   TransformSig (initial_state (true, ctxt)) (SOME p,signat)
-	   handle exn =>
-	       (debugdo (fn () =>
-	       (print "SelfifySig encountered error while selfifying with p = "; pp_path p;
-		print " and signat =\n";
-		pp_signat signat; print "\n\n";
-		          print " and ctxt =\n"; pp_context ctxt; print "\n\n"));
-		raise exn)
-
-       (* We don't need to selfify DEC_CON's because if you do "type s = t",
-          s will be transparently specified to equal t even if t is an abstract type. *)
-       fun SelfifyDec ctxt (DEC_MOD (v,b,s)) = DEC_MOD(v,b,SelfifySig ctxt (PATH(v,[]),s))
-	 | SelfifyDec ctxt dec = dec
-       fun SelfifySdec ctxt (SDEC (l,dec)) = SDEC(l,SelfifyDec ctxt dec)
-       fun SelfifySdecs ctxt (p : path, sdecs : sdecs) =
-	   case (SelfifySig ctxt (p,SIGNAT_STRUCTURE sdecs)) of
-	       SIGNAT_SELF(_, _, SIGNAT_STRUCTURE sdecs) => sdecs
-	     | _ => error "SelfifySdecs: SelfifySig returned non-normal structure"
-       fun SelfifyEntry ctxt (CONTEXT_SDEC sdec) = CONTEXT_SDEC(SelfifySdec ctxt sdec)
-	 | SelfifyEntry ctxt ce = ce
-	   
-   end
-
-   fun UnselfifyContext (ctxt as (CONTEXT {pathMap, overloadMap, labelMap, ordering, fixityMap})) = 
-       let fun unselfifyPC (p,pc) = 
-	   (case pc of
-		PHRASE_CLASS_MOD (m, b, s) => PHRASE_CLASS_MOD(m, b, UnselfifySig ctxt (PATH p, s))
-	     | _ => pc)
-	   fun unselfifyPathmapEntry (p,(l, pc)) = (l, unselfifyPC (p, pc))
-           (* Derek: Why do we only unselfify in the pathMap and not in the labelMap? *)
-	   val pathMap = Name.PathMap.mapi unselfifyPathmapEntry pathMap
-       in  CONTEXT{pathMap = pathMap,
-		   overloadMap = overloadMap,
-		   labelMap = labelMap,
-		   ordering = ordering,
-		   fixityMap = fixityMap}
-       end
-   fun UnselfifyPartialContext (ctxt, free) = (UnselfifyContext ctxt, free)
-
 end
-
