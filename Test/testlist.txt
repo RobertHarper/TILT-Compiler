@@ -10,5 +10,16 @@ m0005	Verifies that signature constraints change status.
 m0006	Check ref's and polymorphism.
 m0007	Check ref's and polymorphism.
 m0008	Records.
+m0009	Explicit polymorphism and ascription.
+m0010	Record elision.
+m0011	valOf.
+m0012	Word.word, Word8.word.
+m0013	Rudimentary functor instantiation.
+m0014	Datatype equality.
+m0015	Empty file.
+m0016	Hello world.
+m0017	Hello world in two lines.
+m0018	Hello world in three lines.
+m0019	Hello world in four lines.
 
 
