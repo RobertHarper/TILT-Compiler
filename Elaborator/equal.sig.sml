@@ -1,4 +1,4 @@
-(*$import Prelude Il *)
+(*$import Prelude Il Tyvar *)
 (* Equality compiler *)
 signature EQUAL = 
   sig
