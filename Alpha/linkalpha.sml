@@ -30,14 +30,14 @@ struct
   structure Regmap     = Regmap    (structure Machine = Decalpha)
   structure Labelgraph = Labelgraph(structure Machine = Decalpha)
   structure Labelmap   = Labelmap  (structure Machine = Decalpha)
-  structure Ifgraph   = Ifgraph    (structure Machine = Decalpha)
-
 
   structure Decalphautils = Decalphautils(structure Decalpha = Decalpha
 					  structure Labelmap = Labelmap
 					  structure Regmap = Regmap
 					  structure Regset = Regset)
- 
+
+  structure Ifgraph   = Ifgraph    (structure Machine = Decalpha
+ 				    structure Machineutils = Decalphautils)
 
   structure Callconv   = DecalphaCallconv (structure Machineutils = Decalphautils
 					   structure Decalpha = Decalpha)
