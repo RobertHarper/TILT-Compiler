@@ -15,17 +15,13 @@ Code:
 Transcript:  
 Comments:
 
-	Does HS permits this code?  Yes.  See the discussion around
-	page 7 of the technical report.  It looks like TILT is
-	consistent with an earlier version of HS that did not permit
-	this code.
+	This code does not typecheck under the Definition, HS, or TILT.
 
-	We need to fix the translation of LetExp.  There may be
-	similar bugs so we need to look at how the translations of
-	local expressions and signature ascription handle escaping
-	type information.
+	The bug is merely that TILT bombs rather than reject this
+	code.
 
-Fix:         
+Fix:
+	TILT now reports the user error.
 Test: n16
 Owner: swasey
-Status: open
+Status: closed

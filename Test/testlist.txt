@@ -88,7 +88,7 @@ n12     pass	ref constraint (obsolete imperative tyvar test)
 n13     pass	record type mismatch
 n14     pass	records aren't ints
 n15     pass	scoping
-n16     fail	type shadowing
+n16     pass	type shadowing
 n17     pass	records aren't lists
 n18     pass	nested pairs aren't triples
 n19     pass	distinct type variables don't unify
