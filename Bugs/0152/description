@@ -1,16 +1,36 @@
 Number: 0152
 Title:       Incorrect matching of eqtype specs.
-Keywords:    <optional - e.g. "modules", "types", "IO", "reals">
+Keywords:    signature matching
 Submitter:   dreyer
 Date:        08/26/02
-Version:     <TILT version number>
-System:      <e.g. solaris,alpha,linux>
-Severity:    <critical, major, minor, cosmetic>
-Problem:     <description of problem>
-Code:        <SML source code to reproduce the bug>
-Transcript:  <transcript of execution demonstating the bug>
-Comments:    <additional comments>
-Fix:         <optional - but you get extra credit>
+Version:     
+System:      
+Severity:    major
+Problem:     
+
+A type should match an (abstract) eqtype spec iff the type supports
+equality.  Currently, the test of this seems to be whether the type
+carries around an equality function with it.  In the example code
+below, this is not the case, and in general we should not expect it to
+be the case.  In particular, we should perform equality compilation on
+at signature matching if the type doesn't come with its own equality
+function.
+
+Code:        
+
+(*$import *)
+
+signature S = sig type t = int end
+signature S' = sig eqtype t end
+structure X :> S = struct type t = int end
+structure X' :> S' = X
+
+Transcript:  
+
+Error: value specification but missing component: +Et_INT
+
+Comments:    
+Fix:         
 Test: *
 Owner: *
 Status: open

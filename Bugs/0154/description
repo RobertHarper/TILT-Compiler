@@ -1,16 +1,40 @@
 Number: 0154
 Title:       Equality allowed on non-eqtypes by elaborator.
-Keywords:    <optional - e.g. "modules", "types", "IO", "reals">
+Keywords:    equality types
 Submitter:   dreyer
 Date:        08/26/02
-Version:     <TILT version number>
-System:      <e.g. solaris,alpha,linux>
-Severity:    <critical, major, minor, cosmetic>
-Problem:     <description of problem>
-Code:        <SML source code to reproduce the bug>
-Transcript:  <transcript of execution demonstating the bug>
-Comments:    <additional comments>
-Fix:         <optional - but you get extra credit>
+Version:     
+System:      
+Severity:    critical
+Problem:     
+
+By accident, the elaborator allows equality on types that do not
+support it.  The bug is caught by the phase-splitter; it would be
+caught earlier if we had a HIL typechecker.  In the example below,
+the declaration "type t = int" produces a type definition and an
+equality function for int.  When we shadow the definition of t
+with "type t = int -> int", the definition of the equality function
+for t does *not* get shadowed because the new type does not support
+equality.  Then we attempt to use equality at t, we get the old
+un-shadowed equality function, which has the wrong type.
+
+The solution is to check that the equality function we're getting is
+for the right type, although it may be slightly more complex than that.
+
+Code:        
+
+(*$import *)
+
+type t = int
+type t = int -> int
+fun f(x:t,y:t) = x = y
+
+Transcript:  
+
+The code passes the elaborator, but bombs in the phase-splitter.
+
+Comments:    
+Fix:         
 Test: *
 Owner: *
 Status: open
