@@ -419,7 +419,7 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   res->valid  = 1;
   res->bitmap = paranoid ? CreateBitmap(maxsize_pageround / 4) : NULL;
   res->freshPages = (int *) malloc(DivideUp(maxsize_pageround / pagesize, 32) * sizeof(int));
-  bzero(res->freshPages, DivideUp(maxsize_pageround / pagesize, 32) * sizeof(int));
+  memset(res->freshPages, 0, DivideUp(maxsize_pageround / pagesize, 32) * sizeof(int));
   assert(res->bottom != (mem_t) -1);
   assert(chunkstart >= 0);
   assert(heap_count < NumHeap);
@@ -441,7 +441,7 @@ int Heap_ResetFreshPages(Heap_t *h)
 {
   int MaxSize = sizeof(val_t) * (h->mappedTop - h->bottom);
   int i, pages = DivideUp(MaxSize,pagesize);
-  bzero(h->freshPages, DivideUp(pages, 32) * sizeof(int));
+  memset(h->freshPages, 0, DivideUp(pages, 32) * sizeof(int));
   return pages;
 }
 
