@@ -1,4 +1,4 @@
-(*$import Name Util TilWord32 TilWord64 Sequence Prim Array Listops Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL Alpha Option ListPair List TraceInfo Stats NilRewrite Int NilDefs *)
+(*$import Name Util TilWord32 TilWord64 Sequence Prim Array Listops Nil PrimUtil IlUtil NilSubst Ppnil NILUTIL Alpha Option ListPair List TraceInfo Stats Int NilDefs *)
 
 (*
  This structure is a repository for useful functions for operating on the NIL syntax.
