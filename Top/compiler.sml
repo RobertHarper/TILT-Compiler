@@ -1,14 +1,13 @@
 (* Interface to the compiler. *)
 (*
-	NB we reset the label counter to make the elaborator more
-	deterministic.  Fresh labels must be chosen to account for SML
-	shadowing and these sometimes make it into compilation unit
-	interfaces.  We want to choose the same labels each time to
-	ensure that if a unit's source code and evaluation context
-	does not change, then the compiler will infer the same
-	interface every time it elaborates the unit.  We also reset
-	the label counter prior to generating the link unit so that
-	diffing that assembler is easier.
+    NB we reset the label counter to make the elaborator more
+    deterministic.  Fresh labels must be chosen to account for SML
+    shadowing and these sometimes make it into compilation unit
+    interfaces.	 We want to choose the same labels each time to ensure
+    that if a unit's source code and evaluation context does not
+    change, then the compiler will infer the same interface every time
+    it elaborates the unit.  We also reset the label counter prior to
+    generating the link unit so that diffing that assembler is easier.
 *)
 structure Compiler :> COMPILER =
 struct
@@ -62,18 +61,18 @@ struct
 		end
 	    val map = foldl add Map.empty desc
 	    fun look (l:label) : I.pdec =
-		(case Map.find (map,l)
-		   of SOME pdec => pdec
-		    | NONE => error (Name.label2longname l ^ " not in desc"))
+		(case (Map.find (map,l)) of
+		    SOME pdec => pdec
+		|   NONE => error (Name.label2longname l ^ " not in desc"))
 	in  look
 	end
 
     fun lookup' (desc:desc, l:label) : I.pdec =
-	(case desc
-	   of pdec :: desc' =>
+	(case desc of
+	    pdec :: desc' =>
 		if Name.eq_label(l,I.P.label pdec) then pdec
 		else lookup' (desc', l)
-	    | nil => error (Name.label2longname l ^ " not in desc"))
+	|   nil => error (Name.label2longname l ^ " not in desc"))
 
     fun pinterface (pdec:I.pdec) : file =
 	let val (_,iexp,_) = I.D.Pdec.idec pdec
@@ -90,9 +89,9 @@ struct
 		else
 		    let val black = Set.union(black,gray)
 			fun folder (l:label, s:Set.set) : Set.set =
-			    (case Map.find(freemap,l)
-			       of SOME s' => Set.union(s,s')
-				| NONE =>
+			    (case (Map.find(freemap,l)) of
+				SOME s' => Set.union(s,s')
+			    |	NONE =>
 				    error ("reachable: " ^
 					   Name.label2longname l ^
 					   " not in desc"))
@@ -128,7 +127,7 @@ struct
 
     (*
 	A project description has more information than necessary to
-	compile a pdec (as opposed to, say, packing a library).  To
+	compile a pdec (as opposed to, say, packing a library).	 To
 	reduce compilation overhead, get_inputs computes a skeletal
 	description (skel) which is a syntactic subcategory of desc:
 
@@ -183,32 +182,32 @@ struct
 	let val (I,iexp,pos) = I.D.Pdec.idec pdec
 	    fun rewrite (using, pinterface) =
 		compi (I,using,pinterface,pos) :: revdesc
-	in  (case iexp
-	       of I.SRCI (_,{pinterface,...}) =>
+	in  (case iexp of
+		I.SRCI (_,{pinterface,...}) =>
 		    let val using = Fs.read_pinterface_parm pinterface
 		    in	rewrite(using,pinterface)
 		    end
-		| I.PRIMI {pinterface,...} => rewrite(nil,pinterface)
-		| I.PRECOMPI (using,_,{pinterface,...}) =>
+	    |	I.PRIMI {pinterface,...} => rewrite(nil,pinterface)
+	    |	I.PRECOMPI (using,_,{pinterface,...}) =>
 		    rewrite(using,pinterface)
-		| I.COMPI _ => pdec::revdesc)
+	    |	I.COMPI _ => pdec::revdesc)
 	end
 
     fun rewriteu (pdec:I.pdec, revdesc:I.pdec list) : I.pdec list =
 	let val (U,uexp,pos) = I.D.Pdec.udec pdec
 	    fun simple I = I.SCDEC (U,I,pos) :: revdesc
-	in  (case uexp
-	       of I.SRCU (_,{pinterface,...}) =>
+	in  (case uexp of
+		I.SRCU (_,{pinterface,...}) =>
 		    let val I = Name.fresh_internal_label "inferred"
 			val using = Fs.read_pinterface_parm pinterface
 			val idec = compi (I,using,pinterface,pos)
 			val udec = I.SCDEC(U,I,pos)
-		    in  udec :: idec :: revdesc
+		    in	udec :: idec :: revdesc
 		    end
-		| I.SSRCU (_,I,_) => simple I
-		| I.PRIMU (I,_) => simple I
-		| I.PRECOMPU (_,_,I,_) => simple I
-		| I.COMPU (_,I,_) => simple I)
+	    |	I.SSRCU (_,I,_) => simple I
+	    |	I.PRIMU (I,_) => simple I
+	    |	I.PRECOMPU (_,_,I,_) => simple I
+	    |	I.COMPU (_,I,_) => simple I)
 	end
 
     fun skel_desc (desc:desc, keep:label) : desc =
@@ -216,10 +215,10 @@ struct
 		let val l = I.P.label pdec
 		in  if Name.eq_label(l,keep) then pdec::revdesc
 		    else
-			(case pdec
-			   of I.IDEC _ => rewritei (pdec,revdesc)
-			    | I.SCDEC _ => pdec :: revdesc
-			    | I.UDEC _ => rewriteu (pdec,revdesc))
+			(case pdec of
+			    I.IDEC _ => rewritei (pdec,revdesc)
+			|   I.SCDEC _ => pdec :: revdesc
+			|   I.UDEC _ => rewriteu (pdec,revdesc))
 		end
 	    val desc = foldr folder nil desc
 	in  desc
@@ -237,29 +236,25 @@ struct
 	    val desc = skel_desc (desc,l)
 	    val desc = gc_desc' (desc, [l])
 	in
-	    (case rev desc
-	       of nil => error "empty description"
-		| pdec::revdesc => (rev revdesc, pdec))
+	    (case (rev desc) of
+		nil => error "empty description"
+	    |	pdec::revdesc => (rev revdesc, pdec))
 	end
 
-    (*
-	If desc |- pdec ready, then (context desc) is a well-formed
-	elaboration context that can be used to compile a pdec.
-    *)
     fun precontext' (desc:desc) : (label * file) list =
 	let val look : label -> file = pinterface o (lookup desc)
 	    fun mapper (pdec:I.pdec) : (label * file) option =
-		(case pdec
-		   of I.SCDEC (U,I,_) => SOME (U,look I)
-		    | I.UDEC(U,uexp,_) =>
-			(case uexp
-			   of I.SRCU (_,{pinterface,...}) =>
+		(case pdec of
+		    I.SCDEC (U,I,_) => SOME (U,look I)
+		|   I.UDEC(U,uexp,_) =>
+			(case uexp of
+			    I.SRCU (_,{pinterface,...}) =>
 				SOME (U,pinterface)
-			    | _ =>
+			|   _ =>
 				let val I = I.P.U.asc uexp
 				in  SOME (U,look I)
 				end)
-		    | I.IDEC _ => NONE)
+		|   I.IDEC _ => NONE)
 	    val precontext' = List.mapPartial mapper desc
 	in  precontext'
 	end
@@ -278,26 +273,26 @@ struct
 	    fun mapper (U,file) = (U,crc file)
 	    val ue : I.ue = map mapper precontext'
 	    val info =
-		(case pdec
-		   of I.IDEC(I,iexp,_) =>
-			(case iexp
-			   of I.SRCI (opened,{src,...}) =>
+		(case pdec of
+		    I.IDEC(I,iexp,_) =>
+			(case iexp of
+			    I.SRCI (opened,{src,...}) =>
 				I.INFO_SRCI (ue,opened,crc src)
-			    | I.PRECOMPI (_,opened,{src,...}) =>
+			|   I.PRECOMPI (_,opened,{src,...}) =>
 				I.INFO_SRCI (ue,opened,crc src)
-			    | _ => error "info on non-source interface")
-		    | I.SCDEC _ => error "info on separately compiled unit"
-		    | I.UDEC (U,uexp,_) =>
-			(case uexp
-			   of I.SRCU (opened,{src,...}) =>
+			|   _ => error "info on non-source interface")
+		|   I.SCDEC _ => error "info on separately compiled unit"
+		|   I.UDEC (U,uexp,_) =>
+			(case uexp of
+			    I.SRCU (opened,{src,...}) =>
 				I.INFO_SRCU (ue,opened,crc src)
-			    | I.SSRCU (opened,I,{src,...}) =>
+			|   I.SSRCU (opened,I,{src,...}) =>
 				I.INFO_SSRCU (ue,opened,crc src,crc (look I))
-			    | I.PRIMU (I,_) =>
+			|   I.PRIMU (I,_) =>
 				I.INFO_PRIMU (crc (look I))
-			    | I.PRECOMPU (_,opened,I,{src,...}) =>
+			|   I.PRECOMPU (_,opened,I,{src,...}) =>
 				I.INFO_SSRCU (ue,opened,crc src, crc (look I))
-			    | _ => error "info on non-source unit"))
+			|   _ => error "info on non-source unit"))
 	in  info
 	end
 
@@ -317,9 +312,9 @@ struct
 	end
 
     fun wrap_parse (f:'a P.parser) (l:label,src:file) : P.filepos * 'a =
-	(case f(Name.label2longname l, src)
-	   of SOME r => r
-	    | NONE => fail ("could not parse " ^ src))
+	(case (f(Name.label2longname l, src)) of
+	    SOME r => r
+	|   NONE => fail ("could not parse " ^ src))
 
     val parse_topspec : label * file -> P.filepos * Ast.topspec =
 	wrap_parse P.parse_topspec
@@ -328,17 +323,17 @@ struct
 	wrap_parse P.parse_topdec
 
     fun elab_opt (src:file, x:'a option) : 'a =
-	(case x
-	   of SOME r => r
-	    | NONE => fail ("could not elaborate " ^ src))
+	(case x of
+	    SOME r => r
+	|   NONE => fail ("could not elaborate " ^ src))
 
     fun write_pinterface (pctx:Il.precontext, pinterface:file,
 			  pi:Il.pinterface) : unit =
 	let val unchanged =
 		Fs.exists pinterface andalso
-		(case Fs.read_pinterface' pinterface
-		   of NONE => false
-		    | SOME pi' => LinkIl.eq (pctx, pi, pi'))
+		(case (Fs.read_pinterface' pinterface) of
+		    NONE => false
+		|   SOME pi' => LinkIl.eq (pctx, pi, pi'))
 	in  if unchanged then ()
 	    else
 		(verbose "  Writing pinterface\n";
@@ -352,22 +347,26 @@ struct
 
     (*
 	RTL parameters are more specific than unit names.
+	LIL modules do not specify their parameters.
     *)
-    fun unitnames (desc : I.desc, parms : Set.set) : I.using =
-	let
-	    fun unit (U:label) : label option =
+    fun get_using (desc : I.desc, module:module) : I.using =
+	let fun isrtlparm (parms : Set.set) (U:label) : bool =
+		Set.member (parms,U) orelse
 		let val (c,r) = Name.make_cr_labels U
-		in  if (Set.member(parms,U) orelse
-			Set.member(parms,c) orelse
-			Set.member(parms,r))
-		    then SOME U
-		    else NONE
+		in  Set.member(parms,c) orelse
+		    Set.member(parms,r)
 		end
+	    val isparm : label -> bool =
+		(case module of
+		    RTL (Rtl.MODULE {parms,...}) => isrtlparm parms
+		|   LIL _ => fn _ => true)
+	    fun unit (U:label) : label option =
+		if isparm U then SOME U else NONE
 	    fun mapper (pdec:I.pdec) : label option =
-		(case pdec
-		   of I.IDEC _ => NONE
-		    | I.SCDEC (U,_,_) => unit U
-		    | I.UDEC (U,_,_) => unit U)
+		(case pdec of
+		    I.IDEC _ => NONE
+		|   I.SCDEC (U,_,_) => unit U
+		|   I.UDEC (U,_,_) => unit U)
 	in  List.mapPartial mapper desc
 	end
 
@@ -377,24 +376,26 @@ struct
 	    val nilmod = Nil.il_to_nil (name,ilmod)
 	    val _ = timestamp()
 	    val tomod =
-		(case Target.getTarget()
-		   of Platform.ALPHA => RTL o Linkrtl.nil_to_rtl
-		    | Platform.SPARC => RTL o Linkrtl.nil_to_rtl
-		    | Platform.TALx86 => LIL o Linklil.nil_to_lil)
+		(case (Target.getTarget()) of
+		    Platform.ALPHA => RTL o Linkrtl.nil_to_rtl
+		|   Platform.SPARC => RTL o Linkrtl.nil_to_rtl
+		|   Platform.TALx86 => LIL o Linklil.nil_to_lil)
 	    val module = tomod(name,nilmod)
-	    val using =
-		(case module
-		   of RTL (Rtl.MODULE {parms,...}) => parms
-		    | LIL _ => Set.empty)	(* XXX *)
-	    val using = unitnames (desc,using)
+	    val using = get_using (desc,module)
 	    val _ = Fs.write I.blastOutParm parm using
-	    fun rtlwrap f (s,module) = (case module of RTL rmod => f (s,rmod)  | _ => error "Can't translate LIL to sparc/alpha")
-	    fun lilwrap f (s,module) = (case module of LIL rmod => f (s,rmod)  | _ => error "Can't translate RTL to TAL")
+	    fun rtlwrap f (s,module) =
+		(case module of
+		    RTL rmod => f (s,rmod)
+		|   _ => error "Can't translate LIL to sparc/alpha")
+	    fun lilwrap f (s,module) =
+		(case module of
+		    LIL rmod => f (s,rmod)
+		|   _ => error "Can't translate RTL to TAL")
 	    val toasm =
-		(case Target.getTarget()
-		   of Platform.ALPHA => rtlwrap Linkalpha.rtl_to_asm
-		    | Platform.SPARC => rtlwrap Linksparc.rtl_to_asm
-		    | Platform.TALx86 => lilwrap LinkTAL.lil_to_asm)
+		(case (Target.getTarget()) of
+		    Platform.ALPHA => rtlwrap Linkalpha.rtl_to_asm
+		|   Platform.SPARC => rtlwrap Linksparc.rtl_to_asm
+		|   Platform.TALx86 => lilwrap LinkTAL.lil_to_asm)
 	    val _ = Fs.write' (fn tmp => toasm(tmp,module)) asm
 	in  ()
 	end
@@ -506,30 +507,32 @@ struct
 	    val _ = Name.reset_label_counter()
 	    val _ = Name.reset_varmap()
 	    fun primwrap f x =
-		(Il.compiling_tiltprim := true;
-		 f x before (Il.compiling_tiltprim := false)
-		 handle e => (Il.compiling_tiltprim := false; raise e))
+		let val _ = Il.compiling_tiltprim := true
+		    val r = Util.apply(f,x)
+		    val _ = Il.compiling_tiltprim := false
+		in  r()
+		end
 	    val finished =
-		(case pdec
-		   of I.IDEC(_,I.SRCI _,_) => compile_srci (desc,pdec)
-		    | I.IDEC(_,I.PRIMI _,_) => primwrap compile_primi (desc,pdec)
-		    | I.UDEC(_,I.SRCU _,_) => compile_srcu (desc,pdec,f)
-		    | I.UDEC(_,I.SSRCU _,_) => compile_ssrcu (desc,pdec)
-		    | I.UDEC(_,I.PRIMU _,_) => primwrap compile_primu (desc,pdec)
-		    | _ => error "compile can't work with pdec")
+		(case pdec of
+		    I.IDEC(_,I.SRCI _,_) => compile_srci (desc,pdec)
+		|   I.IDEC(_,I.PRIMI _,_) => primwrap compile_primi (desc,pdec)
+		|   I.UDEC(_,I.SRCU _,_) => compile_srcu (desc,pdec,f)
+		|   I.UDEC(_,I.SSRCU _,_) => compile_ssrcu (desc,pdec)
+		|   I.UDEC(_,I.PRIMU _,_) => primwrap compile_primu (desc,pdec)
+		|   _ => error "compile can't work with pdec")
 	    val _ =
-		(case I.P.info' pdec
-		   of SOME file =>
+		(case (I.P.info' pdec) of
+		    SOME file =>
 			let val info = info' (desc,pdec)
 			in  Fs.write I.blastOutInfo file info
 			end
-		    | NONE => ())
+		|   NONE => ())
 	in  finished
 	end handle Fail msg =>
-		let val pos = I.P.pos pdec
-		    val msg = concat[Pos.tostring pos, ": ", msg]
-		in  reject msg
-		end
+	    let val pos = I.P.pos pdec
+		val msg = concat[Pos.tostring pos, ": ", msg]
+	    in	reject msg
+	    end
 
     fun compile (desc:I.desc, pdec:I.pdec, f:unit -> unit) : bool =
 	let fun report () : unit =
@@ -571,10 +574,10 @@ struct
 	let val {exe,asm,asmz,obj} = files
 	    val _ = msg ("[linking " ^ exe ^ "]\n")
 	    fun unit_info (pdec:I.pdec) : (string * file) option =
-		(case pdec
-		   of I.IDEC _ => NONE
-		    | I.SCDEC _ => error "link saw unimplementd unit"
-		    | I.UDEC (U,uexp,_) =>
+		(case pdec of
+		    I.IDEC _ => NONE
+		|   I.SCDEC _ => error "link saw unimplementd unit"
+		|   I.UDEC (U,uexp,_) =>
 			let val name = Name.label2name' U
 			    val obj = I.P.U.obj uexp
 			in  SOME (name,obj)
@@ -582,10 +585,10 @@ struct
 	    val (units,objs) = Listops.unzip(List.mapPartial unit_info desc)
 	    val _ = timestamp()
 	    val generate =
-		(case Target.getTarget()
-		   of Platform.ALPHA => Linkalpha.link
-		    | Platform.SPARC => Linksparc.link
-		    | Platform.TALx86 => error "no TAL linker yet")
+		(case (Target.getTarget()) of
+		    Platform.ALPHA => Linkalpha.link
+		|   Platform.SPARC => Linksparc.link
+		|   Platform.TALx86 => error "no TAL linker yet")
 	    fun writer tmp = generate {asmFile=tmp, units=units}
 	    val _ = Fs.write' writer asm
 	in  if assemble'' (asm,asmz,obj) then
@@ -690,33 +693,33 @@ struct
 
 
     fun copy_iexp (target:target, I:label, iexp:I.iexp) : E.ent =
-	(case iexp
-	   of I.SRCI (opened,files) => copy_precompi (target,I,opened,files)
-	    | I.PRIMI files => copy_compi (target,I,files)
-	    | I.PRECOMPI (_,opened,files) => 
+	(case iexp of
+	    I.SRCI (opened,files) => copy_precompi (target,I,opened,files)
+	|   I.PRIMI files => copy_compi (target,I,files)
+	|   I.PRECOMPI (_,opened,files) =>
 		copy_precompi (target,I,opened,files)
-	    | I.COMPI (_,files) => copy_compi (target,I,files))
+	|   I.COMPI (_,files) => copy_compi (target,I,files))
 
     fun copy_uexp (target:target, U:label, uexp:I.uexp) : E.ent =
-	(case uexp
-	   of I.SRCU _ => error "can not pack inferred interfaces"
-	    | I.SSRCU (opened,I,{obj,src,info,parm,...}) =>
+	(case uexp of
+	    I.SRCU _ => error "can not pack inferred interfaces"
+	|   I.SSRCU (opened,I,{obj,src,info,parm,...}) =>
 		let val files = {obj=obj,src=src,info=info,parm=parm}
 		in  copy_precompu (target,U,opened,I,files)
 		end
-	    | I.PRIMU (I,{obj,parm,...}) =>
+	|   I.PRIMU (I,{obj,parm,...}) =>
 		let val files = {obj=obj, parm=parm}
 		in  copy_compu (target,U,nil,I,files)
 		end
-	    | I.PRECOMPU (_,opened,I,files) =>
+	|   I.PRECOMPU (_,opened,I,files) =>
 		copy_precompu (target,U,opened,I,files)
-	    | I.COMPU (_,I,files) => copy_compu (target,U,nil,I,files))
+	|   I.COMPU (_,I,files) => copy_compu (target,U,nil,I,files))
 
     fun copy_pdec (target:target, pdec:I.pdec) : E.ent =
-	(case pdec
-	   of I.IDEC (I,iexp,_) => copy_iexp (target,I,iexp)
-	    | I.SCDEC (U,I,_) => E.SC (U,I)
-	    | I.UDEC (U,uexp,_) => copy_uexp (target,U,uexp))
+	(case pdec of
+	    I.IDEC (I,iexp,_) => copy_iexp (target,I,iexp)
+	|   I.SCDEC (U,I,_) => E.SC (U,I)
+	|   I.UDEC (U,uexp,_) => copy_uexp (target,U,uexp))
 
     fun copy_desc (target:target, desc:I.desc) : E.ents =
 	map (fn pdec => copy_pdec (target,pdec)) desc
@@ -732,10 +735,10 @@ struct
 
     fun interface (desc:I.desc) : I.desc =
 	let fun mapper (pdec:I.pdec) : I.pdec =
-		(case pdec
-		   of I.IDEC _ => pdec
-		    | I.SCDEC _ => pdec
-		    | I.UDEC (U,uexp,pos) => I.SCDEC (U,I.P.U.asc uexp,pos))
+		(case pdec of
+		    I.IDEC _ => pdec
+		|   I.SCDEC _ => pdec
+		|   I.UDEC (U,uexp,pos) => I.SCDEC (U,I.P.U.asc uexp,pos))
 	in  map mapper desc
 	end
 
