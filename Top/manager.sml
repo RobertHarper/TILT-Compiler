@@ -249,20 +249,12 @@ struct
 	  val least_new_time = foldl (fn (f,t) => let val t' = OS.FileSys.modTime f
 						  in  if (Time.<(t,t')) then t' else t
 						  end) smldate imports_ui
-	  fun is_fresh (curdate,curfile) = 
-	      let val files = smlfile :: imports_ui
-		  fun folder f = 
-		      let val t = OS.FileSys.modTime f
-			  handle OS.SysErr _ => error (f ^ "not present")
-		      in  Time.<=(t,curdate)
-			  orelse
-			  (chat ("  [" ^ f ^ " is newer than " ^ curfile ^ "]\n"); false)
-		      end
-	      in  Listops.andfold folder files
-	      end
+	  val is_fresh = is_fresh (smlfile :: imports_ui)
+
 	  val fresh = (access(uofile, [OS.FileSys.A_READ]) andalso
 		       is_fresh(OS.FileSys.modTime uofile, uofile) andalso
-		       (access(intfile, [OS.FileSys.A_READ]) orelse
+		       (Time.<=(OS.FileSys.modTime smlfile, OS.FileSys.modTime uofile) orelse
+                         access(intfile, [OS.FileSys.A_READ]) orelse
 			(access(uifile, [OS.FileSys.A_READ]) andalso
 			 is_fresh(OS.FileSys.modTime uifile, uifile))))
 	  val _ = if fresh
