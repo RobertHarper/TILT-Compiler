@@ -360,10 +360,20 @@ structure Ppnil	:> PPNIL =
 
 	end
 
+    and pp_trace TraceUnknown = String "Unknown"
+      | pp_trace (TraceCompute v) = Hbox[String "Compute(", pp_var v, String ")"]
+      | pp_trace (TraceKnown (TraceInfo.Compute(v,labs))) = 
+	Hbox[String "Compute(", pp_var v, 
+	     String ".", pp_list' pp_label labs,String ")"]
+      | pp_trace (TraceKnown (TraceInfo.Notrace_Int)) = String "Known_Int"
+      | pp_trace (TraceKnown (TraceInfo.Notrace_Real)) = String "Known_Real"
+      | pp_trace (TraceKnown _) = String "Known"
+
     and pp_bnd bnd =
 	let fun help x y = (x,y)
 	  in (case bnd of
-	        Exp_b (v,_,e) => HOVbox[pp_var v, String " = ", Break, pp_exp e]
+	        Exp_b (v,t,e) => HOVbox[pp_var v, String " : ", pp_trace t,
+					String " = ", Break, pp_exp e]
 	      | Con_b (Runtime,cb) => pp_conbnd cb
 	      | Con_b (Compiletime,cb) => HOVbox[String "COMPILE_TIME ", Break, pp_conbnd cb]
 	      | Fixopen_b fixset => let val fixlist = Sequence.toList fixset
@@ -424,10 +434,10 @@ structure Ppnil	:> PPNIL =
 		Hbox[pp_label l, String " = ", pp_var v, String " : ", pp_con c]
 	      |  pp_importentry (ImportType (l,v,k)) = 
 		Hbox[pp_label l, String " = ", pp_var v, String " : ", pp_kind k]
-	    fun pp_exportentry (ExportValue (l,e)) = 
-		Hbox[pp_label l, String " = ", pp_exp e]
-	      |  pp_exportentry (ExportType (l,c)) = 
-		Hbox[pp_label l, String " = ", pp_con c]
+	    fun pp_exportentry (ExportValue (l,v)) = 
+		Hbox[pp_label l, String " = ", pp_var v]
+	      |  pp_exportentry (ExportType (l,v)) = 
+		Hbox[pp_label l, String " = ", pp_var v]
 	in  Vbox0 0 1 [pp_bnds bnds,
 		       Break,
 		       String "IMPORTS:", Break,

@@ -473,10 +473,8 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
 						   add_kind(state,v,k))
 
-	fun do_export(ExportValue(l,e),state) = (ExportValue(l,do_exp state e), 
-						   state)
-	  | do_export(ExportType(l,c),state)  = (ExportType(l,do_con state c), 
-						   state)
+	fun do_export(ExportValue(l,v),state) = (ExportValue(l,v),state)
+	  | do_export(ExportType(l,v),state)  = (ExportType(l,v),state)
 
 	fun optimize (MODULE{imports, exports, bnds}) = 
 	    let val state = new_state number_flatten

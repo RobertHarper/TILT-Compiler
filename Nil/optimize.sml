@@ -273,7 +273,11 @@ struct
 		    mapping=mapping,
 		    current=current}
 	  fun add_con(STATE{avail,equation,mapping,current,intype},v,c) = 
-	      (STATE{equation=NilContext.insert_con(equation,v,c),
+	      (if (!debug)
+		   then (print "optimize: add_con "; Ppnil.pp_var v;
+			 print " -> "; Ppnil.pp_con c; print "\n")
+	       else ();
+	       STATE{equation=NilContext.insert_con(equation,v,c),
 		    intype=intype,
 		     avail=avail,
 		    mapping=mapping,
@@ -939,9 +943,22 @@ struct
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
 						   add_kind(state,v,k))
 
-	fun do_export(ExportValue(l,e),state) = (ExportValue(l,do_exp state e), state)
-	  | do_export(ExportType(l,c),state)  = (ExportType(l,do_con state c), state)
-
+	fun do_export(ExportValue(l,v),state) = 
+	    let val e = do_exp state (Var_e v)
+	    in  (case e of
+		     Var_e v => ((NONE,ExportValue(l,v)), state)
+		   | _ => let val v' = Name.derived_var v
+			  in  ((SOME(Exp_b(v', TraceUnknown, e)),ExportValue(l,v')),state)
+			  end)
+	    end
+	  | do_export(ExportType(l,v),state) =
+	    let val c = do_con state (Var_c v)
+	    in  (case c of
+		     Var_c v => ((NONE,ExportType(l,v)), state)
+		   | _ => let val v' = Name.derived_var v
+			  in  ((SOME(Con_b(Runtime, Con_cb(v',c))),ExportType(l,v')),state)
+			  end)
+	    end
 	fun optimize {lift_array, dead, projection, uncurry, cse} 
 	              (MODULE{imports, exports, bnds}) =
 	  let 
@@ -959,11 +976,14 @@ struct
 				       else ([],state)
 	      val _ = do_lift_array := lift_array
 	      val (bnds,state) = do_bnds(bnds,state)
-	      val bnds = local_bnds @ bnds
 
 	      (* we "retain" the state so that no exports are optimized away *)
 	      val state = retain_state state
-	      val (exports,state) = foldl_acc do_export state exports
+	      val (temp,state) = foldl_acc do_export state exports
+	      val export_bnds = List.mapPartial #1 temp
+	      val exports = map #2 temp
+
+	      val bnds = local_bnds @ bnds @ export_bnds
               val bnds = List.mapPartial (bnd_used state) bnds
 	  in  MODULE{imports=imports,exports=exports,bnds=bnds}
 	  end

@@ -632,10 +632,11 @@ struct
 			     let val (f,state) = cbnd_find_fv(cbnd,(frees,state))
 			     in (state, f)
 			     end
-		       | Exp_b(v,_,e) => 
+		       | Exp_b(v,tr,e) => 
 			     let 
 				 val c = type_of(state,e) 
-				 val f = e_find_fv (state,frees) e
+				 val f = trace_find_fv(state,frees) tr
+				 val f = e_find_fv (state,f) e
 				 val _ = if (!debug)
 					     then (print "add_boundevar ";
 						   Ppnil.pp_var v; print "\n")
@@ -738,7 +739,12 @@ struct
 	end
 
 
-
+    and trace_find_fv (state : state, frees : frees) trace : frees =
+	(case trace of
+	     TraceUnknown => frees
+	   | TraceKnown (TraceInfo.Compute(v,_)) => c_find_fv (state, frees) (Var_c v)
+	   | TraceKnown _ => frees
+	   | TraceCompute v => c_find_fv (state, frees) (Var_c v))
 
     and e_find_fv arg exp : frees =
 	let val res = e_find_fv' arg exp
@@ -923,6 +929,7 @@ struct
 	and t_find_fv' (state : state, frees : frees) con : frees =
 	    (case con of
 		Var_c _ => c_find_fv'(state,frees) con
+	      | Proj_c _ => c_find_fv'(state,frees) con
 	      | _ => frees)
 (*
 	    let fun type_case() = (c_find_fv'(state,frees) con; frees)
@@ -1200,14 +1207,19 @@ struct
 				      in  (p,v,k,l)
 				      end)
 	                     (rev freecpaths)
-	   val vklist = map (fn (v,k) => (v,k_rewrite state k)) vklist
-	   val vclist = map (fn (v,c) => (v,c_rewrite state c)) vclist
+
+	   val inner_state = copy_state(state,v)
+	   val vklist = map (fn (v,k) => (v,k_rewrite inner_state k)) vklist
+	   val vclist = map (fn (v,c) => (v,c_rewrite inner_state c)) vclist
 	   val escape = get_escape v
 	   val vkl_free = map (fn (p,v,k,l) => (p,v,k_rewrite state k,l)) vkl_free
 	   val pc_free = let val temp = PathMap.listItemsi pc_free
 			     fun mapper((v,labs),(v',ethunk,_,c)) = 
 				 let val l = Name.internal_label(Name.var2string v')
-				 in ((v,labs), v', l, c_rewrite state c)
+				 in ((v,labs), v', l, 
+				     case c of
+					 Typeof_c _ => c_rewrite state c
+				       | _ => c_rewrite inner_state c)
 				 end
 			 in  map mapper temp
 			 end
@@ -1270,15 +1282,7 @@ struct
 	   val codebody_tipe = substConPathInCon(external_subst,codebody_tipe)
 
 
-	   val code_body = (e_rewrite (copy_state(state,v)) body)
-
-	   fun pc_mapper((v,l,_),c) = 
-	       let 
-		   val e = path2exp (v,l)
-		   val e = e_rewrite state e
-	       in  (e,c)
-	       end
-
+	   val code_body = e_rewrite inner_state body
 
 	   val cenv = let val lc_list = map (fn (p,v,_,l) => 
 					     let val c = path2con p
@@ -1336,13 +1340,29 @@ struct
 		(Con_b(p,cb)) => let val cbnds = cbnd_rewrite state cb
 				 in  map (fn cb => Con_b(p,cb)) cbnds
 				 end
-	      | (Exp_b(v,niltrace,e)) => [Exp_b(v, niltrace, e_rewrite state e)]
+	      | (Exp_b(v,niltrace,e)) => [Exp_b(v, trace_rewrite state niltrace, 
+						e_rewrite state e)]
 	      | (Fixclosure_b _) => error "there can't be closures while closure-converting"
 	      | (Fixcode_b _) => error "there can't be codes while closure-converting"
 	      | (Fixopen_b var_fun_set) => funthing_helper (fun_rewrite state) var_fun_set)
        end
 
-
+   and trace_rewrite state trace : niltrace = 
+       let fun help c = 
+	   let val c = c_rewrite state c
+	       val (Var_c v, rev_labs) = extract_cpath c
+	       val labs = rev rev_labs
+	   in  case labs of
+	       [] => TraceCompute v
+	     | _ => TraceKnown(TraceInfo.Compute(v,labs))
+	   end
+       in (case trace of
+	       TraceUnknown => trace
+	     | TraceKnown (TraceInfo.Compute(v,labs)) => help(path2con(v,rev labs))
+	     | TraceKnown _ => trace
+	     | TraceCompute v => help(Var_c v))
+       end
+		     
 
    and e_rewrite state arg_exp : exp =
        let 
@@ -1615,8 +1635,8 @@ struct
 	   val (state,{freeepaths_map,freecpaths,...}) = bnds_find_fv (state,empty_frees) bnds
 	   val _ = chat "Closure conversion: Scanned bnds\n"
 
-	   fun export_mapper state (ExportValue(l,e)) = e_find_fv (state, empty_frees) e
-	     | export_mapper state (ExportType(l,c)) = c_find_fv (state, empty_frees) c
+	   fun export_mapper state (ExportValue(l,v)) = e_find_fv (state, empty_frees) (Var_e v)
+	     | export_mapper state (ExportType(l,v)) = c_find_fv (state, empty_frees) (Var_c v)
 
 	   val _ = map (export_mapper state) exports
 	   val _ = chat "Closure conversion: Scanned exports\n"
@@ -1660,8 +1680,8 @@ struct
 	   val bnds' = (Stats.subtimer("toclosure_rewrite_bnds",foldl folder [])) bnds
 	   val _ = chat "Closure conversion: Rewritten bindings\n"
 
-	   fun export_rewrite (ExportValue(l,e)) = ExportValue(l,e_rewrite initial_state e)
-	     | export_rewrite (ExportType(l,c)) = ExportType(l,c_rewrite initial_state c)
+	   fun export_rewrite (ExportValue(l,v)) = ExportValue(l,v)
+	     | export_rewrite (ExportType(l,v)) = ExportType(l,v)
 	   val exports' = map export_rewrite exports
 	   val _ = chat "Closure conversion: Rewritten exports\n"
 

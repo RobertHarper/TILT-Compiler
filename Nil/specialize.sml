@@ -282,8 +282,8 @@ struct
 	fun scan_import(ImportValue(l,v,c),state) : state = state
 	  | scan_import(ImportType(l,v,k),state)  = add_var(state,v,NONE)
 
-	fun scan_export state (ExportValue(l,e)) : unit = scan_exp state e
-	  | scan_export state (ExportType(l,c)) = ()
+	fun scan_export state (ExportValue(l,v)) : unit = ()
+	  | scan_export state (ExportType(l,v)) = ()
 
 	fun scan_module(MODULE{imports, exports, bnds}) : unit = 
 	  let val state = new_state()
@@ -375,8 +375,8 @@ struct
 
 	fun do_import import = import
 
-	fun do_export(ExportValue(l,e)) = ExportValue(l,do_exp e)
-	  | do_export(ExportType(l,c))  = ExportType(l,c)
+	fun do_export(ExportValue(l,v)) = ExportValue(l,v)
+	  | do_export(ExportType(l,v))  = ExportType(l,v)
 	    
 	fun do_module(MODULE{imports, exports, bnds}) = 
 	  let val imports = map do_import imports

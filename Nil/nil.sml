@@ -186,8 +186,8 @@ struct
 
   datatype import_entry = ImportValue of label * var * con
                         | ImportType of label * var * kind
-  datatype export_entry = ExportValue of label * exp
-                        | ExportType of label * con
+  datatype export_entry = ExportValue of label * var
+                        | ExportType of label * var
   datatype module = MODULE of {bnds : bnd list,
 			       imports : import_entry list,
 			       exports : export_entry list}

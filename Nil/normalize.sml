@@ -827,16 +827,9 @@ val show_context = ref false
       (ImportType (label,var,kind),state)
     end
   
-  fun export_normalize' state (ExportValue (label,exp)) = 
-    let
-      val exp = exp_normalize' state exp
-    in ExportValue (label,exp)
-    end
-    | export_normalize' state (ExportType (label,con)) = 
-    let
-      val con = con_normalize' state con
-    in ExportType (label,con)
-    end
+  fun export_normalize' state (ExportValue (label,v)) = ExportValue (label,v)
+    | export_normalize' state (ExportType (label,v)) = ExportType (label,v)
+
   
   fun module_normalize' state (MODULE {bnds,imports,exports}) = 
     let
@@ -1313,7 +1306,9 @@ val show_context = ref false
   val beta_typecase = wrap2 "beta_typecase" beta_typecase
 
   val reduceToSumtype = wrap1 "reduceToSumType" reduceToSumtype
-  val type_of = wrap1 "type_of" type_of
+  val type_of = fn arg => (wrap1 "type_of" type_of arg)
+      handle e => (print "type_of failed on ";
+		   Ppnil.pp_exp (#2 arg); raise e)
 
   fun nilprim_uses_carg np =
 	(case np of

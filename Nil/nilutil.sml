@@ -24,7 +24,12 @@ struct
 		    [Open_cb(v',vklist,c,k)],
 		    Var_c v'))
        end
-     | extractCbnd _ = error "Code_cb not handled"
+     | extractCbnd (Code_cb(v,vklist,c,k)) = 
+       let val v' = Name.derived_var v
+       in  (v,Let_c(Sequential,
+		    [Code_cb(v',vklist,c,k)],
+		    Var_c v'))
+       end
 
   val generate_tuple_symbol = IlUtil.generate_tuple_symbol
   val generate_tuple_label = IlUtil.generate_tuple_label
@@ -53,8 +58,8 @@ struct
   val string_con = Prim_c(Vector_c,[Prim_c(Int_c Prim.W8,[])])
   val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
   val match_exn = Prim_e(NilPrimOp (inj_exn "match"),[unit_con],[match_tag,unit_exp])
-  val false_exp = Prim_e(NilPrimOp (inject 0w0),[false_con],[])
-  val true_exp = Prim_e(NilPrimOp (inject 0w1),[true_con],[])
+  val false_exp = Prim_e(NilPrimOp (inject_nonrecord 0w0),[false_con],[])
+  val true_exp = Prim_e(NilPrimOp (inject_nonrecord 0w1),[true_con],[])
   val int_con = Prim_c(Int_c Prim.W32,[])
   val char_con = Prim_c(Int_c Prim.W8,[])
   val exn_con = Prim_c(Exn_c, [])
@@ -688,8 +693,8 @@ struct
 			     end
       fun import_size (ImportValue (_,_,c)) = 1 + con_size c
 	| import_size (ImportType (_,_,k)) = 1 + kind_size k
-      fun export_size (ExportValue (_,e)) = 1 + exp_size e
-	| export_size (ExportType (_,c)) = 1 + con_size c
+      fun export_size (ExportValue (_,v)) = 2
+	| export_size (ExportType (_,v)) = 2
       fun module_size (MODULE{bnds,imports,exports}) =
 	  let val count = foldl (fn (bnd,acc) => acc + (bnd_size bnd))    0 bnds
 	      val count = foldl (fn (imp,acc) => acc + (import_size imp)) count imports

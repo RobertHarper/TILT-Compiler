@@ -246,13 +246,19 @@ structure Linknil (* :> LINKNIL  *) =
 *)
 
 
+	    val nilmod = transform(ref true, show_before_rtl,
+				 "Renaming2",Linearize.linearize_mod,
+				 filename, nilmod)
+
+
+            val nilmod = transform(do_reify, show_reify,
+                                   "Reification2",
+                                   Reify.reify_mod,
+                                   filename, nilmod)
+
 	    val nilmod = transform(ref true, show_cc,
 				 "Closure-conversion", 
 				 ToClosure.close_mod,
-				 filename, nilmod)
-
-	    val nilmod = transform(ref true, show_before_rtl,
-				 "Renaming2",Linearize.linearize_mod,
 				 filename, nilmod)
 
 (*

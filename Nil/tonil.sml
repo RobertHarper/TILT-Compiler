@@ -2545,31 +2545,28 @@ end (* local defining splitting context *)
 	    fun folder ((Il.SDEC(l,dec)),exports) = 
 		    (case (not (is_nonexport_lab l), dec) of
 			 (false,_) => exports
-		       | (true,Il.DEC_EXP (v,_)) => (ExportValue(l,Var_e v)::exports)
+		       | (true,Il.DEC_EXP (v,_)) => (ExportValue(l,v)::exports)
 		       | (true,Il.DEC_CON (v,_,_)) =>
-			     let val c = Var_c v
-				 val k = NilContext.find_kind(nil_final_context, v)
+			     let val k = NilContext.find_kind(nil_final_context, v)
 				     handle e => (print "exception while doing DEC_CON\n";
 						  raise e)
 			     in  if killArrowKind "7" final_context k
 				     then exports
-				 else (ExportType(l,c)::exports)
+				 else (ExportType(l,v)::exports)
 			     end
 		       | (true,Il.DEC_MOD (v,s)) => 
 			     let val (lc,lr) = make_cr_labels l
 				 val ((vc,vr),_) = splitVar (v,final_context)
 				 val exports = 
 				     let 
-					 val er = Var_e vr
-					 val cc = Var_c vc
 					 val kc = NilContext.find_shape(nil_final_context, vc)
-				     handle e => (print "exception while doing DEC_MOD\n";
-						  raise e)
+					  handle e => (print "exception while doing DEC_MOD\n";
+						       raise e)
 				     in if killArrowKind "8" final_context kc
 					    then 
-						(ExportValue(lr,er)::exports)
-					else (ExportValue(lr,er)::
-					      ExportType(lc,cc)::
+						(ExportValue(lr,vr)::exports)
+					else (ExportValue(lr,vr)::
+					      ExportType(lc,vc)::
 					      exports)
 				     end
 			     in  exports

@@ -527,14 +527,9 @@ struct
 					  end)
 
 
-   fun lexport state (ExportValue(l,e)) = 
-       let val e = lexp_flat state e
-       in  ExportValue(l,e)
-       end
-     | lexport state (ExportType(l,c)) = 
-       let val c = lcon_flat state c
-       in  ExportType(l,c)
-       end
+   fun lexport state (ExportValue(l,v)) = ExportValue(l,find_var(state,v))
+     | lexport state (ExportType(l,v)) = ExportType(l,find_var(state,v))
+
 
    fun limport (ImportValue(l,v,c),s) =
        let val (s,v) = add_var(s,v)
