@@ -223,7 +223,8 @@ struct
 		      let fun mapper (VALUE (INT w)) = chr (TW32.toInt w)
 			    | mapper _ = error "char vector but non-INT value"
 			  val chars = map mapper vals
-		      in  add_data(STRING (String.implode chars));
+			  val str = String.implode chars
+		      in  add_data(STRING str);
 			  add_data(ALIGN LONG)
 		      end
 		  fun wordVector() =
@@ -248,13 +249,18 @@ struct
 		  val numElem = TW32.fromInt(Array.length a)
 		  val tagword = TW32.orb(TW32.lshift(numElem, shiftAmount), intarray)
 		  val _ = add_data(INT32 tagword)
-		  val label = fresh_data_label "vectorData"
+		  val label = (fresh_data_label 
+			       (case c of
+				    Prim_c(Int_c Prim.W8, []) => "string"
+				  | Prim_c(Int_c Prim.W16, []) => error "word16 not handled"
+				  | _ => "wordVector"))
 		  val _ = add_data(DLABEL label)
 		  val _ = (case c of
 			       Prim_c(Int_c Prim.W8, []) => charVector()
 			     | Prim_c(Int_c Prim.W16, []) => error "word16 not handled"
 			     | _ => wordVector())
-		  val _ = if (numElem = 0w0)
+		  (* Empty arrays have one word of storage for the collector *)
+		  val _ = if (numElem = 0w0)  
 			       then add_data(INT32 0w0)
 			   else ()
 	      in  (VALUE(LABEL label), state)
@@ -1464,7 +1470,10 @@ struct
 			    in  (const,result,state)
 			    end
 		   end
-(*
+
+     (* ----------------------------------------------------------------------------------
+        This used to be the code that represented Mu types by creating circular structures.
+
 		   let val vclist = sequence2list vcset
 		       fun loop _ [] (s,rev_lvs) = (s,rev rev_lvs)
 			 | loop n ((v',c)::vrest) (s,rev_lvs) = 

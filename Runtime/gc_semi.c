@@ -189,7 +189,10 @@ void gc_semi(Thread_t *curThread) /* Not mapped */
 #endif
 
   if (paranoid) {
-    paranoid_check_heap_global(fromheap);
+    Heap_t *legalHeaps[2];
+    legalHeaps[0] = fromheap;
+    legalHeaps[1] = NULL;
+    paranoid_check_heap_global(fromheap,legalHeaps);
   }
 
   /* Compute the roots from the stack and register set */
@@ -255,8 +258,11 @@ void gc_semi(Thread_t *curThread) /* Not mapped */
 #endif
 
     if (paranoid) {
+      Heap_t *legalHeaps[2];
+      legalHeaps[0] = toheap;
+      legalHeaps[1] = NULL;
       paranoid_check_stack(curThread,fromheap);
-      paranoid_check_heap_global(toheap);
+      paranoid_check_heap_global(toheap,legalHeaps);
     }
 
   /* Resize the tospace by using the oldspace size and liveness ratio */

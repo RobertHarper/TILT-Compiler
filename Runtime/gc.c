@@ -292,16 +292,16 @@ void paranoid_check_stack(Thread_t *thread, Heap_t *fromspace)
 }
 
 
-void paranoid_check_heap_global(Heap_t *curSpace)
+void paranoid_check_heap_global(Heap_t *curSpace, Heap_t **legalHeaps)
 {
     int count = 0, mi, i;
     scan_heap("Paranoid check heap",curSpace->bottom, curSpace->alloc_start, 
-	      curSpace->top, curSpace, SHOW_HEAPS);
+	      curSpace->top, legalHeaps, SHOW_HEAPS);
     /* check globals */
     for (mi=0; mi<module_count; mi++) {
       value_t start = (&GLOBALS_BEGIN_VAL)[mi];
       value_t stop = (&GLOBALS_END_VAL)[mi];
-      scan_heap("Paranoid check global",start,stop,stop, curSpace, SHOW_HEAPS);
+      scan_heap("Paranoid check global",start,stop,stop, legalHeaps, SHOW_HEAPS);
     }
 }
 

@@ -8,7 +8,7 @@
 
 
 /* Check that pointer is either a tag, a global, or a current heap value */
-int ptr_check(value_t *loc, Heap_t *curHeap)
+int ptr_check(value_t *loc, Heap_t **legalHeaps)
 {
   value_t pointer = *loc;
   if (IsConstructorData(pointer))
@@ -17,8 +17,13 @@ int ptr_check(value_t *loc, Heap_t *curHeap)
     return 1;
   if (pointer == 258) /* Uninitialized pointer */
     return 1;
-  if (curHeap != NULL && pointer >= curHeap->bottom && pointer < curHeap->alloc_start)
-    return 1;
+  while (1) {
+    Heap_t *curHeap = *(legalHeaps++);
+    if (curHeap == NULL)
+      break;
+    if (pointer >= curHeap->bottom && pointer < curHeap->top)
+      return 1;
+  }
   printf("TRACE ERROR: ptr_check %d at %d failed.  GC #%d\n",pointer,loc,NumGC);
   return 0;
 }
@@ -26,17 +31,24 @@ int ptr_check(value_t *loc, Heap_t *curHeap)
 extern int heapstart;
 
 /* If i looks like a printer, issue a warning. */
-int data_check(value_t *loc, Heap_t *curHeap)
+int data_check(value_t *loc, Heap_t **legalHeaps)
 {
   value_t i = *loc;
-  if (verbose && curHeap != NULL && i >= curHeap->bottom && i < curHeap->alloc_start)
-    printf("TRACE WARNING: data_check given int that looks like a curHeap pointer %d\n", i);
-  else if (verbose && i > heapstart)
-    printf("TRACE WARNING: data_check given int that is large enough to be pointer %d\n", i);
+  if (verbose) {
+    while (1) {
+      Heap_t *curHeap = *(legalHeaps++);
+      if (curHeap == NULL)
+	break;
+      if (i >= curHeap->bottom && i < curHeap->alloc_start) 
+	printf("TRACE WARNING: data_check given int that looks like a curHeap pointer %d\n", i);
+    }
+   if (i > heapstart)
+     printf("TRACE WARNING: data_check given int that is large enough to be pointer %d\n", i);
+  }
   return 1;
 }
 
-value_t show_obj(value_t s, int checkonly, Heap_t *curHeap)
+value_t show_obj(value_t s, int checkonly, Heap_t **legalHeaps)
 {
   value_t *start = (value_t *)s, *end = NULL;
   value_t *obj = start + 1;
@@ -66,12 +78,12 @@ value_t show_obj(value_t s, int checkonly, Heap_t *curHeap)
 	  if (isPointer) {
 	    if (!checkonly)
 	      printf("P(%5d)  ",field);
-	    ptr_check(obj+i,curHeap);
+	    ptr_check(obj+i,legalHeaps);
 	  }
 	  else {
 	    if (!checkonly)
 	      printf("I(%5d)  ",field);
-	    data_check(obj+i,curHeap);
+	    data_check(obj+i,legalHeaps);
 	  }
 	}
 	if (!checkonly)
@@ -87,7 +99,7 @@ value_t show_obj(value_t s, int checkonly, Heap_t *curHeap)
 
 	if (!checkonly)
 	  printf("%ld: SENT(%d) -> ",obj,forwardstart + 1);
-	forwardend = (value_t *)(show_obj((value_t)forwardstart,checkonly,curHeap));
+	forwardend = (value_t *)(show_obj((value_t)forwardstart,checkonly,legalHeaps));
 	len = forwardend - forwardstart;
 	end = start + len;
       }
@@ -126,14 +138,14 @@ value_t show_obj(value_t s, int checkonly, Heap_t *curHeap)
 	      value_t field = obj[i];
 	      if (!checkonly)
 		printf("I(%ld)  ",field);
-	      data_check(obj+i,curHeap);
+	      data_check(obj+i,legalHeaps);
 	      break;
 	    }
 	    case PARRAY_TAG: {
 	      value_t field = obj[i];
 	      if (!checkonly)
 		printf("%ld   ",field);
-	      ptr_check(obj+i,curHeap);
+	      ptr_check(obj+i,legalHeaps);
 	      break;
 	    }
 	    case RARRAY_TAG: {
@@ -169,7 +181,7 @@ value_t show_obj(value_t s, int checkonly, Heap_t *curHeap)
 
 
 
-void scan_heap(char *label, value_t start, value_t finish, value_t top, Heap_t *curHeap, int show)
+void scan_heap(char *label, value_t start, value_t finish, value_t top, Heap_t **legalHeaps, int show)
 {
   if (NumGC < LEAST_GC_TO_CHECK)
     return;
@@ -179,7 +191,7 @@ void scan_heap(char *label, value_t start, value_t finish, value_t top, Heap_t *
     printf("--------------------------------------------------------------\n");
   }
   while (start < finish)
-      start = show_obj(start,!show,curHeap);
+      start = show_obj(start,!show,legalHeaps);
   if (show) {
     printf("--------------HEAP CHECK END-----------------------------------\n\n");
   }

@@ -197,6 +197,7 @@ scheduler:
 	.align	4
 global_exnhandler:
 	st	EXNARG_REG, [THREADPTR_REG + EXNARG_DISP]    ! note that this is return address of Yield
+	ld	[EXNPTR_REG + 4], SP_REG
 	call	save_regs
 	nop
 	mov	THREADPTR_REG, %o0

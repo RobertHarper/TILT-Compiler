@@ -3,7 +3,7 @@
 #define _show_h
 
 extern long SemanticGarbageSize;
-void scan_heap(char *label, value_t start, value_t finish, value_t top, Heap_t *curHeap, int show);
+void scan_heap(char *label, value_t start, value_t finish, value_t top, Heap_t **legalHeaps, int show);
 
 void show_heap_raw(char *label, int numwords,
 		   value_t from_low, value_t from_high,

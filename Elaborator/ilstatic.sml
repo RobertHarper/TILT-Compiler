@@ -894,10 +894,12 @@ structure IlStatic
 				   | NONE => (va,con))
      | ETAPRIM (p,cs) => (true, etaize (IlPrimUtil.get_type' p cs))
      | ETAILPRIM (ip,cs) => (true, etaize(IlPrimUtil.get_iltype' ip cs))
-     | (VAR v) => (case Context_Lookup'(ctxt,v) of
-		       SOME(_,PHRASE_CLASS_EXP(_,c,_,_)) => (true,c)
-		     | SOME _ => error "VAR looked up to a non-value"
-		     | NONE => error ("GetExpCon: (VAR " ^ (Name.var2string v) ^ "v) not in context"))
+     | VAR v => (case Context_Lookup'(ctxt,v) of
+		     SOME(_,PHRASE_CLASS_EXP(_,c,_,_)) => (true,c)
+		   | SOME _ => let val str = Name.var2string v
+			       in  error ("VAR " ^ str ^ " looked up to a non-value")
+			       end
+		   | NONE => error ("GetExpCon: (VAR " ^ (Name.var2string v) ^ "v) not in context"))
      | (PRIM _) => GetExpAppCon' (exparg,ctxt)
      | (ILPRIM _) => GetExpAppCon' (exparg,ctxt)
      | (APP _) => GetExpAppCon' (exparg,ctxt)

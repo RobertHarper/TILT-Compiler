@@ -330,6 +330,14 @@ void gc_gen(Thread_t *curThread, int isMajor)
   loc_roots = curThread->loc_roots;
   start_timer(&sysThread->gctime);
 
+  if (paranoid) {
+    Heap_t *legalHeaps[3];
+    legalHeaps[0] = nursery;
+    legalHeaps[1] = old_fromheap;
+    legalHeaps[2] = NULL;
+    paranoid_check_heap_global(nursery, legalHeaps);  
+    paranoid_check_heap_global(old_fromheap, legalHeaps);  
+  }
 
   /* these are debugging and stat-gatherting procedure */
 #ifdef DEBUG
@@ -559,8 +567,11 @@ void gc_gen(Thread_t *curThread, int isMajor)
   /* More debugging and stat-gathering procedure */
   measure_semantic_garbage_after();    
   if (paranoid) {
+    Heap_t *legalHeaps[2];
+    legalHeaps[0] = old_fromheap;
+    legalHeaps[1] = NULL;
     paranoid_check_stack(curThread,nursery);
-    paranoid_check_heap_global(old_fromheap);  
+    paranoid_check_heap_global(old_fromheap, legalHeaps);  
   }
 
   if (GCtype != Minor)

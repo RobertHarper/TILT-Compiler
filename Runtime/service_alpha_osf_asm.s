@@ -203,7 +203,7 @@ global_exnhandler:
 	br	$gp, global_exn_handler_dummy
 global_exn_handler_dummy:	
 	ldgp	$gp, 0($gp)
-	lda	$sp, -320($sp)
+	ldl	$sp, 4(EXNPTR_REG)
 	stq	EXNARG_REG, EXNARG_DISP(THREADPTR_REG)
 	bsr	save_regs
 	mov	THREADPTR_REG, $16

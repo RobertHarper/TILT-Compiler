@@ -45,7 +45,7 @@ extern int TotalGenBytesCollected;
 
 long ComputeHeapSize(long oldsize, double oldratio);
 void paranoid_check_stack(Thread_t *, Heap_t *fromspace);
-void paranoid_check_heap_global(Heap_t *curSpace);
+void paranoid_check_heap_global(Heap_t *space, Heap_t **legalHeaps);
 void debug_and_stat_before(unsigned long *saveregs, long req_size);
 void debug_after_collect(Heap_t *nursery, Heap_t *oldspace);
 void measure_semantic_garbage_after(void);

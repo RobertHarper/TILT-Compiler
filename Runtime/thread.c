@@ -412,7 +412,7 @@ static void work(SysThread_t *sth)
     {
       value_t stack_top = th->stackchain->stacks[0]->top;
       th->saveregs[THREADPTR] = (long)th;
-      th->saveregs[SP] = (long)stack_top - 64; /* Get some initial room so gdb won't freak */
+      th->saveregs[SP] = (long)stack_top - 128; /* Get some initial room; Sparc requires at least 68 byte for the save area */
       th->saveregs[ALLOCPTR] = sth->alloc;
       th->saveregs[ALLOCLIMIT] = sth->limit;
 

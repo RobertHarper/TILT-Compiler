@@ -41,10 +41,12 @@ struct
     fun help ((state,known,sumcon) : typearg) = 
 	let
 	  val (tagcount,_,sumtypes) = reduce_to_sum "xsum_???" state sumcon
-	  val field_sub = TW32.uminus(known,tagcount)
+	  val known = w2i known
+	  val tagcount = w2i tagcount
+	  val field_sub = known - tagcount
 	  val nontagcount = length sumtypes
 	  val single_carrier = nontagcount = 1
-	  val is_tag = TW32.ult(known,tagcount)
+	  val is_tag = known < tagcount
 	in  (state,known,sumcon,
 	     tagcount,nontagcount,single_carrier,is_tag,
 	     sumtypes,field_sub)
@@ -85,23 +87,34 @@ struct
 	       because we only have mu's of sums.
   *)
 
-    (* (1) Falls through to nobox case 
-       (2) con_ir must be a sum-type with one carrier 
+    (* Check if values of the carriedType might look like an int and thus require boxing
      *)
-    fun needs_boxing_dynamic str carriedType =
+    fun needs_boxing_dynamic carriedType =
 	let
 	  val tag = alloc_regi NOTRACE_INT		  
-	  val boxl = fresh_code_label (str ^ "_box")
-	  val noboxl = fresh_code_label (str ^ "_nobox")
+	  val boxl = fresh_code_label "dynamic_box"
+	  val noboxl = fresh_code_label "dynamic_nobox"
 	  val _ = 
 	      (add_instr(BCNDI(LE, carriedType, IMM 4, boxl, false));     (* check for int types *)
 	       add_instr(BCNDI(LE, carriedType, IMM 255, noboxl, false)); (* check for other small types *)
 	       record_project(carriedType, 0, tag);
+	       add_instr(BCNDI(EQ, tag, IMM 12, boxl, false));               (* check for exntags *)
 	       add_instr(BCNDI(EQ, tag, IMM 4, boxl, false));                (* check for sums *)
 	       add_instr(BCNDI(EQ, tag, IMM 8, boxl, false)))                (* check mus *)
 	in  (boxl, noboxl)
 	end
 
+    fun projectFieldFromSum (sumtype, tagcount, nontagcount, known) = 
+	let val sumtypeArg = alloc_regi TRACE
+	    val _ = record_project(sumtype, 4, sumtypeArg)  (* See comment at top on sum type layout *)
+	in  if (nontagcount = 1)
+		then sumtypeArg
+	    else let val result = alloc_regi TRACE
+		     val whichCarrier = known - nontagcount
+		     val _ = record_project(sumtype, whichCarrier, result)
+		 in  result
+		 end
+	end
     
   fun xinject_sum_static (info, term_opt, trace) : term * state = 
       let
@@ -113,7 +126,7 @@ struct
 	  fun single () =
 	      let 
 		  val SOME term = term_opt
-		  val field_type = List.nth(sumtypes, TW32.toInt field_sub)
+		  val field_type = List.nth(sumtypes, field_sub)
 		  val desti = alloc_regi(niltrace2rep state trace)
 	      in  if (needs_boxing state field_type)
 		  then 
@@ -124,14 +137,14 @@ struct
 
 	  fun multi () =
 	      let val SOME term = term_opt
-		  val terms = [VALUE(INT field_sub), term]
+		  val terms = [VALUE(INT (i2w field_sub)), term]
 	      in make_record(state,terms)
 	      end
 	  
       in  (case (is_tag, nontagcount) of
-	       (true, _) => if ((w2i known) < 256) 
-				then (VALUE(TAG known), state)
-			    else error ("Tag too large " ^ (Int.toString (w2i known)))
+	       (true, _) => if (known < 256) 
+				then (VALUE(TAG (i2w known)), state)
+			    else error ("Tag too large " ^ (Int.toString known))
 	     | (_, 0) => error "Can't get here"
 	     | (_, 1) => single()
 	     | _ => multi())
@@ -139,9 +152,9 @@ struct
 
 
     fun xinject_sum_dynamic_single (info,
-			     con_varloc,
-			     exp_varloc,
-			     trace) : term * state = 
+				    sumtypeTerm,
+				    exp_varloc,
+				    trace) : term * state = 
       let val _ = Stats.counter("RTLxinject_sum_dyn_single") ()
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
@@ -149,11 +162,12 @@ struct
 
 	  val desti = alloc_regi TRACE
 	  val afterl = fresh_code_label "xinject_sum_dyn_after"
-	  val con_ir = load_ireg_term(con_varloc,NONE)
+	  val sumtypeReg = load_ireg_term(sumtypeTerm,NONE)
 	  val exp_ir = load_ireg_term(exp_varloc,NONE)
 	  
 	  (* Perform the branching with fall-through to nobox case *)
-	  val (boxl,noboxl) = needs_boxing_dynamic "xinject_sum_dyn_single" con_ir
+	  val fieldtypeReg = projectFieldFromSum (sumtypeReg, tagcount, nontagcount, known)
+	  val (boxl,noboxl) = needs_boxing_dynamic fieldtypeReg
 
 	  (* nobox case *)
 	  val _ = (add_instr(ILABEL noboxl);
@@ -182,7 +196,7 @@ struct
 		sumtypes,field_sub) = help info
 
 	  val dest = alloc_regi(niltrace2rep state trace)
-	  val vls = [VALUE(INT field_sub),exp_varloc]
+	  val vls = [VALUE(INT (i2w field_sub)),exp_varloc]
 	  val (lv,state1) = make_record(state,vls)
 	  val ir = load_ireg_term(lv,NONE)
 	  val _ = add_instr(MV(ir,dest))
@@ -206,7 +220,7 @@ struct
 		    | _ => xinject_sum_dynamic_multi(info,con_varloc,exp_varloc,trace))
 	end
 
-  fun xproject_sum_dynamic (info, con_ir, exp_ir, traceinfo) : term * state = 
+  fun xproject_sum_dynamic (info, sumtypeReg, exp_ir, traceinfo) : term * state = 
      let val _ = Stats.counter("RTLprojsum") ()
 	  val  (state,known,sumcon,
 		tagcount,nontagcount,single_carrier,is_tag,
@@ -218,7 +232,8 @@ struct
 	      let val afterl = fresh_code_label "projsum_single_after"
 
 		  (* Perform the branching with fall-through to nobox case *)
-		  val (boxl,noboxl) = needs_boxing_dynamic "xprojsum_dyn_single" con_ir
+		  val fieldtypeReg = projectFieldFromSum (sumtypeReg, tagcount, nontagcount, known)
+		  val (boxl,noboxl) = needs_boxing_dynamic fieldtypeReg
 		  (* no box case *)
 		  val _ = (add_instr(ILABEL noboxl);
 			   add_instr(MV(exp_ir,desti));
@@ -259,7 +274,7 @@ struct
 
       in  (case (tagcount,nontagcount) of
 	       (_, 0) => error "xproject_sum_static projectin from non-carrier"
-	     | (_, 1) => let val summand_type = (List.nth(sumtypes,w2i field_sub)
+	     | (_, 1) => let val summand_type = (List.nth(sumtypes,field_sub)
 						 handle _ => error "bad project_sum: record_con")
 			 in  if (needs_boxing state summand_type)
 				 then unbox 0

@@ -265,7 +265,10 @@ static void stop_copy(SysThread_t *sysThread)
       /* Check the tospace heap - zero out all of fromspace */
       if (paranoid) {
 	value_t *from_alloc = (value_t *)fromheap->bottom;
-	paranoid_check_heap_global(fromheap);
+	Heap_t *legalHeaps[2];
+	legalHeaps[0] = fromheap;
+	legalHeaps[1] = NULL;
+	paranoid_check_heap_global(fromheap,legalHeaps);
 	while (from_alloc < (value_t *)fromheap->top)
 	  *(from_alloc++) = 0;
       }
