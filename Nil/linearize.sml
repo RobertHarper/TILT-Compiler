@@ -150,14 +150,13 @@ struct
 				 end
 	      | Fixopen_b vf_set => vf_help Fixopen_b vf_set
 	      | Fixcode_b vf_set => vf_help Fixcode_b vf_set
-	      | Fixclosure_b vcl_set => let val state' = add_vars state vcl_set
-					    val state' = pop_vars state vcl_set
+	      | Fixclosure_b vcl_set => let val state = add_vars state vcl_set
+					    val state = pop_vars state vcl_set
 					    val vcl_list = set2list vcl_set
 					    val bnd_vcl = map vcl_help vcl_list
 					    val fixbnd = Fixclosure_b(list2set(map #2 bnd_vcl))
 					    val bnds = flatten (map #1 bnd_vcl)
-					    val state' = pop_var state'
-					in  (state',bnds @ [fixbnd])
+					in  (state,bnds @ [fixbnd])
 					end)
        end
 
