@@ -836,6 +836,7 @@ struct
 	   os : string option, srcs : string list) =
 	let val _ = Stats.clear_stats()
 	    val _ = reset_stats()
+	    val _ = (depth := 0)
 	    val _ = setMapping mapfile
 	    val srcs = if srcs = [] 
 			   then list_units()
