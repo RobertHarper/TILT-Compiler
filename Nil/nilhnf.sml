@@ -10,6 +10,7 @@ structure NilHNF :> NILHNF =
 
     type con_subst = NilSubst.con_subst
 
+    val show_calls = Stats.ff("NilHNF_show_calls")
 
     val timer = Stats.subtimer
     val subtimer = Stats.subtimer
@@ -17,6 +18,8 @@ structure NilHNF :> NILHNF =
     val find_kind_equation = subtimer ("HNF:find_kind_equation",NilContext.find_kind_equation)
 
     val type_of = subtimer ("HNF:typeof",Normalize.type_of)
+
+    val lprintl = Util.lprintl
 
     val substConInCon = fn subst => subtimer ("HNF:substConInCon",NilSubst.substConInCon subst)
     val addr = subtimer ("HNF:addr",NilSubst.C.addr)
@@ -242,7 +245,16 @@ structure NilHNF :> NILHNF =
        (reduce_hnf' (D,con)) before pop())
     and reduce_hnf' (D,con) = *)
       let
+	val _ = if !show_calls then
+         ( lprintl "reduce_hnf called with:";
+	   Ppnil.pp_con con ) else ()
+	  
 	val (con,path) = con_reduce (D,empty()) con
+
+	val _ = if !show_calls then
+         ( lprintl "reduce_hnf returning with:";
+	   Ppnil.pp_con con ) else ()
+	  
       in
 	if path then
 	  (case find_kind_equation(D,con)

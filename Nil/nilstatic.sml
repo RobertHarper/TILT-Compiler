@@ -947,23 +947,36 @@ struct
   (* note: wrapper function at end of file redefines con_equiv! *)
   and con_equiv (args as (D,c1,c2,k,sk)) : bool = 
     (!short_circuit andalso (alpha_equiv_con(c1,c2))) orelse
-(*    (print "\nCon equiv called with arg1 = \n";
-     Ppnil.pp_con c1;
-     print "\n arg 2 = \n";
-     Ppnil.pp_con c2;
-     print "\nkind =\n";
-     Ppnil.pp_kind k;
-     let val res =*) con_equiv' (D,c1,c2,k,sk) (*
-     in (print "\nCon Equiv Done\n";res) end)*)
+    ( if !show_calls then 
+	(
+         print "\nCon equiv called with arg1 = \n";
+	 Ppnil.pp_con c1;
+	 print "\n arg 2 = \n";
+	 Ppnil.pp_con c2;
+	 print "\nkind =\n";
+	 Ppnil.pp_kind k
+	 ) else ();
+      let val res = con_equiv' (D,c1,c2,k,sk) 
+      in (
+	  if !show_calls then print "\nCon Equiv Done\n" else ();
+	  res
+	  ) 
+      end)
 
     
   and con_equiv' (D,c1,c2,k,sk) : bool = 
     let
 
-      val con_head_normalize = (*fn args => (print "\nEntering con_head_normalize, arg is:\n";
-					   Ppnil.pp_con (#2 args);
-					   let val res = *)time_con_head_normalize "Equiv" (*args
-					   in (print "\nReturning\n";res) end)*)
+      val con_head_normalize = 
+	fn args => 
+	( (if !show_calls then
+	     (print "\nEntering con_head_normalize, arg is:\n";
+	      Ppnil.pp_con (#2 args)) else ());
+	  let val res = time_con_head_normalize "Equiv" args
+	  in 
+	    ( if !show_calls then print "\nReturning\n" else ();
+	      res ) 
+	  end)
       val con_reduce = subtimer ("Equiv:con_reduce",NilHNF.con_reduce)
 
       val _ = push_eqcon(c1,c2,D)
@@ -1991,7 +2004,7 @@ struct
 
 	   val subst = Subst.C.simFromList (zip (#1 (unzip tFormals)) cons)
 	   val eFormals = map (fn (v,c) => (v,Subst.substConInCon subst c)) eFormals
-	     
+
 	   fun folder ((vopt, formal_con), actual_con, D) = 
 	       if (type_equiv (D,actual_con,formal_con,true)) 
 		   then (case vopt of
@@ -2001,7 +2014,7 @@ struct
 
 	   val D = ((foldl2 folder D (eFormals,t_cons))
 		    handle e => print_error())
-				 
+		
 	   val f_cons = map (curry2 exp_valid D) fexps
 	   val f_cons = map (curry2 con_head_normalize D) f_cons
 
@@ -2166,7 +2179,13 @@ struct
 	let 
 	  val _ = clear_stack ()
 	  val _ = push_mod(module,D)
-		
+
+	  val _ = 
+	    assert (locate "module_valid")
+	    [
+	     (assertWellFormed D)
+	     ]
+
 	  val _ = if (!show_calls)
 		    then (print "module_valid called with module =\n";
                           Ppnil.pp_module 

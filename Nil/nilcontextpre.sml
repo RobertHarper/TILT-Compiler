@@ -119,6 +119,20 @@ structure NilContextPre
 
    fun contains map var = Option.isSome (V.find (map,var))
 
+   fun var_error v () = error (locate "var_error") ("Constructor variable already occurs in context: "^(Name.var2string v))
+
+   fun Vinsert (map,v,value) = 
+     let
+       val _ = 
+	 assert (locate "Vinsert")
+		  [
+		   (not (contains map v),
+			var_error v)
+		   ]
+     in
+       V.insert (map,v,value)
+     end
+
    (**** Printing functions *****)
    local
      fun print_con (var,{con,std_con}:c_entry) =
@@ -195,7 +209,7 @@ structure NilContextPre
 	 {con = con,
 	  std_con = delay thunk}
      in
-       {conmap = V.insert (conmap, var, c_entry), 
+       {conmap = Vinsert (conmap, var, c_entry), 
 	kindmap = kindmap,
 	counter = counter}
      end
@@ -221,8 +235,6 @@ structure NilContextPre
    fun allBound_c kindmap con = c_all (contains kindmap) vprint  (NilUtil.freeConVarInCon (true,con))
    fun allBound_k kindmap kind = c_all (contains kindmap) vprint (NilUtil.freeConVarInKind kind)
 
-   fun var_error v () = error (locate "var_error") ("Constructor variable already occurs in context: "^(Name.var2string v))
-
    fun find_std_kind (context as {kindmap,...}:context,var) = 
      (case (V.find (kindmap, var)) of
 	   SOME {std_kind,...} => thaw std_kind
@@ -247,7 +259,7 @@ structure NilContextPre
 	 in
 	   {conmap = conmap, 
 	    counter = counter+1,
-	    kindmap = V.insert (kindmap, var, entry)}
+	    kindmap = Vinsert (kindmap, var, entry)}
 	 end
       
       val res = 
@@ -457,7 +469,7 @@ structure NilContextPre
      in
        {conmap = conmap, 
 	counter = counter+1,
-	kindmap = V.insert (kindmap, var, entry)}
+	kindmap = Vinsert (kindmap, var, entry)}
      end
 
   fun insert_kind_equation (context as {conmap,kindmap,counter}:context,var,con,kind) = 
@@ -484,7 +496,7 @@ structure NilContextPre
      in
        {conmap = conmap, 
 	counter = counter+1,
-	kindmap = V.insert (kindmap, var, entry)}
+	kindmap = Vinsert (kindmap, var, entry)}
      end
 
   fun insert_equation (context as {conmap,kindmap,counter}:context,var,con) =  
@@ -509,7 +521,7 @@ structure NilContextPre
      in
        {conmap = conmap, 
 	counter = counter+1,
-	kindmap = V.insert (kindmap, var, entry)}
+	kindmap = Vinsert (kindmap, var, entry)}
      end
 
   fun insert_kind_list (C:context,vklist) = 
@@ -582,7 +594,7 @@ structure NilContextPre
 		     of SOME c => CON c
 		      | NONE => 
 		       (case kind 
-			  of Single_k c => CON c
+			  of Single_k c =>CON c
 			   | SingleType_k c => CON c
 			   | _ =>  KIND (kind, empty_subst())))
 		 | NONE => (print "Variable not found in context!\n";
@@ -638,14 +650,12 @@ structure NilContextPre
        val entries = V.listItemsi kindmap
        val entries =ListMergeSort.sort compare entries
        val error : string -> bool = error (locate "is_well_formed") 
-	     
+	 
        fun folder ((var,entry as {eqn,kind,std_kind,index}),D as {kindmap,conmap,counter}) = 
 	 let
-	   val std_kind = thaw std_kind
 	   val _ = 
 	     (
 	      kind_valid (D,kind);
-	      kind_valid (D,std_kind);
 
 	      (case eqn
 		 of SOME con => 
@@ -665,7 +675,7 @@ structure NilContextPre
 	       (error "Indexing error"))
 	      )
 	   val D = 
-	     {kindmap = V.insert (kindmap,var,entry),
+	     {kindmap = Vinsert (kindmap,var,entry),
 	      conmap = conmap,
 	      counter = counter+1}
 	 in
