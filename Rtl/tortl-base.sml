@@ -778,20 +778,28 @@ struct
 	  else instr::[(LOAD32I(REA(addr,0),global))]
       end
 
+  (* pds: The second "- 1" in record_project seems odd. *)
+
+  val maxRtlRecord = Rtltags.maxRecordLength - 1      (* We reserve one slot from Rtl-generated record so that sums can be handled *)
+  
+  fun record_project (src, index, dest) = 
+      if (index >= 0 andalso index < (maxRtlRecord-1))
+	  then add_instr(LOAD32I(REA(src,4*index), dest))
+      else let val tmp = alloc_regi TRACE
+	       val _ = add_instr(LOAD32I(REA(src,4*(maxRtlRecord-1)), tmp))
+	   in  record_project(tmp,index-(maxRtlRecord-1),dest)
+	   end
 
   fun repPathIsPointer repPath = 
-      let fun loop (r,[]) = let 
+      let
+	  fun loop (r,[]) = let 
 				val result = alloc_regi NOTRACE_INT
 				val _ = add_instr(CMPUI(GT,r,IMM 3,result))
 			    in  result
 			    end
 	    | loop (r,index::rest) = let val s = alloc_regi TRACE
-	                                 (* XXX should use record_project but in tortl-record *)
-					 val _ = if (index >= Rtltags.maxRecordLength)
-						     then error "Record too big"
-						 else ()
-					 val _ = add_instr(LOAD32I(REA(r,4*index),s))
-				     in  loop (s,rest)
+					 val _ = record_project (r,index,s)
+				     in  loop(s,rest)
 				     end
       in  (case repPath of
 	       Notneeded_p => error "load_repPath called on Notneeded_p"

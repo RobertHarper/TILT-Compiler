@@ -109,6 +109,10 @@ sig
    val load_reg_val : value * reg option -> reg
    val load_reg_term : term * reg option -> reg
 
+   (* The next two are for TortlRecord. *)
+   val maxRtlRecord : int
+   val record_project : regi * int * regi -> unit (* register contaiing record, index of field, dest register *)
+
    val repPathIsPointer : Rtl.rep_path -> regi
    val repIsNonheap : Rtl.rep -> bool
 

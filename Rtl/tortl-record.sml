@@ -21,7 +21,7 @@ struct
 
     val empty_record_int = 256
     val empty_record = VALUE (TAG 0w256)
-    val maxRtlRecord = maxRecordLength - 1      (* We reserve one slot from Rtl-generated record so that sums can be handled *)
+    val maxRtlRecord = TortlBase.maxRtlRecord
 
 
 
@@ -210,14 +210,8 @@ struct
       in  make_record_help(false,state,reps,terms,NONE)
       end
 
-  fun record_project (src, index, dest) = 
-      if (index >= 0 andalso index < (maxRtlRecord-1))
-	  then add_instr(LOAD32I(REA(src,4*index), dest))
-      else let val tmp = alloc_regi TRACE
-	       val _ = add_instr(LOAD32I(REA(src,4*(maxRtlRecord-1)), tmp))
-	   in  record_project(tmp,index-(maxRtlRecord-1),dest)
-	   end
-
+  val record_project = TortlBase.record_project
+      
   (* Record_insert takes 4 arguments: (1) a totrl state, (2) a record r : TRACE, (3) a type rt where r : rt, 
                                       (4) a value v : NOTRACE_INT
         Reutrn a record r' whose first field is v and whose remaining fields are those of r.
