@@ -67,6 +67,7 @@ struct
     fun write' (writer : file -> unit) (file : file) : unit =
 	let val _ =  mkdirs (OS.Path.dir file)
 	    val tmp = Paths.tmpFile file
+	    val _ = ignore_exn OS.FileSys.remove tmp
 	    val _ = writer tmp
 	    val _ = ignore_exn OS.FileSys.remove file
 	    val _ = OS.FileSys.rename {old=tmp, new=file}
