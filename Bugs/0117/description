@@ -10,7 +10,10 @@ Problem:     tilt: Option
 Code:        
 Transcript:  
 Comments:    
+         [tom7] This is NOT the same bug as 0112, et al., though it fails in the
+         same place. Before that, there's never a "unset toplevel tyvar -- setting
+	 to unit" message.
 Fix:         
-Test: 
-Owner: m0048
+Test: m0048, vector.sml
+Owner: 
 Status: open
