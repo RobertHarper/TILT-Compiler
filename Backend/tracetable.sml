@@ -458,7 +458,7 @@ functor Tracetable(val little_endian    : bool
 	  INT32 wzero])
 
 
-    fun MakeGlobalTable (name,arg) = 
+    fun MakeMutableTable (name,arg) = 
       let
 	  fun do_lab_trace(lab,trace) = 
 	      let 
@@ -479,19 +479,12 @@ functor Tracetable(val little_endian    : bool
 		  (DATA lab) :: (map INT32 botword) @ specdata
 	      end
       in
-	[DLABEL(ML_EXTERN_LABEL (name^"_GLOBAL_TABLE_BEGIN_VAL"))]
+	[DLABEL(ML_EXTERN_LABEL (name^"_MUTABLE_TABLE_BEGIN_VAL"))]
 	@ (foldr (op @) nil (map do_lab_trace arg))
 	@ [COMMENT "filler for alignment of global_table",
-	   DLABEL(ML_EXTERN_LABEL (name^"_GLOBAL_TABLE_END_VAL")),
+	   DLABEL(ML_EXTERN_LABEL (name^"_MUTABLE_TABLE_END_VAL")),
 	   INT32 wzero]
       end
 
-
-    fun MakeMutableTable (name,arg) = 
-	[DLABEL(ML_EXTERN_LABEL (name^"_MUTABLE_TABLE_BEGIN_VAL"))]
-	@ (map (fn (lab) => DATA(lab)) arg)
-	@ [COMMENT "filler for alignment for mutable_table",
-	   DLABEL(ML_EXTERN_LABEL (name^"_MUTABLE_TABLE_END_VAL")),
-	   INT32 wzero]
 
   end

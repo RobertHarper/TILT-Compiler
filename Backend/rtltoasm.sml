@@ -49,8 +49,7 @@ struct
 (* ----------------------------------------------------------------- *)
 
    fun allocateModule (prog as Rtl.MODULE{procs, data, main, 
-					  mutable_objects,
-					  mutable_variables}) =
+					  mutable}) =
      let
       
        val {callee_map, rtl_scc, ...} = Recursion.procGroups prog
@@ -404,12 +403,11 @@ struct
        emitString commentHeader;
        emitString " filler next\n";
        emitString ("\t.long 0\n\n");
-       dumpDatalist (Tracetable.MakeGlobalTable 
+       dumpDatalist (Tracetable.MakeMutableTable 
 		          (main', 
 			   map (fn (l, rep) => (l,#2(Toasm.translateRep rep)))
-			        mutable_variables));
+			        mutable));
 
-       dumpDatalist (Tracetable.MakeMutableTable (main', mutable_objects));
        ()
      end (* allocateProg *)
        handle e => (Printutils.closeOutput (); raise e)
@@ -429,8 +427,6 @@ struct
 	     val gc_table_end =	     mktable("GCTABLE_END_VAL","_GCTABLE_END_VAL")
 	     val sml_globals =       mktable("SML_GLOBALS_BEGIN_VAL","_SML_GLOBALS_BEGIN_VAL")
 	     val end_sml_globals =   mktable("SML_GLOBALS_END_VAL","_SML_GLOBALS_END_VAL")
-	     val globaltable_begin = mktable("GLOBAL_TABLE_BEGIN_VAL","_GLOBAL_TABLE_BEGIN_VAL")
-	     val globaltable_end =   mktable("GLOBAL_TABLE_END_VAL","_GLOBAL_TABLE_END_VAL")
 	     val muttable_begin =    mktable("MUTABLE_TABLE_BEGIN_VAL","_MUTABLE_TABLE_BEGIN_VAL")
 	     val muttable_end =      mktable("MUTABLE_TABLE_END_VAL","_MUTABLE_TABLE_END_VAL")
 	     val codetable_begin =   mktable("CODE_BEGIN_VAL","_CODE_BEGIN_VAL")
@@ -444,8 +440,6 @@ struct
 	    dumpDatalist gc_table_end;
 	    dumpDatalist sml_globals;
 	    dumpDatalist end_sml_globals;
-	    dumpDatalist globaltable_begin;
-	    dumpDatalist globaltable_end;
 	    dumpDatalist muttable_begin;
 	    dumpDatalist muttable_end;
 	    dumpDatalist codetable_begin;
