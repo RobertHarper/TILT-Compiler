@@ -390,7 +390,6 @@ structure Ppnil	:> PPNIL =
     and pp_conditionCode cc = 
 	(case cc of
 	     Exp_cc exp => pp_exp exp
-	   | Prim_cc (prim, ccList) => HOVbox[pp_prim' prim, String "(", pp_list pp_conditionCode ccList ("", ",", "", true), String ")"]
 	   | And_cc (cc1,cc2) => HOVbox[String "AND(", pp_conditionCode cc1, String ", ", pp_conditionCode cc2, String ")"]
 	   | Or_cc  (cc1,cc2) => HOVbox[String "OR(", pp_conditionCode cc1, String ", ", pp_conditionCode cc2, String ")"]
 	   | Not_cc  cc => HOVbox[String "NOT(", pp_conditionCode cc, String ")"])

@@ -173,7 +173,6 @@ struct
 
   and conditionCode =                          (* Usd by Ifthenelse_e *)
       Exp_cc of exp
-    | Prim_cc of prim * conditionCode list     (* Only comparison primitives of numeric types are permitted *)
     | And_cc  of conditionCode * conditionCode (* Short-circuiting *)
     | Or_cc   of conditionCode * conditionCode (* Short-circuiting *)
     | Not_cc  of conditionCode 
