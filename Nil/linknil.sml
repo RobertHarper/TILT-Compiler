@@ -200,11 +200,6 @@ structure Linknil (* :> LINKNIL  *) =
 				   "Inline", 
 				   inline_domod, filename, nilmod)
 
- 	    val nilmod = check (typecheck_before_opt,show_typecheck,
-				    "Nil_typecheck_pre-opt",
-				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
-				    filename, nilmod)
-
 	    val nilmod = transform(do_one_optimize, show_one_optimize,
 				 "Optimize1", 
 				 Optimize.optimize
@@ -251,11 +246,6 @@ structure Linknil (* :> LINKNIL  *) =
 
 
 ****)
- 	    val nilmod = check (typecheck_before_opt,show_typecheck,
-				    "Nil_typecheck_pre-opt",
-				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
-				    filename, nilmod)
-
 
             val nilmod = transform(do_reify, show_reify,
                                    "Reification",

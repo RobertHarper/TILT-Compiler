@@ -855,26 +855,31 @@ struct
   fun same_phase (Compiletime, Compiletime) = true
     | same_phase (Runtime, Runtime) = true
     | same_phase _ = false
-(*
+
   fun alpha_equiv_kind' (context) (kind1,kind2) = 
     let
       val recur = alpha_equiv_kind' context
     in
       (case (kind1,kind2) of
 	    (Type_k, Type_k) => true
-	  | (Singleton_k con1,Singleton_k con2) => alpha_equiv_con' context (con1,con2)
-	  | (Record_k elts1,Record_k elts2) => 
+          | (Single_k con1, Single_k con2) => 
+	       alpha_equiv_con' context (con1,con2)
+	  | (SingleType_k con1,SingleType_k con2) => 
+               alpha_equiv_con' context (con1,con2)
+	  | (Record_k elts1_seq,Record_k elts2_seq) => 
 	   let
 	     val conref = ref context
+	     val elts1 = Sequence.toList elts1_seq
+	     val elts2 = Sequence.toList elts2_seq
 	     fun equiv_one (((lbl1,var1),kind1),((lbl2,var2),kind2)) = 
 	       let
 		 val kind_equiv = alpha_equiv_kind' (!conref) (kind1,kind2)
 		 val _ = conref := alpha_equate_pair (!conref,(var1,var2))
 	       in
-		 eq_label (lbl1,lbl2) andalso kind_equiv
+		 kind_equiv andalso (eq_label (lbl1,lbl2))
 	       end
 	   in
-	     eq_len (elts1,elts2) andalso 
+	     (eq_len(elts1,elts2)) andalso
 	     (ListPair.all equiv_one (elts1,elts2))
 	   end
 
@@ -915,8 +920,9 @@ struct
 	     flag1 = flag2 andalso
 	     alpha_equiv_con_list context' (con_list1,con_list2)
 	   end
-	  | (AllArrow_c (openness1,effect1,tformals1,formals1,flength1,return1),
-	     AllArrow_c (openness2,effect2,tformals2,formals2,flength2,return2)) =>
+             (*XXX need to fix this! *)
+	  | (AllArrow_c (openness1,effect1,tformals1,NONE,formals1,flength1,return1),
+	     AllArrow_c (openness2,effect2,tformals2,NONE,formals2,flength2,return2)) =>
 	   let
 	     val conref = ref context
 	     fun tformal_equiv ((var1,kind1),(var2,kind2)) = 
@@ -932,10 +938,13 @@ struct
 	   end 
 
 
-          (* XXXX should be threading e_context here too *)
-	  | (Typeof_c exp1, Typeof_c exp2) => alpha_equiv_exp' context (exp1,exp2)
-	  | (Var_c var1,Var_c var2) => 
-	   alpha_pair_eq(context,(var1,var2))
+          (* XXX need to fix this! *)
+	  | (Typeof_c exp1, Typeof_c exp2) => 
+                false
+(*
+                alpha_equiv_exp' context (exp1,exp2)
+*)
+	  | (Var_c var1,Var_c var2) => alpha_pair_eq(context,(var1,var2))
 
 	  | (Let_c (sort1, binds1,con1),Let_c (sort2, binds2,con2)) => 
 	   let 
@@ -1002,9 +1011,9 @@ struct
 	 orelse (if !debug then
 		   (lprintl "alpha_equiv_con failed!";
 		    printl "Constructor:";
-		    PpNil.pp_con con1;
+		    Ppnil.pp_con con1;
 		    lprintl "Not equivalent to :";
-		    PpNil.pp_con con2;
+		    Ppnil.pp_con con2;
 		    printl "")
 		 else ();
 		   false)
@@ -1014,7 +1023,7 @@ struct
   and alpha_equiv_con_list context list_pair = 
     eq_len list_pair andalso
     ListPair.all (alpha_equiv_con' context) list_pair
-
+(*
   fun alpha_sub_kind' context (k1,k2) = 
     (case (k1,k2) of
 	  (Type_k, Type_k) => true
@@ -1045,18 +1054,16 @@ struct
 	   (ListPair.all sub_one (elts1,elts2))
 	 end
 	| (_,_) => false)
-       
+*)       
   val alpha_equiv_con = alpha_equiv_con' (empty_context (),empty_context ())
 
   val alpha_equiv_kind = alpha_equiv_kind' (empty_context (),empty_context ())
-
+(*
   val alpha_sub_kind = alpha_sub_kind' (empty_context (),empty_context ())
-
-  val alpha_sub_kind = alpha_sub_kind' (empty_context (),empty_context ())
-
-(* End exported functions *)
 
 *)
+(* End exported functions *)
+
 
   fun alpha_mu is_bound (vclist) = 
       let fun folder((v,_),subst) = if (is_bound v)

@@ -67,13 +67,15 @@ signature NILUTIL =
 (*    type alpha_context
 
     val alpha_equiv_con' : (alpha_context*alpha_context) -> Nil.con * Nil.con -> bool
-    val alpha_equiv_con : Nil.con * Nil.con -> bool
 
     val alpha_equiv_kind' : (alpha_context*alpha_context) -> Nil.kind * Nil.kind -> bool
-    val alpha_equiv_kind : Nil.kind * Nil.kind -> bool
 
     val alpha_sub_kind : Nil.kind * Nil.kind -> bool
 *)
+
+    val alpha_equiv_con : Nil.con * Nil.con -> bool
+    val alpha_equiv_kind : Nil.kind * Nil.kind -> bool
+
     val sub_phase : Nil.phase * Nil.phase -> bool
 
     val is_var_e : Nil.exp -> bool

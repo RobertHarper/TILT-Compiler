@@ -1,4 +1,4 @@
-(*$import ANNOTATION PRIMUTIL NIL PPNIL ALPHA NILUTIL NILCONTEXT NILERROR NORMALIZE NILSUBST Stats NILSTATIC Normalize *)
+(*$import ANNOTATION PRIMUTIL NIL PPNIL ALPHA NILCONTEXT NILERROR NORMALIZE NILSUBST Stats NILSTATIC Normalize NilUtil *)
 structure NilStatic :> NILSTATIC where type context = NilContext.context = 
 struct	
   
@@ -23,6 +23,7 @@ struct
   val debug = Stats.ff "nil_debug"
   val show_calls = Stats.ff "nil_show_calls"
   val show_context = Stats.ff "nil_show_context"
+  val short_circuit = Stats.tt "nilstatic_shortcircuit"
   val warn_depth = ref 500
 
   val locate = NilError.locate "NilStatic"
@@ -478,7 +479,7 @@ struct
       val kinds = map (curry2 con_valid D) args
       val _ = 
 	(case pcon of
-	   (Record_c (labels,vars_opt)) => 
+	   (Record_c (labels,NONE)) => 
 	     let
 	       val _ = 
 		 (if labels_distinct labels then
@@ -532,12 +533,22 @@ struct
     let
 
       val _ = 
-	(case constructor 
-	   of (Prim_c (pcon,args)) => pcon_valid (D,pcon,args)
+	(case constructor of
+              (Prim_c (Record_c (labels,SOME vars), args)) =>
+              let
+                 fun folder (v,c,(kinds,D)) = ((con_valid (D,c))::kinds,insert_con (D,v,c))
+                 val (kinds,D) = foldl2 folder ([],D) (vars,args)
+  	         val _ = 
+		  (if labels_distinct labels then
+		     (c_all is_type b_perr_k kinds) orelse
+		     (error (locate "con_valid'") "DepRecord contains field of non-word kind")
+		   else
+		     (error (locate "con_valid'") "DepRecord contains duplicate field labels"))
+  	      in () 
+	      end
+	    | (Prim_c (pcon,args)) => pcon_valid (D,pcon,args)
 	    | (Mu_c (is_recur,defs)) =>
 	     let
-	       val word_kind = Type_k
-
 	       val D =
 		 if is_recur then
 		     let fun folder((v,_),D) = insert_kind (D,v,Type_k)
@@ -549,7 +560,7 @@ struct
 
 	       val _ = 
 		 (c_all is_type b_perr_k kinds) orelse
-		 (error (locate "con_valid") "Invalid kind for recursive constructor" )
+		 (error (locate "con_valid'") "Invalid kind for recursive constructor" )
 	     in
 	       ()
 	     end
@@ -571,7 +582,7 @@ struct
 	       val body_kind = con_valid (D,body)
 	       val _ = 
 		 ((c_all is_type b_perr_k formal_kinds) andalso (is_type body_kind)) orelse
-		 (error (locate "con_valid") "Invalid arrow constructor")
+		 (error (locate "con_valid'") "Invalid arrow constructor")
 	     in
 	       ()
 	     end
@@ -589,7 +600,7 @@ struct
 	     let
 	       val _ = if (bound_kind(D,var))
 			   then ()
-		       else (error (locate "con_valid")  
+		       else (error (locate "con_valid'")  
 			     ("Encountered undefined variable " ^ (Name.var2string var)))
 	     in ()
 	     end	       
@@ -618,7 +629,7 @@ struct
 		  print "env_kind is "; pp_kind env_kind; print "\n";
 		  print "klast is "; pp_kind klast; print "\n";
 		  print "code_kind is "; pp_kind code_kind; print "\n";
-		  (error (locate "con_valid") "Invalid kind for closure environment" ))
+		  (error (locate "con_valid'") "Invalid kind for closure environment" ))
 	     in
 	       ()
 	     end
@@ -637,7 +648,7 @@ struct
                                                    val result = Name.compare_label (x,y)
                                                    val _ = if result = EQUAL then print "TRUE\n" else print "FALSE\n"
                                                in result end) labels;
-		  (error (locate "con_valid") "Labels in record of constructors not distinct" ))
+		  (error (locate "con_valid'") "Labels in record of constructors not distinct" ))
 	       val _ = if (!trace)
 			   then print "con_valid done processing Crecord_c\n}"
 		       else ()
@@ -657,7 +668,7 @@ struct
 		      (perr_c_k (constructor,record_kind);
 		       lprintl "and context is";
 		       NilContext.print_context D;
-		       (error (locate "con_valid") 
+		       (error (locate "con_valid'") 
 			"Non-record kind returned from con_valid in projection")))
 		val labs = map (#1 o #1) (Sequence.toList entry_kinds)
 (*		val _ = (print "XXX DONE con_valid on Proj_c\n")
@@ -686,7 +697,7 @@ struct
 		   (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
 		 | _ => (print "Invalid kind for constructor application\n";
 			 pp_kind cfun_kind; print "\n";
-			 (error (locate "con_valid") "Invalid kind for constructor application" ))
+			 (error (locate "con_valid'") "Invalid kind for constructor application" ))
 	       val actual_kinds = map (curry2 con_valid D) actuals
 	       val (formal_vars,formal_kinds) = unzip formals
 	       val _ = 
@@ -694,7 +705,7 @@ struct
 		  (o_perr_k_k "Constructor function applied to wrong number of arguments") 
 		  (actual_kinds,formal_kinds))
 		 orelse
-		 (error (locate "con_valid") "Constructor function failed: argument not subkind of expected kind")
+		 (error (locate "con_valid'") "Constructor function failed: argument not subkind of expected kind")
 (*	       val _ = print "XXX con_valid on App_c 5 DONE\n" *)
 	     in  ()
 	     end
@@ -716,7 +727,7 @@ struct
 		   val _ = 
 		     (sub_kind (D,body_kind,given_kind)) orelse
 		     (perr_k_k (given_kind,body_kind);
-		      (error (locate "con_valid") "Illegal kind in typecase"))
+		      (error (locate "con_valid'") "Illegal kind in typecase"))
 		 in ()
 		 end
 	       val _ = app doarm arms
@@ -724,7 +735,7 @@ struct
 	       val def_kind = con_valid (D,default)
 	       val _ = 
 		 ((sub_kind (D,def_kind,given_kind)) andalso (is_type arg_kind)) orelse
-		 (error (locate "con_Valid") "Error in type case" handle e => raise e)
+		 (error (locate "con_valid'") "Error in type case" handle e => raise e)
 	     in
 	       ()
 	     end
@@ -887,24 +898,33 @@ struct
 
   (* Given a well-formed context D and well-formed constructors c1 and c2 of kind k,
      return whether they are equivalent at well-formed kind k. *)
-  and con_equiv (D,c1,c2,k) : bool = 
+  and con_equiv (args as (D,c1,c2,k)) : bool = 
+        if (!short_circuit andalso NilUtil.alpha_equiv_con(c1,c2)) then
+           ((* print "con_equiv short-circuited\n"; *) true)
+        else
+           con_equiv' args
+            
+  and con_equiv' (D,c1,c2,k) : bool = 
     let val _ = push_eqcon(c1,c2,D)
         val res = 
         case k of
 	  Type_k => 
 	      let val c1 = con_head_normalize(D,c1)
 		  val c2 = con_head_normalize(D,c2)
-	      in  (case con_structural_equiv(D,c1,c2) of
-		       NONE => false
-		     | SOME Type_k => true
-		     | SOME _ => error' "con_structural_equiv returned bad kind")
+	      in  
+                  (case con_structural_equiv(D,c1,c2) of
+	 	        NONE => false
+		      | SOME Type_k => true
+		      | SOME _ => error' "con_structural_equiv returned bad kind")
 	      end
 	| SingleType_k c => true
 	| Single_k c => true
 	| Record_k lvk_seq => 
 	      let fun folder (((l,v),k),(D,equal)) =
 		      let val equal = equal andalso
-			             con_equiv(D,Proj_c(c1,l),Proj_c(c2,l),k)
+                                       (* if they weren't alpha-equivalent before, 
+                                          they won't be now; bypass the check *)
+			              con_equiv'(D,Proj_c(c1,l),Proj_c(c2,l),k)
 			  val D = NilContext.insert_kind(D,v,Single_k(Proj_c(c1,l)))
 		      in  (D,equal)
 		      end
@@ -916,11 +936,14 @@ struct
 		  val args = map (Var_c o #1) vklist
 		  val c1 = App_c(c1,args)
 		  val c2 = App_c(c2,args)
-	      in  con_equiv(D,c1,c2,k)
+	      in  
+                  (* if they weren't alpha-equivalent before, 
+                     they won't be now; bypass the check *)
+                  con_equiv'(D,c1,c2,k)  
 	      end
 	val _ = pop()
 	val _ = if res then ()
-	    else (print "con_equiv returning false\n";
+	    else (print "con_equiv' returning false\n";
 		  print "c1 = "; Ppnil.pp_con c1; print "\n";
 		  print "c2 = "; Ppnil.pp_con c2; print "\n";
 		  print "k = "; Ppnil.pp_kind k; print "\n";
