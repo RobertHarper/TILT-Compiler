@@ -16,6 +16,7 @@ structure Linknil :> LINKNIL  =
     val cc          = makeEntry (true, "ClosureConv")
     val optimize1   = makeEntry (true, "Optimize1")
     val optimize2   = makeEntry (true, "Optimize2")
+    val optimize3   = makeEntry (true, "Optimize3")
     val reify1      = makeEntry (true, "Reify1")
     val reify2      = makeEntry (true, "Reify2")
     val vararg      = makeEntry (true, "Vararg")
@@ -24,6 +25,7 @@ structure Linknil :> LINKNIL  =
     val hoist       = makeEntry (true, "Hoist")
     val inline1     = makeEntry (true, "Inline1")
     val inline2     = makeEntry (true, "Inline2")
+    val inline3     = makeEntry (true, "Inline3")
 (*  val reduce      = makeEntry (false, "Reduce") *)
 (*  val flatten     = makeEntry (false, "Flatten") *)
     val measure     = makeEntry (false, "NilMeasure")
@@ -175,6 +177,16 @@ structure Linknil :> LINKNIL  =
 						       doUncurry = !do_uncurry},
 				   nilmod) 
 	    val nilmod = transform inline2 
+		                   (Inline.inline {sizeThreshold = 50, 
+						   occurThreshold = 5},
+				    nilmod)
+	    val nilmod = transform optimize3
+				   (Optimize.optimize {doDead = true, 
+						       doProjection = SOME 50,
+						       doCse = !do_cse, 
+						       doUncurry = !do_uncurry},
+				   nilmod) 
+	    val nilmod = transform inline3 
 		                   (Inline.inline {sizeThreshold = 50, 
 						   occurThreshold = 5},
 				    nilmod)

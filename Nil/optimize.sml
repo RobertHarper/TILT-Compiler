@@ -1,4 +1,4 @@
-(*$import Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps *)
+(*$import Nil NilContext NilUtil Ppnil Normalize OPTIMIZE Stats ExpTable TraceOps Vararg *)
 
 (* A one-pass optimizer with the following goals.  
    Those marked - are controlled by the input parameters.
@@ -936,8 +936,7 @@ fun pp_alias UNKNOWN = print "unknown"
 					       map (do_exp state) elist, 
 					       map (do_exp state) eflist)
 			 (* assumes anormalization by not performing purity check *)
-			 fun do_eta (uncurry,args) = 
-			     let val (cargs,eargs,fargs) = Listops.unzip3 args
+			 fun do_eta (uncurry,args) = 			     let val (cargs,eargs,fargs) = Listops.unzip3 args
 				 val cargs = Listops.flatten cargs
 				 val eargs = Listops.flatten eargs
 				 val fargs = Listops.flatten fargs
@@ -945,10 +944,34 @@ fun pp_alias UNKNOWN = print "unknown"
 						     eargs @ elist, eflist @ eflist)
 			     in  do_exp state new_exp
 			     end
+			 fun do_onearg(arg_con, onearg_var, orig_var, args as [Var_e arg_var]) =
+			     (case reduce_hnf(state,arg_con) of
+				  (true, Prim_c(Record_c (labels,_), _)) =>
+				      if (List.length labels <= Vararg.flattenThreshold) then
+					  let
+					      val newvars = map (fn _ => Name.fresh_var()) labels
+					      val args' = map Var_e newvars
+					      fun mkbnd (l,v) = 
+						  Exp_b(v,TraceUnknown,
+							Prim_e(NilPrimOp(select l), [], args))
+					      val bnds' = Listops.map2 mkbnd (labels, newvars)
+					      val call = App_e(Open, Var_e orig_var, [], args', [])
+					      val new_exp = NilUtil.makeLetE Sequential bnds' call
+					  in
+					      do_exp state new_exp
+					  end
+				      else
+					  default()
+				| _ => default())
+                           | do_onearg _ = error "do_onearg: found application of onearg'ed function not given a single variable argument!"
+
 		     in (case f of 
 			     Var_e v =>
 			         (case (lookup_alias(state,v)) of
 				      ETAe (1,uncurry,args)=> do_eta (uncurry,args)
+                                    | OPTIONALe(Prim_e(NilPrimOp (make_onearg_),
+						       [c1,_],[Var_e v'])) =>
+					  do_onearg(c1, v, v', elist)
 				    | _ => default())
 			      | _ => default())
 		     end
@@ -1103,8 +1126,10 @@ fun pp_alias UNKNOWN = print "unknown"
 		      in  innerBnds @ (bnd :: (flattenBnds rest))
 		      end
 		   | flattenBnds (bnd::rest) = bnd :: (flattenBnds rest)
-		 val bnds = flattenBnds bnds
+		val bnds = flattenBnds bnds
 		val (bnds_list,state) = foldl_acc do_bnd state bnds
+		(* The un-onearg optimization may result in a nested let binding *)
+		val bnds = flattenBnds bnds
 	    in  (List.concat bnds_list,state)
 	    end
 

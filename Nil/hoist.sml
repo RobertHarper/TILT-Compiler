@@ -219,9 +219,9 @@ struct
 	    end
 
 
-        fun pp_hoistmap (hoistmap: (bnd list * levels) IntMap.map) =
+        fun pp_hoistmap (hoistmap: (bnd list * levels * bool) IntMap.map) =
 	    let
-		val (top_bnds,_) = lookup (hoistmap, 0, ([],[]))
+		val (top_bnds,_,_) = lookup (hoistmap, 0, ([],[], true))
 	    in
 		print "top bnds: ";
                 print (Int.toString (List.length top_bnds));
@@ -243,7 +243,7 @@ struct
 
 
     in
-	type hoistmap = (bnd list * levels) IntMap.map
+	type hoistmap = (bnd list * levels * bool) IntMap.map
         type choistmap = (conbnd list * levels) IntMap.map
 	datatype env = ENV of {currentlevel : level, 
 			       econtext : econtext,
@@ -302,13 +302,26 @@ struct
                          STATE{hoistmap = hoistmap2,
 	                       choistmap = choistmap2}) =
 	    let
-		fun folder (level, (bnds,levels), accum_map) =
+		fun folder (level, (bnds,levels,valuable), accum_map) =
+		    let val (newbnds, newlevels, newvaluable) = 
+                          (case IntMap.find (accum_map, level)
+			       of NONE => (bnds,levels,valuable)
+                                | SOME (bnds',levels',valuable') => 
+				   (bnds @ bnds',
+				    mergeLevels (levels,levels'),
+				    valuable andalso valuable'))
+		    in
+			IntMap.insert(accum_map, level, 
+				      (newbnds, newlevels, newvaluable))
+		    end
+
+		fun cfolder (level, (bnds,levels), accum_map) =
 		    let val (newbnds, newlevels) = 
                           (case IntMap.find (accum_map, level)
 			       of NONE => (bnds,levels)
-                                | SOME (bnds',levels') => (bnds @ bnds',
-							  mergeLevels
-							  (levels,levels')))
+                                | SOME (bnds',levels') => 
+				   (bnds @ bnds',
+				    mergeLevels (levels,levels')))
 		    in
 			IntMap.insert(accum_map, level, (newbnds, newlevels))
 		    end
@@ -316,7 +329,7 @@ struct
 		val hoistmap =
 		    IntMap.foldli folder hoistmap1 hoistmap2
 		val choistmap =
-		    IntMap.foldli folder choistmap1 choistmap2
+		    IntMap.foldli cfolder choistmap1 choistmap2
 	    in
 		STATE{hoistmap = hoistmap, choistmap = choistmap}
 	    end
@@ -356,7 +369,7 @@ struct
 	fun clearLevel (levnum, STATE{hoistmap,choistmap}) = 
 	    let
 		val hoistmap' = 
-		    IntMap.insert(hoistmap, levnum, ([], emptyLevels))
+		    IntMap.insert(hoistmap, levnum, ([], emptyLevels, true))
 		val choistmap' = 
 		    IntMap.insert(choistmap, levnum, ([], emptyLevels))
 	    in
@@ -432,7 +445,7 @@ struct
 		      choistmap = choistmap'}
 	    end
 
-	fun hoistBnd(STATE{hoistmap,choistmap}, bndlevels, bnd) =
+	fun hoistBnd(STATE{hoistmap,choistmap}, bndlevels, bnd, bnds_valuable)=
 	    let
 		val (hoistlevel, levels) = splitLevels bndlevels
 (*
@@ -442,12 +455,13 @@ struct
 			 print (Int.toString hoistlevel);
 			 print "\n")
 *)
-		val (rev_bnds, levels') = 
-                    lookup (hoistmap, hoistlevel, ([],[]))
-		val levels'' = mergeLevels (levels, levels') 
+		val (rev_bnds, levels', bnds_valuable') = 
+                    lookup (hoistmap, hoistlevel, ([],[], true))
+		val levels = mergeLevels (levels, levels') 
+		val bnds_valuble = bnds_valuable' andalso bnds_valuable
 		val hoistmap' =
 		    IntMap.insert(hoistmap, hoistlevel, 
-				  (bnd :: rev_bnds, levels''))
+				  (bnd :: rev_bnds, levels, bnds_valuable))
 	    in
 		STATE{hoistmap = hoistmap',
 		      choistmap = choistmap}
@@ -468,8 +482,8 @@ struct
 		val _ =
 		    (case IntMap.find(hoistmap, levnum) of
 				NONE => ()
-			      | SOME ([],_) => ()
-			      | SOME (bnds,_) => 
+			      | SOME ([],_,_) => ()
+			      | SOME (bnds,_,_) => 
 				    (print "ERROR:  found term bindings:\n";
 				     Ppnil.pp_bnds bnds;
 				     print "\nat level ";
@@ -494,21 +508,21 @@ struct
 			 NONE => ([], emptyLevels)
 		       | SOME (rev_choists, clevels) => 
 			     (rev rev_choists, clevels))
-		val (bnds, levels) = 
+		val (bnds, levels, bnds_valuable) = 
 		    (case IntMap.find(hoistmap, level) of
-			 NONE => ([], emptyLevels)
-		       | SOME (rev_hoists, levels) => 
-			     (rev rev_hoists, levels))
+			 NONE => ([], emptyLevels, true)
+		       | SOME (rev_hoists, levels, bnds_valuable) => 
+			     (rev rev_hoists, levels, bnds_valuable))
 		val choistmap' = 
 		    IntMap.insert(choistmap, level, ([], emptyLevels))
 		val hoistmap' = 
-		    IntMap.insert(hoistmap, level, ([], emptyLevels))
+		    IntMap.insert(hoistmap, level, ([], emptyLevels, true))
 		val state' = STATE{hoistmap = hoistmap',
 				   choistmap = choistmap'}
 		val bnds' = (map (fn cb => Con_b(Runtime, cb)) cbnds) @ bnds
 		val levels' = mergeLevels (clevels, levels)
 	    in
-		(bnds', levels', state')
+		(bnds', levels', state', bnds_valuable)
 	    end
 
 	(* limitLevels: level * levels -> levels
@@ -545,8 +559,9 @@ struct
 		(con', state', levels'')
 	    end
 
-	fun limitExp (limitlevel : level, exp : exp, env : env, 
-		      state : state, levels : level list) =
+	fun limitExp (limitlevel : level, exp : exp, exp_valuable : bool, 
+		      env : env, state : state, levels : level list)
+	       : exp * state * level list * bool =
 	    let
 
 		val currentlevel = currentLevel env
@@ -559,20 +574,21 @@ struct
 			 print (Int.toString limitlevel);
 			 print "\n")
 *)
-		fun loop (levnum, bnds, levels, state) =
+		fun loop (levnum, bnds, levels, state, bnds_valuable) =
 		    if (levnum > currentlevel) then
-			(bnds, levels, state)
+			(bnds, bnds_valuable, levels, state)
 		    else
 			let     
-			    val (bnds', levels', state') = 
+			    val (bnds', levels', state', bnds_valuable') = 
 				extractBnds(state, levnum)
 			    val levels'' = mergeLevels (levels, levels')
 			in
-			    loop(levnum + 1, bnds @ bnds', levels'', state')
+			    loop(levnum + 1, bnds @ bnds', levels'', state',
+				 bnds_valuable' andalso bnds_valuable)
 			end
 		    
-		val (bnds, levels', state) = 
-		    loop (limitlevel, [], levels, state)
+		val (bnds, bnds_valuable, levels', state) = 
+		    loop (limitlevel, [], levels, state, true)
 
 		val levels'' = limitLevels (limitlevel, levels')
 (*
@@ -583,8 +599,9 @@ struct
 			 print "\n")
 *)
 		val exp' = NilUtil.makeLetE Sequential bnds exp
+		val exp_valuable = exp_valuable andalso bnds_valuable
 	    in
-		(exp', state, levels'')
+		(exp', state, levels'', exp_valuable)
 	    end
 
     end (* local *)
@@ -998,8 +1015,8 @@ struct
   and rexp_limited levnum (exp, env, state) = 
       let
 	  val (exp, state, levels, eff, valuable) = rexp (exp, env, state)
-	  val (exp, state, levels) = 
-	      limitExp (levnum, exp, env, state, levels)
+	  val (exp, state, levels, valuable) = 
+	      limitExp (levnum, exp, valuable, env, state, levels)
       in
 	  (exp, state, levels, eff, valuable)
       end
@@ -1012,11 +1029,12 @@ struct
 	      let
 		  val (exp, state, new_levels, new_eff, new_valuable) = 
 		      rexp(exp, env, state)
-		  val (exp, state, new_levels) = 
+		  val (exp, state, new_levels, new_valuable) = 
 		      (case limitopt of
-			   NONE => (exp, state, new_levels)
+			   NONE => (exp, state, new_levels, new_valuable)
 			 | SOME limit => 
-			       limitExp(limit, exp, env, state, new_levels))
+			       limitExp(limit, exp, new_valuable, 
+					env, state, new_levels))
 			       
 	      in
 		  loop(exps, exp::rev_accum, state, 
@@ -1047,7 +1065,7 @@ struct
 	  val (e, state, levels, effs, valuable) = rexp(e, env, state)
 	  val newbnd = Exp_b(v,nt,e)
 
-          (* We can only hoist valuable bindings.
+          (* We can only hoist valuable bindings to higher levels.
              If it is not valuable, we "hoist" to the current level
              (i.e., don't move the binding).  This is accomplished
              by stipulating that the binding is dependent on a
@@ -1064,7 +1082,7 @@ struct
 	  val env = bindLevel(env, v, hoistlevel)
 	  val env = bindEff(env, v, effs)
 
-	  val state = hoistBnd (state, levels, newbnd)
+	  val state = hoistBnd (state, levels, newbnd, valuable)
       in
 	  (env, state, valuable)
       end
@@ -1095,29 +1113,29 @@ struct
             val inner_env = enterFunction inner_env 
 	    val inner_env = bindsLevel (inner_env, vars, fixopenlevel)
 
-	    fun loop ([], rev_fns, state, levels) = 
-		(rev rev_fns, state, levels)
-	      | loop ((v,f)::rest, vfl, state, levels) = 
+	    fun loop ([], rev_fns, rev_fn_effs, state, levels) = 
+		(rev rev_fns, rev rev_fn_effs, state, levels)
+	      | loop ((v,f)::rest, rev_fns, rev_fn_effs, state, levels) = 
 		let
-		    val (f, state, new_levels) = rfun (v, f, inner_env, state)
+		    val (f, eff, state, new_levels) = 
+			rfun (v, f, inner_env, state)
 		    val levels = mergeLevels (levels, new_levels)
 		in
-		    loop (rest, (v,f)::vfl, state, levels)
+		    loop (rest, (v,f)::rev_fns, eff :: rev_fn_effs, 
+			  state, levels)
 		end
 	    
-	    val (vfs, state, levels) = 
-		loop (vfs, [], state, emptyLevels)
+	    val (vfs, function_effs, state, levels) = 
+		loop (vfs, [], [], state, emptyLevels)
 
 	    val hoistlevel = deepestLevel levels
 
 	    (* Fix effects *)
-	    val function_effs = map (con2eff o (NilUtil.function_type Open)) 
-                                      functions
             val env = bindsEff(env, vars, function_effs)
 
 	    val env = bindsLevel (env, vars, hoistlevel)
 	    val newbnd = Fixopen_b(Sequence.fromList vfs)
-	    val state = hoistBnd (state, levels, newbnd)
+	    val state = hoistBnd (state, levels, newbnd, true)
 
 	    val valuable = true
 	in
@@ -1128,6 +1146,10 @@ struct
     | rbnd (Fixclosure_b _, _, _) = error "rbnd: found fixclosure"
 
   and rbnds ([], env, state) = (env, state, true)
+    | rbnds (Exp_b(v,nt,Let_e(Sequential,bnds,body))::rest, env, state) =
+         (* A bit of on-the-fly flattening. Doesn't happen automatically
+            for non-valuable bindings because they're never hoisted. *)
+         rbnds (bnds @ [Exp_b(v,nt,body)] @ rest, env, state)
     | rbnds (bnd::bnds, env, state) = 
       let
 (*	  val _ = (print "rbnd: "; Ppnil.pp_bnd bnd; print "\n") *)
@@ -1261,10 +1283,11 @@ struct
     | rexpopt' (limitopt, SOME e, env, state) = 
       let 
 	  val (e, state, levels, effs, valuable) = rexp(e, env, state)
-	  val (e, state, levels) = 
+	  val (e, state, levels, valuable) = 
 	      (case limitopt of
-		   NONE => (e, state, levels)
-		 | SOME limit => limitExp(limit, e, env, state, levels))
+		   NONE => (e, state, levels, true)
+		 | SOME limit => limitExp(limit, e, valuable, 
+					  env, state, levels))
       in 
 	  (SOME e, state, levels, effs, valuable)
       end
@@ -1292,7 +1315,7 @@ struct
 
 	  val env = bindsLevel(env, fFormals, arglevel)
 
-	  val (body, state, levels3, _, _) = 
+	  val (body, state, levels3, body_eff, body_valuable) = 
                   rexp_limited arglevel (body, env, state)
 
 	  val (body_type, state, levels4) = 
@@ -1300,6 +1323,23 @@ struct
 
 	  val levels = mergeLevels(mergeLevels(levels1,levels2),
  				   mergeLevels(levels3,levels4))
+
+	  (* The effect annotation on the function may have been
+	     overly conservative, saying Partial where the function
+             is really Total.  The effect is always sound, so if it
+	     sead Total it's still going to be Total. (Hoisting ought
+	     not change valuability).  However, our estimation of
+	     valuability is also sound, so if it says the body is
+	     valuable then this is also correct regardless of the
+	     original annotation. *)
+	  val effect = (case effect of
+			    Total => Total
+			  | Partial => if body_valuable then 
+				          (print "Making function ";
+					   Ppnil.pp_var fnvar;
+					   print " Total\n";
+					   Total) 
+				       else Partial)
 (*
 	  val _ = (print "Function ";
 		   Ppnil.pp_var fnvar;
@@ -1311,6 +1351,7 @@ struct
 		    isDependent = isDependent, tFormals = tFormals,
 		    eFormals = eFormals, fFormals = fFormals,
 		    body = body, body_type = body_type},
+	   ARROW_EFF(effect, body_eff),
 	   state, levels)
       end
 
@@ -1446,7 +1487,7 @@ struct
 	  val (_, final_state, _) = 
 	      rbnds(bnds, initial_env, initial_state)
 		    
-	  val (bnds',_,_) = extractBnds(final_state, toplevel)
+	  val (bnds',_,_,_) = extractBnds(final_state, toplevel)
       in
 	  MODULE {bnds=bnds',imports=imports,exports=exports}  
       end
