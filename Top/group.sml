@@ -113,7 +113,8 @@ struct
       | PACK of
 	{lib : filename,
 	 imports : varset,	(* units that may only be imported *)
-	 exports : varset,	(* units and interfaces to pack *)
+	 units : varset,	(* units to pack *)
+	 ifaces : varset,	(* interfaces to pack *)
 	 values : (id * ExtSyn.exp) list} (* each exp is a value *)
 
     datatype entry =
@@ -1241,10 +1242,10 @@ struct
 	let val lib = xfile gf lib
 	    val (ifaces,values) = xexports gf exports
 	    val imports = Gf.imports gf
-	    val exports' = Gf.exports gf
-	    val exports = VS.union(ifaces,VS.difference(exports',imports))
-	    val cmd = PACK {lib=lib, imports=imports, exports=exports,
-			    values=values}
+	    val units' = Gf.exports gf
+	    val units = VS.difference(units',imports)
+	    val cmd = PACK {lib=lib, imports=imports, units=units,
+			    ifaces=ifaces, values=values}
 	    val gf = Gf.add_target (gf, lib)
 	in  Gf.add_cmd (gf, cmd)
 	end

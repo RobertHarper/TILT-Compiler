@@ -51,7 +51,8 @@ sig
       | PACK of
 	{lib : filename,
 	 imports : varset,	(* units that may only be imported *)
-	 exports : varset,	(* units and interfaces to pack *)
+	 units : varset,	(* units to pack *)
+	 ifaces : varset,	(* interfaces to pack *)
 	 values : (id * ExtSyn.exp) list} (* each exp is a value *)
 
     datatype entry =
