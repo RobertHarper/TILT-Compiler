@@ -730,10 +730,17 @@ structure Machine =
 		   load_imm' (i2w sz, rtemp) @
 		   [SPECIFIC(INTOP(intop, r, REGop rtemp, r))]
        end
+
+   val counter
+       : string -> (unit -> unit)
+       = fn name => ignore o (Stats.counter name)
+   val large_stack_frame = counter "Large Stack Frames"
+   val large_frame_access = counter "Large Frame Accesses"
        
    fun allocate_stack_frame (sz, prevframe_maxoffset) = 
        let val _ = if sz < 0 then error "allocate_stack_frame given negative size" else ()
 	   val after = freshCodeLabel()
+	   val _ = if in_imm_range sz then () else large_stack_frame()
 	   (* On procedure entry, Rat is not in use. *)
 	   val bumpSp = fn offset => bumpReg (Rsp, offset, Rat)
        in
@@ -794,9 +801,12 @@ structure Machine =
        if in_ea_disp_range offset then
 	   f(base, offset)
        else
-	   List.concat [load_imm' (i2w offset, temp),
-			[SPECIFIC(INTOP(ADD,base,REGop temp,temp))],
-			f(temp, 0)]
+	   let val _ = large_frame_access()
+	   in
+	       List.concat [load_imm' (i2w offset, temp),
+			    [SPECIFIC(INTOP(ADD,base,REGop temp,temp))],
+			    f(temp, 0)]
+	   end
 
    fun push (src,actual_location,tmp) =
        let val reduce_offset = fn (offset, f) => reduce_offset (Rsp, offset, tmp, f)
@@ -845,6 +855,7 @@ structure Machine =
    val special_regs  = listunion(special_iregs, special_fregs) 
    val general_regs  = listdiff(physical_regs, special_regs)
 
+      
  end
  
  open Machine
