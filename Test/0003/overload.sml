@@ -1,4 +1,4 @@
-(*$import Firstlude TiltPrim Prelude TopLevel Int Word Word8 Word31 Real Char String OVERLOAD OvldDefaults *)
+(*$import Int Word Word8 Word31 Real Char String OVERLOAD OvldDefaults *)
 
 (* Overloaded special constants and operators. *)
 

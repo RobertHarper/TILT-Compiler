@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel *)
+(*$import *)
 
 (* Default types at overloaded special constants and operators. *)
 
