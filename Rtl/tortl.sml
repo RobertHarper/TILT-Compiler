@@ -1251,22 +1251,27 @@ val _ = if !debug then print "*** end promote map ***\n"
 		  val _ = add_data(COMMENT "static string tag")
 		  val _ = add_data(INT32 tagword)
 		  val _ = add_data(DLABEL label)
+		  val vl = (Array.foldr (fn (e,acc) => (xexp(state,Name.fresh_var(),e,NONE,NOTID))::acc)
+			    [] a)
 		  fun layout segsize packager = 
 		  let fun pack [] = ()
 			| pack acc = packager(rev acc)
-		      fun loop index 0 acc = (pack acc; loop index segsize [])
-			| loop (index : int) remain acc =
-			  if (index < sz)
-			      then loop (index+1) (remain-1) ((Array.sub(a,index))::acc)
-			  else pack acc
-		  in  loop 0 segsize []
+		      fun loop ls 0 acc = (pack acc; loop ls segsize [])
+			| loop [] remain acc = pack acc
+			| loop (a::rest) remain acc = loop rest (remain-1) (a::acc)
+		  in  loop vl segsize []
 		  end
+		  fun getword(VAR_VAL(VINT w), _) = w
+		    | getword vl = (print "bad value in vector: ";
+				    print "\n";
+				    error "bad string")
+		  fun boxfloat_packager [(VAR_VAL(VREAL l),_)] = add_data(DATA l)
+		    | boxfloat_packager [(VAR_VAL(VLABEL l),_)] = add_data(DATA l)
+		    | boxfloat_packager _ = error "did not receive 1 boxed float"
+		  fun word_packager [w] = add_data(INT32(getword w))
+		    | word_packager _ = error "did not receive 1 word"
 		  fun char_packager vals = 
-		      let fun getword(Const_e(uint(_,w))) = TW64.toUnsignedHalf w
-			    | getword v = (print "bad character in vector: ";
-					   Ppnil.pp_exp v; print "\n";
-					   error "bad string")
-			  val (a,b,c,d) = (case (map getword vals) of
+		      let val (a,b,c,d) = (case (map getword vals) of
 					       [a,b,c,d] => (a,b,c,d)
 					     | [a,b,c] => (a,b,c,TW32.zero)
 					     | [a,b] => (a,b,TW32.zero,TW32.zero)
@@ -1277,9 +1282,16 @@ val _ = if !debug then print "*** end promote map ***\n"
 			  val d = TW32.lshift(d,24)
 		      in  add_data(INT32 (TW32.orb(TW32.orb(a,b),TW32.orb(c,d))))
 		      end
+		  val c = (case c of
+			       Prim_c _ => c
+			     | _ => #2(simplify_type state c))
 		  val _ = (case c of
 			       Prim_c(Int_c Prim.W8, []) => layout 4 char_packager
-			     | _ => error "xvector not fully done")
+			     | Prim_c(Int_c Prim.W32, []) => layout 1 word_packager
+			     | Prim_c(BoxFloat_c Prim.F64, []) => layout 1 boxfloat_packager
+			     | _ => (print "xvector not done on type = \n";
+				     Ppnil.pp_con c; print "\n";
+				     error "xvector not fully done"))
 	      in  (VAR_VAL(VLABEL label), Prim_c(Vector_c, [c]))
 	      end
       in
@@ -2054,11 +2066,15 @@ val _ = if !debug then print "*** end promote map ***\n"
 			      | loop (l1::lrest) (c1::crest) n = if (eq_label(l1,label))
 								     then (n,c1)
 								 else loop lrest crest (n+1)
-			    val (labels,fieldcons) = (case reccon of
-							  Prim_c(Record_c labels,cons) => (labels,cons)
-							| c => (print "selecting from exp of type: ";
-								Ppnil.pp_con c; print "\n";
-								error' "selecting from a non-record"))
+			    val reccon = case reccon of
+				Prim_c(Record_c _, _) => reccon
+			      | _ => #2(simplify_type state reccon)
+			    val (labels,fieldcons) = 
+				(case reccon of
+				     Prim_c(Record_c labels,cons) => (labels,cons)
+				   | c => (print "selecting from exp of type: ";
+					   Ppnil.pp_con c; print "\n";
+					   error' "selecting from a non-record"))
 (*
 			    val _ = (print "labels are: ";
 				     app (fn l => (Ppnil.pp_label l; print " ")) labels; print "\n";
@@ -2087,8 +2103,12 @@ val _ = if !debug then print "*** end promote map ***\n"
 		       (case econ of
 			    Prim_c(Sum_c _, summands) =>
 				(case (List.nth (summands, index)) of
-				     Prim_c(Record_c labels, _) =>
-					 let fun loop n [] = error "bad project_sum_record: bad econ field not found"
+				     c as (Prim_c(Record_c labels, _)) =>
+					 let fun loop n [] = 
+					         (print "bad project_sum_record: missing field ";
+						  Ppnil.pp_label field; print "\n in type = \n";
+						  Ppnil.pp_con c; print "\n";
+						  error "bad project_sum_record: bad econ field not found")
 					       | loop n (a::rest) = if (Name.eq_label(a,field))
 									then n else loop (n+1) rest
 					 in  loop 0 labels
@@ -2114,15 +2134,13 @@ val _ = if !debug then print "*** end promote map ***\n"
 	       let val index = TW32.toInt(TW32.uminus(sumtype, tagcount))
 		   val summand_con = (List.nth(clist,index)
 				     handle _ => error' "bad project_sum: record_con")
-		   fun record_case field_cons = 
-		       let val labels = Listops.mapcount 
-			   (fn (n,_) => NilUtil.generate_tuple_label (n+1)) field_cons
-			   fun make_e (n,_) = Prim_e(NilPrimOp(project_sum_record
-							       {tagcount = tagcount,
-								sumtype = sumtype,
-								field = NilUtil.generate_tuple_label (n+1)}),
-						     clist,elist)
-			   val elist' = Listops.mapcount make_e field_cons
+		   fun record_case labels field_cons = 
+		       let fun make_e l = Prim_e(NilPrimOp(project_sum_record
+							   {tagcount = tagcount,
+							    sumtype = sumtype,
+								field = l}),
+						 clist,elist)
+			   val elist' = map make_e labels
 		       in  xnilprim(state,Nil.record labels,field_cons,elist',context)
 		       end
 		   fun nonrecord_case() = 
@@ -2152,10 +2170,10 @@ val _ = if !debug then print "*** end promote map ***\n"
 			      | (false,_) => unbox 4)
 		       end
 	       in  (case summand_con of
-			Prim_c(Record_c _,cons) => record_case cons
+			Prim_c(Record_c labs,cons) => record_case labs cons
 		      | _ => 
 			    (case (simplify_type' state summand_con,elist) of
-				 ((_,Prim_c(Record_c _,cons)),_) => record_case cons
+				 ((_,Prim_c(Record_c labs,cons)),_) => record_case labs cons
 			       | ((true,_),_) => nonrecord_case()
 			       | ((_,c),[e]) => xdynamic_project_sum(state,info,clist,
 								     c,e,context)))
@@ -2405,14 +2423,23 @@ val _ = if !debug then print "*** end promote map ***\n"
 					end
 			       | _ => error "wrong number of argument to int2float")
 
-            (* XXX do we want overflow in some cases *)
+            (* XXX do we want overflow in some cases or are these casts? *)
 	    | int2uint _ => (case vl_list of
 				 [vl] => (vl, int32)
 			       | _ => error "wrong number of argument to int2uint")
 
+	    | uint2uint _ => (case vl_list of
+				 [vl] => (vl, int32)
+			       | _ => error "wrong number of argument to uint2int")
+
 	    | uint2int _ => (case vl_list of
 				 [vl] => (vl, int32)
 			       | _ => error "wrong number of argument to uint2int")
+	    | int2int _ => (case vl_list of
+				 [vl] => (vl, int32)
+			       | _ => error "wrong number of argument to uint2int")
+
+
 
 	    | neg_float fs => op1f FNEGD
 	    | abs_float fs => op1f FABSD
@@ -2443,19 +2470,22 @@ val _ = if !debug then print "*** end promote map ***\n"
 	    | greater_int W32 => stdcmp2si GT
 	    | lesseq_int W32 => stdcmp2si LE
 	    | greatereq_int W32 => stdcmp2si GE
-	    | less_uint W32 => stdcmp2ui LT
-	    | greater_uint W32 => stdcmp2ui GT
-	    | lesseq_uint W32 => stdcmp2ui LE
-	    | greatereq_uint W32 => stdcmp2ui GE
 	    | eq_int _ => stdcmp2ui EQ
 	    | neq_int _ => stdcmp2ui NE
+
+	    (* assume upper bits of 8-bit and 16-bit unsigned ints are zero *)
+	    | less_uint _ => stdcmp2ui LT
+	    | greater_uint _ => stdcmp2ui GT
+	    | lesseq_uint _ => stdcmp2ui LE
+	    | greatereq_uint _ => stdcmp2ui GE
 
 	    | neg_int is => error "should not get here"
 	    | abs_int is => error "abs_int not done"
 
-	    | not_int W32 => op1i NOTB
-	    | and_int W32 => commutesop2i ANDB
-	    | or_int W32 => commutesop2i ORB
+	    | not_int (W8 | W16 | W32) => op1i NOTB
+	    | and_int (W8 | W16 | W32) => commutesop2i ANDB
+	    | or_int (W8 | W16 | W32) => commutesop2i ORB
+	    | xor_int (W8 | W16 | W32) => commutesop2i XORB
 	    | lshift_int W32 => stdop2i SLL
 	    | rshift_int W32 => stdop2i SRA
 	    | rshift_uint W32 => stdop2i SRL
@@ -2491,7 +2521,16 @@ val _ = if !debug then print "*** end promote map ***\n"
 		     | (PtrArray,[vl],[c]) => (vl,Prim_c(Vector_c, [c]))
 		     | (WordArray,[vl],[c]) => (vl,Prim_c(Vector_c, [c]))
 		     | _ => error "illegal array2vector")
-					   
+
+	    | (vector2array table) => 
+		  (case (table,vl_list,clist) of 
+		       (IntVector is,[vl],_) => (vl,Prim_c(Array_c, [Prim_c(Int_c is,[])]))
+		     | (FloatVector fs,[vl],_) => (vl,Prim_c(Array_c, [Prim_c(Float_c fs,[])]))
+		     | (PtrVector,[vl],[c]) => (vl,Prim_c(Array_c, [c]))
+		     | (WordVector,[vl],[c]) => (vl,Prim_c(Array_c, [c]))
+		     | _ => error "illegal array2vector")
+				
+
 	     | (length_table t) => 
 		       let val vl = (case vl_list of
 					[vl] => vl
@@ -2505,6 +2544,20 @@ val _ = if !debug then print "*** end promote map ***\n"
 	     | (update t) => (case vl_list of
 				      [vl1,vl2,vl3] => xupdate(state,extract_type(t,clist),vl1,vl2,vl3)
 				    | _ => error "update given bad arguments")
+
+	     (* zero is legal as a pointer *)
+	     | (create_empty_table table) => 
+		       (VAR_VAL(VINT 0w0), 
+			case (table, clist) of
+			    (IntArray is,_) => Prim_c(Array_c, [Prim_c(Int_c is,[])])
+			  | (IntVector is,_) => Prim_c(Vector_c, [Prim_c(Int_c is,[])])
+			  | (FloatArray fs,_) => Prim_c(Array_c, [Prim_c(Float_c fs,[])])
+			  | (FloatVector fs,_) => Prim_c(Vector_c, [Prim_c(Float_c fs,[])])
+			  | (PtrArray, [c]) => Prim_c(Array_c, [c])
+			  | (PtrVector, [c]) => Prim_c(Vector_c, [c])
+			  | (WordArray, [c]) => Prim_c(Array_c, [c])
+			  | (WordVector, [c]) => Prim_c(Vector_c, [c]))
+
 	     | (create_table t) => (case vl_list of
 					    [vl1,vl2] => xarray(state,extract_type(t,clist),vl1,vl2)
 					  | _ => error "array/vector given bad arguments")
@@ -3067,7 +3120,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 				       val _ = add_instr(ILABEL afterl)
 				   in  ()
 				   end)
-    in  (VAR_LOC (VREGISTER (I dest)), Prim_c(Int_c Prim.W32, []))
+    in  (VAR_LOC (VREGISTER (I dest)), Prim_c(Array_c, [c]))
     end
 
 
@@ -3118,7 +3171,7 @@ val _ = if !debug then print "*** end promote map ***\n"
 	     | Prim_c(BoxFloat_c F32, []) => mk_ptr 10
 	     | Prim_c(BoxFloat_c F64, []) => mk_ptr 11
 	     | Prim_c(Exn_c,[]) => mk_ptr 12
-	     | Prim_c(Exntag_c,[]) => mk_ptr 13
+	     | Prim_c(Exntag_c,[c]) => mk_sum(11,[c])
 	     | Prim_c(Array_c,[c]) => mk_sum(0,[c])
 	     | Prim_c(Vector_c,[c]) => mk_sum(1,[c])
 	     | Prim_c(Ref_c,[c]) => mk_sum(2,[c])
