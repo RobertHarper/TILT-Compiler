@@ -9,4 +9,4 @@ alpha) platform=alpha ;;
 *)     platform=bogus ;;
 esac
 
-exec "$bindir/TwelfServer.$platform.exe"
+exec "$bindir/../src/server/TwelfServer.$platform.exe"
