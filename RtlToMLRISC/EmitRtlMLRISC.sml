@@ -185,7 +185,7 @@ functor EmitRtlMLRISC(
       (*
        * Start a new module.
        *)
-      fun open_() = infosRef := []
+      fun open_() = ()
 
       (*
        * Terminate the current module.
@@ -230,26 +230,36 @@ functor EmitRtlMLRISC(
 
     local
       (*
-       * The register maps of the current cluster.
+       * Used to create an empty intmap.
        *)
-      val mapsRef = ref([]: int Array.array ref list)
+      exception Impossible
+
+      (*
+       * An empty intmap.
+       *)
+      val emptyMap = Intmap.new(0, Impossible): int Intmap.intmap
+
+      (*
+       * The register map of the current cluster.
+       *)
+      val mapRef = ref emptyMap
     in
       (*
-       * Start a new cluster with a given set of register maps.
-       * maps -> the register maps of the cluster
+       * Start a new cluster with a given register map.
+       * map -> the register map of the cluster
        *)
-      fun open_ maps = mapsRef := maps
+      fun open_ map = mapRef := map
 
       (*
        * Terminate the current cluster.
        *)
-      fun close() = mapsRef := []
+      fun close() = mapRef := emptyMap
 
       (*
-       * Return the register maps of the current cluster.
-       * <- the register maps
+       * Return the register map of the current cluster.
+       * <- the register map
        *)
-      fun maps() = !mapsRef
+      fun map() = !mapRef
     end
 
   end
@@ -270,9 +280,14 @@ functor EmitRtlMLRISC(
       val floatMin   = ref 0
 
       (*
+       * An empty save assignment.
+       *)
+      val emptySaves = CallConventionBasis.assignNew []
+
+      (*
        * The assignment for the registers saved by the current procedure.
        *)
-      val savesRef = ref(CallConventionBasis.assignNew [])
+      val savesRef = ref emptySaves
     in
       (*
        * Start a new procedure with a given stack frame.
@@ -287,7 +302,8 @@ functor EmitRtlMLRISC(
        *)
       fun close() = (frameRef	:= StackFrame.empty;
 		     integerMin := 0;
-		     floatMin	:= 0)
+		     floatMin	:= 0;
+		     savesRef	:= emptySaves)
 
       (*
        * Return the stack frame of the current procedure.
@@ -492,12 +508,10 @@ functor EmitRtlMLRISC(
        *)
       fun callSite label =
 	    let
-	      val maps	       = Cluster.maps()
+	      val physical     = Intmap.map(Cluster.map())
 	      val frame	       = Procedure.frame()
 	      val frameSize    = StackFrame.size frame
 	      val returnOffset = StackFrame.allocateReturn frame
-
-	      fun physical id = Array.sub(!(hd maps), id)
 	    in
 	      fn live =>
 		(* ??? print(Label.nameOf(LocalLabel.translate label)^": ");
@@ -1710,9 +1724,9 @@ functor EmitRtlMLRISC(
   local
     fun translateBody(prefix, main, procedures, data) =
 	  let
-	    val maps = Cells.resetRegs()
+	    val map = Cells.resetRegs()
 
-	    val _ = Cluster.open_ maps
+	    val _ = Cluster.open_ map
 
 	    fun define name =
 		  let
@@ -1736,7 +1750,7 @@ functor EmitRtlMLRISC(
 
 	    val trailer = [
 		  MLTree.PSEUDO_OP MLRISCPseudo.ModuleTrailer,
-		  MLTree.ENDCLUSTER maps
+		  MLTree.ENDCLUSTER map
 		]
 
 	    val textHeader =
@@ -1769,7 +1783,7 @@ functor EmitRtlMLRISC(
 
     fun translateTables(prefix, infos, objects, variables) =
 	  let
-	    val maps = Cells.resetRegs()
+	    val map = Cells.resetRegs()
 
 	    val header = [
 		  MLTree.BEGINCLUSTER,
@@ -1778,7 +1792,7 @@ functor EmitRtlMLRISC(
 
 	    val trailer = [
 		  MLTree.PSEUDO_OP MLRISCPseudo.TableTrailer,
-		  MLTree.ENDCLUSTER maps
+		  MLTree.ENDCLUSTER map
 		]
 
 	    fun translateVariable(label, represent) =
@@ -1786,7 +1800,7 @@ functor EmitRtlMLRISC(
 
 	    val objects' = objects
 
-	    val variables' = map translateVariable variables
+	    val variables' = List.map translateVariable variables
 
 	    val calls = TraceTable.MakeTableHeader prefix@
 			TraceTable.MakeTable infos@
@@ -1829,18 +1843,18 @@ functor EmitRtlMLRISC(
 
   fun emitEntryTable labels =
 	let
-	  val maps = Cells.resetRegs()
+	  val map = Cells.resetRegs()
 
 	  val emitData = app (emitMLTree o translateData)
 
-	  val names = map LocalLabel.string labels
+	  val names = List.map LocalLabel.string labels
 
 	  fun table name =
 		let
 		  fun data prefix =
 			Rtl.DATA(Rtl.ML_EXTERN_LABEL(prefix^"_"^name))
 		in
-		  Rtl.DLABEL(Rtl.ML_EXTERN_LABEL name)::map data names
+		  Rtl.DLABEL(Rtl.ML_EXTERN_LABEL name)::List.map data names
 		end
 
 	  val header = [
@@ -1850,7 +1864,7 @@ functor EmitRtlMLRISC(
 
 	  val trailer = [
 		MLTree.PSEUDO_OP MLRISCPseudo.TableTrailer,
-		MLTree.ENDCLUSTER maps
+		MLTree.ENDCLUSTER map
 	      ]
 
 	  val tables = [
