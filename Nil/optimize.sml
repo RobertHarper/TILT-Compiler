@@ -181,12 +181,12 @@ struct
 	fun cbnd_used state (Con_cb(v,_)) = is_used_var(state,v)
 	  | cbnd_used state (Open_cb(v,_,_,_)) = is_used_var(state,v)
 	  | cbnd_used state (Code_cb(v,_,_,_)) = is_used_var(state,v)
-	fun bnd_used state (Con_b(v,_)) = is_used_var(state,v)
+	fun bnd_used state (Con_b(_,cb)) = cbnd_used state cb
 	  | bnd_used state (Exp_b(v,_,e)) = is_used_var(state,v)
-	  | bnd_used state (Fixopen_b(vfset)) = orfold (fn (v,_) => is_used_var(state,v)) (Util.set2list vfset)
-	  | bnd_used state (Fixcode_b(vfset)) = orfold (fn (v,_) => is_used_var(state,v)) (Util.set2list vfset)
+	  | bnd_used state (Fixopen_b(vfset)) = orfold (fn (v,_) => is_used_var(state,v)) (Sequence.toList vfset)
+	  | bnd_used state (Fixcode_b(vfset)) = orfold (fn (v,_) => is_used_var(state,v)) (Sequence.toList vfset)
 	  | bnd_used state (Fixclosure_b(_,vclset)) = orfold (fn (v,_) => is_used_var(state,v)) 
-								(Util.set2list vclset)
+								(Sequence.toList vclset)
 
 	fun do_vklist state vklist =
 	    let fun folder((v,k),state) = let val k = do_kind state k
@@ -199,11 +199,11 @@ struct
 								  end) state vclist
 	and do_kind (state : state) (kind : kind) : kind = 
 	  (case kind of 
-		Type_k _ => kind
-	      | Word_k _ => kind
-              | Singleton_k(p,k,c) => Singleton_k(p,do_kind state k, do_con state c)
-  	      | Record_k(lvk_seq) => let fun mapper((l,v),k) = ((l,v),do_kind state k)
-				     in  Record_k(Util.mapsequence mapper lvk_seq)
+		Type_k => kind
+              | Singleton_k c => Singleton_k(do_con state c)
+  	      | Record_k(lvk_seq) => let fun folder(((l,v),k),state) = (((l,v),do_kind state k),
+									add_kind(state,v,k))
+				     in  Record_k(#1(Sequence.foldl_acc folder state lvk_seq))
 				     end
 	      | Arrow_k(openness,vklist,k) => let val (vklist,state) = do_vklist state vklist
 					      in  Arrow_k(openness,vklist,do_kind state k)
@@ -220,7 +220,7 @@ struct
 	and do_con (state : state) (con : con) : con =
 	   (case con of
 		Prim_c(pc,clist) => Prim_c(pc, map (do_con state) clist)
-	      | Mu_c(recur,vc_seq) => Mu_c(recur,Util.mapsequence 
+	      | Mu_c(recur,vc_seq) => Mu_c(recur,Sequence.map
 					   (fn (v,c) => (v,do_con state c)) vc_seq)
 	      | AllArrow_c(openness,effect,vklist,vclist,numfloats,c) =>
 			let val (vklist,state) = do_vklist state vklist
@@ -247,7 +247,8 @@ struct
 	   (case cbnd of
 		Con_cb(v,c) => let val state = add_var(state,v)
 				   val state' = enter_var(state,v)
-				   val k = NilStatic.get_shape (get_env state) c
+(*		   val k = NilStatic.get_shape (get_env state) c *)
+				   val k = Singleton_k c
 				   val state = add_kind_equation(state,v,c,k)
 			       in  (Con_cb(v,do_con state' c), state)
 			       end
@@ -269,7 +270,7 @@ struct
 		    (e, c, vklist, vclist, vflist,
 		     fn c => fn e => Function(effect,recur,vklist,vclist,vflist,e,c))
 	        fun is_lambda (Let_e(_,[Fixopen_b vfset],Var_e v)) = 
-		    (case (Util.set2list vfset) of
+		    (case (Sequence.toList vfset) of
 			 [(v',f)] => if (Name.eq_var(v,v'))
 					 then SOME(v,f)
 				     else NONE)
@@ -288,7 +289,7 @@ struct
 				       (fn c => fn e =>
 					let val f = wrapper c e
 					    val e = Let_e(Sequential,
-							  [Fixopen_b(Util.list2set[(v,f)])], 
+							  [Fixopen_b(Sequence.fromList[(v,f)])], 
 							  Var_e v)
 					in  cwrapper c e
 					end))
@@ -300,7 +301,7 @@ struct
 							 map (Var_c o #1) vk,
 							 map (Var_e o #1) vc,
 							 map Var_e vf)
-				fun uwrapper(body,con) = Function(Partial,Nonleaf,vk,vc,vf,body,con)
+				fun uwrapper(body,con) = Function(Partial,Arbitrary,vk,vc,vf,body,con)
 			    in  (depth,uncurry_call,vk,vc,body,con,alias,cwrapper_base,uwrapper)
 			    end
 		    in  case (is_lambda body) of
@@ -660,14 +661,11 @@ val reduce = fn state => fn pred =>
 				    exp_b(v,c,e)))
 		   | Exp_b(v,c,Let_e(_,bnds,e)) => do_bnds(bnds @ [Exp_b(v,c,e)], state)
 		   | Exp_b(v,c,e) => exp_b(v,c,e)
-		   | Con_b(v,c) => let val state = add_var(state,v)
-				       val state' = enter_var(state,v)
-				       val k = NilStatic.get_shape (get_env state) c
-				       val state = add_kind_equation(state,v,c,k)
-				   in  ([Con_b(v, do_con state' c)], state)
-				   end
+		   | Con_b(p,cbnd) => let val (cbnd,state) = do_cbnd(cbnd,state)
+				      in  ([Con_b(p,cbnd)], state)
+				      end
 		   | Fixopen_b vfset =>
-		     let val vflist = Util.set2list vfset
+		     let val vflist = Sequence.toList vfset
 			 val (v_vk_vc_b_c_cw_uw_call,state) = do_uncurry(vflist,state)
 			 val state = add_vars(state,map #1 vflist)
 			 val state = add_vars(state,map #1 v_vk_vc_b_c_cw_uw_call)
@@ -693,21 +691,21 @@ val reduce = fn state => fn pred =>
 			     
 			 val res as (bnds,state) =   
 			     if used
-				 then ([Fixopen_b(Util.list2set (uncurries@curries))], state)
-			     else ([Fixopen_b(Util.list2set uncurries)] @
+				 then ([Fixopen_b(Sequence.fromList (uncurries@curries))], state)
+			     else ([Fixopen_b(Sequence.fromList uncurries)] @
 				   (if (null curries) then [] 
-				    else [Fixopen_b(Util.list2set curries)]), state)
+				    else [Fixopen_b(Sequence.fromList curries)]), state)
 		     in res
 		     end
 		   | Fixcode_b vfset =>
-				let val vflist = Util.set2list vfset
+				let val vflist = Sequence.toList vfset
 				    val state = add_vars(state,map #1 vflist)
 				    val state' = enter_var(state,hd(map #1 vflist))
 				    val vflist = map (fn (v,f) => (v,do_function state' f)) vflist
-				in  ([Fixcode_b(Util.list2set vflist)], state)
+				in  ([Fixcode_b(Sequence.fromList vflist)], state)
 				end
 		   | Fixclosure_b (recur,vclset) => 
-				let val vcllist = Util.set2list vclset
+				let val vcllist = Sequence.toList vclset
 				    val state = add_vars(state,map #1 vcllist)
 				    val state' = enter_var(state,#1(hd vcllist))
 				    fun do_closure {code,cenv,venv,tipe} = 
@@ -718,7 +716,7 @@ val reduce = fn state => fn pred =>
 					in  {code=code,cenv=cenv,venv=venv,tipe=tipe}
 					end
 				    val vcllist = map (fn (v,f) => (v,do_closure f)) vcllist
-				in  ([Fixclosure_b(recur,Util.list2set vcllist)], state)
+				in  ([Fixclosure_b(recur,Sequence.fromList vcllist)], state)
 				end)
 	  end
 	fun do_import(ImportValue(l,v,c),state) = (ImportValue(l,v,do_con state c), state)

@@ -8,11 +8,9 @@ struct
 
     val error = fn s => Util.error "linearize.sml" s
     structure Nil = Nil
-    open Nil Name NilUtil
-    val list2set = Util.list2set
-    val set2list = Util.set2list
-    val list2sequence = Util.list2sequence
-    val sequence2list = Util.sequence2list
+    open Nil Name NilUtil Ppnil
+    val list2sequence = Sequence.fromList
+    val sequence2list = Sequence.toList
     val foldl_acc = Listops.foldl_acc
     val linearize = false
     val debug = ref false
@@ -141,11 +139,11 @@ struct
        let 
 	   fun add_vars state vx_list = foldl (fn ((v,_),s) => #1(add_var(s,v))) state vx_list
 	   fun vf_help wrapper vf_set = 
-	       let val vf_list = set2list vf_set
+	       let val vf_list = sequence2list vf_set
 		   val newstate = add_vars state vf_list
 		   val vf_list = map (fn (v,f) => (find_var(newstate,v),
 						   lfunction newstate f)) vf_list
-	       in  (wrapper (list2set vf_list), newstate)
+	       in  (wrapper (list2sequence vf_list), newstate)
 	       end
 	   fun vcl_help state (v,{code,cenv,venv,tipe}) = 
 	       let val v = find_var(state,v)
@@ -155,15 +153,14 @@ struct
 		   val code' = find_var(state,code)
 	       in  (v,{code=code',cenv=cenv',venv=venv',tipe=tipe'})
 	       end
-	   fun mapset f s = list2set(map f (set2list s))
+	   fun mapset f s = list2sequence(map f (sequence2list s))
 
        in  (case arg_bnd of
-		Con_b (v,c) => let val _ = inc depth_lcon_conb
-				   val c = lcon state c
-				   val _ = dec depth_lcon_conb
-				   val (state,v) = add_var(state,v)
-			       in  (Con_b(v,c), state)
-			       end
+		Con_b (p,cb) => let val _ = inc depth_lcon_conb
+				    val (cb,state) = lcbnd state cb
+				    val _ = dec depth_lcon_conb
+				in  (Con_b(p,cb),state)
+				end
 	      | Exp_b (v,c,e) => let val e = lexp state e
 				     val _ = inc depth_lcon_expb
 				     val c = lcon state c
@@ -176,9 +173,9 @@ struct
 (* RECURSIVE BINDING *)
 	      | Fixclosure_b (flag,vcl_set) => 
 				 let val state = add_vars state vcl_set
-				     val vcl_list = set2list vcl_set
+				     val vcl_list = sequence2list vcl_set
 				     val vcl_list = map (vcl_help state) vcl_list
-				     val fixbnd = Fixclosure_b(flag,list2set vcl_list)
+				     val fixbnd = Fixclosure_b(flag,list2sequence vcl_list)
 				 in  (fixbnd, state)
 				 end)
        end
@@ -198,8 +195,12 @@ struct
        end
 
 
-
    and lexp state arg_exp : exp =
+       ((lexp' state arg_exp)
+       handle e => (print "exception in lexp call with exp =\n";
+		    pp_exp arg_exp; print "\n"; raise e))
+
+   and lexp' state arg_exp : exp =
 	let val _ = num_lexp := !num_lexp + 1;
 	    val self = lexp state
 	in  case arg_exp of
@@ -264,8 +265,12 @@ struct
        end
 
 
-
    and lcon state arg_con : con = 
+       ((lcon' state arg_con)
+       handle e => (print "exception in lcon call with con =\n";
+		    pp_con arg_con; print "\n"; raise e))
+
+   and lcon' state arg_con : con = 
        (inc num_lcon;
 	bumper(num_lcon_prim, depth_lcon_prim);
 	bumper(num_lcon_expb, depth_lcon_expb);
@@ -283,13 +288,13 @@ struct
 		end
 	  | Mu_c (flag,vc_seq) => (* cannot just use lvclist here: 
 				   not sequential bindings *)
-		let val vclist = sequence2list vc_seq
-		    val state = foldl (fn ((v,_),s) => #1(add_var(s,v))) state vclist
-		    val vclist' = map (fn (v,c) => (derived_var v, c)) vclist
-		    val (vclist',state) = lvclist state vclist'
-		    val vclist = Listops.map2 (fn ((v,_),(_,c)) => (find_var(state,v),c)) 
-			(vclist,vclist')
-		in  Mu_c(flag,list2sequence vclist)
+		let val state = Sequence.foldl (fn ((v,_),s) => #1(add_var(s,v))) state vc_seq
+		    val vc_seq' = Sequence.map (fn (v,c) => (derived_var v, c)) vc_seq
+		    val (vc_seq',state) = Sequence.foldl_acc 
+			                  (fn ((v,c),s) => lvc state (v,c)) state vc_seq'
+		    val vc_seq'' = Sequence.map2 (fn ((v,_),(_,c)) => (find_var(state,v),c)) 
+			         (vc_seq,vc_seq')
+		in  Mu_c(flag,vc_seq'')
 		end
 	  | AllArrow_c (openness,effect,vklist,clist,w32,c) =>
 		let 
@@ -341,6 +346,13 @@ struct
      | Annotate_c (a,c) => Annotate_c(a,lcon state c))
 
 
+   and lvk state (v,k) = 
+	   let val k = lkind state k
+	       val (state,v) = add_var(state,v)
+	   in  ((v,k), state)
+	   end
+
+
    and lvklist state vklist = 
        let fun vkfolder((v,k),(acc,state)) = 
 	   let val k = lkind state k
@@ -350,6 +362,12 @@ struct
 	   val (rev_vklist,state) = foldl vkfolder ([],state) vklist
        in  (rev rev_vklist, state)
        end
+
+   and lvc state (v,c) = 
+	   let val c = lcon state c
+	       val (state,v) = add_var(state,v)
+	   in  ((v,c), state)
+	   end
 
    and lvclist state vclist = 
        let fun vcfolder((v,c),(acc,state)) = 
@@ -363,25 +381,24 @@ struct
 
 
    and lkind state arg_kind : kind = 
+       ((lkind' state arg_kind)
+       handle e => (print "exception in lkind call with kind =\n";
+		    pp_kind arg_kind; print "\n"; raise e))
+
+   and lkind' state arg_kind : kind = 
        (inc num_lkind;
 	bumper(num_lkind_single, depth_lkind_single);
 
 	case arg_kind of
-	    Type_k _ => arg_kind
-	  | Word_k _ => arg_kind
-	  | Singleton_k (p,k,c) => let val _ = inc depth_lkind_single
-				       val k = lkind state k
-				       val _ = dec depth_lkind_single
-				       val c = lcon state c
-				   in  Singleton_k(p,k,c)
-				   end
-	  | Record_k lvk_seq => let val lvk_list = sequence2list lvk_seq
-				    val vk_list = map (fn ((l,v),k) => (v,k)) lvk_list
-				    val (vk_list,state) = lvklist state vk_list
-				    val lvk_list = Listops.map2 (fn (((l,_),_),(v,k)) => ((l,v),k)) 
-					(lvk_list,vk_list)
-				in  Record_k (list2sequence lvk_list)
-				end
+	    Type_k => arg_kind
+	  | Singleton_k c => Singleton_k(lcon state c)
+	  | Record_k lvk_seq => 
+		let fun folder (((l,v),k),state) = 
+			let val ((v,k),state) = lvk state (v,k)
+			in  (((l,v),k),state)
+			end
+		in  Record_k (#1(Sequence.foldl_acc folder state lvk_seq))
+		end
 	  | Arrow_k(openness,vklist,k) => let val (vklist,state) = lvklist state vklist
 					      val k = lkind state k
 					  in  Arrow_k(openness,vklist,k)
@@ -402,6 +419,8 @@ struct
    fun limport (ImportValue(l,v,c),s) =
        let val (s,v) = add_var(s,v)
        in  (ImportValue(l,v,lcon s c),s)
+	   handle e => (print "exception in limport call\n";
+			raise e)
        end
      | limport (ImportType(l,v,k),s) =
        let val (s,v) = add_var(s,v)
@@ -441,9 +460,8 @@ struct
 		    print (Int.toString (!num_lcon_concb)); print "\n";
 
 		    print "Number of lkind calls: ";
-		    print (Int.toString (!num_lkind)); print "\n";
-		    print "Number of lkind calls inside singleton kinds: ";
-		    print (Int.toString (!num_lkind_single)); print "\n")
+		    print (Int.toString (!num_lkind)); print "\n")
+
 
        in  MODULE{bnds = bnds,
 		  imports = imports,

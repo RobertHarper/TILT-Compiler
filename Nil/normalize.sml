@@ -37,7 +37,6 @@ struct
   val strip_proj = NilUtil.strip_proj
   val strip_prim = NilUtil.strip_prim
   val strip_app = NilUtil.strip_app
-  val strip_singleton = NilUtil.strip_singleton
   val con_free_convar = NilUtil.con_free_convar
   val alpha_equiv_con = NilUtil.alpha_equiv_con
   val alpha_equiv_kind = NilUtil.alpha_equiv_kind
@@ -45,7 +44,6 @@ struct
 
   val singletonize = NilUtil.singletonize 
 
-  val mapsequence = Util.mapsequence
 
   (*From Name*)
   val eq_var = Name.eq_var
@@ -69,11 +67,6 @@ struct
   val split = Listops.split
 
   (*From Util *)
-  val set2list = Util.set2list
-  val list2set = Util.list2set
-  val mapsequence = Util.mapsequence
-  val sequence2list = Util.sequence2list
-  val list2sequence = Util.list2sequence
   val eq_opt = Util.eq_opt
   val map_opt = Util.mapopt
   val printl = Util.printl
@@ -95,10 +88,9 @@ val show_context = ref false
 
   fun pull (c,kind) = 
     let open Nil NilUtil Name Util
-    in  (case kind
-       of Type_k p => c
-	| Word_k p => c
-	| Singleton_k (p,k,c2) => c2
+    in  (case kind of
+          Type_k => c
+	| Singleton_k c2 => c2
 	| Record_k elts => 
 	 let
 	   fun folder (((label,var),kind),subst) = 
@@ -109,7 +101,7 @@ val show_context = ref false
 	     in
 	       ((label,con),subst)
 	     end
-	   val (entries,subst) = Listops.foldl_acc folder (Subst.empty()) (sequence2list elts)
+	   val (entries,subst) = Listops.foldl_acc folder (Subst.empty()) (Sequence.toList elts)
 	 in
 	   (Crecord_c entries)
 	 end
@@ -124,7 +116,8 @@ val show_context = ref false
 	        Open => Let_c (Sequential,[Open_cb (var,formals,c,return)],Var_c var)
 	      | Code => Let_c (Sequential,[Code_cb (var,formals,c,return)],Var_c var)
 	      | ExternCode => Let_c (Sequential,[Code_cb (var,formals,c,return)],Var_c var)
-	      | Closure => let val cenv = (fresh_named_var "pull_closure", Record_k (list2sequence []))
+	      | Closure => let val cenv = (fresh_named_var "pull_closure", 
+					   Record_k (Sequence.fromList []))
 			   in  Let_c (Sequential,[Code_cb (var,formals @ [cenv] ,c,return)],
 				      Closure_c(Var_c var, Crecord_c []))
 			   end
@@ -201,10 +194,6 @@ val show_context = ref false
 		   show_stack(); raise e)
   end
 	 
-  fun count_fields k = 
-    (case strip_singleton k 
-       of (Record_k entries) => List.length (sequence2list entries)
-	| _ => error "Expected record_kind")
 
   fun beta_conrecord' (proj as Proj_c (con,label)) = 
 	(case strip_crecord con
@@ -220,44 +209,38 @@ val show_context = ref false
 
   fun beta_conrecord proj = #2(beta_conrecord' proj)
 
-  fun make_shape kind = 
-    (case kind 
-       of Type_k p => (Type_k p)
-	| Word_k p => (Word_k p)
-	| Singleton_k (p,kind,con) => make_shape kind
-	| Record_k elts => 
-	 Record_k (mapsequence (fn ((l,v),k) => ((l,v),make_shape k)) elts)
-	| Arrow_k (openness, formals, return) => 
-	 let
-	   val formals = map_second make_shape formals
-	   val return = make_shape return
-	 in
-	   (Arrow_k (openness, formals,return))
-	 end)
+  fun make_shape D kind = 
+      let fun lfolder(((l,v),k),D) = let val k = make_shape D k
+				     in  (((l,v),k),insert_kind(D,v,k))
+				     end
+	  fun folder((v,k),D) = let val k = make_shape D k
+				in  ((v,k),insert_kind(D,v,k))
+				end
+      in    (case kind of
+		 Type_k => Type_k
+	       | Singleton_k con => get_shape' D con
+	       | Record_k elts => Record_k (#1(Sequence.foldl_acc lfolder D elts))
+	       | Arrow_k (openness, formals, return) => 
+		     let val (formals,D) = foldl_acc folder D formals
+			 val return = make_shape D return
+		     in  (Arrow_k (openness, formals,return))
+		     end)
+      end
 
-  fun get_shape' (D : context) (constructor : con) : kind = 
-      let fun letcase() = 
-	  (print "Warning: get_shape' got un-normalized constructor Let_c\n";
-	   PpNil.pp_con constructor; print "\n";
-	   get_shape' D (con_normalize' (D,Subst.empty()) constructor))
-(*	   error "Warning: get_shape' got un-normalized constructor Let_c\n" *)
-	   
+  and get_shape' (D : context) (constructor : con) : kind = 
+      let 	   
       in
       (case constructor of
-	 Prim_c (Int_c W64,_) => (Type_k Runtime)
-       | Prim_c (Float_c F32,_) => (Type_k Runtime)
-       | Prim_c (Float_c F64,_) => (Type_k Runtime)
-       | Prim_c _ => Word_k Runtime
+	 Prim_c (Int_c W64,_) => Type_k
+       | Prim_c (Float_c F32,_) => Type_k (* error *)
+       | Prim_c (Float_c F64,_) => Type_k (* error *)
+       | Prim_c _ => Type_k 
 
-	| (Mu_c (recur,defs)) => if (length (sequence2list defs) = 1)
-				     then (Word_k Runtime)
-				 else NilUtil.kind_tuple(map (fn _ => Word_k Runtime) (sequence2list defs))
-	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>Word_k Runtime
-	| (v as (Var_c var)) => 
-	 ((make_shape(find_kind (D,var))
-	  handle NilContext.Unbound =>
-	      (NilContext.print_context D;
-	       error ("variable "^(var2string var)^" not in context"))))
+	| (Mu_c (recur,defs)) => (case (Sequence.length defs) of
+				      1 => Type_k
+				    | len => NilUtil.kind_tuple(Listops.copy(len,Type_k)))
+	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) => Type_k
+	| (Var_c var) => NilContext.find_shape_kind (D,var)
         | Let_c (sort,[Open_cb (var,formals,body,body_kind)],Var_c v) =>
 	   if (eq_var(var,v)) then Arrow_k(Open,formals,body_kind) else get_shape' D (Var_c v)
 	| Let_c(sort,[Code_cb (var,formals,body,body_kind)],Var_c v) =>
@@ -265,13 +248,22 @@ val show_context = ref false
         | Let_c (sort,[Code_cb (var,formals,body,body_kind)],Closure_c(Var_c v,_)) =>
 	   if (eq_var(var,v)) then Arrow_k(Closure,Listops.butlast formals,body_kind) 
 	   else get_shape' D (Var_c v)
-        | (Let_c _) => letcase()
+        | Let_c (sort,[],body) => get_shape' D body
+        | Let_c (sort,cbnd::rest,body) => 
+	       let val D = (case cbnd of
+				Con_cb(v,c) => insert_kind(D,v,Singleton_k c)
+			      | Open_cb(v,formals,_,body_kind) => insert_kind(D,v,Arrow_k(Open,formals,body_kind))
+			      | Code_cb(v,formals,_,body_kind) => insert_kind(D,v,Arrow_k(Code,formals,body_kind)))
+	       in  get_shape' D (Let_c(sort,rest,body))
+	       end
 	| (Closure_c (code,env)) => 
 	    let val (vklist,body_kind) = 
-		(case (strip_singleton (get_shape' D code)) of
+		(case get_shape' D code of
 	          Arrow_k (Code,vklist,body_kind) => (vklist,body_kind)
 		| Arrow_k (ExternCode,vklist,body_kind) => (vklist,body_kind)
-		| _ => (error "Invalid closure: code component does not have code kind" 
+		| k => (print "Invalid closure: code component does not have code kind\n";
+			PpNil.pp_kind k; print "\n";
+			error "Invalid closure: code component does not have code kind" 
 			handle e => raise e))		      
 		val (first,(v,klast)) = split vklist
 		val kind = Arrow_k(Closure,first,body_kind)
@@ -285,32 +277,35 @@ val show_context = ref false
 	   val k_entries = 
 	     map2 (fn (l,k) => ((l,fresh_named_var "crec_norm"),k)) (labels,kinds)
 	   val entries = zip labels cons
-	 in Record_k (list2sequence k_entries)
+	 in Record_k (Sequence.fromList k_entries)
 	 end
 	| (Proj_c (rvals,label)) => 
 	 let
 	   val record_kind = get_shape' D rvals
-	   val entry_kinds = 
-	     (case (strip_singleton record_kind) of
-		Record_k kinds => sequence2list kinds
+	   fun find [] = error "could not find field in record kind"
+	     | find (((l,v),k)::rest) = 
+	       if (eq_label(l,label))
+		   then k (* there should be no dependencies *)
+	       else find rest
+	 in  (case record_kind of
+		Record_k kinds => find (Sequence.toList kinds)
 	      | other => 
 		    (print "Non-record kind returned from get_shape' in projection:\n";
 		     PpNil.pp_kind other; print "\n";
-		     error "Non-record kind returned from get_shape' in projection" handle e => raise e))
-	   fun find ((l,v),k) = eq_label(l,label)
-	   (*No dependencies, since shape is all we get*)
-	   val (_,kind) = valOf (List.find find entry_kinds)
-	 in kind
+		     error "Non-record kind returned from get_shape' in projection" 
+		     handle e => raise e))
 	 end
 	| (App_c (cfun,actuals)) => 
 	    let
 	      val cfun_kind = get_shape' D cfun
 	      val (formals,body_kind) = 
-		case (strip_singleton cfun_kind) of
+		case cfun_kind of
 		  (Arrow_k (_,formals,body_kind)) => (formals,body_kind)
-		| _ => (print "Invalid kind for constructor application\n";
+		| _ => (print "Invalid (non-arrow) kind for constructor application\n";
 			PpNil.pp_kind cfun_kind; print "\n";
 			(error "Invalid kind for constructor application" handle e => raise e))
+	      fun folder (((v,k),c),D) = NilContext.insert_kind_equation(D,v,c,k)
+	      val D = foldl folder D (zip formals actuals)
 	    in body_kind
 	    end
 	| (Typecase_c {arg,arms,default,kind}) => kind
@@ -486,19 +481,12 @@ val show_context = ref false
     else
       kind_normalize state kind
   and kind_normalize state (kind : kind) : kind = 
-    (case kind 
-       of Type_k p => (Type_k p)
-	| Word_k p => (Word_k p)
-	| Singleton_k (p,kind,con) => 
-	 let
-	   val con = con_normalize' state con
-	   val kind = kind_normalize' state kind
-	 in
-	   singletonize(kind,con)
-	 end
+    (case kind of
+          Type_k => kind
+	| Singleton_k con => Singleton_k(con_normalize' state con)
 	| Record_k elts => 
 	 let
-	   val elt_list = sequence2list elts
+	   val elt_list = Sequence.toList elts
 	   val (labels,vars_and_kinds) = unzip (map (fn ((l,v),k) => (l,(v,k))) elt_list)
 	   val (state,vars_and_kinds) =  bind_at_kinds state vars_and_kinds
 	   val elts = 
@@ -580,14 +568,14 @@ val show_context = ref false
 	 end
 	| (Mu_c (recur,defs)) =>
 	 let
-	   val def_list = sequence2list defs
+	   val def_list = Sequence.toList defs
 	   val (vars,cons) = unzip def_list
 	   val (state',vars_kinds) = 
-	     bind_at_kinds state (map (fn v => (v,Word_k Runtime)) vars)
+	     bind_at_kinds state (map (fn v => (v,Type_k)) vars)
 	   val (vars,_) = unzip vars_kinds
 	   val cons = if recur then map (con_normalize' state') cons
 		      else map (con_normalize' state) cons
-	   val defs = list2sequence (zip vars cons)
+	   val defs = Sequence.fromList (zip vars cons)
 	 in Mu_c (recur,defs)
 	 end
 	| (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) =>
@@ -845,15 +833,8 @@ val show_context = ref false
     end
 
   and bnd_normalize' state (bnd : bnd) =
-    (case bnd
-       of Con_b (var, con) =>
-	 let
-	   val con = con_normalize' state con
-	   val bnd = Con_b (var,con)
-	   val kind = get_shape' (#1 state) con
-	   val (state,var,kind) = bind_at_kind state (var,kind)
-	 in (bnd,state)
-	 end
+    (case bnd of
+          Con_b (p, cb) => error "sorry not handled"
 	| Exp_b (var, con, exp) =>
 	 let
 	   val con = con_normalize' state con
@@ -862,15 +843,11 @@ val show_context = ref false
 	 in (bnd,state)
 	 end
 	| (Fixopen_b defs) =>
-	 let val def_list = set2list defs
-	     val def_list = map_second (function_normalize' state) def_list
-	     val defs = list2set def_list
+	 let val defs = Sequence.map (fn (v,f) => (v,function_normalize' state f)) defs
 	 in  (Fixopen_b defs,state)
 	 end
 	| (Fixcode_b defs) =>
-	 let val def_list = set2list defs
-	     val def_list = map_second (function_normalize' state) def_list
-	     val defs = list2set def_list
+	 let val defs = Sequence.map (fn (v,f) => (v,function_normalize' state f)) defs
 	 in  (Fixcode_b defs,state)
 	 end
 	| Fixclosure_b (is_recur,defs) => 
@@ -882,7 +859,7 @@ val show_context = ref false
 	       val tipe = con_normalize' state tipe
 	     in {code=code,cenv=cenv,venv=venv,tipe=tipe}
 	     end
-	   val defs = list2set (map_second do_closure (set2list defs))
+	   val defs = Sequence.map (fn (v,c) => (v,do_closure c)) defs
 	   val bnd = Fixclosure_b (is_recur,defs)
 	 in (bnd,state)
 	 end)

@@ -25,8 +25,7 @@ signature NILUTIL =
 
     val letc : Nil.conbnd list * Nil.con -> Nil.con
     val lete : Nil.bnd list * Nil.exp -> Nil.exp
-    val cbnd2bnd : Nil.conbnd -> Nil.bnd
-(*    val rename_mu : (Nil.var -> bool) * (Nil.var, Nil.con) Util.sequence * Nil.var -> Nil.con*)
+
 
     val effect : Nil.exp -> bool (* could the expression have an effect *)
 
@@ -76,7 +75,6 @@ signature NILUTIL =
     val alpha_normalize_kind' : alpha_context -> Nil.kind -> Nil.kind
 
     val sub_phase : Nil.phase * Nil.phase -> bool
-    val get_phase : Nil.kind -> Nil.phase
 
     val is_var_e : Nil.exp -> bool
 
@@ -84,7 +82,7 @@ signature NILUTIL =
 
     val strip_var : Nil.con -> Nil.var option
     val strip_exntag : Nil.con -> Nil.con option
-    val strip_recursive : Nil.con -> (bool * (Nil.var,Nil.con) Util.set) option
+    val strip_recursive : Nil.con -> (bool * (Nil.var,Nil.con) Sequence.sequence) option
     val strip_boxfloat : Nil.con -> Nil.Prim.floatsize option
     val strip_float : Nil.con -> Nil.Prim.floatsize option
     val strip_int : Nil.con -> Nil.Prim.intsize option
@@ -102,8 +100,7 @@ signature NILUTIL =
     val is_var_c : Nil.con -> bool
     val is_float_c : Nil.con -> bool
     val is_unit_c : Nil.con -> bool
-    val strip_singleton : Nil.kind -> Nil.kind
-    val kill_singleton : Nil.kind -> Nil.kind
+
     val singletonize : (Nil.kind * Nil.con) -> Nil.kind
     val selfify : (Nil.con * Nil.kind) -> Nil.kind
 

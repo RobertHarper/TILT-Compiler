@@ -1,4 +1,4 @@
-(*$import ANNOTATION PRIM NIL *)
+(*$import ANNOTATION PRIM NIL Sequence *)
 functor Nil(structure ArgAnnotation : ANNOTATION
 	    structure ArgPrim : PRIM)
 	   :> NIL where Prim = ArgPrim 
@@ -17,8 +17,8 @@ struct
   type w32 = Word32.word
   type prim = Prim.prim
 
-  type ('a,'b) sequence = ('a * 'b) list
-  type ('a,'b) set = ('a * 'b) list
+  type ('a,'b) sequence = ('a,'b) Sequence.sequence
+
 
 
   (* In general, we want to distinguish between functions/arrow types that 
@@ -33,20 +33,14 @@ struct
    *)
   datatype effect = Total | Partial
 
-  (* A leaf procedure makes no function calls.
-   *  A non-leaf procedure may call any functions.
-   *)
-  datatype recursive = Leaf | Nonleaf
+  datatype recursive = Leaf | NonRecursive | Arbitrary
 
-  (* A sequential let only permits the bindings to be evaluated sequentially. 
-   * A parallel let permits the bindings to be concurrently executed.
-   *)
+
   datatype letsort = Sequential | Parallel
   datatype phase = Runtime | Compiletime
   datatype kind = 
-      Type_k of phase               (* classifies constructors that are types *)
-    | Word_k of phase               (* classifies types that fit in a word *)
-    | Singleton_k of phase * kind * con     (* singleton-kind at kind type that leaks 
+      Type_k                        (* classifies constructors that are types *)
+    | Singleton_k of con            (* singleton-kind at kind type that leaks 
 				               through the constructor *)
                                     (* dependent record kind classify records of 
 				           constructors *)
@@ -170,12 +164,12 @@ struct
    *)
 
   and bnd =                                (* Term-level Bindings with optional classifiers *)
-      Con_b of var * con                     (* Binds constructors *)
-    | Exp_b of var * con  * exp                     (* Binds expressions *)
-    | Fixopen_b of (var,function) set        (* Binds mutually recursive open functions *)
-    | Fixcode_b of (var,function) set        (* Binds mutually recursive code functions *)
+      Con_b of phase * conbnd                (* Binds constructors *)
+    | Exp_b of var * con  * exp              (* Binds expressions *)
+    | Fixopen_b of (var,function) sequence   (* Binds mutually recursive open functions *)
+    | Fixcode_b of (var,function) sequence   (* Binds mutually recursive code functions *)
                                              (* Allows the creation of term and for-all closures *)
-    | Fixclosure_b of bool * (var , {code:var, cenv:con, venv:exp, tipe:con}) set
+    | Fixclosure_b of bool * (var , {code:var, cenv:con, venv:exp, tipe:con}) sequence
 
   (* A function is either open or closed.  It is a "code pointer" if it is closed.
    * It may or may not be effect-free and may or may not be recursive.

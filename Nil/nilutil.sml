@@ -45,7 +45,7 @@ struct
       end
   fun kind_tuple klist = let fun doer(i,k) = ((generate_tuple_label(i+1),Name.fresh_var()),k)
 			     val lvk_list = Listops.mapcount doer klist
-			 in  Record_k(Util.list2sequence lvk_list)
+			 in  Record_k(Sequence.fromList lvk_list)
 			 end
   val unit_con = con_tuple []
   val unit_exp = exp_tuple []
@@ -67,15 +67,6 @@ struct
    fun lete ([],e) = e
      | lete (ebnds,e) = Let_e(Sequential,ebnds,e)
 
-  fun cbnd2bnd (Con_cb vc) = Con_b vc
-    | cbnd2bnd (Open_cb (confuns as (v,vklist,_,resk))) = 
-      let val v' = Name.derived_var v
-      in  Con_b(v',Let_c(Sequential,[Open_cb confuns], Var_c v))
-      end
-    | cbnd2bnd (Code_cb (confuns as (v,vklist,_,resk))) = 
-      let val v' = Name.derived_var v
-      in  Con_b(v',Let_c(Sequential,[Code_cb confuns], Var_c v))
-      end
 
   fun is_var_e (Var_e v) = true
     | is_var_e _ = false
@@ -152,8 +143,6 @@ struct
     val is_float_c = Option.isSome o strip_float
   end
 
-  fun strip_singleton (Singleton_k(_,k,_)) = strip_singleton k
-    | strip_singleton k = k
 
   fun get_arrow_return con = 
     case strip_arrow con
@@ -166,33 +155,16 @@ struct
   fun sub_phase (Compiletime, Runtime) = false
     | sub_phase _ = true
 
-  fun get_phase kind = 
-    (case kind of
-          Type_k p => p
-        | Word_k p => p
-        | Singleton_k (p,_,_) => p
-	| Record_k entries => 
-	 if allsequence (fn ((l,v),k) => sub_phase (get_phase k,Runtime)) entries then
-	   Runtime
-	 else
-	   Compiletime
-       | Arrow_k (openness,args,result) => 
-	   if List.all (fn (v,k) => sub_phase (get_phase k,Runtime)) args 
-	     andalso sub_phase(get_phase result,Runtime) then
-	     Runtime
-	   else
-	     Compiletime)
 
   val fresh_named_var = Name.fresh_named_var
 
 
   fun selfify (con,kind) =
     (case kind of
-          Type_k phase => Singleton_k(phase,Type_k phase,con)
-	| Word_k phase => Singleton_k(phase,Word_k phase,con)
-	| Singleton_k(_) => kind
+          Type_k => Singleton_k con
+	| Singleton_k _ => kind
 	| Record_k entries => 
-	 Record_k (mapsequence (fn ((l,v),k) => ((l,v),selfify (Proj_c (con,l),k))) entries)
+	 Record_k (Sequence.map (fn ((l,v),k) => ((l,v),selfify (Proj_c (con,l),k))) entries)
 	| Arrow_k (openness,args,return) => 
 	 let
 	   val (formal_vars,_) = ListPair.unzip args
@@ -201,7 +173,7 @@ struct
 	   Arrow_k (openness,args,selfify(App_c (con,actuals),return))
 	 end)
 
-  fun singletonize (kind as Singleton_k(_,_,_),con) = kind
+  fun singletonize (kind as Singleton_k(_),con) = kind
     | singletonize (kind,con) = selfify(con,kind)
 
   local
@@ -326,10 +298,10 @@ struct
 	       
 	     | (Mu_c (flag,defs)) =>
 		   let
-		       val (con_vars,cons) = ListPair.unzip (Util.set2list defs)
+		       val (con_vars,cons) = ListPair.unzip (Sequence.toList defs)
 		       val state' = add_convars (state,con_vars)
 		       val cons' = List.map (f_con state') cons
-		       val defs' = Util.list2set (ListPair.zip (con_vars,cons'))
+		       val defs' = Sequence.fromList (ListPair.zip (con_vars,cons'))
 		   in  Mu_c (flag,defs')
 		   end
 	       
@@ -431,17 +403,9 @@ struct
       val (STATE{bound,kindhandler,...}) = state
       fun dokind kind = 
 	  (case kind of
-	       Type_k _ => kind
+	       Type_k => kind
 
-	     | Word_k _ => kind
-
-	     | (Singleton_k(p,kind, con)) =>
-	      let
-		val kind' = self kind
-		val con' = f_con state con
-	      in
-		Singleton_k(p,kind', con')
-	      end
+	     | (Singleton_k con) => Singleton_k(f_con state con)
 
 	     | (Record_k fieldseq) =>
 	      let
@@ -452,11 +416,9 @@ struct
 		  in
 		    (((lbl, var), kind'),state')
 		  end
-		val field_list = Util.sequence2list fieldseq
-		val (field_list',state') = 
-		  foldl_acc fold_one state field_list
+		val (fieldseq',state') = Sequence.foldl_acc fold_one state fieldseq
 	      in
-		Record_k (Util.list2sequence field_list')
+		Record_k fieldseq'
 	      end
 
 	     | (Arrow_k (openness, args, result)) =>
@@ -514,22 +476,24 @@ struct
       let val (STATE{bound,bndhandler,exphandler,...}) = state
 	  fun funtype openness (Function(effect,recur,vklist,vclist,vflist,body,c)) = 
 	      AllArrow_c(openness,effect,vklist,(map #2 vclist),TilWord32.fromInt(length vflist),c)
-	  fun do_bnd (bnd,s) : bnd * state = 
+	  fun do_bnd (bnd,s) : bnd list * state = 
 	      case bnd of
-		  Con_b(v,c) => (Con_b(v,f_con state c), add_convar(state,v))
-		| Exp_b(v,c,e) => (Exp_b(v,f_con state c, f_exp state e), add_var(state,v,c))
+		  Con_b(p,cb) => let val (cbnds,state) = f_cbnd state cb
+				 in  (map (fn cb => Con_b(p,cb)) cbnds, state)
+				 end
+		| Exp_b(v,c,e) => ([Exp_b(v,f_con state c, f_exp state e)], add_var(state,v,c))
 		| Fixopen_b vfset => 
-		      let val s' = foldset (fn ((v,f),s) => add_var(s,v,funtype Open f)) s vfset
+		      let val s' = Sequence.foldl (fn ((v,f),s) => add_var(s,v,funtype Open f)) s vfset
 			  fun doer(v,f) = (v,dofun s' f)
-		      in  (Fixopen_b(Util.mapset doer vfset), s')
+		      in  ([Fixopen_b(Sequence.map doer vfset)], s')
 		      end
 		| Fixcode_b vfset => 
-		      let val s' = foldset (fn ((v,f),s) => add_var(s,v,funtype Code f)) s vfset
+		      let val s' = Sequence.foldl (fn ((v,f),s) => add_var(s,v,funtype Code f)) s vfset
 			  fun doer(v,f) = (v,dofun s' f)
-		      in  (Fixcode_b(Util.mapset doer vfset), s')
+		      in  ([Fixcode_b(Sequence.map doer vfset)], s')
 		      end
 		| Fixclosure_b (is_recur,vcset) => 
-		      let val s' = foldset (fn ((v,{tipe,...}),s) => add_var(s,v,tipe)) s vcset 
+		      let val s' = Sequence.foldl (fn ((v,{tipe,...}),s) => add_var(s,v,tipe)) s vcset 
 			  fun doer(v,{code,cenv,venv,tipe}) = 
 			  (v,{code = (case (exphandler (bound,Var_e code)) of
 					  NOCHANGE => code
@@ -539,21 +503,14 @@ struct
 			  cenv = f_con s' cenv,
 			  venv = f_exp s' venv,
 			  tipe = f_con s' tipe})
-		      in  (Fixclosure_b(is_recur,Util.mapset doer vcset), s')
+		      in  ([Fixclosure_b(is_recur, Sequence.map doer vcset)], s')
 		      end
       in  case (bndhandler (bound,bnd)) of
 	  CHANGE_NORECURSE bs => (bs, state)  (* is this right? *)
-	| CHANGE_RECURSE bs =>  let 
-				   fun folder(b,(bs,s)) = 
-				       let val (b',s') = do_bnd(b,s)
-				       in  (b'::bs,s')
-				       end
-				   val (bs_rev',s) = foldl folder ([],state) bs
-			       in  (rev bs_rev', s)
+	| CHANGE_RECURSE bs => let val (bs_list,s) = foldl_acc do_bnd state bs
+			       in  (List.concat bs_list, s)
 			       end
-	| NOCHANGE => let val (b,s) = do_bnd(bnd,state)
-		      in ([b],s)
-		      end
+	| NOCHANGE => do_bnd(bnd,state)
       end
 
   and f_switch state sw = 
@@ -689,19 +646,7 @@ struct
       List.exists (fn v => eq_var (v,var)) free_vars
     end
 
-  fun kill_singleton k = 
-      let fun remove_single (Singleton_k(_,k,_)) = remove_single k
-	    | remove_single k = CHANGE_RECURSE k
-	  fun kind_handler (_,Singleton_k(_,k,_)) = remove_single k
-	    | kind_handler _ = NOCHANGE
-	  val handlers = STATE{bound = default_bound,
-			       bndhandler = default_bnd_handler,
-			       cbndhandler = default_cbnd_handler,
-			       exphandler = default_exp_handler,
-			       conhandler = default_con_handler,
-			       kindhandler = kind_handler}
-      in  f_kind handlers k
-      end
+
 
   local
       fun count_handler() = 
@@ -813,7 +758,7 @@ struct
     end
 
   fun muExpand (flag,vcseq,v) = 
-      let val vc_list = sequence2list vcseq
+      let val vc_list = Sequence.toList vcseq
 	  val mu_con = Mu_c(flag,vcseq)
 	  fun mapper (which,(v,_)) = (v,if (length vc_list = 1)
 					    then mu_con
@@ -870,14 +815,9 @@ struct
     let
       val recur = alpha_equiv_kind' context
     in
-      (case (kind1,kind2)
-	 of (Type_k p1, Type_k p2) => same_phase(p1,p2)
-	  | (Word_k p1, Word_k p2) => same_phase(p1,p2)
-	  | (Singleton_k (p1,kind1,con1),Singleton_k (p2,kind2,con2)) => 
-	   same_phase(p1,p2) andalso
-	   recur (kind1,kind2) andalso
-	   alpha_equiv_con' context (con1,con2)
-	   
+      (case (kind1,kind2) of
+	    (Type_k, Type_k) => true
+	  | (Singleton_k con1,Singleton_k con2) => alpha_equiv_con' context (con1,con2)
 	  | (Record_k elts1,Record_k elts2) => 
 	   let
 	     val conref = ref context
@@ -921,8 +861,8 @@ struct
 	  (* mus with the same ordering to be equiv *) 
 	  | (Mu_c (flag1,defs1),Mu_c (flag2,defs2)) =>
 	   let
-	     val def_list1 = Util.set2list defs1
-	     val def_list2 = Util.set2list defs2
+	     val def_list1 = Sequence.toList defs1
+	     val def_list2 = Sequence.toList defs2
 	     val (var_list1,con_list1) = ListPair.unzip def_list1
 	     val (var_list2,con_list2) = ListPair.unzip def_list2
 	     val context' = alpha_equate_pairs (context,(var_list1,var_list2))
@@ -1031,14 +971,10 @@ struct
     ListPair.all (alpha_equiv_con' context) list_pair
 
   fun alpha_sub_kind' context (k1,k2) = 
-    (case (k1,k2)
-       of (Word_k p1, Word_k p2) => sub_phase(p1,p2)
-	| (Type_k p1, Type_k p2) => sub_phase(p1,p2)
-	| (Word_k p1, Type_k p2) => sub_phase(p1,p2)
-	| (Singleton_k (p1,k1,c1),Singleton_k (p2,k2,c2)) => 
-	 sub_phase(p1,p2) andalso alpha_equiv_con' context (c1,c2)
-	| (Singleton_k (p1,k1,c1),k2) => 
-	 sub_phase(p1,get_phase k2) andalso alpha_sub_kind' context (k1,k2)
+    (case (k1,k2) of
+	  (Type_k, Type_k) => true
+	| (Singleton_k c1,Singleton_k c2) => alpha_equiv_con' context (c1,c2)
+	| (Singleton_k c1,k2) => false
 	| (Arrow_k (openness1, formals1, return1), Arrow_k (openness2, formals2, return2)) => 
 	 let
 	   val conref = ref context
@@ -1075,16 +1011,48 @@ struct
 
 (* End exported functions *)
 
-    fun alpha_normalize_con' (context:alpha_context) (con:con) = 
+    fun alpha_normalize_cbnd' (context:alpha_context) cbnd =
+	let
+	    fun do_confun Con (var,formals,body,kind) = 
+		let
+		    fun fold_one ((var,kind),context) =
+			let
+			    val (context',var') = alpha_bind (context,var)
+			    val kind' = alpha_normalize_kind' context' kind
+			in
+			    ((var',kind'),context')
+			end
+		    val (formals',context') = foldl_acc fold_one context formals
+		    val body' = alpha_normalize_con' context' body
+		    val kind' = alpha_normalize_kind' context' kind
+		    val (context'',var') = alpha_bind (context,var) (*Not context'!!*)
+		in
+		    (Con (var',formals',body',kind'),context'')
+		end
+	in
+	    case cbnd of
+		 Con_cb (var,con) =>
+		     let 
+			 val (context',var') = alpha_bind (context,var)
+			 val con' = alpha_normalize_con' context' con
+			 val cbnd' = Con_cb (var',con')
+		     in  
+			 (cbnd',context')
+		     end
+	       | Open_cb body => do_confun Open_cb body
+	       | Code_cb body => do_confun Code_cb body
+	end
+
+    and alpha_normalize_con' (context:alpha_context) (con:con) = 
       (case con 
 	 of (Prim_c (pcon,args)) => 
 	   (Prim_c (pcon,map (alpha_normalize_con' context) args))
 	  | (Mu_c (flag, defs)) =>
 	   let
-	     val (con_vars,cons) = ListPair.unzip (Util.set2list defs)
+	     val (con_vars,cons) = ListPair.unzip (Sequence.toList defs)
 	     val (context',con_vars') = alpha_bind_list (context,con_vars)
 	     val cons' = List.map (alpha_normalize_con' context') cons
-	     val defs' = Util.list2set (ListPair.zip (con_vars',cons'))
+	     val defs' = Sequence.fromList (ListPair.zip (con_vars',cons'))
 	   in
 	     (Mu_c (flag, defs'))
 	   end
@@ -1110,36 +1078,7 @@ struct
 
 	  | (Let_c (letsort, cbnds, body)) => 
 	   let
-	     
-	     fun do_confun Con (var,formals,body,kind) = 
-	       let
-		 fun fold_one ((var,kind),context) =
-		   let
-		     val (context',var') = alpha_bind (context,var)
-		     val kind' = alpha_normalize_kind' context' kind
-		   in
-		     ((var',kind'),context')
-		   end
-		 val (formals',context') = foldl_acc fold_one context formals
-		 val body' = alpha_normalize_con' context' body
-		 val kind' = alpha_normalize_kind' context' kind
-		 val (context'',var') = alpha_bind (context,var) (*Not context'!!*)
-	       in
-		 (Con (var',formals',body',kind'),context'')
-	       end
-	     fun folder (cbnd,context) = 
-	       case cbnd 
-		 of Con_cb (var,con) =>
-		   let 
-		     val (context',var') = alpha_bind (context,var)
-		     val con' = alpha_normalize_con' context' con
-		     val cbnd' = Con_cb (var',con')
-		   in  
-		     (cbnd',context')
-		   end
-		  | Open_cb body => do_confun Open_cb body
-		  | Code_cb body => do_confun Code_cb body
-
+	     fun folder (cbnd,context) = alpha_normalize_cbnd' context cbnd
 	     val (cbnds',context') = foldl_acc folder context cbnds
 	     val body' = alpha_normalize_con' context' body
 	   in
@@ -1200,16 +1139,8 @@ struct
 	   end)
     and alpha_normalize_kind' (context:alpha_context) (kind:kind) : kind =
       (case kind of
-	 Type_k _ => kind
-       | Word_k _ => kind
-       | (Singleton_k(p,kind, con)) =>
-	   let
-	     val kind' = alpha_normalize_kind' context kind
-	     val con' = alpha_normalize_con' context con
-	   in
-	     Singleton_k(p,kind', con')
-	   end
-	 
+	 Type_k => kind
+       | (Singleton_k con) => Singleton_k(alpha_normalize_con' context con)
        | (Record_k fieldseq) =>
 	   let
 	     fun fold_one (((lbl,var),knd),context) = 
@@ -1219,11 +1150,9 @@ struct
 	       in
 		 (((lbl, var'), kind'),context')
 	       end
-	     val field_list = Util.sequence2list fieldseq
-	     val (field_list',context') = 
-	       foldl_acc fold_one context field_list
+	     val (fieldseq',context') = Sequence.foldl_acc fold_one context fieldseq
 	   in
-	     Record_k (Util.list2sequence field_list')
+	     Record_k fieldseq'
 	   end
 
        | (Arrow_k (openness, args, result)) =>
@@ -1283,7 +1212,7 @@ struct
 	  | Handle_e (exp,v,handler,result_type) =>
 	   let
 	     val exp' = alpha_normalize_exp' contexts exp
-	     val function = Function(Partial,Nonleaf,[],[(v,Prim_c(Exn_c,[]))],[],handler,result_type)
+	     val function = Function(Partial,Arbitrary,[],[(v,Prim_c(Exn_c,[]))],[],handler,result_type)
 	     val Function(_,_,_,[(v',_)],_,handler',result_type') = 
 				     alpha_normalize_function' contexts function
 	   in
@@ -1327,22 +1256,18 @@ struct
     and alpha_normalize_bnd' (bnd,(e_context,c_context)) = 
 	let fun do_funs (wrapper,defs) = 
 	    let
-		val (vars,functions) = unzip (set2list defs)
+		val (vars,functions) = unzip (Sequence.toList defs)
 		val (e_context',vars') = alpha_bind_list (e_context,vars)
 		val functions' = 
 		    map (alpha_normalize_function' (e_context',c_context)) functions
-		val defs' = list2set (zip (vars',functions'))
+		val defs' = Sequence.fromList (zip (vars',functions'))
 	     in (wrapper defs',(e_context',c_context))
 	     end
 	in
 	    (case bnd of
-		 Con_b (var, con) =>
-		     let
-			 val con' = alpha_normalize_con' c_context con
-			 val (c_context',var') = alpha_bind (c_context,var)
-			 val bnd' = (Con_b (var',con'))
-		     in
-			 (bnd',(e_context,c_context'))
+		 Con_b (phase, cb) => 
+		     let val (cbnd,c_context') = alpha_normalize_cbnd' c_context cb
+		     in  (Con_b(phase, cbnd), (e_context, c_context'))
 		     end
 	       | Exp_b (var, con, exp) =>
 		     let
@@ -1358,10 +1283,10 @@ struct
 
 	 | Fixclosure_b (is_recur,defs) => 
 	     let
-	       val (vars,closures) = unzip (set2list defs)
+	       val (vars,closures) = unzip (Sequence.toList defs)
 	       val (e_context',vars') = alpha_bind_list (e_context,vars)
 	       val closures' = map (alpha_normalize_closure' (e_context',c_context)) closures
-	       val defs' = list2set (zip (vars',closures'))
+	       val defs' = Sequence.fromList (zip (vars',closures'))
 	       val bnd' = Fixclosure_b (is_recur, defs)
 	     in
 	       (bnd',(e_context',c_context))
@@ -1478,8 +1403,6 @@ struct
 
 *)
 
-  fun type_or_word T = alpha_sub_kind (T,Type_k Runtime)
-  fun is_word T = alpha_sub_kind (T,Word_k Runtime)
 
   fun get_function_type openness (Function(effect, recur, vklist, vclist, vlist, _, con)) =
       AllArrow_c(openness, effect, vklist, map #2 vclist, 

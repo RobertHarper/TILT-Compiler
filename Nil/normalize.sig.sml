@@ -22,6 +22,7 @@ signature NORMALIZE =
      * con - i.e, merely the shape info
      *)
     val get_shape : context -> con -> kind
+    val make_shape : context -> kind -> kind
 
     (*Normalizing functions:
      * PRE: context is well formed!

@@ -253,15 +253,21 @@ struct
 	and scan_bnd (bnd : bnd, state : state) : state = 
 	  	(case bnd of
 		     Exp_b(v,c,e) => (scan_exp state e; state)
-		   | Con_b(v,c) => add_var(state,v,SOME c)
+		   | Con_b(p,cbnd) => 
+			 (case cbnd of
+			      Con_cb(v,c) => add_var(state,v,SOME c)
+			    | Open_cb (v,_,_,_) => add_var(state,v,SOME
+							   (Let_c(Sequential,[cbnd],Var_c v)))
+			    | Code_cb (v,_,_,_) => add_var(state,v,SOME
+							   (Let_c(Sequential,[cbnd],Var_c v))))
 		   | Fixopen_b vfset =>
-		      let val vflist = (Util.set2list vfset)
+		      let val vflist = (Sequence.toList vfset)
 			  val _ = 
 			      (case vflist of
 				   [(v,Function(_,Leaf,vklist,[],[],e,_))] => 
 				       (case e of
 					   Let_e(_,[Fixopen_b vfset], Var_e inner) =>
-					       (case (Util.set2list vfset) of
+					       (case (Sequence.toList vfset) of
 						   [(v',_)] => if (Name.eq_var(v',inner))
 								   then add_candidate(state,v,inner)
 							       else ()
@@ -350,15 +356,15 @@ struct
 		     Exp_b(v,c,e) => [Exp_b(v,c,do_exp e)]
 		   | Con_b(v,c) => [bnd]
 		   | Fixopen_b vfset =>
-		      let val vflist = (Util.set2list vfset)
+		      let val vflist = (Sequence.toList vfset)
 			  fun do_vflist vflist = 
-			      [Fixopen_b(Util.list2set(map (fn (v,f) => (v,do_function f)) vflist))]
+			      [Fixopen_b(Sequence.fromList(map (fn (v,f) => (v,do_function f)) vflist))]
 		      in  (case vflist of
 			       [(v,Function(_,Leaf,vklist,[],[],Let_e(_,[Fixopen_b vflist'],_),_))] =>
 				   (case (is_candidate v) of
 					NONE => do_vflist vflist
 				      | SOME (v,clist) => 
-					    let fun mapper ((v,k),c) = Con_b(v,c)
+					    let fun mapper ((v,k),c) = Con_b(Runtime,Con_cb(v,c))
 						val cbnds = Listops.map2 mapper (vklist,clist)
 					    in  cbnds @ do_vflist vflist'
 					    end)

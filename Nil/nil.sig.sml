@@ -1,4 +1,4 @@
-(*$import PRIM ANNOTATION *)
+(*$import PRIM ANNOTATION Sequence *)
 
 signature NIL =
 sig
@@ -11,12 +11,9 @@ sig
 
   type w32 = Word32.word
   type prim = Prim.prim
-  type ('a,'b) sequence = ('a,'b) Util.sequence
+  type ('a,'b) sequence = ('a,'b) Sequence.sequence
                           (* conceptually this is a ('a*'b) list that allows
 			     fast access using 'a as a key *)
-  type ('a,'b) set = ('a,'b) Util.sequence
-                          (* sets are used instead of lists in places 
-			   where a natural ordering does not exist *)
 
   (* In general, we want to distinguish between functions/arrow types that 
    * are open (possibly having free variables) or those that are closed.
@@ -30,10 +27,13 @@ sig
    *)
   datatype effect = Total | Partial
 
-  (* A leaf procedure makes no function calls.
-   *  A non-leaf procedure may call any functions.
+  (*  A leaf procedure makes no function calls.
+   *  A non-recursive function may not directly call itself or functions
+       bound in the same cluster.  This means that the functions bound
+       are not (mutually recursive) and can thus be inlined.
+   *  An arbitrary function may call itself or other functions.
    *)
-  datatype recursive = Leaf | Nonleaf
+  datatype recursive = Leaf | NonRecursive | Arbitrary
 
   (* A sequential let only permits the bindings to be evaluated sequentially. 
    * A parallel let permits the bindings to be concurrently executed.
@@ -41,9 +41,8 @@ sig
   datatype letsort = Sequential | Parallel
   datatype phase = Runtime | Compiletime
   datatype kind = 
-      Type_k of phase               (* classifies constructors that are types *)
-    | Word_k of phase               (* classifies types that fit in a word *)
-    | Singleton_k of phase * kind * con     (* singleton-kind at kind type that leaks 
+      Type_k                        (* classifies constructors that are types *)
+    | Singleton_k of con            (* singleton-kind at kind type that leaks 
 				               through the constructor *)
                                     (* dependent record kind classify records of 
 				           constructors *)
@@ -173,13 +172,13 @@ sig
    *)
 
   and bnd =                                (* Term-level Bindings with optional classifiers *)
-      Con_b of var * con                   (* Binds constructors *)
+      Con_b of phase * conbnd                (* Binds constructors *)
     | Exp_b of var * con * exp               (* Binds expressions *)
-    | Fixopen_b of (var,function) set        (* Binds mutually recursive open functions *)
-    | Fixcode_b of (var,function) set        (* Binds mutually recursive code functions *)
+    | Fixopen_b of (var,function) sequence  (* Binds mutually recursive open functions *)
+    | Fixcode_b of (var,function) sequence  (* Binds mutually recursive code functions *)
                                              (* Allows the creation of term and for-all closures;
                                                 bool indicates if it is really recursive *)
-    | Fixclosure_b of bool * (var , {code:var, cenv:con, venv:exp, tipe:con}) set
+    | Fixclosure_b of bool * (var , {code:var, cenv:con, venv:exp, tipe:con}) sequence
                                              
 
   (* A function is either open or closed.  It is a "code pointer" if it is closed.

@@ -42,8 +42,6 @@ functor NilSubstFn(structure Nil : NIL
     val unzip = Listops.unzip
     val zip = Listops.zip
     val mapopt = Util.mapopt
-    val set2list = Util.set2list
-    val list2set = Util.list2set
     fun error s = Util.error "subst.sml" s
 
     local
@@ -230,16 +228,8 @@ functor NilSubstFn(structure Nil : NIL
       
     and substConInKind' (conmap : con subst) (kind : kind) = 
       (case kind of
-	 Type_k _ => kind
-       | Word_k _ => kind
-       | (Singleton_k(p,kind, con)) =>
-	   let
-	     val kind = substConInKind' conmap kind
-	     val con = substConInCon' conmap con
-	   in
-	     Singleton_k(p,kind, con)
-	   end
-	 
+	 Type_k => kind
+       | (Singleton_k(con)) => Singleton_k(substConInCon' conmap con)
        | (Record_k fieldseq) =>
 	   let
 	     fun fold_one (((lbl,var),kind),conmap) = 
@@ -249,11 +239,9 @@ functor NilSubstFn(structure Nil : NIL
 	       in
 		 (((lbl, var), kind),conmap)
 	       end
-	     val field_list = Util.sequence2list fieldseq
-	     val (field_list,conmap) = 
-	       foldl_acc fold_one conmap field_list
+	     val (fieldseq,conmap) = Sequence.foldl_acc fold_one conmap fieldseq
 	   in
-	     Record_k (Util.list2sequence field_list)
+	     Record_k fieldseq
 	   end
 
        | (Arrow_k (openness, args, result)) =>
@@ -263,6 +251,31 @@ functor NilSubstFn(structure Nil : NIL
 	   in
 	     Arrow_k (openness,args, result)
 	   end)
+
+    and substConInConBnd' (conmap : con subst) cbnd =
+	let fun do_confun Con conmap1 (var,formals,body,kind) = 
+	       let
+		 val (formals,conmap) = substConInTFormals conmap1 formals
+		 val body = substConInCon' conmap body
+		 val kind = substConInKind' conmap kind
+		 val (var,conmap) = con_rebind (var,conmap1) (*Not conmap!!*)
+	       in
+		 (Con (var,formals,body,kind),conmap)
+	       end
+	in
+	       case cbnd of
+		     Con_cb (var,con) =>
+		   let 
+		     val con = substConInCon' conmap con
+		     val (var,conmap) = con_rebind (var,conmap)
+		     val cbnd = Con_cb (var,con)
+		   in  
+		     (cbnd,conmap)
+		   end
+		  | Open_cb body => do_confun Open_cb conmap body
+		  | Code_cb body => do_confun Code_cb conmap body
+
+	end
 
     and substConInCon' (conmap : con subst) (con : con) = 
       let
@@ -283,10 +296,10 @@ functor NilSubstFn(structure Nil : NIL
 	   (Prim_c (pcon,map (substConInCon' conmap) args))
 	  | (Mu_c (flag,defs)) =>
 	   let
-	     val (vars,cons) = unzip (set2list defs)
+	     val (vars,cons) = unzip (Sequence.toList defs)
 	     val (vars,conmap) = con_rebind_list (vars,conmap)
 	     val cons = List.map (substConInCon' conmap) cons
-	     val defs = Util.list2set (zip vars cons)
+	     val defs = Sequence.fromList (zip vars cons)
 	   in
 	     (Mu_c (flag,defs))
 	   end
@@ -306,29 +319,7 @@ functor NilSubstFn(structure Nil : NIL
 
 	  | (Let_c (letsort, cbnds, body)) => 
 	   let
-
-	     fun do_confun Con conmap1 (var,formals,body,kind) = 
-	       let
-		 val (formals,conmap) = substConInTFormals conmap1 formals
-		 val body = substConInCon' conmap body
-		 val kind = substConInKind' conmap kind
-		 val (var,conmap) = con_rebind (var,conmap1) (*Not conmap!!*)
-	       in
-		 (Con (var,formals,body,kind),conmap)
-	       end
-	     fun folder (cbnd,conmap) = 
-	       case cbnd of
-		     Con_cb (var,con) =>
-		   let 
-		     val con = substConInCon' conmap con
-		     val (var,conmap) = con_rebind (var,conmap)
-		     val cbnd = Con_cb (var,con)
-		   in  
-		     (cbnd,conmap)
-		   end
-		  | Open_cb body => do_confun Open_cb conmap body
-		  | Code_cb body => do_confun Code_cb conmap body
-
+	     fun folder (cbnd,conmap) = substConInConBnd' conmap cbnd
 	     val (cbnds,conmap) = foldl_acc folder conmap cbnds
 	     val body = substConInCon' conmap body
 	   in
@@ -451,7 +442,7 @@ functor NilSubstFn(structure Nil : NIL
 	  | Handle_e (exp,v,handler,con) =>
 	   let
 	     val exp = substExpConInExp' maps exp
-	     val function = Function(Partial,Nonleaf,[],[(v,Prim_c(Exn_c,[]))],[],handler,con)
+	     val function = Function(Partial,Arbitrary,[],[(v,Prim_c(Exn_c,[]))],[],handler,con)
 	     val Function(_,_,_,[(v,_)],_,handler,con) = substExpConInFunction' maps function
 	   in
 	     Handle_e (exp,v,handler,con)
@@ -497,19 +488,18 @@ functor NilSubstFn(structure Nil : NIL
     and substExpConInBnd' (bnd,maps as (expmap,conmap)) = 
 	let fun do_funs defs =  
 	    let
-		val (vars,functions) = unzip (set2list defs)
+		val (vars,functions) = unzip (Sequence.toList defs)
 		val (vars,expmap) = exp_rebind_list (vars,expmap)
 		val functions = 
 		    map (substExpConInFunction' (expmap,conmap)) functions
-		val defs = list2set (zip vars functions)
+		val defs = Sequence.fromList (zip vars functions)
 	    in	(defs,(expmap,conmap))
 	    end
         in  (case bnd of
-		 Con_b (var, con) =>
+		 Con_b (phase,cb) =>
 		     let
-			 val con = substConInCon conmap con
-			 val (var,conmap) = con_rebind (var,conmap)
-			 val bnd = (Con_b (var,con))
+			 val (cb,conmap) = substConInConBnd' conmap cb
+			 val bnd = (Con_b (phase,cb))
 		     in
 			 (bnd,(expmap,conmap))
 		     end
@@ -530,10 +520,10 @@ functor NilSubstFn(structure Nil : NIL
 				     end
 	       | Fixclosure_b (flag,defs) => 
 		      let
-			  val (vars,closures) = unzip (set2list defs)
+			  val (vars,closures) = unzip (Sequence.toList defs)
 			  val (vars,expmap) = exp_rebind_list (vars,expmap)
 			  val closures = map (substExpConInClosure' (expmap,conmap)) closures
-			  val defs = list2set (zip vars closures)
+			  val defs = Sequence.fromList (zip vars closures)
 			  val bnd = Fixclosure_b (flag,defs)
 		      in  (bnd,(expmap,conmap))
 		      end)

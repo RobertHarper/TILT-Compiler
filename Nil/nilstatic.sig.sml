@@ -63,6 +63,7 @@ signature NILSTATIC =
       *)
 
     val get_shape : context -> Nil.con -> Nil.kind
+    val make_shape : context -> Nil.kind -> Nil.kind
 
     (* bool indicates progress if true *)
     type con_subst

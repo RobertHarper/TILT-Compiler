@@ -55,6 +55,7 @@ signature NILCONTEXT =
      * kind.  Note that in the case of transparency, SOME ... will be returned.
      * A NONE denotes the path is at least partially opaque.
      *)
+    val find_shape_kind    : context * var -> kind
     val find_kind          : context * var -> kind
     val remove_kind        : context * var -> context
     val find_kind_equation : context * con -> con option

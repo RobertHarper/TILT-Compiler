@@ -1,4 +1,4 @@
-(*$import NIL PRIMUTILPARAM *)
+(*$import NIL PRIMUTILPARAM Int32 *)
 functor NilPrimUtilParam(structure Nil : NIL)
     :> PRIMUTILPARAM where type con = Nil.con 
 		       and type exp = Nil.exp 

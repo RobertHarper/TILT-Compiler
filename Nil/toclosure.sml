@@ -133,11 +133,23 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
     (* -------- types and values manipulating functions and related information ------ *)
 
 
+   fun memoize thunk = 
+       let val result = ref NONE
+       in  fn() =>
+	   (case !result of
+		NONE => let val res = thunk()
+			    val _ = result := SOME res
+			in  res
+			    end
+	      | SOME res => res)
+       end
 
     (* -------- code to perform the initial free-variable computation ---------------- *)
     local
-	datatype expentry = GLOBALe | LOCALe of con * frees option ref | SHADOWe of con * frees option ref
-	datatype conentry = GLOBALc | LOCALc of kind * frees option ref | SHADOWc of kind * frees option ref
+	datatype expentry = GLOBALe | LOCALe of con * frees option ref 
+	                            | SHADOWe of con * frees option ref
+	datatype conentry = GLOBALc | LOCALc of (unit->kind) * frees option ref 
+	                            | SHADOWc of (unit->kind) * frees option ref
 	datatype state = STATE of {curfid : fid,
 				   is_top : bool,
 				   ctxt : NilStatic.context,
@@ -187,30 +199,25 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 	val add_boundevars = add_boundevars' false
 
 	fun add_boundcvars reduced (STATE{ctxt,is_top,curfid,boundevars,boundcvars,boundfids},vck_list) = 
-	    let val wrap = (if is_top then (fn _ => GLOBALc) 
-			    else (fn k => LOCALc(k,ref NONE)))
+	    let val wrap = (if is_top 
+				then (fn _ => GLOBALc) 
+			    else (fn k => LOCALc(memoize (fn() => Stats.subtimer("toclosure_make_shape",
+										 NilStatic.make_shape ctxt) k),
+						 ref NONE)))
 		val _ = if reduced 
 			    then (Stats.counter("add_boundcvars_reduced"))()
 			else (Stats.counter("add_boundcvars_unreduced"))()
-		fun folder ((v,copt,kopt),ctxt) =
-		    ((NilContext.find_kind(ctxt,v); ctxt)
-		    handle NilContext.Unbound =>
-			(case (copt,kopt) of
-			  (NONE,SOME k) => NilContext.insert_kind(ctxt,v,k)
-		        | (SOME c, SOME k) => NilContext.insert_kind_equation(ctxt,v,c,k)
-		        | (SOME c, NONE) => error "add_boundcvar with equation but no kind"
-		        | (NONE,NONE) => error "add_boundcvars with no info"))
-		val ctxt' =  foldl folder ctxt vck_list
-
-		fun folder ((v,NONE,SOME k),m) = VarMap.insert(m,v,wrap k)
-		  | folder ((v,_,_),m) = 
-		    let val k = NilContext.find_kind(ctxt',v)
-		    handle NilContext.Unbound => (error "add_boundcvars internal error")
-		    in  VarMap.insert(m,v,wrap k)
-		    end
-		val boundcvars' = foldl folder boundcvars vck_list
-
-					 
+		fun folder ((v,copt,k:kind),(ctxt,boundcvars)) =
+		   let val ctxt = 
+				((NilContext.find_kind(ctxt,v); ctxt)
+				 handle NilContext.Unbound =>
+				     (case copt of
+					  NONE => NilContext.insert_kind(ctxt,v,k)
+					| SOME c => NilContext.insert_kind_equation(ctxt,v,c,k)))
+		       val boundcvars = VarMap.insert(boundcvars,v,wrap k)
+		   in  (ctxt,boundcvars)
+		   end
+		val (ctxt',boundcvars') =  foldl folder (ctxt,boundcvars) vck_list
 
 	    in  STATE{ctxt = ctxt',
 		      is_top = is_top,
@@ -220,8 +227,6 @@ fun show_path (v,labs) = (Ppnil.pp_var v; app (fn l => (print "."; pp_label l)) 
 		      boundfids = boundfids}
 	    end
 
-val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcvars",
-							  add_boundcvars arg1) arg2
 
 	fun add_boundfids shadow (STATE{ctxt,is_top,curfid,boundevars,boundcvars,boundfids},fid_types) = 
 	    let val state = STATE{ctxt=ctxt,
@@ -234,8 +239,8 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	    end
 
 	fun add_boundevar(s,v,c) = add_boundevars(s,[(v,c)])
-	fun add_boundcvar(s,v,k) = add_boundcvars false (s,[(v,NONE, SOME k)])
-	fun add_boundcvar'(s,v,c,k) = add_boundcvars true (s,[(v,SOME c, SOME k)])
+	fun add_boundcvar(s,v,k) = add_boundcvars false (s,[(v,NONE, k)])
+	fun add_boundcvar'(s,v,c,k) = add_boundcvars true (s,[(v,SOME c, k)])
 	    
 	fun is_boundevar(STATE{boundevars,...},evar) = 
 	    (case (VarMap.find(boundevars,evar)) of
@@ -260,7 +265,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	    else (case (VarMap.find(boundcvars,cvar)) of
 			  SOME GLOBALc => NONE
 			| SOME (LOCALc _) => NONE
-			| SOME (SHADOWc k) => SOME k
+			| SOME (SHADOWc (k,f)) => SOME(k(),f)
 			| NONE => error ("cvar_isfree: variable " ^
 					 (var2string cvar) ^ " not bound"))
 
@@ -278,15 +283,14 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 				  if (eq_label(l,l1)) then k1 else search l rest
 				  fun proj (k,[]) = k
 				    | proj (k,l::rest) = 
-				      let val k = 
-					  (case k of
-					       Record_k lvk_seq => search l (Util.sequence2list lvk_seq)
-					     | Singleton_k(_,Record_k lvk_seq,_) => 
-						   search l (Util.sequence2list lvk_seq)
-					     | _ => error "projecting from non-record kind")
+				      let
+					  val k = 
+					      (case k of
+						   Record_k lvk_seq => search l (Sequence.toList lvk_seq)
+						 | _ => error "projecting from non-record kind")
 				      in  proj(k,rest)
 				      end
-			      in  SOME (proj(k,rev labs))
+			      in  SOME (proj(k(),rev labs))
 			      end
 		      | NONE => error ("cpath_isfree: variable " ^
 				(var2string cvar) ^ "not bound"))
@@ -603,25 +607,19 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		fun fun_type(Function(effect,recur,vklist,vclist,vflist,body,c)) = 
 		    AllArrow_c(Open,effect,vklist,(map #2 vclist),TilWord32.fromInt(length vflist),c)
 		fun do_fix frees var_arm_set do_arm do_add get_type =
-		    let val var_arm_list = set2list var_arm_set
+		    let val var_arm_list = Sequence.toList var_arm_set
 			val _ = app (fn (fid,_) => do_add fid) var_arm_list
 			val local_fids_types = map (fn (v,pf) => (v,get_type pf)) var_arm_list
 			val free = (foldl (fn (a,f) => let val f' = do_arm local_fids_types a
 					               in  join_free(f,f')
 						       end)
-				    frees (set2list var_arm_set))
+				    frees (Sequence.toList var_arm_set))
 		    in  (add_boundfids false (state, local_fids_types), free)
 		    end
 		val (state,frees) = 
 		    (case bnd of
-			 Con_b(v,c) => 
-			     let val f = c_find_fv (state,frees) c
-				 val k = NilStatic.get_shape (get_ctxt state) c
-				 val state =  add_boundcvar'(state,v,c,k)
-				 val _ = if (!debug)
-					     then (print "add_boundcvar ";
-						   Ppnil.pp_var v; print "\n")
-					 else ()
+			 Con_b(_,cbnd) => 
+			     let val (f,state) = cbnd_find_fv(cbnd,(frees,state))
 			     in (state, f)
 			     end
 		       | Exp_b(v,c,e) => 
@@ -704,8 +702,57 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 
 
 
+    and nilprim_uses_carg_conservative (np,clist) = 
+	(case np of
+	     record _ => false
+	   | select _ => false
+	   | roll => false
+	   | unroll => false
+	   | project_sum_record _ => false
+	   | project_sum known => true
+	   | _ => true)
 
-
+    and nilprim_uses_carg state (np,clist) = 
+	(case np of
+	     record _ => false
+	   | select _ => false
+	   | roll => false
+	   | unroll => false
+	   | project_sum_record _ => false
+	   | project_sum known =>
+		 let 
+		     val (tagcount,totalcount,carrier) = 
+			 (case (hd clist) of
+			      Prim_c(Sum_c{known,totalcount,tagcount},cons) =>
+				  (tagcount,totalcount,hd cons)
+			    | _ => (case (NilStatic.con_reduce (get_ctxt state,hd clist)) of
+					Prim_c(Sum_c{known,totalcount,tagcount},cons) =>
+					    (tagcount,totalcount,hd cons)
+				      | _ => error "project_sum decoration not reducible to sum type"))
+		     val cons = 
+			 if (TilWord32.equal(totalcount,TilWord32.uplus(tagcount,0w1))) then [carrier]
+			 else (case carrier of
+				   Crecord_c lcons => map #2 lcons
+				 | _ => (case (NilStatic.con_reduce(get_ctxt state, carrier)) of
+					     Crecord_c lcons => map #2 lcons
+					   | _ => error "project_sum decoration reduced to a bad sum type"))
+			     
+		     val which_con = TilWord32.toInt (TilWord32.uminus(known,tagcount))
+		     val field_con = List.nth(cons, which_con)
+		     val irreducible = not(istype_reducible(state,field_con))
+		     val _ = if irreducible
+				 then (Stats.counter
+				       
+				       ("toclosure.irreducible-project_sum")(); 
+				       if (!debug) 
+					   then print "toclosure: irreducible projsum\n" 
+				       else ())
+			     else (if (!debug)
+				       then (print "toclosure: projsum: field_con was reducible:\n"; Ppnil.pp_con field_con; print "\n") else ())
+		 in  irreducible
+		 end
+	   | _ => true)
+	
 
     and e_find_fv arg exp : frees =
 	let val res = e_find_fv' arg exp
@@ -802,49 +849,10 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	       end
 
 	   | Prim_e (NilPrimOp np,clist,elist) =>
-		 let fun cfold(c,f) = c_find_fv (state,f) c
+		 let fun tfold(t,f) = t_find_fv (state,f) t
+		     fun cfold(c,f) = c_find_fv (state,f) c
 		     fun efold(e,f) = e_find_fv (state,f) e
-		     val uses_carg = 
-			 (case np of
-			      record _ => false
-			    | select _ => false
-			    | roll => false
-			    | unroll => false
-			    | project_sum_record _ => false
-			    | project_sum known =>
-				  let 
-				      val (tagcount,totalcount,carrier) = 
-					 (case (hd clist) of
-					   Prim_c(Sum_c{known,totalcount,tagcount},cons) =>
-							(tagcount,totalcount,hd cons)
-					 | _ => (case (NilStatic.con_reduce (get_ctxt state,hd clist)) of
-						   Prim_c(Sum_c{known,totalcount,tagcount},cons) =>
-							(tagcount,totalcount,hd cons)
-						| _ => error "project_sum decoration not reducible to sum type"))
-				      val cons = 
-					  if (TilWord32.equal(totalcount,TilWord32.uplus(tagcount,0w1))) then [carrier]
-					  else (case carrier of
-						    Crecord_c lcons => map #2 lcons
-						      | _ => (case (NilStatic.con_reduce(get_ctxt state, carrier)) of
-							       Crecord_c lcons => map #2 lcons
-							     | _ => error "project_sum decoration reduced to a bad sum type"))
-
-				      val which_con = TilWord32.toInt (TilWord32.uminus(known,tagcount))
-				      val field_con = List.nth(cons, which_con)
-				      val irreducible = not(istype_reducible(state,field_con))
-				      val _ = if irreducible
-					  then (Stats.counter
-
-					       ("toclosure.irreducible-project_sum")(); 
-						if (!debug) 
-						    then print "toclosure: irreducible projsum\n" 
-						else ())
-					      else (if (!debug)
-							then (print "toclosure: projsum: field_con was reducible:\n"; Ppnil.pp_con field_con; print "\n") else ())
-				  in  irreducible
-				  end
-			    | _ => true)
-		     val frees = if (uses_carg)
+		     val frees = if (nilprim_uses_carg state (np,clist))
 				     then foldl cfold frees clist
 				 else frees
 		     val frees = foldl efold frees elist
@@ -948,13 +956,13 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	     (case c of
 		  Prim_c _ => true
 		| Mu_c(_,vcset) => 
-		      let val vclist = set2list vcset
+		      let val vclist = Sequence.toList vcset
 		      in  (case vclist of
 			       [(_,c)] => istype c
 			     | _ => false)
 		      end
 		| Proj_c (Mu_c (_,vcset), l) => 
-		      let val vclist = set2list vcset
+		      let val vclist = Sequence.toList vcset
 			  fun loop n [] = error "bad proj_c(mu_c"
 			    | loop n ((v,c)::rest) = if (eq_label(generate_tuple_label n, l))
 							 then istype c
@@ -991,16 +999,38 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		else constructor_case()
 	    end
 
-	and c_find_fv' (state : state, frees : frees) con : frees =
-	    (case con of
+    and cbnd_find_fv (cbnd,(f,s)) = 
+	(case cbnd of
+	     Con_cb(v,c) => let val f' = c_find_fv (s,f) c
+				val k = Singleton_k c
+				val state = add_boundcvar'(s,v,c,k)
+			    in (f',state)
+			    end
+	   | (Code_cb(v,vklist,c,k)) => (f,s)
+	   | (Open_cb(v,vklist,c,k)) =>
+			    let val _ = add_fun v
+				fun folder((v,k),(f,s)) = 
+				    (k_find_fv (s,f) k,
+				     add_boundcvar(s,v,k))
+				val ls = copy_state s v
+				val (f,ls) = foldl folder (f,ls) vklist
+				val f' = k_find_fv (ls,f) k
+				val f'' = c_find_fv (ls,f') c
+				val _ = add_frees(v,f'')
+				val ak = Arrow_k(Open,vklist,k)
+			    in  (remove_free(s,f''), add_boundcvar(s,v,ak))
+			    end)
+			
+    and c_find_fv' (state : state, frees : frees) con : frees =
+	     (case con of
 		 Prim_c (pc,clist) => foldl (fn (c,f)=> (c_find_fv (state,f) c)) frees clist
 	       | Mu_c (_,vcset) =>
-		     let val vclist = set2list vcset
+		     let val vclist = Sequence.toList vcset
 			 (* we need to alpha-vary since reductions may lead to duplication
 			    of bound variables despite A-normal linearization *)
 			 val (vclist) = alpha_mu (fn v => is_boundcvar(state,v)) (vclist)
-			 val state' = add_boundcvars(state,map (fn (v,_) => (v,NONE,SOME(Word_k Runtime))) vclist)
-		     in  foldl (fn ((v,c),f) => c_find_fv (state',f) c) frees (set2list vcset)
+			 val state' = add_boundcvars(state,map (fn (v,_) => (v,NONE,Type_k)) vclist)
+		     in  foldl (fn ((v,c),f) => c_find_fv (state',f) c) frees (Sequence.toList vcset)
 		     end
 	       (* the types of some primitives like integer equality are Code arrow *)
 	       | AllArrow_c(_,_,vklist,clist,numfloats,c) =>
@@ -1027,8 +1057,8 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 (*				  val frees = join_free(frees,f) *)
 				  (* add classifier first *)
 *)
-				  val k_shape = NilUtil.kill_singleton k
-				  val k = Singleton_k(NilUtil.get_phase k_shape, k_shape,Var_c v)
+(*				  val k_shape = NilUtil.kill_singleton k *)
+				  val k = Singleton_k(Var_c v)
 			      in  free_cvar_add(frees,v,k)
 			      end)
 	       | Typecase_c {arg, arms, default, kind} => 
@@ -1045,27 +1075,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		     end
 	       | Let_c(_,cbnds,c) => 
 		     let 
-			 fun cb_folder (Con_cb(v,c),(f,s)) =
-			     let val f' = c_find_fv (s,f) c
-				 val k = NilStatic.get_shape (get_ctxt s) c
-				 val state = add_boundcvar'(s,v,c,k)
-			     in (f',state)
-			     end
-			   | cb_folder (Code_cb(v,vklist,c,k), (f,s)) = (f,s)
-			   | cb_folder (Open_cb(v,vklist,c,k), (f,s)) =
-			     let val _ = add_fun v
-				 fun folder((v,k),(f,s)) = 
-				     (k_find_fv (s,f) k,
-				      add_boundcvar(s,v,k))
-				 val ls = copy_state s v
-				 val (f,ls) = foldl folder (f,ls) vklist
-				 val f' = k_find_fv (ls,f) k
-				 val f'' = c_find_fv (ls,f') c
-				 val _ = add_frees(v,f'')
-				 val ak = Arrow_k(Open,vklist,k)
-			     in  (remove_free(s,f''), add_boundcvar(s,v,ak))
-			     end
-			 val (f,s) = foldl cb_folder (frees,state) cbnds
+			 val (f,s) = foldl cbnd_find_fv (frees,state) cbnds
 			 val f' = c_find_fv (s,f) c
 (*			 val f' = remove_free(s,f') *)
 		     in  f'
@@ -1083,9 +1093,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 			  in  (case cpath_isfree(state,frees,(v,labels)) of
 			 	NONE => frees
 			      | SOME k => 
-				let val k_shape = NilUtil.kill_singleton k
-				    val k = Singleton_k(NilUtil.get_phase k_shape,k_shape, Proj_c(c,l))
-
+				let val k = Singleton_k(Proj_c(c,l))
 				in  free_cpath_add(frees,(v,labels),k)
 				end)
 			  end
@@ -1098,12 +1106,11 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		 
 	and k_find_fv' (state,frees) kind : frees =
 	    (case kind of
-	    Type_k _ => frees
-	  | Word_k _ => frees
-	  | (Singleton_k (p,k,c)) => (k_find_fv (state,frees) k; (c_find_fv (state,frees) c))
+	    Type_k => frees
+	  | Singleton_k c => (c_find_fv (state,frees) c)
 	  | (Record_k lv_kind_seq) =>
 		 let fun folder (((l,v),k),(f,s)) = (k_find_fv (s,f) k, add_boundcvar(s,v,k))
-		 in  #1(foldsequence folder (frees,state) lv_kind_seq)
+		 in  #1(Sequence.foldl folder (frees,state) lv_kind_seq)
 		 end
 	  | (Arrow_k (_,vklist,k)) =>
 		let fun folder ((v,k),(f,s)) = (k_find_fv (s,f) k, add_boundcvar(s,v,k))
@@ -1241,13 +1248,15 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
    fun fun_rewrite state vars (v,Function(effect,recur,vklist,vclist,vflist,body,tipe)) = 
        let 
 	   val _ = if (!debug)
-		       then (print "\nfun_rewrite v = "; Ppnil.pp_var v; print "\n")
+		       then (print "\n***fun_rewrite v = "; Ppnil.pp_var v; print "\n")
 		   else ()
 	   val {code_var, unpack_var, cenv_var, venv_var, ...} = get_static v
 	   val {freecpaths,freecpaths_map,freeepaths_map=pc_free,...} = get_frees v
 	   (* was kept in reverse order *)
-	   val vkl_free = map (fn p => let val SOME(v,_,k) = PathMap.find(freecpaths_map,p)
-					  val l = Name.internal_label(Name.var2string v)
+	   val vkl_free = map (fn p => let (* the k is shape only *)
+					   val SOME(v,_,k) = PathMap.find(freecpaths_map,p)
+					   val k = Singleton_k(path2con p)
+					   val l = Name.internal_label(Name.var2string v)
 				      in  (p,v,k,l)
 				      end)
 	                     (rev freecpaths)
@@ -1274,11 +1283,12 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 							print ", ")) pc_free;
 			     print "\n")
 		   else ()
+
 	   val num_vkl_free = length vkl_free
 	   val num_pc_free = length pc_free
 	   val cenv_kind = let fun mapper(p,v,k,l) = ((l,Name.derived_var v),k)
 			       val lvk_list = map mapper vkl_free
-			   in  Record_k(Util.list2sequence lvk_list)
+			   in  Record_k(Sequence.fromList lvk_list)
 			   end
 	   val venv_type = let val types = map #4 pc_free
 			       val labs = map #3 pc_free
@@ -1286,11 +1296,12 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 				   then hd types
 			       else Prim_c(Record_c labs, types)
 			   end
+
 	   val vklist_code = vklist @ (map (fn (p,v,k,l) => (v,k)) vkl_free)
 	   val vclist_code = vclist @ (map (fn (path,v',_,c) => (v',c)) pc_free)
 	   val (internal_subst,external_subst,cenv_kind) = 
 	       let 
-		   fun loop is es acc [] = (is,es,Record_k (list2set (rev acc)))
+		   fun loop is es acc [] = (is,es,Record_k (Sequence.fromList (rev acc)))
 		     | loop is es acc (((p,v',_,_),((l,v),k))::rest) = 
 		       let val k' = substConPathInKind(is,k)
 			   val acc' = ((l,v),k')::acc
@@ -1299,8 +1310,8 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		       in  loop is' es' acc' rest
 		       end
 	       in  (case cenv_kind of
-			Record_k lvk_set => loop [] [] [] (Listops.zip vkl_free (set2list lvk_set))
-		      | _ => error "cenb_kind not a record_k")
+			Record_k lvk_set => loop [] [] [] (Listops.zip vkl_free (Sequence.toList lvk_set))
+		      | _ => error "cenv_kind not a record_k")
 	       end
 
 	   val vklist_unpack_almost = map (fn (v,k) => (v,substConPathInKind(external_subst, k))) vklist
@@ -1308,12 +1319,14 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	   val vclist_unpack_almost = vclist @ [(venv_var,venv_type)]
 	   val vclist_unpack = map (fn (v,c) => (v,substConPathInCon (external_subst, c))) vclist_unpack_almost
 
+
 	   val codebody_tipe = c_rewrite state tipe
 
 	   val closure_tipe = AllArrow_c(Closure,effect,
 					 vklist,map #2 vclist,
 					 TilWord32.fromInt(length vflist),codebody_tipe)
 	   val codebody_tipe = substConPathInCon(external_subst,codebody_tipe)
+
 
 	   val code_body = (e_rewrite (copy_state(state,v)) body)
 
@@ -1323,12 +1336,16 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		   val e = e_rewrite state e
 	       in  (e,c)
 	       end
+
+
 	   val cenv = let val lc_list = map (fn (p,v,_,l) => 
 					     let val c = path2con p
 					     in  (l,c_rewrite state c)
 					     end) vkl_free
 		      in  Crecord_c lc_list
 		      end
+
+
 	   val venv = let val labels = map #3 pc_free
 			  val clist = map #4 pc_free
 			  val elist = map (fn (p,_,_,_) => e_rewrite state (path2exp p)) pc_free
@@ -1358,20 +1375,22 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
        let
 	   fun funthing_helper rewriter var_thing_set =
 	       let 
-		   val var_thing_list = set2list var_thing_set
+		   val var_thing_list = Sequence.toList var_thing_set
 		   val vars = map #1 var_thing_list
 		   val pfun_close = map (rewriter vars) var_thing_list
 		   val is_recur = Listops.orfold (fn (x,_,_) => x) pfun_close
 		   val pfun_list = List.concat(map #2 pfun_close)
-		   val pfun_bnd = Fixcode_b (list2set pfun_list)
+		   val pfun_bnd = Fixcode_b (Sequence.fromList pfun_list)
 		   val closure_bnd_list = 
 		       (case (List.concat(map #3 pfun_close)) of
 			    [] => []
-			  | close_list => [Fixclosure_b(is_recur,list2set close_list)])
+			  | close_list => [Fixclosure_b(is_recur,Sequence.fromList close_list)])
 	       in  pfun_bnd :: closure_bnd_list
 	       end
        in (case bnd of
-		(Con_b(v,c)) => [Con_b(v, c_rewrite state c)]
+		(Con_b(p,cb)) => let val cbnds = cbnd_rewrite state cb
+				 in  map (fn cb => Con_b(p,cb)) cbnds
+				 end
 	      | (Exp_b(v,c,e)) => [Exp_b(v,c_rewrite state c, e_rewrite state e)]
 	      | (Fixclosure_b _) => error "there can't be closures while closure-converting"
 	      | (Fixcode_b _) => error "there can't be codes while closure-converting"
@@ -1381,7 +1400,12 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 
 
    and e_rewrite state arg_exp : exp =
-       let (* we do not copy_state for arms since they are not first-class *)
+       let 
+(*
+	   val _ = (print "  e_rewrite called on = \n";
+		    pp_exp arg_exp; print "\n")
+*)
+	   (* we do not copy_state for arms since they are not first-class *)
 	   fun armfun_rewrite (Function(ef,re,vklist,vclist,vflist,e,c)) =
 	   Function(ef,re,map (fn (v,k) => (v, k_rewrite state k)) vklist,
 		    map (fn (v,c) => (v, c_rewrite state c)) vclist,
@@ -1414,7 +1438,14 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 		       in  path_case(v,labels)
 		       end
 	       end
-	  | Prim_e(p,clist,elist) => Prim_e(p,map c_rewrite clist, map e_rewrite elist)
+
+	  | Prim_e(NilPrimOp np,clist,elist) => 
+	       if (nilprim_uses_carg_conservative (np,clist))
+		   then Prim_e(NilPrimOp np,map c_rewrite clist, map e_rewrite elist)
+	       else Prim_e(NilPrimOp np,clist, map e_rewrite elist)
+
+	  | Prim_e(p,clist,elist) => 
+	       Prim_e(p,map c_rewrite clist, map e_rewrite elist)
 
 	  | Const_e v => arg_exp
 	  | Switch_e switch => 
@@ -1485,7 +1516,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	    [Con_cb(v,c_rewrite state c)]
      | cbnd_rewrite state (Open_cb(v,vklist,c,k)) = 
          let val _ = if (!debug)
-			 then (print "cbnd_rewrite v = "; Ppnil.pp_var v; print "\n")
+			 then (print "  cbnd_rewrite v = "; Ppnil.pp_var v; print "\n")
 		     else ()
 	     val (code_var,cenv_var,vkl_free) = 
 		 if (is_fid v)
@@ -1523,7 +1554,7 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 	     val code_cb = Code_cb(code_var, vklist',
 				   (* letc(cbnds,( )) *) 
 				c_rewrite (copy_state(state ,v)) c, k)
-	     val con_env = Crecord_c(map (fn (p,_,_,l) => (l,path2con p)) vkl_free)
+	     val con_env = Crecord_c(map (fn (p,_,_,l) => (l,c_rewrite state (path2con p))) vkl_free)
 	     val k' = Subst.substConInKind 
 			(Subst.fromList [(cenv_var,con_env)]) k
 	     val closure_cb = Con_cb(v,Closure_c (Var_c code_var, con_env))
@@ -1548,8 +1579,8 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
        in
 	(case arg_con of
             Prim_c (primcon,clist) => Prim_c(primcon, map c_rewrite clist)
-	  | Mu_c (ir,vc_set) => Mu_c(ir,Util.list2set 
-					(map (fn (v,c) => (v,c_rewrite c)) (Util.set2list vc_set)))
+	  | Mu_c (ir,vc_set) => Mu_c(ir,Sequence.fromList 
+					(map (fn (v,c) => (v,c_rewrite c)) (Sequence.toList vc_set)))
 	  | Var_c v => path_case(v,[])
 	  | AllArrow_c (ar,effect,vklist,clist,numfloats,c) => 
 		let val vklist' = map (fn(v,k) => (v,k_rewrite state k)) vklist
@@ -1602,12 +1633,11 @@ val add_boundcvars = fn arg1 => fn arg2 => Stats.subtimer("toclosure_add_boundcv
 
   and k_rewrite state arg_kind : kind =
        (case arg_kind of 
-	    Type_k _ => arg_kind
-	  | Word_k _ => arg_kind
-	  | (Singleton_k (p,k,c)) =>  Singleton_k (p,k_rewrite state k, c_rewrite state c)
-	  | (Record_k lvkseq) => let val lvklist = Util.sequence2list lvkseq
+	    Type_k => arg_kind
+	  | Singleton_k c =>  Singleton_k (c_rewrite state c)
+	  | (Record_k lvkseq) => let val lvklist = Sequence.toList lvkseq
 				     val lvklist = map (fn ((l,v),k) => ((l,v),k_rewrite state k)) lvklist
-				 in  Record_k(Util.list2sequence lvklist)
+				 in  Record_k(Sequence.fromList lvklist)
 				 end
 	  | Arrow_k (Open,vklist,k) => 
 		let val vklist' = map (fn (v,k) => (v,k_rewrite state k)) vklist

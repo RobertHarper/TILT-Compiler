@@ -84,15 +84,11 @@ functor Ppnil(structure ArgNil : NIL
 
     fun pp_kind kind =
 	    (case kind of
-		 Type_k Compiletime => String "TYPE_C"
-	       | Type_k Runtime => String "TYPE_R"
-	       | Word_k Compiletime => String "WORD_C"
-	       | Word_k Runtime => String "WORD_R"
+		 Type_k => String "TYPE"
 	       | Record_k lvk_seq => (pp_list (fn ((l,v),k) => HOVbox[pp_label l, String " > ",
 								      pp_var v, String " : ",
 								  pp_kind k])
-				      (sequence2list lvk_seq) ("REC_K{", ",","}", true))
-(*	       | List_k k => pp_region "LIST_K)" ")" [pp_kind k] *)
+				      (Sequence.toList lvk_seq) ("REC_K{", ",","}", true))
 	       | Arrow_k (openness,ks,k) => 
 		     HOVbox[String "Arrow_k(",
 			    pp_openness openness,
@@ -103,16 +99,8 @@ functor Ppnil(structure ArgNil : NIL
 			    String "; ",
 			    pp_kind k,
 			    String ")"]
-	       | Singleton_k (p,k,c) => (pp_region 
-					 (case p of 
-					      Compiletime => "SINGLE_KC(" 
-					    | Runtime => "SINGLE_KR(")
-					 ")" [pp_kind k, String ",", pp_con c]))
+	       | Singleton_k c => (pp_region "SINGLETON(" ")" [pp_con c]))
 
-(*
-    and pp_primcon (Mono_c monocon) = pp_monocon monocon
-      | pp_primcon (List_c listcon) = pp_listcon listcon
-*)
 
     and pp_conbnd (Con_cb(v,c)) : format = Hbox[pp_var v, String " = ", pp_con c]
       | pp_conbnd (Open_cb(v,vklist,c,k)) = 
@@ -183,7 +171,7 @@ functor Ppnil(structure ArgNil : NIL
 					       String ")"]
 	 | Mu_c (flag,vcset) => HOVbox[if flag then String "MU_C(" else String "MU_C_NR(",
 					   (pp_list' (fn (v,c) => HOVbox[pp_var v, String "=", pp_con c])
-					    (sequence2list vcset)),
+					    (Sequence.toList vcset)),
 					   String ")"]
 (*	 | Listcase_c {arg,arms,default} =>HOVbox[String "LISTCASE_C ",
 						  pp_con arg,
@@ -364,15 +352,16 @@ functor Ppnil(structure ArgNil : NIL
 		    if (!elide_bnd)
 			then HOVbox[pp_var v, String " = ", Break, pp_exp e]
 		    else HOVbox[pp_var v, String " : ", pp_con c, String " = ", Break, pp_exp e]
-	      | Con_b (v,c) => HOVbox[pp_var v, String " = ", Break, pp_con c]
-	      | Fixopen_b fixset => let val fixlist = set2list fixset
+	      | Con_b (Runtime,cb) => pp_conbnd cb
+	      | Con_b (Compiletime,cb) => HOVbox[String "COMPILE_TIME ", Break, pp_conbnd cb]
+	      | Fixopen_b fixset => let val fixlist = Sequence.toList fixset
 				    in Vbox(separate (map (pp_fix false) fixlist) Break)
 				    end
-	      | Fixcode_b fixset => let val fixlist = set2list fixset
+	      | Fixcode_b fixset => let val fixlist = Sequence.toList fixset
 				    in Vbox(separate (map (pp_fix true) fixlist) Break)
 				    end
 	      | Fixclosure_b (flag,vceset) => 
-		    let val vcelist = set2list vceset
+		    let val vcelist = Sequence.toList vceset
 		    in pp_list (fn (v,{code,cenv,venv,tipe}) => 
 				HOVbox[pp_var v, 
 				       HOVbox(if (!elide_bnd) then [] else [String " : ", pp_con tipe]),
@@ -395,10 +384,12 @@ functor Ppnil(structure ArgNil : NIL
 	    val temp = (length vclist) + (length vflist)
 	in
 	    Vbox([String (case (is_code,recursive) of
-			    (false,Nonleaf) => "/\\ "
-			  | (false, Leaf) => "/LEAF\\"
-			  | (true, Nonleaf) => "/CODE\\"
-			  | (true, Leaf) => "/LEAFCODE\\"),
+			    (false,Arbitrary) => "/\\ "
+			  | (false,NonRecursive) => "/NORECUR\\"
+			  | (false,Leaf) => "/LEAF\\"
+			  | (true, Arbitrary) => "/CODE\\"
+			  | (true, NonRecursive) => "/NORECUR-CODE\\"
+			  | (true, Leaf) => "/LEAF-CODE\\"),
 		    pp_var v, Break,
 		    pp_region "(" ")"
 		    [HVbox(vkformats @
