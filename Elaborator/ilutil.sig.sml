@@ -72,6 +72,7 @@ signature ILUTIL =
     (* special labels *)
     val mk_lab   : label
     val km_lab   : label
+    val them_lab : label
     val it_lab   : label
     val stamp_lab   : label
     val case_lab : label

@@ -1060,13 +1060,13 @@ structure Toil
 		 end
 
 
-	     fun modsig_helper (name,id,(exp,con)) = 
+	     fun modsig_helper inner_lab (name,id,(exp,con)) = 
 		 let val inner = Name.fresh_named_var ((Name.var2name name) ^ "_inner")
 		     fun poly_case () = 
 			 let 
 			     val sig_poly = SIGNAT_STRUCTURE (NONE,sdecs)
-			     val sbnd = SBND(it_lab, BND_EXP(inner,exp))
-			     val sdec = SDEC(it_lab, DEC_EXP(inner,con))
+			     val sbnd = SBND(inner_lab, BND_EXP(inner,exp))
+			     val sdec = SDEC(inner_lab, DEC_EXP(inner,con))
 			     val inner_sig = SIGNAT_STRUCTURE(NONE, [sdec])
 			     val functor_mod = MOD_FUNCTOR(TOTAL,var_poly,sig_poly,
 							   MOD_STRUCTURE[sbnd],inner_sig)
@@ -1083,9 +1083,9 @@ structure Toil
 			| _ => poly_case())
 		 end
 	     
-	     val (top_sbnd,top_sdec) = modsig_helper (top_var,top_label, top_exp_con)
+	     val (top_sbnd,top_sdec) = modsig_helper them_lab (top_var,top_label,top_exp_con)
 	     val top_sbnd_entry = (SOME top_sbnd, CONTEXT_SDEC top_sdec)
-	     val sbnds_sdecs = map3 modsig_helper (fun_vars,fun_ids,exp_con_list)
+	     val sbnds_sdecs = map3 (modsig_helper it_lab) (fun_vars,fun_ids,exp_con_list)
 	     val sbnds_entries = (map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) 
 				  sbnds_sdecs)
 	 in  top_sbnd_entry :: sbnds_entries

@@ -44,6 +44,7 @@ structure IlUtil
       
     val mk_lab = internal_label "mk"
     val km_lab = internal_label "km"
+    val them_lab = internal_label "them"
     val it_lab = internal_label "it"
     val stamp_lab = internal_label "stamp"
     val case_lab = internal_label "case"
