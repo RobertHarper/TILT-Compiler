@@ -1,0 +1,656 @@
+(* ml.grm
+ *
+ * Copyright 1989,1992 by AT&T Bell Laboratories
+ *)
+
+open Ast ErrorMsg Symbol FastSymbol AstUtil Fixity 
+
+type raw_symbol = FastSymbol.raw_symbol
+
+fun markexp (e as MarkExp _, _, _) = e
+  | markexp(e,a,b) = MarkExp(e,(a,b))
+(*fun markdec((d as MarkDec _, e), _,_) = (d,e)
+  | markdec((d,e),a,b) = (MarkDec(d,(a,b)),e)
+*)
+fun markdec(d as MarkDec _, _,_) = d
+  | markdec(d,a,b) = MarkDec(d,(a,b))
+
+  val asteriskHash = StrgHash.hashString "*"
+  val asteriskString = "*"
+  val equalHash = StrgHash.hashString "="
+  val equalString = "="
+  val bogusHash = StrgHash.hashString "BOGUS"
+  val bogusString = "BOGUS"
+  val quotedBogusHash = StrgHash.hashString "'BOGUS"
+  val quotedBogusString = "'BOGUS"
+  val quotedBogusHash = StrgHash.hashString "'BOGUS"
+  val quotedBogusString = "'BOGUS"
+
+  %%
+  %term
+      EOF | SEMICOLON
+    | ID of FastSymbol.raw_symbol | TYVAR of FastSymbol.raw_symbol
+    | INT of IntInf.int | INT0 of IntInf.int
+    | WORD of IntInf.int
+    | REAL of string
+    | STRING of string 
+    | CHAR of string
+    | ABSTRACTION | ABSTYPE | AND
+    | ARROW | AS | BAR | CASE | DATATYPE | DOTDOTDOT | ELSE | END | EQUALOP
+    | EQTYPE | EXCEPTION | DO | DOT | DARROW | FN | FUN | FUNCTOR | HANDLE 
+    | HASH | IF | IN | INCLUDE | INFIX | INFIXR | LET | LOCAL | NONFIX | OF 
+    | OP | OPEN | OVERLOAD | RAISE | REC | SHARING | SIG | SIGNATURE | STRUCT
+    | STRUCTURE | THEN | TYPE | VAL | WHERE | WHILE | WILD | WITH | WITHTYPE 
+    | ASTERISK | COLON | COLONGT | COMMA | LBRACE | LBRACKET | LPAREN | RBRACE 
+    | RBRACKET | RPAREN | ORELSE | ANDALSO | FUNSIG | VECTORSTART | BEGINQ 
+    | ENDQ of string | OBJL of string | AQID of FastSymbol.raw_symbol
+
+%nonterm ident of FastSymbol.raw_symbol
+       | id of FastSymbol.raw_symbol
+       | int of IntInf.int
+       | op_op of unit
+       | qid of (FastSymbol.raw_symbol ->symbol) -> symbol list 
+       | selector of symbol
+       | tycon of symbol list
+       | tlabel of (symbol * ty)
+       | tlabels  of (symbol * ty) list 
+       | ty' of ty
+       | tuple_ty of ty list
+       | ty of ty
+       | ty0_pc of ty list
+       | match of  rule list
+       | rule of  rule
+       | elabel of  (symbol * exp)
+       | elabels of  (symbol * exp) list
+       | exp_ps of  exp list
+       | exp of  exp 
+       | app_exp of  exp fixitem list
+       | aexp of  exp
+       | exp_list of  exp list
+       | exp_2c  of  exp list
+       | quote of  exp list
+       | ot_list of  exp list
+       | pat of pat
+       | apat of pat fixitem
+       | apat' of  pat
+       | plabel of  (symbol * pat)
+       | plabels of  ((symbol * pat) list * bool)
+       | pat_2c of  pat list
+       | pat_list of  pat list
+       | or_pat_list of  pat list
+       | vb of  vb list
+       | constraint of ty option
+       | rvb of  rvb list
+       | fb' of  clause list
+       | fb of  fb list
+       | apats of pat fixitem list
+       | clause of  clause
+       | tb of tb list
+       | tyvars of tyvar list
+       | tyvar_pc of tyvar list
+       | db of  db list
+       | constrs of  (symbol * ty option) list
+       | constr of  symbol * ty option
+       | eb of  eb list
+       | qid_p of Symbol.symbol list list
+       | fixity of fixity
+       | ldec of dec
+       | exp_pa of   exp list
+       | ldecs of  dec
+       | ops of symbol list
+       | spec_s of  spec list
+       | spec of  spec list
+       | idents of spec list
+       | strspec of  (symbol * sigexp) list
+       | fctspec of  (symbol * fsigexp) list
+       | tyspec of  (symbol * tyvar list * ty option) list
+       | valspec of (symbol * ty) list
+       | exnspec of (symbol * ty option) list
+       | sharespec of spec list
+       | patheqn of (FastSymbol.raw_symbol ->symbol) -> symbol list list
+       | sign of  sigexp
+       | sigconstraint_op of  sigexp sigConst
+       | fsigconstraint_op of fsigexp sigConst
+       | sigb of  sigb list
+       | fsigb of  fsigb list
+       | fsig of  fsigexp
+       | str of  strexp
+       | arg_fct of  (strexp * bool) list
+       | sdecs of  dec
+       | sdecs' of  dec
+       | sdec of  dec
+       | strb of  strb list
+       | fparam of  symbol option * sigexp
+       | fparamList of  (symbol option * sigexp) list
+       | fctb of  fctb list
+       | fct_exp of fsigexp sigConst -> fctexp
+       | interdec of  dec
+
+%verbose
+%pos int
+%arg (error) : pos * pos -> ErrorMsg.complainer
+%start interdec
+%eop EOF SEMICOLON
+%noshift EOF
+
+%nonassoc WITHTYPE
+%right AND
+%right ARROW
+%right DARROW 
+%left DO
+%left ELSE
+%left RAISE
+%right HANDLE
+%left ORELSE
+%left ANDALSO
+%right AS
+%left COLON
+
+
+%name ML
+
+%keyword ABSTRACTION ABSTYPE AND AS CASE DATATYPE DOTDOTDOT ELSE END 
+  EQTYPE EXCEPTION  DO  DARROW  FN  FUN  FUNCTOR  HANDLE
+  IF IN INCLUDE  INFIX  INFIXR  LET  LOCAL  NONFIX  OF  OP
+  OPEN OVERLOAD  RAISE  REC  SHARING  SIG  SIGNATURE  STRUCT
+  STRUCTURE THEN TYPE VAL WHILE WHERE WITH WITHTYPE
+  ORELSE ANDALSO 
+
+%change -> VAL | -> THEN | -> ELSE | -> LPAREN | -> SEMICOLON | 
+        DARROW -> EQUALOP | EQUALOP -> DARROW | AND -> ANDALSO | COLON -> OF |
+        SEMICOLON -> COMMA | COMMA -> SEMICOLON |
+        -> IN ID END | -> ELSE ID
+
+%value ID (rawSymbol(bogusHash,bogusString))
+%value TYVAR (rawSymbol(quotedBogusHash,quotedBogusString))
+%value INT (IntInf.fromInt 1)
+%value INT0 (IntInf.fromInt 0)
+%value WORD (IntInf.fromInt 0)
+%value REAL ("0.0")
+%value STRING ("")
+%value CHAR ("a")
+
+%%
+
+int	: INT		(INT)
+	| INT0		(INT0)
+
+id	: ID		(ID)
+	| ASTERISK	(rawSymbol (asteriskHash,asteriskString))
+
+ident	: ID 		(ID)
+	| ASTERISK	(rawSymbol (asteriskHash,asteriskString))
+	| EQUALOP	(rawSymbol (equalHash,equalString))
+
+op_op	: OP		(error (OPleft,OPright) WARN "unnecessary `op'"
+			       nullErrorBody)
+	| 		()
+
+qid	: ID DOT qid	(fn kind => strSymbol ID :: qid kind)
+	| ident		(fn kind => [kind ident])
+
+selector: id		(labSymbol id)
+	| INT		(Symbol.labSymbol(IntInf.toString INT))
+
+tycon   : ID DOT tycon		(strSymbol ID :: tycon)
+	| ID			([tycSymbol ID])
+
+tlabel	: selector COLON ty	(selector, ty )
+
+tlabels : tlabel COMMA tlabels	(tlabel :: tlabels)
+	| tlabel		([tlabel])
+
+ty'	: TYVAR		(MarkTy (VarTy(Tyv(tyvSymbol TYVAR)),
+				 (TYVARleft,TYVARright)))
+	| LBRACE tlabels
+		 RBRACE (MarkTy(RecordTy tlabels,(LBRACEleft,RBRACEright)))
+	| LBRACE RBRACE	(RecordTy [])
+	| LPAREN ty0_pc RPAREN tycon  
+			(MarkTy(ConTy(tycon,ty0_pc),(tyconleft,tyconright)))
+	| LPAREN ty RPAREN	(ty)
+	| ty' tycon	(MarkTy(ConTy(tycon,[ty']),(tyconleft,tyconright)))
+	| tycon		(MarkTy(ConTy(tycon,[]),(tyconleft,tyconright)))
+
+tuple_ty : ty' ASTERISK tuple_ty 	(ty' :: tuple_ty)
+	 | ty' ASTERISK ty'	 	([ty'1,ty'2])
+
+ty	: tuple_ty	(TupleTy(tuple_ty))
+	| ty ARROW ty	(ConTy([arrowTycon], [ty1,ty2]))
+	| ty' 		(ty')
+	
+ty0_pc	: ty COMMA ty		([ty1,ty2])
+	| ty COMMA ty0_pc 	(ty :: ty0_pc)
+
+match	: rule			([rule])
+	| rule BAR match	(rule :: match)
+
+rule	: pat DARROW exp        (Rule{pat=pat, 
+				      exp=markexp(exp,expleft,expright)})
+
+		(* 	EXPRESSIONS	*)
+
+elabel	: selector EQUALOP exp	(selector,exp)
+
+elabels : elabel COMMA elabels	(elabel :: elabels)
+	| elabel	        ([elabel])
+
+exp_ps	: exp		        ([exp])
+	| exp SEMICOLON exp_ps	(exp :: exp_ps)
+
+exp	: exp HANDLE match	(HandleExp{expr=exp,rules=match})
+
+        | exp ORELSE exp        (OrelseExp(markexp(exp1,exp1left,exp1right),
+					   markexp(exp2,exp2left,exp2right)))
+	 | exp ANDALSO exp      (AndalsoExp(markexp(exp1,exp1left,exp1right),
+					    markexp(exp2,exp2left,exp2right)))
+	 | exp COLON ty	        (ConstraintExp{expr=exp,constraint=ty})
+	 | app_exp	        (FlatAppExp(app_exp))
+	 | FN match	        (markexp(FnExp match, FNleft,matchright))
+	 | CASE exp OF match	(markexp(CaseExp{expr=exp, rules=match},
+					 CASEleft,matchright))
+	 | WHILE exp DO exp	(WhileExp
+                                   {test=markexp(exp1, exp1left, exp1right),
+				    expr=markexp(exp2, exp2left, exp2right)})
+	 | IF exp THEN exp ELSE exp (IfExp{test=exp1,
+				   thenCase=markexp(exp2,exp2left,exp2right),
+				   elseCase=markexp(exp3,exp3left,exp3right)})
+	 | RAISE exp	     (markexp(markexp(RaiseExp exp, expleft,expright),
+				      RAISEleft,expright))
+
+app_exp	: aexp	        ([{item=markexp(aexp,aexpleft,aexpright),
+			   region=(aexpleft,aexpright), fixity=NONE}])
+	| ident		([let val (v,f) = var'n'fix ident
+			    in {item=markexp(VarExp [v],identleft,identright),
+				region=(identleft,identright),
+				fixity=SOME f}
+			    end])
+	| aexp app_exp	({item=markexp(aexp,aexpleft,aexpright),
+			  region=(aexpleft,aexpright), fixity=NONE}
+                            :: app_exp)
+	| ident app_exp (let val (v,f) = var'n'fix ident
+			  in {item=markexp(VarExp [v],identleft,identright),
+			      region=(identleft,identright),
+				fixity=SOME f} :: app_exp
+			 end)
+
+ aexp	: OP ident		(VarExp [varSymbol ident])
+	| ID DOT qid		(VarExp (strSymbol ID :: qid varSymbol))
+	| int			(IntExp int)
+	| WORD			(WordExp WORD)
+	| REAL			(RealExp REAL)
+	| STRING		(StringExp STRING)
+	| CHAR 		        (CharExp CHAR)
+	| HASH selector		(markexp(SelectorExp selector,
+						   HASHleft, selectorright))
+	| LBRACE elabels RBRACE	(markexp(RecordExp elabels, 
+					 LBRACEleft,RBRACEright))
+	| LBRACE RBRACE		(RecordExp nil)
+	| LPAREN RPAREN		(unitExp)
+	| LPAREN exp_ps RPAREN	(SeqExp exp_ps)
+	| LPAREN exp_2c RPAREN	(TupleExp exp_2c)
+	| LBRACKET exp_list RBRACKET     (ListExp exp_list)
+	| LBRACKET RBRACKET	(ListExp nil)
+        | VECTORSTART exp_list RBRACKET (VectorExp exp_list)	  
+        | VECTORSTART RBRACKET  (VectorExp nil) 
+	| LET ldecs IN exp_ps END	
+				(markexp (LetExp{dec=markdec(ldecs,ldecsleft,
+							     ldecsright),
+						 expr=SeqExp exp_ps},
+					  LETleft,ENDright))
+        | AQID                  (VarExp([varSymbol AQID]))
+        | quote                 (ListExp quote)
+
+quote   : BEGINQ ENDQ           ([QuoteExp ENDQ])
+        | BEGINQ ot_list ENDQ   (ot_list @ [QuoteExp ENDQ])
+
+ot_list : OBJL aexp             ([QuoteExp OBJL,AntiquoteExp aexp])
+        | OBJL aexp ot_list     (QuoteExp OBJL :: AntiquoteExp aexp ::
+                                            ot_list)
+
+exp_2c	: exp COMMA exp_2c	(exp :: exp_2c)
+	| exp COMMA exp		([exp1, exp2])
+
+exp_list : exp			([exp])
+	 | exp COMMA exp_list	(exp :: exp_list)
+
+pat	: pat AS pat		(layered(pat1, pat2, 
+					 error(pat1left,pat2right)))
+	| pat COLON ty		(ConstraintPat{pattern=pat, constraint=ty})
+	| apats			(FlatAppPat apats)
+
+apat	: apat'		({item=apat', region=(apat'left,apat'right),
+			  fixity=NONE})
+	| LPAREN pat RPAREN	({item=pat,
+				  region=(LPARENleft,RPARENright),
+				  fixity=NONE})
+	| id			(let val (v,f) = var'n'fix id
+				 in {item=VarPat [v], 
+				     region=(idleft,idright),
+				     fixity=SOME f} end)
+	| LPAREN RPAREN		({item=unitPat,fixity=NONE,
+				  region=(LPARENleft,RPARENright)})
+	| LPAREN pat COMMA  pat_list RPAREN	
+  				({item=TuplePat(pat :: pat_list),
+				  region=(LPARENleft,RPARENright),
+				  fixity=NONE})
+	| LPAREN pat BAR or_pat_list RPAREN
+				({item=OrPat(pat :: or_pat_list),
+				  region=(LPARENleft,RPARENright),
+				  fixity=NONE})
+
+apat'	: OP ident		(VarPat [varSymbol ident])
+	| ID DOT qid		(VarPat (strSymbol ID :: qid varSymbol))
+	| int			(IntPat int)
+	| WORD			(WordPat WORD)
+	| STRING		(StringPat STRING)
+        | CHAR 			(CharPat CHAR)
+	| WILD			(WildPat)
+	| LBRACKET RBRACKET	(ListPat nil)
+	| LBRACKET pat_list 
+		RBRACKET	(ListPat pat_list)
+        | VECTORSTART RBRACKET  (VectorPat nil)
+	| VECTORSTART pat_list 
+		RBRACKET	(VectorPat pat_list)
+	| LBRACE RBRACE		(unitPat)
+	| LBRACE plabels RBRACE	
+		            (let val (d,f) = plabels
+			     in MarkPat(RecordPat{def=d,flexibility=f},
+					(LBRACEleft,RBRACEright)) end)
+
+plabel	: selector EQUALOP pat	((selector,pat))
+	| ID			(labSymbol ID, VarPat [varSymbol ID])
+	| ID AS pat		(labSymbol ID, 
+				 LayeredPat{varPat=VarPat [varSymbol ID], 
+					    expPat=pat})
+	| ID COLON ty		(labSymbol ID,
+				 ConstraintPat{pattern=VarPat [varSymbol ID],
+					       constraint=ty})
+	| ID COLON ty AS pat	(labSymbol ID,
+				 LayeredPat
+				 {varPat=ConstraintPat{pattern=VarPat [varSymbol ID],
+						       constraint=ty},
+				  expPat=pat})
+
+plabels : plabel COMMA plabels	(let val (a,(b,fx))=(plabel, plabels)
+				 in (a::b, fx) end)
+	| plabel		([plabel],false)
+	| DOTDOTDOT		(nil, true)
+
+pat_list: pat			([pat])
+	| pat COMMA pat_list	(pat :: pat_list)
+
+or_pat_list : pat			([pat])
+	    | pat BAR or_pat_list	(pat :: or_pat_list)
+
+vb	: vb AND vb		(vb1 @ vb2)
+	| pat EQUALOP exp	([MarkVb(Vb{exp=exp, pat=pat}, (patleft,expright))])
+
+constraint :	 		(NONE)
+	   | COLON ty	 	(SOME ty)
+
+rvb	: id constraint EQUALOP FN match
+			  (let val (v,f) = var'n'fix id
+	                   in [MarkRvb(Rvb{var=v,fixity=SOME(f,(idleft,idright)),
+					   resultty=constraint,
+			       exp=FnExp match},(idleft,matchright))] end)
+	| OP id constraint EQUALOP FN match
+			  ([MarkRvb(Rvb{var=varSymbol id,fixity=NONE,
+				       resultty=constraint,
+			       exp=FnExp match},(OPleft,matchright))])
+	| rvb AND rvb		(rvb1 @ rvb2)
+
+fb'	: clause		([clause])
+	| clause BAR fb'	(clause :: fb')
+
+fb	: fb'			([MarkFb(Fb fb', (fb'left,fb'right))])
+	| fb' AND fb		(MarkFb(Fb fb', (fb'left,fb'right)) :: fb)
+
+apats	: apat			([apat])
+	| apat apats		(apat :: apats) 
+
+clause	: apats constraint EQUALOP exp	
+		(Clause{pats=apats,
+			resultty=constraint,
+			exp=markexp(exp,expleft,expright)})
+
+
+tb	: tyvars ID EQUALOP ty	([MarkTb(
+				   Tb{tyvars=tyvars,tyc=tycSymbol ID,def=ty},
+				   (tyleft,tyright))])
+	| tb AND tb		(tb1 @ tb2)
+
+tyvars	: TYVAR			([MarkTyv(Tyv(tyvSymbol TYVAR),
+					 (TYVARleft,TYVARright))])
+	| LPAREN tyvar_pc RPAREN  (tyvar_pc)
+	|			  (nil)
+
+tyvar_pc: TYVAR	([MarkTyv(Tyv(tyvSymbol TYVAR), (TYVARleft,TYVARright))])
+	| TYVAR COMMA tyvar_pc
+		(MarkTyv(Tyv(tyvSymbol TYVAR),(TYVARleft,TYVARright))
+		 :: tyvar_pc)
+
+db	: db AND db			(db1 @ db2)
+	| tyvars ident EQUALOP constrs	([Db{tyc=tycSymbol ident,
+					     tyvars=tyvars,
+					     def=constrs}])
+
+constrs : constr		([constr])
+	| constr BAR constrs	(constr :: constrs)
+
+constr	: op_op ident		(varSymbol ident,NONE)
+	| op_op ident OF ty	(varSymbol ident, SOME ty)
+
+eb	: op_op ident		([EbGen{exn=(varSymbol ident),etype=NONE}])
+	| op_op ident OF ty	([EbGen{exn=(varSymbol ident),etype=SOME ty}])
+	| op_op ident EQUALOP qid	([EbDef{exn=varSymbol ident,
+					edef=qid varSymbol}])
+	| eb AND eb		(eb1 @ eb2)
+
+qid_p	: qid			([qid strSymbol])
+	| qid qid_p		(qid strSymbol :: qid_p)
+
+fixity	: INFIX			(infixleft 0)
+	| INFIX int		(infixleft (checkFix(IntInf.toInt int,error(intleft,intright))))
+	| INFIXR		(infixright 0)
+	| INFIXR int		(infixright (checkFix(IntInf.toInt int,error(intleft,intright))))
+	| NONFIX		(NONfix)
+
+ldec	: VAL vb		(ValDec (vb,ref []))
+	| VAL REC rvb		(ValrecDec (rvb,ref []))
+	| FUN fb		(FunDec (fb,ref []))
+	| TYPE tb		(TypeDec tb)
+	| DATATYPE db		(DatatypeDec{datatycs=db,withtycs=[]})
+ 	| DATATYPE db WITHTYPE tb  (DatatypeDec{datatycs=db,withtycs=tb})
+	| ABSTYPE db WITH ldecs END (AbstypeDec{abstycs=db,withtycs=[],
+						body=ldecs})
+	| ABSTYPE db WITHTYPE tb WITH ldecs END  (AbstypeDec{abstycs=db,
+							     withtycs=tb,
+							     body=ldecs})
+	| EXCEPTION eb		(ExceptionDec eb)
+	| OPEN qid_p		(OpenDec qid_p)
+	| fixity ops		(FixDec{fixity=fixity, ops=ops})
+	| OVERLOAD ident COLON ty AS exp_pa
+				(OvldDec(varSymbol ident,ty,exp_pa))
+
+exp_pa	: exp			([exp])
+	| exp AND exp_pa	(exp :: exp_pa)
+
+ldecs	: 			(SeqDec nil)
+	| ldec ldecs  		(makeSEQdec 
+				 (markdec(ldec,ldecleft,ldecright), ldecs))
+	| SEMICOLON ldecs	(ldecs)
+	| LOCAL ldecs IN ldecs END ldecs	
+ 		(makeSEQdec
+ 		   (markdec(LocalDec(markdec(ldecs1,ldecs1left,ldecs1right),
+				     markdec(ldecs2,ldecs2left,ldecs2right)),
+			    LOCALleft,ENDright),
+ 	            ldecs3))
+
+ops	: ident			([fixSymbol ident])
+	| ident ops 		(fixSymbol ident :: ops)
+
+spec_s	: 			([])
+	| spec spec_s		(spec @ spec_s)
+	| SEMICOLON spec_s	(spec_s)
+
+spec	: STRUCTURE strspec	([StrSpec strspec])
+        | FUNCTOR fctspec	([FctSpec fctspec])
+	| DATATYPE db		([DataSpec{datatycs=db,withtycs=nil}])
+	| DATATYPE db WITHTYPE tb ([DataSpec{datatycs=db,withtycs=tb}])
+	| TYPE tyspec		([TycSpec(tyspec,false)])
+	| EQTYPE tyspec		([TycSpec(tyspec,true)])
+	| VAL valspec		([ValSpec valspec])
+	| EXCEPTION exnspec	([ExceSpec exnspec])
+	| fixity ops		([FixSpec {fixity=fixity, ops=ops}])
+	| SHARING sharespec	(sharespec)
+	| INCLUDE idents	(idents)
+
+idents	: ident			([IncludeSpec(FastSymbol.sigSymbol ident)])
+	| ident idents		(IncludeSpec(FastSymbol.sigSymbol ident)
+				 :: idents)
+
+strspec	: strspec AND strspec	(strspec1 @ strspec2)
+	| ident COLON sign	([(strSymbol ident, sign)])
+
+fctspec	: fctspec AND fctspec	(fctspec1 @ fctspec2)
+	| ident fsig		([(fctSymbol ident, fsig)])
+
+tyspec	: tyspec AND tyspec	(tyspec1 @ tyspec2)
+	| tyvars ID		([(tycSymbol ID,tyvars,NONE)])
+        | tyvars ID EQUALOP ty  ([(tycSymbol ID,tyvars,SOME ty)])
+
+valspec	: valspec AND valspec	(valspec1 @ valspec2)
+	| op_op ident COLON ty  ([(varSymbol ident,ty)])
+
+
+exnspec : exnspec AND exnspec	(exnspec1 @ exnspec2)
+	| ident			([(varSymbol ident,NONE)])
+	| ident OF ty		([(varSymbol ident,SOME ty)])
+
+sharespec: sharespec AND sharespec	(sharespec1 @ sharespec2)
+	 | TYPE patheqn	([MarkSpec(ShatycSpec(patheqn tycSymbol),
+				   (patheqnleft,patheqnright))])
+	 | patheqn	([MarkSpec (ShareSpec (patheqn strSymbol),
+				    (patheqnleft,patheqnright))])
+	
+patheqn: qid EQUALOP qid	(fn kind => [qid1 kind, qid2 kind])
+       | qid EQUALOP patheqn	(fn kind => qid kind :: patheqn kind)
+
+sign	: ident			(MarkSig(VarSig (sigSymbol ident),
+				         (identleft,identright)))
+	| SIG spec_s END	(MarkSig(SigSig(spec_s),
+	 				 (spec_sleft,spec_sright)))
+        | sign WHERE TYPE tyvars qid EQUALOP ty
+	                        (MarkSig(AugSig(sign,qid tycSymbol,tyvars,ty),
+	 				 (signleft,tyright)))
+
+sigconstraint_op :		(NoSig)
+	| COLON sign		(Transparent(sign))
+ 	| COLONGT sign		(Opaque(sign))
+
+fsigconstraint_op :		(NoSig)
+	| COLON ident		(Transparent(VarFsig (fsigSymbol ident)))
+ 	| COLONGT ident		(Opaque(VarFsig (fsigSymbol ident)))
+
+sigb	: sigb AND sigb		(sigb1 @ sigb2)
+	| ident EQUALOP sign	([Sigb{name=sigSymbol ident,def=sign}])
+
+fsigb	: fsigb AND fsigb	(fsigb1 @ fsigb2)
+	| ident fparamList EQUALOP sign
+		([Fsigb{name=fsigSymbol ident,
+			def=FsigFsig{param=fparamList,def=sign}}])
+
+fsig	: COLON ident	(VarFsig (fsigSymbol ident))
+	| fparamList COLON sign
+			(FsigFsig{param=fparamList,def=sign})
+
+str	: qid	((MarkStr(VarStr(qid strSymbol),(qidleft,qidright))))
+	| STRUCT sdecs END	
+		(MarkStr(StructStr sdecs,(STRUCTleft,ENDright)))
+	| qid arg_fct
+		(MarkStr(AppStr(qid fctSymbol,arg_fct), 
+			 (qidleft,arg_fctright)))
+	| LET sdecs IN str END	
+		(MarkStr(LetStr(sdecs, str), (LETleft,ENDright)))
+
+arg_fct : LPAREN sdecs RPAREN arg_fct   ((MarkStr(StructStr sdecs,
+						  (sdecsleft,sdecsright)),
+					  false) :: arg_fct)
+	| LPAREN str RPAREN arg_fct	((str, true) :: arg_fct)
+	| LPAREN str RPAREN 		([(str, true)])
+	| LPAREN sdecs RPAREN 		([(MarkStr(StructStr sdecs,
+						   (sdecsleft,sdecsright)),
+					   false)])
+
+sdecs	: sdec sdecs		(makeSEQdec (markdec(sdec,sdecleft,sdecright),
+					     sdecs))
+	| SEMICOLON sdecs	(sdecs)
+	|			(SeqDec[])
+
+sdecs'	: sdec sdecs'		(makeSEQdec (markdec(sdec,sdecleft,sdecright),
+					     sdecs'))
+	| sdec			(markdec(sdec, sdecleft,sdecright))
+
+sdec	: STRUCTURE strb	(StrDec strb)
+	| ABSTRACTION strb	(AbsDec strb)
+	| SIGNATURE sigb	(SigDec sigb)
+	| FUNSIG fsigb		(FsigDec fsigb)
+	| FUNCTOR fctb		(FctDec fctb)
+	| LOCAL sdecs IN sdecs END (LocalDec(markdec(sdecs1,
+						     sdecs1left,sdecs1right),
+				    markdec(sdecs2,sdecs2left,sdecs2right)))
+	| ldec			(markdec(ldec,ldecleft,ldecright))
+
+strb	: ident sigconstraint_op EQUALOP str
+	   		([MarkStrb(Strb{name = strSymbol ident,def = str, 
+					constraint=sigconstraint_op},
+				   (identleft,strright))])
+	| strb AND strb		(strb1 @ strb2)
+
+fparam	: ID COLON sign		((SOME(strSymbol ID),sign))
+	| spec_s		((NONE,MarkSig(SigSig(spec_s), 
+					       (spec_sleft,spec_sright))))
+
+fparamList
+	: LPAREN fparam	RPAREN			([fparam])
+	| LPAREN fparam RPAREN fparamList	(fparam :: fparamList)
+
+fctb	: ident fparamList sigconstraint_op EQUALOP str
+		([MarkFctb(Fctb {name = fctSymbol ident,
+					   def = FctFct{params=fparamList,
+							body=str,
+					  		constraint=
+							  sigconstraint_op}},
+			   (identleft,strright))])
+	| ident fsigconstraint_op EQUALOP fct_exp
+		    ([MarkFctb(Fctb {name=fctSymbol ident,
+				    def=fct_exp (fsigconstraint_op)},
+			      (identleft,fct_expright))])
+	| fctb AND fctb		(fctb1 @ fctb2)
+
+fct_exp: qid	(fn constraint => VarFct(qid fctSymbol,constraint))
+       | qid arg_fct
+  		(fn constraint =>
+		    MarkFct(AppFct(qid fctSymbol,arg_fct,constraint),
+			    (qidleft,arg_fctright)))
+       | LET sdecs IN fct_exp END	
+		(fn constraint =>
+		   MarkFct(LetFct(sdecs, fct_exp constraint),
+		   (LETleft,ENDright)))
+
+interdec: sdecs'	(markdec(sdecs',sdecs'left,sdecs'right))
+
+	| exp		(markdec(ValDec([Vb{exp=exp,pat=VarPat itsym}],ref []),
+				 expleft,expright))
+
+(*
+ * $Log$
+# Revision 1.1  97/03/21  15:24:23  pscheng
+# added our local version of the parser
+# asthelp.* and name* migrated from Util directory
+# 
+ * Revision 1.2  1997/01/28  23:20:44  jhr
+ * Integer and word literals are now represented by IntInf.int (instead of
+ * as strings).
+ *
+ *)
