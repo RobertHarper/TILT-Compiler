@@ -295,6 +295,8 @@ struct
 					(fn w => (float(F64,Float.toString(real(TilWord64.toInt w)))))
 	  | (int2uint(is1,is2), [], [v]) => objunary (value2int is1) (fn w => uint(is2,w))
 	  | (uint2int(is1,is2), [], [v]) => objunary (value2int is1) (fn w => int(is2,w))
+	  | (int2int(is1,is2), [], [v]) => objunary (value2int is1) (fn w => int(is2,w))
+	  | (uint2uint(is1,is2), [], [v]) => objunary (value2int is1) (fn w => uint(is2,w))
 	  | (uinta2uinta(is1,is2),_,_) => error "UNIMP"
 	  | (uintv2uintv(is1,is2),_,_) => error "UNIMP"
 

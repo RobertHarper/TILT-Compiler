@@ -2441,7 +2441,7 @@ end (* local defining splitting context *)
 		     print "\n")
 		else
 		    ()
-	    val _ = msg "tonil.sml: initial splitting context computed\n"
+	    val _ = msg "Initial context is phase-split\n"
 
 	    (* Phase-split the bindings *)
 	    val {cbnd_cat, ebnd_cat, final_context, ...} =
@@ -2451,7 +2451,7 @@ end (* local defining splitting context *)
 	    val bnds = cbnds @ ebnds
 	    val (nil_initial_context,used) = filter_NILctx initial_splitting_context
 	    val (nil_final_context,_) = filter_NILctx final_context
-	    val _ = msg "---bindings phase-split\n" 
+	    val _ = msg "Bindings are phase-split\n" 
 
 	     (* Filter out the unused imports *)
 	    fun filter_imports [] = ([], used)
@@ -2501,7 +2501,7 @@ end (* local defining splitting context *)
 			     in  exports
 			     end)
 	    val exports : export_entry list = rev(foldr folder [] sdecs)
-	    val _ = msg "---done phase-splitting\n" 
+	    val _ = msg "Exports are phase-split\n" 
 
 	    val nilmod = MODULE{bnds = bnds, 
 				imports = imports,

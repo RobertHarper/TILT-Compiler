@@ -997,15 +997,13 @@ struct
 	   val num_pc_free = length pc_free
 	   val is_empty = num_pc_free = 0
 
-	   val (internal_subst, code_cbnds, cenv, cenv_kind) =
+	   val (internal_subst, code_cbnds, cenv) =
 	       let val cbnds = map (fn (_,v',_,l) => Con_b(Runtime, (Con_cb(v',
 								Proj_c(Var_c cenv_var, l))))) vkl_free
 		   val cenv = Crecord_c(map (fn (v,_,_,l) => (l,c_rewrite state (Var_c v))) vkl_free)
-		   val kind = Record_k(Sequence.fromList
-				       (map (fn (v,_,k,l) => ((l,derived_var v),k)) vkl_free))
 		   val subst = foldl (fn ((v,_,_,l),s) => NilSubst.C.sim_add s (v,Proj_c(Var_c cenv_var, l)))
 				(NilSubst.C.empty()) vkl_free
-	       in  (subst, cbnds, cenv, kind)
+	       in  (subst, cbnds, cenv)
 	       end
 
 
@@ -1068,9 +1066,14 @@ struct
 		     end)
 
 
-	   fun vc_mapper (v,tr,c) = (v,trace_rewrite state (NilSubst.substConInTrace internal_subst tr),
-				       c_rewrite state (NilSubst.substConInCon internal_subst c))
-	   val vklist_code = tFormals @ [(cenv_var,cenv_kind)]
+	   fun vc_mapper (v,tr,c) = 
+	       let val tr = trace_rewrite state (NilSubst.substConInTrace internal_subst tr)
+		   val _ = (print "trace: "; Ppnil.pp_trace tr; print "  -->  ";
+			    Ppnil.pp_trace tr'; print "\n")
+	       in  (v, trace_rewrite state (NilSubst.substConInTrace internal_subst tr),
+		    c_rewrite state (NilSubst.substConInCon internal_subst c))
+	       end
+	   val vklist_code = tFormals @ [(cenv_var,Single_k cenv)]
 	   val vclist_code = map vc_mapper (eFormals @ [(venv_var,venv_tr,venv_type)])
 	   val code_fun = Function{effect=effect,recursive=recursive,isDependent=isDependent,
 				   tFormals=vklist_code,
