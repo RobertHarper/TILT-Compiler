@@ -206,3 +206,4 @@ m0064	exceptions
 m0065	exceptions
 m0066	exponential polymorphic instantiation
 m0067	factorial
+m0068	loop with comparison
