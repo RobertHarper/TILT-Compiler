@@ -45,13 +45,15 @@ struct platformType {
 "DEC4000",     8, 32, 50.0, 4, 8192, 5, 8192, 5,1048576, 5, 6.25,  50.0,  50.0,  75.0, 182.0,   0.0,
 "DEC7000",     8, 32, 50.0, 4, 8192, 5, 8192, 5,4194304, 6, 5.50,  82.5,  82.5,  82.5, 400.0,   0.0,
 "DEC10000",    8, 32, 50.0, 4, 8192, 5, 8192, 5,4194304, 6, 5.00,  75.0,  75.0,  75.0, 400.0,   0.0,
+#if 0
 "DEC2100_A50", 8, 32, 50.0, 4,16384, 5,16384, 5,2097152, 5, 6.66,  66.6,  66.6,  99.9, 260.0, 190.0, /* 1 */
+#endif
            "", 0,  0,  0.0, 0,    0, 0,    0, 0,      0, 0,  0.0,   0.0,   0.0,   0.0,   0.0,   0.0
 	   };
 
-/* 1: [pds 8/9/00] DEC2100_A50 is the AlphaStations 250 4/266 which uses
-   a 266MHz Alpha 21064A chip.  The cache sizes (in bytes) are correct.
-   Everything else is copied from DEC3000_500.
+/* 1: DEC2100_A50 is the AlphaStations 250 4/266 which uses a 266MHz Alpha
+   21064A chip.  The cache sizes (in bytes) are correct.  Everything else
+   is copied from DEC3000_500 and ignored by TILT.
 */
 
 typedef struct platformType PlatformType;
