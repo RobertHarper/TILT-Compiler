@@ -39,6 +39,14 @@ structure Listops :> LISTOPS =
 	in unzip4_loop abcd_list ([],[],[],[])
 	end
 
+    fun unzip5 abcde_list = 
+	let fun unzip5_loop [] (aa,bb,cc,dd,ee) = 
+	          (rev aa, rev bb, rev cc, rev dd, rev ee)
+	      | unzip5_loop ((a,b,c,d,e)::rest) (aa,bb,cc,dd,ee) = 
+	  unzip5_loop rest (a::aa,b::bb,c::cc,d::dd,e::ee)
+	in unzip5_loop abcde_list ([],[],[],[],[])
+	end
+
     val all = List.all
 
     fun all2 pred = 
