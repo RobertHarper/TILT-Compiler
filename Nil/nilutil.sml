@@ -11,7 +11,7 @@ functor NilUtilFn(structure ArgNil : NIL
 		  and type ArgNil.exp = Subst.exp
 		  and type ArgNil.con = Subst.con
 		  and type ArgNil.kind = Subst.kind) 
-  :(*>*) NILUTIL where structure Nil = ArgNil 
+  :(*>*) NILUTIL where Nil = ArgNil 
 		   and type alpha_context = Alpha.alpha_context =
 struct
 
@@ -50,8 +50,8 @@ struct
   val string_con = Prim_c(Vector_c,[Prim_c(Int_c Prim.W8,[])])
   val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
   val match_exn = Prim_e(NilPrimOp (inj_exn "match"),[unit_con],[match_tag,unit_exp])
-  val false_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w0}),[],[])
-  val true_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w1}),[],[])
+  val false_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,sumtype=0w0}),[],[])
+  val true_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,sumtype=0w1}),[],[])
   val int_con = Prim_c(Int_c Prim.W32,[])
   val char_con = Prim_c(Int_c Prim.W8,[])
 

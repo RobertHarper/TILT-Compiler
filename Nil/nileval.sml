@@ -239,9 +239,9 @@ functor NilEvaluate (structure Nil : NIL
 				      | NONE => error "select given bad argument")
 			       end
 			 | _ => error "select given bad argument")
-		| inject {tagcount, field} => default
-		| inject_record (info as {tagcount, field}) => 
-		      let val reccon = List.nth(clist, TilWord32.toInt field)
+		| inject {tagcount, sumtype} => default
+		| inject_record (info as {tagcount, sumtype}) => 
+		      let val reccon = List.nth(clist, TilWord32.toInt sumtype)
 			  val (labels,recclist) = 
 			      (case reccon of
 				   Prim_c(Record_c labels, recclist) => (labels, recclist)
@@ -257,8 +257,10 @@ functor NilEvaluate (structure Nil : NIL
 		      (case elist of
 			   [Prim_e(NilPrimOp(inject info), _, [injected])] =>
 			       (case injected of
-				    Prim_e(NilPrimOp(record _), _, recfields) =>
-					List.nth(recfields, TilWord32.toInt field)
+				    Prim_e(NilPrimOp(record labels), _, recfields) =>
+					(case (Listops.assoc_eq(Name.eq_label,field,Listops.zip labels recfields)) of
+					     NONE => error "project_sum_record got bad arg"
+					   | SOME v => v)
 				  | _ => error "project_sum_record given bad arg")
 			 | _ => error "project_sum_record given bad arg")
 		| box_float fs => default
@@ -341,8 +343,8 @@ functor NilEvaluate (structure Nil : NIL
 		     | _ => error "ill-typed int switch")
 	      fun summatch (tagcount,conlist) arg t = 
 		  (case arg of
-		       VALUE(Prim_e(NilPrimOp(inject {tagcount,field}), clist, elist)) =>
-			   if (TilWord32.equal(field,t))
+		       VALUE(Prim_e(NilPrimOp(inject {tagcount,sumtype}), clist, elist)) =>
+			   if (TilWord32.equal(sumtype,t))
 			       then SOME(if TilWord32.ult(t,tagcount)
 					     then ([],[])
 					 else ([],[arg]))

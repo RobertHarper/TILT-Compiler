@@ -1,7 +1,7 @@
 functor Nil(structure ArgAnnotation : ANNOTATION
 	    structure ArgPrim : PRIM)
-	   :(*>*) NIL where structure Prim = ArgPrim 
-		    and structure Annotation = ArgAnnotation =
+	   :(*>*) NIL where Prim = ArgPrim 
+		      and  Annotation = ArgAnnotation =
 struct	
 
   open Util Name Listops
@@ -101,15 +101,15 @@ struct
   datatype nilprim = 
       record of label list       (* record intro *)
     | select of label            (* record field selection *)
-    | inject of {field : w32,
-                 tagcount : w32} (* slow; sum intro *)
-    | inject_record of {field : w32,       (* fast; sum intro where argument is a record  *)
-			tagcount : w32}    (* whose components are individually passed in *)
+    | inject of {tagcount : w32,
+                 sumtype : w32}    (* slow; sum intro *)
+    | inject_record of {tagcount : w32,       (* fast; sum intro where argument is a record *)
+			sumtype : w32}	      (* whose components are individually passed in *)
     | project_sum of {tagcount : w32,
                       sumtype  : w32}         (* slow; given a special sum type, return carried value *)
     | project_sum_record of {tagcount : w32,
 			     sumtype  : w32,
-                             field : w32}     (* fast; given a special sum type of record type, 
+                             field : label}     (* fast; given a special sum type of record type, 
 				                 return the specified field *)
     | box_float of Prim.floatsize   (* boxing floating-points *)
     | unbox_float of Prim.floatsize (* unboxing floating-points *)

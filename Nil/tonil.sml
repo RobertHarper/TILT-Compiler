@@ -26,7 +26,8 @@ functor Tonil(structure ArgIl : IL
 		     and type Subst.exp = ArgNil.exp
 		     and type Subst.kind = ArgNil.kind
 		     and type Subst.subst = ArgNilcontext.subst
-             ) :(*>*) TONIL where structure Il = ArgIl and structure NilContext = ArgNilcontext =
+             ) :(*>*) TONIL where Il = ArgIl 
+                            and NilContext = ArgNilcontext =
 struct
    structure Il = ArgIl
    structure NilContext = ArgNilcontext
@@ -1897,7 +1898,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
      | xexp' context (Il.INJ {carriers, noncarriers, special, inject=NONE}) =
        let
-	   val field = Word32.fromInt special
+	   val sumtype = Word32.fromInt special
 	   val tagcount = Word32.fromInt noncarriers
 	   val cons = map (#1 o (xcon context)) carriers
 	   val con = Prim_c(Sum_c{tagcount = tagcount,
@@ -1905,7 +1906,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 			    cons)
        in
 	   (Prim_e(NilPrimOp (inject {tagcount = tagcount,
-				      field = field}),
+				      sumtype = sumtype}),
 		   cons, []),
 	    con, true)
        end
@@ -1913,7 +1914,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 
      | xexp' context (Il.INJ {carriers, noncarriers, special, inject=SOME il_exp}) =
        let
-	   val field = Word32.fromInt special
+	   val sumtype = Word32.fromInt special
 	   val tagcount = Word32.fromInt noncarriers
 	   val cons = map (#1 o (xcon context)) carriers
 	   val con = Prim_c(Sum_c{tagcount = tagcount,
@@ -1922,7 +1923,7 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val (exp, _, valuable) = xexp context il_exp
        in
 	   (Prim_e(NilPrimOp (inject {tagcount = tagcount,
-				      field = field}),
+				      sumtype = sumtype}),
 		   cons, [exp]),
 	    con, 
 	    valuable)

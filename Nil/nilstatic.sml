@@ -17,7 +17,7 @@ functor NilStaticFn(structure Annotation : ANNOTATION
 			 and type Subst.kind = ArgNil.kind
 			 and type Subst.bnd = ArgNil.bnd
 			 and type Subst.subst = NilContext.subst) :(*>*) NILSTATIC 
-  where structure Nil = ArgNil 
+        where Nil = ArgNil 
 	and type context = NilContext.context = 
 struct	
   
@@ -1016,28 +1016,28 @@ struct
 		printl ("Label "^(label2string label)^" projected from expression");
 		(error "No such label" handle e => raise e))
 	 end
-	| (inject {tagcount,field},cons,exps as ([] | [_])) =>  
+	| (inject {tagcount,sumtype},cons,exps as ([] | [_])) =>  
 	 let
 	   val (cons,kinds) = 
 	     unzip (map (curry2 con_valid D) cons)
-	   val con = Prim_c (Sum_c {tagcount=tagcount,known=NONE},cons) (*Can't propogate field*)
+	   val con = Prim_c (Sum_c {tagcount=tagcount,known=NONE},cons) (*Can't propogate sumtype*)
 	 in
 	   case exps 
 	     of [] => 
-	       if (field < tagcount) then
-		 ((inject {tagcount=tagcount,field=field},cons,[]),con)
+	       if (sumtype < tagcount) then
+		 ((prim,cons,[]),con)
 	       else
 		 (perr_e (Prim_e (NilPrimOp prim,cons,[]));
-		  (error "Illegal injection - field out of range" handle e => raise e))
+		  (error "Illegal injection - sumtype out of range" handle e => raise e))
 	      | argexp::_ =>    
-		 if (tagcount <= field) andalso 
-		   ((Word32.toInt field) < ((Word32.toInt tagcount) + (List.length cons))) then
+		 if (tagcount <= sumtype) andalso 
+		   ((Word32.toInt sumtype) < ((Word32.toInt tagcount) + (List.length cons))) then
 		   let
 		     val (argexp,argcon) = exp_valid (D,argexp)
-		     val con_k = List.nth (cons,Word32.toInt (field-tagcount))
+		     val con_k = List.nth (cons,Word32.toInt (sumtype-tagcount))
 		   in
 		     if alpha_equiv_con (argcon,con_k) then 
-		       ((inject {tagcount=tagcount,field=field},cons,[argexp]),con)
+		       ((prim,cons,[argexp]),con)
 		     else
 		       (perr_e_c_c (argexp,con_k,argcon);
 			(error "Illegal injection - type mismatch in args" handle e => raise e))
@@ -1046,7 +1046,7 @@ struct
 		   (perr_e (Prim_e (NilPrimOp prim,cons,[argexp]));
 		    (error "Illegal injection - field out of range" handle e => raise e))
 	 end
-	| (inject_record {tagcount,field},argcons,argexps) => 
+	| (inject_record {tagcount,sumtype},argcons,argexps) => 
 	 let
 	   val (argcons,argkinds) = 
 	     unzip (map (curry2 con_valid D) argcons)
@@ -1054,10 +1054,10 @@ struct
 	     unzip (map (curry2 exp_valid D) exps)
 	   val con = Prim_c (Sum_c {tagcount=tagcount,known=NONE},argcons) (*can't propogate field*)
 	 in
-	   if (tagcount <= field) andalso 
-	     ((Word32.toInt field) < ((Word32.toInt tagcount) + (List.length argcons))) then
+	   if (tagcount <= sumtype) andalso 
+	     ((Word32.toInt sumtype) < ((Word32.toInt tagcount) + (List.length argcons))) then
 	     let
-	       val con_k = List.nth (argcons,Word32.toInt (field-tagcount))
+	       val con_k = List.nth (argcons,Word32.toInt (sumtype-tagcount))
 	       val (labels,cons) = 
 		 case strip_record con_k
 		   of SOME (ls,cs) => (ls,cs)
@@ -1067,7 +1067,7 @@ struct
 	     in
 	       if c_all2 alpha_equiv_con 
 		 (o_perr_c_c "Length mismatch in record") (expcons,cons) then 
-		 ((inject_record {tagcount=tagcount,field=field},argcons,argexps),con)
+		 ((prim,argcons,argexps),con)
 	       else
 		  (error "Illegal record injection - type mismatch in args" handle e => raise e)
 	     end
@@ -1122,13 +1122,9 @@ struct
 		      in
 			case strip_record con_i
 			  of SOME (labels,cons) =>
-			    if (Word32.toInt field) < List.length labels then
-			      let 
-				val con_j = List.nth (cons,Word32.toInt field) 
-			      in
-				((prim,argcons,[argexp]),con_j)
-			      end
-			    else (error "Project_sum_record field out of range" handle e => raise e)
+			      (case Listops.assoc_eq(Name.eq_label,field,Listops.zip labels cons) of
+				   SOME field_con => ((prim,argcons,[argexp]),field_con)
+				 | NONE => (error "Project_sum_record field out of range" handle e => raise e))
 			   | NONE => 
 			      (perr_c con_i;
 			       (error "Non recrod type in sum record projection" handle e => raise e))

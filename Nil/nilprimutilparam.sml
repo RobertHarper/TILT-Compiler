@@ -37,8 +37,8 @@ functor NilPrimUtilParam(structure Nil : NIL)
 	    let val labels = Listops.mapcount (fn (i,_) => generate_tuple_label(i+1)) clist
 	    in Prim_c(Record_c labels,clist)
 	    end
-	val false_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w0}),[],[])
-	val true_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,field=0w1}),[],[])
+	val false_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,sumtype=0w0}),[],[])
+	val true_exp = Prim_e(NilPrimOp(inject {tagcount=0w2,sumtype=0w1}),[],[])
 	fun bool2exp false = false_exp
 	  | bool2exp true = true_exp
 

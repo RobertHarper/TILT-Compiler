@@ -7,7 +7,7 @@ functor NilContextFn(structure ArgNil : NIL
 		       and type Subst.con = ArgNil.con
 		       and type Subst.exp = ArgNil.exp
 		       and type Subst.kind = ArgNil.kind) :(*>*)
-   NILCONTEXT where structure Nil = ArgNil 
+   NILCONTEXT where Nil = ArgNil 
 	      and type 'a subst = 'a Subst.subst = 
 struct
   structure Nil = ArgNil

@@ -12,6 +12,8 @@ sig
     val compiles : string list -> Nil.module list
     val test : string -> Nil.module
     val il_to_nil : Il.context * Il.sbnds * Il.sdecs -> Nil.module
+
+    val do_opt : bool ref
 end
 
 structure Linknil (* : LINKNIL *) =
@@ -137,6 +139,9 @@ structure Linknil (* : LINKNIL *) =
 			       structure NilStatic = NilStatic
 			       structure NilSubst = NilSubst
 			       structure NilUtil = NilUtil)
+
+    val do_opt = ref true
+
     fun phasesplit debug (ctxt,sbnds,sdecs) : Nil.module = 
 	let
 	    open Nil LinkIl.Il LinkIl.IlContext Name
@@ -430,9 +435,9 @@ structure Linknil (* : LINKNIL *) =
 		else print "Nil typechecking complete (pre-opt)\n"
 	      else ()
 
-	    val nilmod = (Stats.timer("Nil Optimization", NilOpts.do_opts debug)) nilmod  
 
-	    val _ = if debug 
+	    val nilmod = if (!do_opt) then (Stats.timer("Nil Optimization", NilOpts.do_opts debug)) nilmod else nilmod
+	    val _ = if debug andalso (!do_opt)
 			then (print "\n\n=======================================\n\n";
 			      print "nil optimization results:\n";
 			      PpNil.pp_module nilmod;

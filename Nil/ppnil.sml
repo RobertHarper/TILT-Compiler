@@ -3,7 +3,7 @@ functor Ppnil(structure ArgNil : NIL
 	      structure Ppprim : PPPRIM
 	      structure Prim : PRIM
 	      sharing Prim = ArgNil.Prim = Ppprim.Prim)
-	: PPNIL where structure Nil = ArgNil = 
+	: PPNIL where Nil = ArgNil = 
   struct
 
     structure Nil = ArgNil
@@ -241,11 +241,15 @@ functor Ppnil(structure ArgNil : NIL
 	String (case nilprimop of
 		    record labels => "record"
 		  | select label => raise (BUG "pp_nilprimop: control should not reach here")
-		  | inject {field,tagcount} => ("inject" ^ (TilWord32.toDecimalString tagcount) ^ 
-						"_" ^ (TilWord32.toDecimalString field))
-		  | inject_record {field,...} => "inject_record_" ^ (TilWord32.toDecimalString field)
-		  | project_sum {sumtype,...} => "project_sum_" ^ (TilWord32.toDecimalString sumtype)
-		  | project_sum_record {sumtype,...} => "project_sum_rec__" ^ (TilWord32.toDecimalString sumtype)
+		  | inject {tagcount,sumtype} => ("inject" ^ (TilWord32.toDecimalString tagcount) ^ 
+						  "_" ^ (TilWord32.toDecimalString sumtype))
+		  | inject_record {tagcount,sumtype} => ("inject_rec" ^ (TilWord32.toDecimalString tagcount) ^ 
+							 "_" ^ (TilWord32.toDecimalString sumtype))
+		  | project_sum {tagcount,sumtype} => ("project_sum" ^ (TilWord32.toDecimalString tagcount) ^ 
+						       "_" ^ (TilWord32.toDecimalString sumtype))
+		  | project_sum_record {tagcount,sumtype,field} => ("project_sum" ^ (TilWord32.toDecimalString tagcount) ^
+								     "_" ^ (TilWord32.toDecimalString sumtype) ^
+								     "_rec[" ^ (Name.label2string field) ^ "]")
 		  | roll => "roll"
 		  | unroll  => "unroll"
 		  | make_exntag => "make_exntag"

@@ -1,6 +1,6 @@
 functor NilErrorFn(structure ArgNil : NIL
 		   structure PpNil : PPNIL
-		   sharing ArgNil = PpNil.Nil) :(*>*) NILERROR where structure Nil = ArgNil = 
+		   sharing ArgNil = PpNil.Nil) :(*>*) NILERROR where Nil = ArgNil = 
   struct
     val printl = Util.printl
     val lprintl = Util.lprintl

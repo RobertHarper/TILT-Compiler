@@ -94,14 +94,14 @@ sig
       record of label list       (* record intro *)
     | select of label            (* record field selection; takes the record type *)
     | inject of {tagcount : w32,
-                 field : w32}    (* slow; sum intro *)
+                 sumtype : w32}    (* slow; sum intro *)
     | inject_record of {tagcount : w32,       (* fast; sum intro where argument is a record *)
-			field : w32}	      (* whose components are individually passed in *)
+			sumtype : w32}	      (* whose components are individually passed in *)
     | project_sum of {tagcount : w32,
                       sumtype  : w32}         (* slow; given a special sum type, return carried value *)
     | project_sum_record of {tagcount : w32,
 			     sumtype  : w32,
-                             field : w32}     (* fast; given a special sum type of record type, 
+                             field : label}     (* fast; given a special sum type of record type, 
 				                 return the specified field *)
     | box_float of Prim.floatsize   (* boxing floating-points *)
     | unbox_float of Prim.floatsize (* unboxing floating-points *)
