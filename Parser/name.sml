@@ -53,16 +53,17 @@ structure Name :> NAME =
 	 
     val labels_sorted_distinct = all_pairs lt_label
     
-    fun make_counter() = 
-      let
-	val counter = ref 0
-	fun inc() = (counter := (!counter) + 1; !counter)
-      in inc
-      end
+    val var_counter = ref 0
+    val tag_counter = ref 0
+    val label_counter = ref 0
 
-    val var_counter = make_counter()
-    val tag_counter = make_counter()
-    val label_counter = make_counter()
+    fun inc_counter counter = 
+      let val res = !counter
+	  val _ = counter := res + 1
+      in res
+      end
+    fun update_counter counter n = counter := (Int.max(!counter,n + 1))
+
 
     (* these values copied from NJ source env/env.sml *)
     val varInt = 0 and sigInt = 1 and strInt = 2 and fsigInt = 3 and 
@@ -80,12 +81,12 @@ structure Name :> NAME =
     val maxnamespace = 8
     fun namespaceint (hash,str) = hash - (Symbol.number(Symbol.varSymbol str))
 
-    fun fresh_named_var s : var = (var_counter(),s)
-    fun fresh_named_tag s = GTAG(tag_counter(),s)
+    fun fresh_named_var s : var = (inc_counter var_counter,s)
+    fun fresh_named_tag s = GTAG(inc_counter tag_counter,s)
     fun fresh_var   () = fresh_named_var "v"
     fun fresh_tag  () = fresh_named_tag "t"
     fun non_generative_named_var s : var = (0, s)
-    fun gen_var_from_symbol v : var = (var_counter(), Symbol.name v)
+    fun gen_var_from_symbol v : var = (inc_counter var_counter, Symbol.name v)
     fun internal_hash s = Symbol.number(Symbol.varSymbol s) + maxnamespace + 1
     fun internal_label s : label = (internal_hash s,s,false)
     fun open_internal_label s : label = (internal_hash s,s,true)
@@ -94,7 +95,7 @@ structure Name :> NAME =
 
     fun symbol_label s = (Symbol.number s, Symbol.name s, false)
     fun open_symbol_label s = (Symbol.number s, Symbol.name s, true)
-    fun fresh_string s = s ^ "_" ^ Int.toString(label_counter())
+    fun fresh_string s = s ^ "_" ^ Int.toString(inc_counter label_counter)
     fun fresh_internal_label s = internal_label(fresh_string s)
     fun fresh_open_internal_label s = open_internal_label(fresh_string s)
     fun openlabel ((i,s,_) : label) = (i,s,true)
@@ -176,12 +177,18 @@ structure Name :> NAME =
 	    
 	fun blastInVar is = 
 	    let val n = blastInInt is
+		val _ = update_counter var_counter n
 		val str = blastInString is
 	    in  (n, str)
 	    end
 	
 	fun blastOutTag os (GTAG num_str) = blastOutVar os num_str
-	fun blastInTag is = GTAG (blastInVar is)
+	fun blastInTag is = 
+	    let val n = blastInInt is
+		val _ = update_counter label_counter n
+		val str = blastInString is
+	    in  GTAG(n, str)
+	    end
 
 	fun blastOutLabel os (n,str,b) = 
 	    (blastOutInt os n;
@@ -190,6 +197,7 @@ structure Name :> NAME =
 	    
 	fun blastInLabel is = 
 	    let val n = blastInInt is
+		val _ = update_counter label_counter n
 		val str = blastInString is
 		val b = blastInBool is
 	    in  (n, str, b)
