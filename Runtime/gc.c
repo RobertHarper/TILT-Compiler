@@ -571,7 +571,11 @@ void NewStackletFromMutator(Thread_t *curThread, int maxOffset)
 {
   mem_t sp = (mem_t) curThread->saveregs[SP];
   mem_t returnToCaller = (mem_t) curThread->saveregs[ASMTMP2];
+#ifdef solaris
   mem_t returnToCallee = (mem_t) curThread->saveregs[LINK];
+#else
+  mem_t returnToCallee = 0; /* XXX */
+#endif
   Stacklet_t *oldStacklet, *newStacklet;
   StackChain_t *stackChain = curThread->stack;
 
@@ -610,7 +614,11 @@ void PopStackletFromMutator(Thread_t *curThread)
   PopStacklet(curThread->stack);
   newStacklet = CurrentStacklet(curThread->stack);
   curThread->saveregs[SP] = (val_t) StackletPrimaryCursor(newStacklet);
+#ifdef solaris
   curThread->saveregs[LINK] = (val_t) newStacklet->retadd; /* Not really necessary */
+#else
+  assert(0);
+#endif
   curThread->stackLimit = StackletPrimaryBottom(newStacklet);
   Stacklet_KillReplica(newStacklet);
   returnToML(curThread, newStacklet->retadd);

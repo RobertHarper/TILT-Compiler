@@ -42,15 +42,6 @@
 #define typed_swap(t,a,b) { t swap_temp = a; a = b; b = swap_temp; }
 #define arraysize(a) (sizeof(a)/sizeof(*(a)))
 
-/* We need two INLINE because cpp will not (reliably) generate newlines.  */
-#ifdef alpha_osf
-#define INLINE1(funName) #pragma inline funName
-#define INLINE2(funName) static
-#else
-#define INLINE1(funName) 
-#define INLINE2(funName) static inline
-#endif
-
 void init_int(int *, int);
 void init_double(double *, double);
 long FetchAndAdd(long *, int);

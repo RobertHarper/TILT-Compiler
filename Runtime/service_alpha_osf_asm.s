@@ -109,7 +109,7 @@ start_client_getgp1:
 start_client_retadd_val:				# used by stack.c
 	br	$gp, start_client_getgp2
 start_client_getgp2:	
-	ldgp	$gp, 0($gp)				$ fix gp
+	ldgp	$gp, 0($gp)				# fix gp
 	lda	$at, 1($31)
 	stl	$at, notinml_disp(THREADPTR_REG)
 	addq	THREADPTR_REG, MLsaveregs_disp, $0

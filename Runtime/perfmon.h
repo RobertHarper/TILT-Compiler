@@ -3,7 +3,14 @@
 
 
 #ifndef _ASM
+#ifdef solaris
 #include <sys/ioccom.h>
+#endif
+/*
+  #ifdef alpha_osf
+  #include <sys/ioctl.h>
+  #endif
+*/
 
 #define PERFMON_SETPCR			_IOW('P', 1, unsigned long long)
 #define PERFMON_GETPCR			_IOR('P', 2, unsigned long long)

@@ -11,24 +11,21 @@ extern mem_t textstart, textend;
 
 void global_init(void);
 
-INLINE1(IsText)
-INLINE2(IsText)
+INLINE(IsText)
 int IsText(ptr_t addr)
 {
   return (textstart <= addr && addr <= textend);
 }
 
 
-INLINE1(IsGlobalData)
-INLINE2(IsGlobalData)
+INLINE(IsGlobalData)
 int IsGlobalData(ptr_t addr)
 {
   return (datastart <= addr && addr <= dataend);
 	  /* ||	  (RuntimeGlobalData_Start <= addr && addr <= RuntimeGlobalData_End) */
 }
 
-INLINE1(IsTagData)
-INLINE2(IsTagData)
+INLINE(IsTagData)
 int IsTagData(ptr_t addr)
 {
   return (addr <= (ptr_t) 256);

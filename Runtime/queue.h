@@ -34,23 +34,20 @@ void        QueueCopy(Queue_t *target, Queue_t *src);   /* Copies the contents o
 /* void       *Dequeue     (Queue_t *); */
 /* void        Enqueue     (Queue_t *, void *data); */
 
-INLINE1(QueueLength)
-INLINE2(QueueLength)
+INLINE(QueueLength)
 long QueueLength(Queue_t *q)
 {
   int diff = q->end - q->start; /* Up to but not including q->size */
   return (diff >= 0) ? diff : diff + q->size;
 }
 
-INLINE1(QueueIsEmpty)
-INLINE2(QueueIsEmpty)
+INLINE(QueueIsEmpty)
 int QueueIsEmpty(Queue_t *q)
 {
   return (q->start == q->end);
 }
 
-INLINE1(Dequeue)
-INLINE2(Dequeue)
+INLINE(Dequeue)
 void *Dequeue(Queue_t *q)
 {
   void *res;
@@ -63,8 +60,7 @@ void *Dequeue(Queue_t *q)
   return res;
 }
 
-INLINE1(Enqueue)
-INLINE2(Enqueue)
+INLINE(Enqueue)
 void Enqueue(Queue_t *q, void *data)
 {
   if (QueueLength(q) + 2 >= q->size)  /* + 2 since last entry of table cannot be used */
@@ -89,22 +85,19 @@ void resizeStack(Stack_t *ostack, int newSize);
 void allocStack(Stack_t *ostack, int size);     /* allocate the data portion of an existing stack */
 Stack_t *createStack(int size);                 /* make a stack from scratch */
 
-INLINE1(resetStack)
-INLINE2(resetStack)
+INLINE(resetStack)
 void resetStack(Stack_t *oStack)
 {
   oStack->cursor = 0;
 }
 
-INLINE1(lengthStack)
-INLINE2(lengthStack)
+INLINE(lengthStack)
 int lengthStack(Stack_t *oStack)
 {
   return oStack->cursor;
 }
 
-INLINE1(pushStack)
-INLINE2(pushStack)
+INLINE(pushStack)
 void pushStack(Stack_t *oStack, ptr_t item)
 {
   /* assert(item != NULL); */
@@ -113,8 +106,7 @@ void pushStack(Stack_t *oStack, ptr_t item)
     resizeStack(oStack, 2 * oStack->size);  /* Enough to maintain invariant that it is not full */
 }
 
-INLINE1(pushStack2)
-INLINE2(pushStack2)
+INLINE(pushStack2)
 void pushStack2(Stack_t *oStack, ptr_t item1, ptr_t item2)
 {
   /* assert(item != NULL); */
@@ -126,8 +118,7 @@ void pushStack2(Stack_t *oStack, ptr_t item1, ptr_t item2)
     resizeStack(oStack, 2 * oStack->size);
 }
 
-INLINE1(pushStack3)
-INLINE2(pushStack3)
+INLINE(pushStack3)
 void pushStack3(Stack_t *oStack, ptr_t item1, ptr_t item2, ptr_t item3)
 {
   /* assert(item != NULL); */
@@ -141,8 +132,7 @@ void pushStack3(Stack_t *oStack, ptr_t item1, ptr_t item2, ptr_t item3)
 }
 
 /* Returns NULL if stack is empty */
-INLINE1(popStack)
-INLINE2(popStack)
+INLINE(popStack)
 ptr_t popStack(Stack_t *oStack)
 {
   if (oStack->cursor) {
@@ -152,8 +142,7 @@ ptr_t popStack(Stack_t *oStack)
 }
 
 /* Returns NULL if stack is empty */
-INLINE1(peekStack)
-INLINE2(peekStack)
+INLINE(peekStack)
 ptr_t peekStack(Stack_t *oStack)
 {
   if (oStack->cursor) {
@@ -163,8 +152,7 @@ ptr_t peekStack(Stack_t *oStack)
 }
 
 /* Returns NULL if stack is empty */
-INLINE1(popStack2)
-INLINE2(popStack2)
+INLINE(popStack2)
 ptr_t popStack2(Stack_t *oStack, ptr_t *item2Ref)
 {
   if (oStack->cursor > 1) {
@@ -175,8 +163,7 @@ ptr_t popStack2(Stack_t *oStack, ptr_t *item2Ref)
 }
 
 /* Returns NULL if stack is empty */
-INLINE1(popStack3)
-INLINE2(popStack3)
+INLINE(popStack3)
 ptr_t popStack3(Stack_t *oStack, ptr_t *item2Ref, ptr_t *item3Ref)
 {
   if (oStack->cursor > 2) {
@@ -187,8 +174,7 @@ ptr_t popStack3(Stack_t *oStack, ptr_t *item2Ref, ptr_t *item3Ref)
   return NULL;
 }
 
-INLINE1(isEmptyStack)
-INLINE2(isEmptyStack)
+INLINE(isEmptyStack)
 int isEmptyStack(Stack_t *oStack)
 {
   return oStack->cursor == 0;

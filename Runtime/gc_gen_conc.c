@@ -346,8 +346,7 @@ static void CollectorOn(Proc_t *proc)
 
 }
 
-INLINE1(flipRootLoc)
-INLINE2(flipRootLoc)
+INLINE(flipRootLoc)
 void flipRootLoc(int curGCType, ploc_t root)
 {
   ptr_t primary = *root;

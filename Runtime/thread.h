@@ -218,8 +218,7 @@ void procChangeState(Proc_t *, ProcessorState_t);
 
 long updateWorkDone(Proc_t *proc);
 
-INLINE1(getWorkDone)
-INLINE2(getWorkDone)
+INLINE(getWorkDone)
 long getWorkDone(Proc_t *proc)
 {
   if (--proc->segUsage.counter) {
@@ -229,8 +228,7 @@ long getWorkDone(Proc_t *proc)
   return proc->segUsage.workDone;
 }
 
-INLINE1(recentWorkDone)
-INLINE2(recentWorkDone)
+INLINE(recentWorkDone)
 long recentWorkDone(Proc_t *proc, int recentWorkThreshold)
 {
   int workDone = getWorkDone(proc);

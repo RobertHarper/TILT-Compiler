@@ -64,8 +64,7 @@ void ClearCopyRange(CopyRange_t *copyRange)
 }
 
 /* Since doubleOddAlign and noCheck are statically known, the compiler can greatly simplify the function body */
-INLINE1(allocFromCopyRange)
-INLINE2(allocFromCopyRange)
+INLINE(allocFromCopyRange)
 mem_t allocFromCopyRange(CopyRange_t *copyRange, int byteLen, Align_t align, int noCheck)
 {
   mem_t oldCursor = copyRange->cursor;
@@ -187,8 +186,7 @@ unsigned long objectLength(ptr_t obj, mem_t *start)
 
 /* -------------------------------------------------------------------------- */
 /* Tag is the the tag value when the caller checked.  It may have changed */
-INLINE1(acquireOwnership)
-INLINE2(acquireOwnership)
+INLINE(acquireOwnership)
 tag_t acquireOwnership(Proc_t *proc, ptr_t white, tag_t tag, CopyRange_t *copyRange)
 {
 
@@ -255,8 +253,7 @@ tag_t acquireOwnership(Proc_t *proc, ptr_t white, tag_t tag, CopyRange_t *copyRa
 
 
 
-INLINE1(genericAlloc)
-INLINE2(genericAlloc)
+INLINE(genericAlloc)
 int genericAlloc(Proc_t *proc, ptr_t white, CopyRange_t *copyRange, int doCopy, int doCopyCopy, int skipSpaceCheck, int splitLarge)
 {
   ptr_t obj;                       /* forwarded object */
@@ -556,8 +553,7 @@ typedef enum Transfer__t {NoTransfer, Transfer, SelfTransfer} Transfer_t;
    doCopyWrite - copy-write synchronization; if true, must also have mayTransfer
 */
 
-INLINE1(genericScan)
-INLINE2(genericScan)
+INLINE(genericScan)
 void genericScan(Proc_t *proc, 
 		 ptr_t primaryOrReplicaGray, int start, int end,
 		 Stack_t *localStack, Stack_t *localSegmentStack, CopyRange_t *copyRange,

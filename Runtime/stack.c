@@ -216,8 +216,7 @@ static Callinfo_t *LookupCallinfo(Proc_t *proc, val_t retAdd)
 }
 
 
-INLINE1(resetCursor)
-INLINE2(resetCursor)
+INLINE(resetCursor)
 void resetCursor(CallinfoCursor_t *cursor, Callinfo_t *callinfo)
 {
   cursor->callinfo = callinfo;
@@ -230,8 +229,7 @@ void resetCursor(CallinfoCursor_t *cursor, Callinfo_t *callinfo)
     cursor->RAQuadOffset = LookupSpecialByte(cursor);
 }
 
-INLINE1(PathProject)
-INLINE2(PathProject)
+INLINE(PathProject)
 ptr_t PathProject(ptr_t base, int index)
 {
   ptr_t res = base;
@@ -296,8 +294,7 @@ int should_trace_special(CallinfoCursor_t *cursor, mem_t cur_sp, int regstate,
 }
 
 
-INLINE1(should_trace)
-INLINE2(should_trace)
+INLINE(should_trace)
 int should_trace(unsigned long trace, 
 		 CallinfoCursor_t *cursor, mem_t cur_sp, int regstate,
 		 val_t *data_add, int i)

@@ -11,7 +11,7 @@
 
 #if (defined solaris)
 #define pagesize 8192
-#elif (defined alpha)
+#elif (defined alpha_osf)
 #define pagesize 8192
 #endif
 
@@ -123,8 +123,7 @@ int inSomeHeap(ptr_t v);
 void Heap_Check(Heap_t*);
 void Heap_Reset(Heap_t *);
 int Heap_ResetFreshPages(Heap_t *);
-INLINE1(Heap_TouchPage)
-INLINE2(Heap_TouchPage)
+INLINE(Heap_TouchPage)
 int Heap_TouchPage(Heap_t *h, mem_t addr) /* Returns 1 if fresh */
 {
   int offset = sizeof(val_t) * (addr - h->bottom);

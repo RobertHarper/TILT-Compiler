@@ -1,4 +1,4 @@
-# ------------------------------ Makefile Usage ----------------------------
+# ------------------------------ Makefile Usage ------------------------
 # While in this directory, execute "make target=foo out=goo"
 #
 # This will assume the existence of an "foo.s" file as input.
@@ -6,14 +6,16 @@
 # The object file "foo.o" will be created as an intermediate.
 # By default, the non-threading version is generated.
 # Define "runtime_lib" to be "runtime.hprof.a" to turn on heapprofile.
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------------------
 
-# ------------------------------ Top Targets ----------------------------
+# ------------------------------ Top Targets ---------------------------
+SHELL=/bin/sh
+
 all:
 	echo "Try gmake runtime"
 
 purge:
-	rm -rf obj*/*\.o *~
+	rm -rf obj*/*.o obj*/*.d *~ *.m4.c
 
 test:
 	echo ${asm_name}
@@ -22,7 +24,7 @@ test:
 	echo ${DEBUG}
 	echo ${DEBUG2}
 
-# ------------------------------ General macros --------------------------
+# ------------------------------ General macros ------------------------
 alpha_osf20_sys_name = alpha_osf
 alpha_osf32_sys_name = alpha_osf
 alpha_dux40_sys_name = alpha_osf
@@ -71,8 +73,14 @@ else
 	DODEBUG=
 endif
 
-# --------------------------- C and asm flags ---------------------------
-#CC=gcc -D__C_ASM_H -DGCC
+# --------------------------- M4 and CPP flags ---------------------------------
+
+M4=m4
+M4FLAGS=-D${sys_name} prelude.m4
+CPP=${CC} -E
+CPPFLAGS=-D${sys_name} ${DODEBUG}
+
+# --------------------------- C flags ----------------------------------
 alpha_osf_cc=cc
 solaris_cc=gcc
 # /usr/local/opt/SUNWspro/bin/cc Solaris ANSI C compiler
@@ -83,16 +91,17 @@ solaris_cc=gcc
 # -std will define __STDC__ 
 alpha_osf_cflags=-newc -xtaso -w0 -warnprotos -std -c -inline size -g3 
 solaris_cflags=-O2 -Winline -finline-functions -Wimplicit -Wa,-xarch=v8plus -c -g 
-CC=${${sys_name}_cc} -D${sys_name} ${DODEBUG}
-CFLAGS=${${sys_name}_cflags}
+CC=${${sys_name}_cc}
+CFLAGS=${CPPFLAGS} ${${sys_name}_cflags}
 
-# --------------------------- assembler flag ----------------------------
-alpha_osf_asflags=-O1 -g -Dalpha_osf
+# --------------------------- assembler flag ---------------------------
+alpha_osf_asflags=-O1 -g
 rs_aix_asflags=-mppc -Drs_aix
-solaris_asflags=-xarch=v8plus -P -Dsolaris
-ASFLAGS=${${sys_name}_asflags}
+solaris_asflags=-xarch=v8plus -P
+AS=as
+ASFLAGS=${CPPFLAGS} ${${sys_name}_asflags}
 
-# --------------------------- linker flag, CRT, libs -------------------------
+# --------------------------- linker flag, CRT, libs -------------------
 alpha_osf_ldflags=-D 40000000 -T 20000000 -non_shared
 rs_aix_ldflags=-H512 -T512
 sparc_solaris_ldflags=
@@ -112,13 +121,6 @@ alpha_osf_libs=-lm -lsys5 -lc -lots -lpthreads
 rs_aix_libs=-lm -lsys5 -lc -lots -lpthreads
 sparc_solaris_libs=-lm -lsys5 -lc -lots -lpthreads -lperfmon
 LIBS=${${sys_name}_libs}
-
-
-# --------------------------- Make asm target with default rules --------
-.s.o: thread.h
-	as ${ASFLAGS} -o $@ $*.s
-
-
 
 # ------------------------------ Link Phase ----------------------------
 runtime.${sys_name}.a: ${COREFILES_OBJ}
@@ -149,182 +151,40 @@ ifeq ($(ATOM),1)
 else
 endif
 
-# ------------------------------ Core Code ----------------------------
-${objdir}/firstdata.o: firstdata.c
-	${CC} -o $@ ${CFLAGS} firstdata.c
+# ------------------------------ Compiling -----------------------------
 
-${objdir}/posix.o: general.h posix.c posix.h
-	${CC} -o $@ ${CFLAGS} posix.c
+${objdir}/%.o: %.c
+	${CPP} ${CPPFLAGS} $< | ${M4} ${M4FLAGS} - > $<.m4.c
+	${CC} -o $@ ${CFLAGS} $<.m4.c
+	rm $<.m4.c
 
-${objdir}/global.o: global.h general.h global.c general.h
-	${CC} -o $@ ${CFLAGS} global.c
+${objdir}/%.hprof.o: %.c
+	${CPP} ${CPPFLAGS} -DHEAPPROFILE $< | ${M4} ${M4FLAGS} - > $<.m4.c
+	${CC} -o $@ ${CFLAGS} $<.m4.c
+	rm $<.m4.c
 
-${objdir}/stack.o: stack.c queue.h general.h
-	${CC} -o $@ ${CFLAGS} stack.c
+${objdir}/%.o: %.s
+	$(AS) -o $@ ${ASFLAGS} $<
 
-${objdir}/stack_${ASM}.o: stack_${ASM}.s  general.h
-	as -o $@ ${ASFLAGS} stack_${ASM}.s
+${objdir}/%.hprof.o: %.s
+	$(AS) -o $@ ${ASFLAGS} $<
 
-${objdir}/queue.o: queue.c queue.h
-	${CC} -o $@ ${CFLAGS} queue.c
+# ------------------------------ Dependency analysis -------------------
 
-${objdir}/hash.o: hash.c hash.h
-	${CC} -o $@ ${CFLAGS} hash.c
+# We generate a dependency makefile for each source file.  The sed
+# command adds dependency information for two additional targets: the
+# generated makefile and the heap profiling object file.
 
-${objdir}/thread.o: thread.c memobj.h tag.h general.h thread.h
-	${CC} -o $@ ${CFLAGS} thread.c
+ADD_MAKEFILE_DEP=sed 's,\($*\)\.o[ :]*,\1.o \1.hprof.o $@ : ,g'
+ADD_MAKEFILE_DEP_ASM=sed 's,\($*${ASM}\)\.o[ :]*,\1.o \1.hprof.o $@ : ,g'
 
-${objdir}/signal.o: signal.c tag.h
-	${CC} -o $@ ${CFLAGS} signal.c
+# Dependencies for C source.
+${objdir}/%.d: %.c
+	$(CPP) $(CPPFLAGS) -M $< | $(ADD_MAKEFILE_DEP) > $@
 
-${objdir}/forward.o: forward.c tag.h general.h platform.h forward.h thread.h
-	${CC} -o $@ ${CFLAGS} forward.c
+# Dependencies for assembler source.  ("as -M" doesn't work on solaris.)
+${objdir}/%${ASM}.d: %${ASM}.s
+	makedepend -f- -- $(ASFLAGS) -- $< | $(ADD_MAKEFILE_DEP_ASM) > $@
 
-${objdir}/gc_semi.o: gc_semi.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
-	${CC} -o $@ ${CFLAGS} gc_semi.c
-
-${objdir}/gc_gen.o: gc_gen.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
-	${CC} -o $@ ${CFLAGS} gc_gen.c
-
-${objdir}/gc_large.o: gc_large.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
-	${CC} -o $@ ${CFLAGS} gc_large.c
-
-${objdir}/gc_para.o: gc_para.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
-	${CC} -o $@ ${CFLAGS} gc_para.c
-
-${objdir}/gc_semi_para.o: gc_semi_para.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
-	${CC} -o $@ ${CFLAGS} gc_semi_para.c
-
-${objdir}/gc_gen_para.o: gc_gen_para.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
-	${CC} -o $@ ${CFLAGS} gc_gen_para.c
-
-${objdir}/gc_semi_conc.o: gc_semi_conc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
-	${CC} -o $@ ${CFLAGS} gc_semi_conc.c
-
-${objdir}/gc_gen_conc.o: gc_gen_conc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
-	${CC} -o $@ ${CFLAGS} gc_gen_conc.c
-
-${objdir}/gc.o: gc.c tag.h general.h platform.h forward.h gc.h stack.h thread.h
-	${CC} -o $@ ${CFLAGS} gc.c
-
-${objdir}/gcstat.o: gcstat.c tag.h general.h
-	${CC} -o $@ ${CFLAGS} gcstat.c
-
-${objdir}/gc_${ASM}.o: gc_${ASM}.s  general.h
-	as -o $@ ${ASFLAGS} gc_${ASM}.s
-
-${objdir}/service.o: service.c tag.h  general.h
-	${CC} -o $@ ${CFLAGS} service.c
-
-${objdir}/service_${ASM}.o: service_${ASM}.s  general.h
-	as -o $@ ${ASFLAGS} service_${ASM}.s
-
-${objdir}/exn.o: exn.c tag.h general.h
-	${CC} -o $@ ${CFLAGS} exn.c
-
-${objdir}/create.o: create.c tag.h  general.h
-	${CC} -o $@ ${CFLAGS} create.c
-
-${objdir}/bitmap.o: bitmap.c tag.h
-	${CC} -o $@ ${CFLAGS} bitmap.c
-
-${objdir}/main_nothread.o: main.c tag.h general.h platform.h thread.h
-	${CC} -o $@ ${CFLAGS} main.c -DTHREADED_VERSION=0
-
-
-${objdir}/main_thread.o: main.c tag.h  general.h platform.h thread.h
-	${CC} -o $@ ${CFLAGS} main.c -DTHREADED_VERSION=1
-
-
-${objdir}/show.o: show.c tag.h  general.h
-	${CC} -o $@ ${CFLAGS} show.c
-
-${objdir}/stats.o: stats.c stats.h general.h
-	${CC} -o $@ ${CFLAGS} stats.c
-
-${objdir}/memobj.o: memobj.c tag.h general.h
-	${CC} -o $@ ${CFLAGS} memobj.c
-
-${objdir}/mllib_${ASM}.o: mllib_${ASM}.s  general.h
-	as -o $@ ${ASFLAGS} mllib_${ASM}.s
-
-${objdir}/mllib.o: mllib.c tag.h
-	${CC} -o $@ ${CFLAGS} mllib.c
-
-${objdir}/platform.o: platform.c platform.h
-	${CC} -o $@ ${CFLAGS} platform.c
-
-
-# ---------------------------- Core hprof Code ----------------------------
-${objdir}/global.hprof.o: global.c global.h general.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE global.c
-
-${objdir}/stack.hprof.o: stack.c queue.h general.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE stack.c
-
-${objdir}/stack_${ASM}.hprof.o: stack_${ASM}.s  general.h
-	as -o $@ ${ASFLAGS} stack_${ASM}.s
-
-${objdir}/queue.hprof.o: queue.c queue.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE queue.c
-
-${objdir}/hash.hprof.o: hash.c hash.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE hash.c
-
-${objdir}/thread.hprof.o: thread.c memobj.h tag.h general.h thread.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE thread.c
-
-${objdir}/signal.hprof.o: signal.c tag.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE signal.c
-
-${objdir}/gc.hprof.o: gc.c tag.h general.h platform.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE gc.c
-
-${objdir}/gcstat.hprof.o: gcstat.c tag.h general.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE gcstat.c
-
-${objdir}/gc_${ASM}.hprof.o: gc_${ASM}.s  general.h
-	as -o $@ ${ASFLAGS} gc_${ASM}.s
-
-${objdir}/service.hprof.o: service.c tag.h  general.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE service.c
-
-${objdir}/service_${ASM}.hprof.o: service_${ASM}.s  general.h
-	as -o $@ ${ASFLAGS} service_${ASM}.s
-
-${objdir}/exn.hprof.o: exn.c tag.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE exn.c
-
-${objdir}/create.hprof.o: create.c tag.h  general.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE create.c
-
-${objdir}/bitmap.hprof.o: bitmap.c tag.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE bitmap.c
-
-${objdir}/main_nothread.hprof.o: main.c tag.h general.h platform.h thread.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE main.c -DTHREADED_VERSION=0
-
-
-${objdir}/main_thread.hprof.o: main.c tag.h  general.h platform.h thread.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE main.c -DTHREADED_VERSION=1
-
-
-${objdir}/show.hprof.o: show.c tag.h  general.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE show.c
-
-${objdir}/stats.hprof.o: stats.c stats.h general.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE stats.c
-
-${objdir}/memobj.hprof.o: memobj.c tag.h general.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE memobj.c
-
-${objdir}/mllib_${ASM}.hprof.o: mllib_${ASM}.s  general.h
-	as -o $@ ${ASFLAGS} mllib_${ASM}.s
-
-${objdir}/mllib.hprof.o: mllib.c tag.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE mllib.c
-
-${objdir}/platform.hprof.o: platform.c platform.h
-	${CC} -o $@ ${CFLAGS} -DHEAPPROFILE platform.c
-
-
+# Snarf up the dependency information.
+include $(patsubst %,${objdir}/%.d,${ROOT_OBJ})

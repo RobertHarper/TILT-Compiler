@@ -11,7 +11,9 @@
 #include <sys/procset.h>
 #include <sys/processor.h>
 #include <unistd.h>
+#ifdef solaris
 #include <thread.h>
+#endif
 #include <pthread.h>
 #include "gc.h"
 #include "forward.h"
@@ -159,7 +161,11 @@ void ReleaseJob(Proc_t *proc)
 
   /* Null out thread's version of allocation and write-list */
   stacklet = EstablishStacklet(th->stack, (mem_t) th->saveregs[SP]); /* updates stacklet->cursor */
+#ifdef solaris
   stacklet->retadd = (mem_t) th->saveregs[LINK];
+#else
+  assert(0);
+#endif
   th->saveregs[ALLOCPTR] = 0;
   th->saveregs[ALLOCLIMIT] = 0;
   th->writelistAlloc = 0;

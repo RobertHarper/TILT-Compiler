@@ -102,8 +102,7 @@ int splitAlloc_copyCopySync(Proc_t *, ptr_t obj, CopyRange_t *copyRange);
 /* ------------------------------------------------------- */
 
 /* copy1_noSpaceCheck */
-INLINE1(copy1_noSpaceCheck)
-INLINE2(copy1_noSpaceCheck)
+INLINE(copy1_noSpaceCheck)
 void copy1_noSpaceCheck(Proc_t *proc, ptr_t obj, CopyRange_t *copyRange, Heap_t *from)
 {
   if ((val_t) obj - (val_t)from->range.low < from->range.diff) 
@@ -111,8 +110,7 @@ void copy1_noSpaceCheck(Proc_t *proc, ptr_t obj, CopyRange_t *copyRange, Heap_t 
 }
 
 /* locCopy1_noSpaceCheck */
-INLINE1(locCopy1_noSpaceCheck)
-INLINE2(locCopy1_noSpaceCheck)
+INLINE(locCopy1_noSpaceCheck)
 void locCopy1_noSpaceCheck(Proc_t *proc, ploc_t loc, CopyRange_t *copyRange, Heap_t *from)
 {
   ptr_t obj = *loc;
@@ -123,8 +121,7 @@ void locCopy1_noSpaceCheck(Proc_t *proc, ploc_t loc, CopyRange_t *copyRange, Hea
 }
 
 /* locCopy2L_noSpaceCheck */
-INLINE1(locCopy2L_noSpaceCheck)
-INLINE2(locCopy2L_noSpaceCheck)
+INLINE(locCopy2L_noSpaceCheck)
 void locCopy2L_noSpaceCheck(Proc_t *proc, ploc_t loc, CopyRange_t *copyRange,
 			    Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
@@ -139,8 +136,7 @@ void locCopy2L_noSpaceCheck(Proc_t *proc, ploc_t loc, CopyRange_t *copyRange,
 }
 
 /* copy2L_noSpaceCheck */
-INLINE1(copy2L_noSpaceCheck)
-INLINE2(copy2L_noSpaceCheck)
+INLINE(copy2L_noSpaceCheck)
 void copy2L_noSpaceCheck(Proc_t *proc, ptr_t obj, CopyRange_t *copyRange,
 			 Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
@@ -156,8 +152,7 @@ void copy2L_noSpaceCheck(Proc_t *proc, ptr_t obj, CopyRange_t *copyRange,
    (1) Returns the size of the object (which equals bytesCopied if object was copied).
        Otherwise, object was already copied.
 */
-INLINE1(splitAlloc_primaryStack)
-INLINE2(splitAlloc_primaryStack)
+INLINE(splitAlloc_primaryStack)
 int splitAlloc_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   tag_t tag;
@@ -172,8 +167,7 @@ int splitAlloc_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, Copy
 
 
 /* copy1_copyCopySync_replicaStack */
-INLINE1(copy1_copyCopySync_replicaStack)
-INLINE2(copy1_copyCopySync_replicaStack)
+INLINE(copy1_copyCopySync_replicaStack)
 void copy1_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   if ((val_t) white - (val_t)from->range.low < from->range.diff) {
@@ -186,8 +180,7 @@ void copy1_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, Stack_t *localSt
 }
 
 /* splitAlloc1_copyCopySync_primaryStack */
-INLINE1(splitAlloc1_copyCopySync_primaryStack)
-INLINE2(splitAlloc1_copyCopySync_primaryStack)
+INLINE(splitAlloc1_copyCopySync_primaryStack)
 void splitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   if ((val_t) white - (val_t)from->range.low < from->range.diff) {
@@ -200,8 +193,7 @@ void splitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *l
 }
 
 /* splitAlloc1L_copyCopySync_primaryStack */
-INLINE1(splitAlloc1L_copyCopySync_primaryStack)
-INLINE2(splitAlloc1L_copyCopySync_primaryStack)
+INLINE(splitAlloc1L_copyCopySync_primaryStack)
 void splitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from, Heap_t *large)
 { 
   if ((val_t) white - (val_t)from->range.low < from->range.diff) {
@@ -216,8 +208,7 @@ void splitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *
 }
 
 /* locCopy1_copyCopySync_replicaStack */
-INLINE1(locCopy1_copyCopySync_replicaStack)
-INLINE2(locCopy1_copyCopySync_replicaStack)
+INLINE(locCopy1_copyCopySync_replicaStack)
 void locCopy1_copyCopySync_replicaStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   ptr_t white = *loc;							
@@ -232,8 +223,7 @@ void locCopy1_copyCopySync_replicaStack(Proc_t *proc, ploc_t loc, Stack_t *local
 }
 
 /* copy1_copyCopySync_primaryStack */
-INLINE1(copy1_copyCopySync_primaryStack)
-INLINE2(copy1_copyCopySync_primaryStack)
+INLINE(copy1_copyCopySync_primaryStack)
 void copy1_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   if ((val_t) white - (val_t)from->range.low < from->range.diff) {
@@ -246,8 +236,7 @@ void copy1_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localSt
 }
 
 /* locCopy1_copyCopySync_primaryStack */
-INLINE1(locCopy1_copyCopySync_primaryStack)
-INLINE2(locCopy1_copyCopySync_primaryStack)
+INLINE(locCopy1_copyCopySync_primaryStack)
 void locCopy1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   ptr_t white = *loc;							
@@ -263,8 +252,7 @@ void locCopy1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *local
 }
 
 /* locSplitCopy1_copyCopySync_primaryStack */
-INLINE1(locSplitCopy1_copyCopySync_primaryStack)
-INLINE2(locSplitCopy1_copyCopySync_primaryStack)
+INLINE(locSplitCopy1_copyCopySync_primaryStack)
 void locSplitCopy1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   ptr_t white = *loc;							
@@ -280,8 +268,7 @@ void locSplitCopy1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *
 }
 
 /* locCopy1L_copyCopySync_primaryStack */
-INLINE1(locCopy1L_copyCopySync_primaryStack)
-INLINE2(locCopy1L_copyCopySync_primaryStack)
+INLINE(locCopy1L_copyCopySync_primaryStack)
 void locCopy1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from, Heap_t *large)
 { 
   ptr_t white = *loc;							
@@ -299,8 +286,7 @@ void locCopy1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loca
 }
 
 /* locCopy2L_copyCopySync_replicaStack */
-INLINE1(locCopy2L_copyCopySync_replicaStack)
-INLINE2(locCopy2L_copyCopySync_replicaStack)
+INLINE(locCopy2L_copyCopySync_replicaStack)
 void locCopy2L_copyCopySync_replicaStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange,
 					 Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
@@ -320,8 +306,7 @@ void locCopy2L_copyCopySync_replicaStack(Proc_t *proc, ploc_t loc, Stack_t *loca
 
 
 /* copy2L_copyCopySync_primaryStack */
-INLINE1(copy2L_copyCopySync_primaryStack)
-INLINE2(copy2L_copyCopySync_primaryStack)
+INLINE(copy2L_copyCopySync_primaryStack)
 void copy2L_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange,
 				      Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
@@ -346,8 +331,7 @@ void copy2L_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localS
 }
 
 /* locCopy2L_copyCopySync_primaryStack */
-INLINE1(locCopy2L_copyCopySync_primaryStack)
-INLINE2(locCopy2L_copyCopySync_primaryStack)
+INLINE(locCopy2L_copyCopySync_primaryStack)
 void locCopy2L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange,
 					 Heap_t *from, Heap_t *from2, Heap_t *large)
 { 
@@ -375,8 +359,7 @@ void locCopy2L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loca
 }
 
 /* locAlloc1_copyCopySync_primaryStack */
-INLINE1(locAlloc1_copyCopySync_primaryStack)
-INLINE2(locAlloc1_copyCopySync_primaryStack)
+INLINE(locAlloc1_copyCopySync_primaryStack)
 void locAlloc1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   ptr_t white = *loc;							
@@ -392,8 +375,7 @@ void locAlloc1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loca
 }
 
 /* locSplitAlloc1_copyCopySync_primaryStack */
-INLINE1(locSplitAlloc1_copyCopySync_primaryStack)
-INLINE2(locSplitAlloc1_copyCopySync_primaryStack)
+INLINE(locSplitAlloc1_copyCopySync_primaryStack)
 void locSplitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   ptr_t white = *loc;							
@@ -410,8 +392,7 @@ void locSplitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t 
 
 
 /* locSplitAlloc1L_copyCopySync_primaryStack */
-INLINE1(locSplitAlloc1L_copyCopySync_primaryStack)
-INLINE2(locSplitAlloc1L_copyCopySync_primaryStack)
+INLINE(locSplitAlloc1L_copyCopySync_primaryStack)
 void locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from, Heap_t *large)
 { 
   ptr_t white = *loc;							
@@ -430,8 +411,7 @@ void locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t
 
 
 /* locAlloc2L_copyCopySync_primaryStack */
-INLINE1(locAlloc2L_copyCopySync_primaryStack)
-INLINE2(locAlloc2L_copyCopySync_primaryStack)
+INLINE(locAlloc2L_copyCopySync_primaryStack)
 void locAlloc2L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *localStack, CopyRange_t *copyRange, 
 					  Heap_t *from, Heap_t *from2, Heap_t *large)
 { 

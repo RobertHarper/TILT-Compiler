@@ -138,7 +138,9 @@ struct option_entry table[] =
    1, "localWorkSize", &localWorkSize, "Number of items to work on from local shared stack before accessing shared work stack",
    1, "doCopyCopySync", &doCopyCopySync, "Perform copy-copy synchronization for parallel/concurrent collectiors",
    3, "majorCollectionRate", &majorCollectionRate, "Rate of concurrent collector",
+#ifdef solaris
    1, "perfType", &perfType, "Type of performance counters",
+#endif
    0, "short", &shortSummary, "Print short summary of execution"};
 
 void process_option(int argc, char **argv)
