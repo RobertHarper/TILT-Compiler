@@ -86,10 +86,11 @@ struct
     fun is_varstr (VarStr _) = true
       | is_varstr (MarkStr (s, _)) = is_varstr s
       | is_varstr _ = false
-    fun grind name_strexp (strexp, _) =
+    fun grind name name_strexp (strexp, _) =
       if is_varstr strexp then ([], (strexp, false)) else
 	let
-	  val name = ("<Named_Structure" ^ Int.toString (!unique_n) ^ ">"
+	  val name = ((Symbol.name name) ^ "_Named_Structure" ^ 
+		      Int.toString (!unique_n) 
 		      before unique_n := !unique_n+1)
 	  val symbol = Symbol.strSymbol name
 	  val (strbs, strexp') = (case name_strexp strexp of
@@ -101,39 +102,39 @@ struct
 	   (VarStr [symbol], false))
 	end
   in
-    fun nameify_strexpbools name_strexp strexpbools =
-      case ListPair.unzip (map (grind name_strexp) strexpbools) of
+    fun nameify_strexpbools name name_strexp strexpbools =
+      case ListPair.unzip (map (grind name name_strexp) strexpbools) of
 	(newstrbs, newsebs) => (List.concat newstrbs, newsebs)
   end
 
   (* Here's the beef - traverse the syntax, naming anomnymous functor
      arguments along the way *)
-  fun name_strexp (VarStr path) = Unaltered
-    | name_strexp (StructStr dec) =
+  fun name_strexp name (VarStr path) = Unaltered
+    | name_strexp name (StructStr dec) =
         process (name_dec dec, fn d => StructStr d)
-    | name_strexp (AppStr (path, strexpbools)) =
+    | name_strexp name (AppStr (path, strexpbools)) =
 	let
-	  val (newstrbs, newsebs) = nameify_strexpbools name_strexp strexpbools
+	  val (newstrbs, newsebs) = nameify_strexpbools name (name_strexp name) strexpbools
 	in Declare (newstrbs, AppStr (path, newsebs))
 	end
-    | name_strexp (LetStr (dec, strexp)) =
-	namify_let (LetStr, name_dec, dec, name_strexp, strexp)
-    | name_strexp (MarkStr (strexp, region)) =
-	process (name_strexp strexp, fn se => MarkStr (se, region))
+    | name_strexp name (LetStr (dec, strexp)) =
+	namify_let (LetStr, name_dec, dec, name_strexp name, strexp)
+    | name_strexp name (MarkStr (strexp, region)) =
+	process (name_strexp name strexp, fn se => MarkStr (se, region))
 
-  and name_fctexp (VarFct _) = Unaltered
-    | name_fctexp (FctFct {params, body, constraint}) =
+  and name_fctexp name (VarFct _) = Unaltered
+    | name_fctexp name (FctFct {params, body, constraint}) =
         process
-	(name_strexp body,
+	(name_strexp name body,
 	 fn se => FctFct {params=params, body=se, constraint=constraint})
-    | name_fctexp (LetFct (dec, fctexp)) =
-	namify_let (LetFct, name_dec, dec, name_fctexp, fctexp)
-    | name_fctexp (AppFct (path, strexpbools, fsigconst)) =
+    | name_fctexp name (LetFct (dec, fctexp)) =
+	namify_let (LetFct, name_dec, dec, name_fctexp name, fctexp)
+    | name_fctexp name (AppFct (path, strexpbools, fsigconst)) =
 	let
-	  val (newstrbs, newsebs) = nameify_strexpbools name_strexp strexpbools
+	  val (newstrbs, newsebs) = nameify_strexpbools name (name_strexp name) strexpbools
 	in Declare (newstrbs, AppFct (path, newsebs, fsigconst)) end
-    | name_fctexp (MarkFct (fctexp, region)) =
-	process (name_fctexp fctexp, fn fe => MarkFct (fe, region))
+    | name_fctexp name (MarkFct (fctexp, region)) =
+	process (name_fctexp name fctexp, fn fe => MarkFct (fe, region))
 
   and dec_declare (Declare (strbs, dec)) =
         flatten_seqdec
@@ -160,13 +161,13 @@ struct
     | name_dec _ = Unaltered
 
   and name_strb (Strb {name, def, constraint}) =
-        process (name_strexp def,
+        process (name_strexp name def,
 		 fn d => Strb {name=name, def=d, constraint=constraint})
     | name_strb (MarkStrb (strb, region)) =
 	process (name_strb strb, fn sb => MarkStrb (sb, region))
 
   and name_fctb (Fctb {name, def}) =
-        process (name_fctexp def, fn d => Fctb {name=name, def=d})
+        process (name_fctexp name def, fn d => Fctb {name=name, def=d})
     | name_fctb (MarkFctb (fctb, region)) =
 	process (name_fctb fctb, fn fb => MarkFctb (fb, region))
 
