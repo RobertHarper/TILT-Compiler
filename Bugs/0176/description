@@ -24,6 +24,37 @@ Transcript:
 	status=1
 
 Comments:
+
+	We should fix this bug before the release.  It is embarassing.
+
+	I suspect the call to insert_kind_equation at
+		/n/tilt/Nil/nilstatic.sml:1318
+
+	A partial transcript compiling with -fnil_show_calls:
+
+	kind_valid called with kind =
+	Arrow_k(Open; _2750 : TYPE; SINGLE_TYPE(APP(ref_2752,(_2750))))
+	
+	kind_valid called with kind =
+	TYPE
+	
+	kind_valid returned
+	kind_valid called with kind =
+	SINGLE_TYPE(APP(ref_2752,(_2750)))
+	
+	con_analyze APP(ref_2752,(_2750)) called at TYPE
+	con_valid called with constructor =
+	ref_2752
+	
+	con_valid returned
+	con_analyze _2750 called at TYPE
+	con_analyze returned
+	Problem with analyzing vk_list
+	Error while calling module_valid
+	tilt: BUG: slave sheridan.home.2356: nilcontext.sml::Vinsert: Variable already occurs in context: _2750
+	status='ssh 2567: 1'
+	term% 
+
 Fix:
 Test:
 Owner:
