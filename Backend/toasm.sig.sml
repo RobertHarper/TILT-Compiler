@@ -21,8 +21,9 @@ sig
       These are registers used in COMPUTEs.*)
    val translateProc   : Rtl.proc -> 
      (Machine.label list) * (Bblock.bblock Machine.Labelmap.map)
-     * (Tracetable.trace Machine.Regmap.map)
+     * ((Machine.register option * Tracetable.trace) Machine.Regmap.map)
      * (Machine.stacklocation Machine.Regmap.map)
 				    
-   val translateRep : Rtl.rep -> Tracetable.trace
+   val translateRep : Rtl.rep -> Machine.register option * Tracetable.trace 
+
 end

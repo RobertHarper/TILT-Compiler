@@ -1,11 +1,13 @@
-(*$import MACHINE MACHINEUTILS *)
+(*$import MACHINE MACHINEUTILS TRACETABLE *)
 (* Definitions of annotated instructions and basic blocks, and some
    simple dataflow operations on them.*)
 
 signature BBLOCK =
 sig
 
+
    structure Machine : MACHINE
+   structure Tracetable : TRACETABLE
 
    (* Annotations on an instruction *)
 
@@ -48,8 +50,9 @@ sig
    val live : Machine.instruction annotated -> Machine.Regset.set
    val defUse : Machine.instruction -> Machine.register list * Machine.register list
    val blockDefUse : bblock -> bblock
-   val liveVars : bblock Machine.Labelmap.map -> Machine.label -> 
-                        bblock Machine.Labelmap.map
+   val liveVars : ((Machine.register option * Tracetable.trace) Machine.Regmap.map)
+                   -> bblock Machine.Labelmap.map -> Machine.label -> 
+                      bblock Machine.Labelmap.map
 
 end
 

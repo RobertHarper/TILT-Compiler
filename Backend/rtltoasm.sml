@@ -406,7 +406,7 @@ struct
        emitString ("\t.long 0\n\n");
        dumpDatalist (Tracetable.MakeGlobalTable 
 		          (main', 
-			   map (fn (l, rep) => (l,Toasm.translateRep rep))
+			   map (fn (l, rep) => (l,#2(Toasm.translateRep rep)))
 			        mutable_variables));
 
        dumpDatalist (Tracetable.MakeMutableTable (main', mutable_objects));

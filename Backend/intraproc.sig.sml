@@ -11,7 +11,7 @@ sig
    val allocateProc : {getSignature  : Machine.label -> Machine.procsig,
 		       name          : Machine.label,
 		       block_map     : Bblock.bblock Machine.Labelmap.map,
-		       tracemap      : Tracetable.trace Machine.Regmap.map,
+		       tracemap      : (Machine.register option * Tracetable.trace) Machine.Regmap.map,
 		       stack_resident : Machine.stacklocation 
 		                                 Machine.Regmap.map,
 		       procsig       : Machine.procsig} 
@@ -24,7 +24,7 @@ sig
    val allocateProc1 : {getSignature  : Machine.label -> Machine.procsig,
 		       name          : Machine.label,
 		       block_map     : Bblock.bblock Machine.Labelmap.map,
-		       tracemap      : Tracetable.trace Machine.Regmap.map,
+		       tracemap      : (Machine.register option * Tracetable.trace) Machine.Regmap.map,
 		       stack_resident : Machine.stacklocation 
 		                                 Machine.Regmap.map,
 		       procsig       : Machine.procsig} 
@@ -32,7 +32,7 @@ sig
                        ({getSignature  : Machine.label -> Machine.procsig,
 		       name          : Machine.label,
 		       block_map     : Bblock.bblock Machine.Labelmap.map,
-		       tracemap      : Tracetable.trace Machine.Regmap.map,
+		       tracemap      : (Machine.register option * Tracetable.trace) Machine.Regmap.map,
 		       stack_resident : Machine.stacklocation 
 		                                 Machine.Regmap.map,
 		       procsig       : Machine.procsig} 
@@ -43,7 +43,7 @@ sig
                      ({getSignature  : Machine.label -> Machine.procsig,
 		       name          : Machine.label,
 		       block_map     : Bblock.bblock Machine.Labelmap.map,
-		       tracemap      : Tracetable.trace Machine.Regmap.map,
+		       tracemap      : (Machine.register option * Tracetable.trace) Machine.Regmap.map,
 		       stack_resident : Machine.stacklocation 
 		                                 Machine.Regmap.map,
 		       procsig       : Machine.procsig} 

@@ -1,8 +1,9 @@
 (*$import BBLOCK MACHINEUTILS TRACETABLE PRINTUTILS TextIO Util Listops *)
 functor Printutils(val commentHeader : string
-		   structure Bblock : BBLOCK
 		   structure Machineutils : MACHINEUTILS
                    structure Tracetable : TRACETABLE
+		   structure Bblock : BBLOCK
+		   sharing Tracetable = Bblock.Tracetable
 		   sharing Tracetable.Machine = Machineutils.Machine = Bblock.Machine)
 		      :> PRINTUTILS where Bblock = Bblock
                                     where Machine = Machineutils.Machine

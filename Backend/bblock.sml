@@ -1,9 +1,13 @@
-(*$import MACHINEUTILS BBLOCK Int32 Util Listops *)
-functor Bblock(structure Machineutils : MACHINEUTILS) 
-    :> BBLOCK where Machine = Machineutils.Machine =
+(*$import MACHINEUTILS BBLOCK Int32 Util Listops TRACETABLE List *)
+functor Bblock(structure Machineutils : MACHINEUTILS
+	       structure Tracetable : TRACETABLE 
+	       sharing Tracetable.Machine = Machineutils.Machine)
+    :> BBLOCK where Tracetable = Tracetable
+              where Machine = Machineutils.Machine =
 struct
    structure Machineutils = Machineutils
    structure Machine = Machineutils.Machine
+   structure Tracetable = Tracetable
 
    open Machineutils Machineutils.Machine
    (* Annotations on an instruction *)
@@ -184,7 +188,7 @@ struct
 
    (* Use the in_live and out_live values determined from findLiveTemps()
       to annotate individual instructions. *)
-   fun liveVars (block_map : bblock Machine.Labelmap.map) first_label =
+   fun liveVars compute_map (block_map : bblock Machine.Labelmap.map) first_label =
      let 
 	                      
        (* Scan backwards to compute which variables are live after each instruction in
@@ -193,17 +197,23 @@ struct
 
 	  Taken from Aho, Sethi, Ullman, live-variable analysis (eq. 10.11) *)
 
+      
        fun loop (out,[]) = []
 	 | loop (out,instr :: instrs) =
 	      let val instr = stripAnnot instr
                   val (def_list, use_list) = defUse instr
 		  val instr_def = listToSet def_list
+		  val use_list_compute = 
+		      List.mapPartial (fn f => (case (Regmap.find(compute_map,f)) of
+						    NONE => NONE
+						  | SOME (copt,_) => copt)) use_list
                   (* we don't want special regs in in' so we subtract 
                      them out as we add use_list;  note that we don't
                      need to remove special regs from instr_def since 
                      instr_def is used to subtract away from out which
                      already doesn't have any special regs *)
-		   val in' = setPlusListMinusSet(out - instr_def, use_list, special_regs_set)
+		  val in' = setPlusListMinusSet(out - instr_def, use_list, special_regs_set)
+		  val in' = setPlusListMinusSet(in', use_list_compute, Regset.empty)
               in LIVE(out,instr) :: loop(in',instrs)
 	      end
 

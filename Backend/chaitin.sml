@@ -44,36 +44,35 @@
 *)
 
 functor Chaitin(val commentHeader: string
+		structure Color : COLOR
+		structure Printutils : PRINTUTILS
 		structure Machineutils : MACHINEUTILS
 		structure Callconv : CALLCONV
-		structure Bblock : BBLOCK
-		structure Trackstorage : TRACKSTORAGE
-		structure Printutils : PRINTUTILS
-		structure Ifgraph : IFGRAPH
-		structure Color : COLOR
-		structure Tracetable : TRACETABLE
 
-		sharing Bblock = Printutils.Bblock
-		sharing Tracetable.Machine = Bblock.Machine = Trackstorage.Machine 
-		      = Callconv.Machine = Machineutils.Machine = Printutils.Machine = Ifgraph.Machine
+		sharing Printutils.Tracetable.Machine 
+		      = Printutils.Bblock.Machine 
+		      = Printutils.Bblock.Tracetable.Machine 
+		      = Printutils.Machine 
+		      = Color.Trackstorage.Machine 
 		      = Color.Machine
-(* should not be needed *)  = Color.Ifgraph.Machine = Color.Trackstorage.Machine = Printutils.Tracetable.Machine
+		      = Color.Ifgraph.Machine 
+		      = Color.Trackstorage.Machine 
+		      = Color.Ifgraph.Machine
+		      = Callconv.Machine 
+		      = Machineutils.Machine 
 
-		sharing Color.Trackstorage = Trackstorage
-		sharing Color.Ifgraph = Ifgraph
-	        sharing Tracetable = Printutils.Tracetable
-		  ) :> PROCALLOC where Bblock = Bblock 
-                                 where Tracetable = Tracetable 
-				 where Machine = Bblock.Machine =
+		sharing Printutils.Tracetable = Printutils.Bblock.Tracetable
+
+		  ) :> PROCALLOC where Bblock = Printutils.Bblock 
+                                 where Tracetable = Printutils.Tracetable 
+				 where Machine = Color.Machine =
 struct
 
    open Rtl
-   open Bblock 
-   open Callconv Color
-   open Printutils Tracetable 
-   open Machineutils
+   open Callconv Color Printutils Machineutils
+   open Tracetable 
    open Machine
-
+   open Bblock
 
    structure Bblock = Bblock
    structure Machine = Machine
@@ -468,7 +467,7 @@ struct
 					let val newreg = freshIreg()
 					    val _ = tracemap := 
 						Regmap.insert(!tracemap,newreg, 
-							      lookup r table)
+							      (NONE, lookup r table))
 					in IN_REG newreg
 					end
 				in map doit save_across_C_reglist
@@ -1093,7 +1092,7 @@ struct
 				   else 
 				     case (Regmap.find(mapping,h),
 					   Regmap.find(tracemap,h)) of
-				       (SOME loc,SOME trace) => 
+				       (SOME loc,SOME (_,trace)) => 
 					 let val trace = stack_trace_location trace
 					 in  (loc,trace) :: loop t
 					 end
@@ -1227,7 +1226,7 @@ struct
 						   args, res} : procsig,
 		       stack_resident : Machine.stacklocation
 		                        Machine.Regmap.map,
-		       tracemap     : Tracetable.trace Regmap.map}) = 
+		       tracemap     : (Machine.register option * Tracetable.trace) Regmap.map}) = 
 
      let
        val _ = msg "\tentered allocateproc1\n"
@@ -1273,7 +1272,7 @@ struct
 	       else ()
        val _ = msg  "\tannotating\n"
 	   
-       val block_map = (annotate_time (Bblock.liveVars block_map)) name
+       val block_map = (annotate_time (Bblock.liveVars (!local_tracemap) block_map)) name
 	   
        val _ = 
 	   if (! debug) then 
@@ -1320,7 +1319,7 @@ struct
 						    args, res} : procsig,
 		       stack_resident : Machine.stacklocation
 		                        Machine.Regmap.map,
-		       tracemap     : Tracetable.trace Regmap.map},
+		       tracemap     : (Machine.register option * Tracetable.trace) Regmap.map},
 		      arg_ra_pos : assign list option, 
 		      max_passed_args, max_C_args, block_labels) = 
 
