@@ -84,11 +84,11 @@ TILT generates an internal interface for every compilation unit. An
 elaboration context is built by combining the internal interfaces of
 the unit's direct and indirect ancestors while hiding the top-level
 labels provided by indirect ancestors. The unit's source code is
-elaborated in this context, perhaps constrained by an external
-interface, yielding internal language code for the unit and its
-internal interface. By hiding labels, TILT requires that all the free
-identifiers of a unit be provided by its direct ancestors (hereafter:
-parents).
+elaborated in this context yielding internal language code for the
+unit and an internal interface. If an external interface is provided,
+it is used to constrain the internal interface. By hiding labels, TILT
+requires that all the free identifiers of a unit be provided by its
+direct ancestors (hereafter: parents).
 
 *** Dependencies
 
