@@ -1,4 +1,3 @@
-(*$import Firstlude TiltPrim Prelude PreString PreInt Real Char String Option List General TextIO Vector Word31 *)
 (* see http://www.dina.kvl.dk/%7Esestoft/sml/top-level-chapter.html *)
 
 (* The interface provided by TopLevel should not be assumed by users
@@ -20,6 +19,9 @@ overload >  : 'a as String.>  and Word31.>
 overload <= : 'a as String.<= and Word31.<=
 overload >= : 'a as String.>= and Word31.>=
 
+exception Div = Div
+exception Overflow = Overflow
+
 (* types *)
 type substring = PreString.substring
 
@@ -28,11 +30,11 @@ type substring = PreString.substring
 (* before, ignore, o -- Prelude *)
 val exnName = General.exnName
 val exnMessage = General.exnMessage
-    
+
 val getOpt = Option.getOpt
 val isSome = Option.isSome
 val valOf = Option.valOf
-    
+
 (* not -- Prelude *)
 
 (* real -- primitive *)
@@ -43,7 +45,7 @@ val round = Real.round
 
 (* ord -- primitive *)
 val chr = Char.chr
-    
+
 val size = String.size
 val str = String.str
 val concat = String.concat
@@ -51,7 +53,7 @@ val implode = String.implode
 val explode = String.explode
 val substring = String.substring
 val op^ = String.^
-    
+
 val null = List.null
 val hd = List.hd
 val tl = List.tl
@@ -64,7 +66,7 @@ val foldr = List.foldr
 val foldl = List.foldl
 
 val print = TextIO.print
-    
+
 val vector = Vector.fromList
 
 fun use (_ : string) : unit = raise TiltExn.LibFail "use unimplemented"
