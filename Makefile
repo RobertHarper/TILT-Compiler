@@ -18,8 +18,9 @@ MAPFILE=mapfile-all
 SML_NEW=SML_VERSION=$(SML_VERSION_NEW) /usr/local/bin/sml
 
 # TILT drivers
-TILT_NEW=TILT_VERSION=NJ TILT_LIBDIR=`pwd` ./Bin/tilt
-TILT_OLD=TILT_VERSION=NJ TILT_LIBDIR=/usr/local/lib/tilt /usr/local/bin/tilt
+TILT_FLAGS=-fdebug_asm -fkeep_asm -fkeep_link_asm
+TILT_NEW=TILT_VERSION=NJ TILT_LIBDIR=`pwd` ./Bin/tilt ${TILT_FLAGS}
+TILT_OLD=TILT_VERSION=NJ TILT_LIBDIR=/usr/local/lib/tilt /usr/local/bin/tilt ${TILT_FLAGS}
 
 .PHONY: all
 all:
