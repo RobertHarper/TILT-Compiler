@@ -18,8 +18,8 @@ structure Light =
 	    (case light of
 		 Sunlight (dir, color) => color
 	       | Pointlight(pos, color) => let val d = distance(src, pos)
-						in  scale(attenuate d, color)
-						end
+					   in  scale(attenuate d, color)
+					   end
 	       | Spotlight {pos, dir, color, cutoff, att} =>
 						let val toSrc = makeDir(pos, src)
 						    val targetAngle = angle(toSrc, dir)    (* Angle in degrees *)

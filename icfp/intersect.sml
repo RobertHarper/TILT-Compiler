@@ -39,8 +39,29 @@ structure Intersect : INTERSECT =
 	end
 
 
+    val eps = 1.0e~10
+    fun iszero r = (Real.abs r) < eps
+
+    fun quad (a,b,c) = 
+      let
+	val disc = b*b - 4.0*a* c
+	val roots = 
+	  if iszero disc then [~b / (2.0*a)]
+	  else if disc < 0.0 then []
+	  else 
+	    let
+	      val d = Math.sqrt disc
+	      val t0 = (~b + d) / (2.0*a)
+	      val t1 = (~b - d) / (2.0*a)
+	    in [t0,t1]
+	    end
+      in (disc,roots)
+      end
+
+
+
     (* Where does the plane y=0 transformed by m4 intersect the vector originating from src0 in the direction of dir0 *)
-    fun plane (m4, src0, dir0) = (* Plane is Ax + By + Cz = D *)
+    fun plane1 (m4, src0, dir0) = (* Plane is Ax + By + Cz = D *)
 	let val newOrigin = Matrix.applyPoint(m4, (0.0, 0.0, 0.0))
 	    val oldNormal = (0.0, 1.0, 0.0)
 	    val N = normalize(Matrix.applyVector (m4, oldNormal))
@@ -48,15 +69,17 @@ structure Intersect : INTERSECT =
 	    val numerator = D - dp(N, src0)
 	    val denominator = dp(N, dir0)
 
-(*
+
 	    val _ = (print "\n--newOrigin = "; printV3 newOrigin;
 		     print "\n  N = "; printV3 N;
 		     print "\n  D = "; printR D;
+		     print "\n  dir0 = "; printV3 dir0;
+		     print "\n  src0 = "; printV3 src0;
 		     print "  num = "; printR numerator;
 		     print "  denom = "; printR denominator; print "\n")
-*)
-	in  if (Real.==(numerator, 0.0) orelse  (* point in plane *)
-		Real.==(denominator, 0.0))      (* direction parallel to plane *)
+
+	in  if (iszero(numerator) orelse   (* point in plane *)
+		iszero(denominator))      (* direction parallel to plane *)
 		then noIntersect
 	    else let val t = numerator / denominator 
 (*
@@ -87,26 +110,31 @@ structure Intersect : INTERSECT =
 		 end
 	end
 
-    val eps = 1.0e~10
-    fun iszero r = (Real.abs r) < eps
-
-    fun quad (a,b,c) = 
-      let
-	val disc = b*b - 4.0*a* c
-	val roots = 
-	  if iszero disc then [~b / (2.0*a)]
-	  else if disc < 0.0 then []
-	  else 
-	    let
-	      val d = Math.sqrt disc
-	      val t0 = (~b + d) / (2.0*a)
-	      val t1 = (~b - d) / (2.0*a)
-	    in [t0,t1]
-	    end
-      in (disc,roots)
-      end
     
 
+    fun plane2 (M: m4,orig:v3,dir:v3) : result = 
+	let
+	    
+	    val M' = invert M
+	    val orig_oc as (x,y,z) = Matrix.applyPoint (M',orig)
+	    val dir_oc  as (xd,yd,zd) = Matrix.applyVector (M',dir)
+
+	in  if (iszero y orelse iszero yd)
+		then noIntersect
+	    else let val dist = ~ y / yd
+		     val hit_oc = add(orig_oc, scale(dist, dir_oc))
+		     val (u, _, v) = hit_oc
+		     val hit = Matrix.applyPoint(M, hit_oc)
+		     val N = Matrix.applyVector(M, if (y > 0.0)
+						       then (0.0, 1.0, 0.0)
+						   else (0.0, ~1.0, 0.0))
+		     fun l2() = [{hit=hit,dist=dist}]
+		     fun l3() = [{u=u,v=v,face=0,N=N,hit=hit,dist=dist}]
+		 in  (true, l2, l3)
+		 end
+	end
+
+    val plane = plane2
 
     fun cylinder (M: m4,orig:v3,dir:v3) : result = 
       let
@@ -432,10 +460,12 @@ structure Intersect : INTERSECT =
 
 	  val bottom = Matrix.ident
 	  val top = Matrix.translateM(0.0,1.0,0.0,Matrix.ident)
-	  val left = Matrix.rotzM(90.0,Matrix.ident)
-	  val right = Matrix.translateM(1.0,0.0,0.0,left)
+
 	  val front = Matrix.rotxM(~90.0,bottom)
 	  val back = Matrix.translateM(0.0,0.0,1.0,front)
+
+	  val left = Matrix.rotyM(~90.0,front)
+	  val right = Matrix.translateM(1.0,0.0,0.0,left)
 
 	  val bottom = M
 	  val top = Matrix.combine(M, top)
@@ -444,12 +474,27 @@ structure Intersect : INTERSECT =
 	  val front = Matrix.combine(M, front)
 	  val back = Matrix.combine(M, back)
 
+(*
+	  val M' = invert M
+	  val orig' as (px,py,pz) = Matrix.applyPoint (M',orig)
+	  val dir'  as (dx,dy,dz) = Matrix.applyVector (M',dir)
+	  val _ = (print "orig' = "; printV3 orig';
+		   print "dir' = "; printV3 dir'; print "\n")
+*)
 	  fun doFace (p,face) = 
 	      let val (hit, _, l3) = plane(p, orig, dir)
 	      in  if (hit)
 		      then
 			  let val [{u,v,face=_,N,hit,dist}] = l3()
-(*			      val _ = (print "hit cube plane  u = "; printR u; print "   v = "; printR v; print "\n") *)
+(*
+			      val _ = (print "hit cube    u = "; printR u;
+				       print  "      v = "; printR v;
+				       print "       hit = ";
+                                       printV3 hit;
+				       print "       hit' = ";
+                                       printV3 (Matrix.applyPoint (M', hit));
+				       print "\n")
+*)
 			  in  if (u >= 0.0 andalso u < 1.0 andalso
 				  v >= 0.0 andalso v < 1.0)
 				  then [{u=u,v=v,face=face,N=N,hit=hit,dist=dist}]

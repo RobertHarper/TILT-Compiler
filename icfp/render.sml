@@ -4,11 +4,12 @@ structure Render : RENDER =
     open Base
     open Intersect
     open Vect
-    exception Error of string
 
-    val chat = ref 0	
+    val chat = ref ~1
     val i2r = Real.fromInt
     val black = (0.0, 0.0, 0.0)
+    val eps = 1e~5
+    fun realEqual (a,b) = Real.abs(a-b) < eps
 
     fun add2o f obj (x : real, y : real) = 
 	let val (x2,y2) = f obj
@@ -18,7 +19,8 @@ structure Render : RENDER =
     fun weakAttenuate d = 100.0 / (99.0 + Math.pow(d, 0.5))
 
     (* bump depends on how far we are from the source *)
-    fun bump (hit, dir, dist) = let val f = (Real.abs dist) / 1e2
+    fun bump (hit, dir, dist) = let (* val f = 1e~5 *)
+				    val f = (Real.abs dist) / 1e5
 				in  add(hit, scale(f, dir))
 				end
 
@@ -32,9 +34,22 @@ structure Render : RENDER =
 				| Cylinder (name, m4,t) => (t,name,cylinder(m4,src,dir))
 				| _ => raise (Error "primIntersect for non-primitive object"))
 	in  if hit
-		then (case map (fn info => (t, name, info)) (l3 ()) of
-			  [] => []
-			| [(t,name,{u,v,face,N,dist,hit})] => 
+	      then let val ls = map (fn info => (t, name, info)) (l3 ())
+		       val ls = (case ls of
+				     [i1 as (_,_,{dist=d1,...}),
+				      i2 as (_,_,{dist=d2,...}),
+				      i3 as (_,_,{dist=d3,...})] =>
+				     if (realEqual(d1,d2))
+					 then [i1,i3]
+				     else if (realEqual(d1,d3))
+					      then [i1,i2]
+					  else if (realEqual(d2,d3))
+						   then [i1,i2]
+					       else [i1,i2,i3]
+				    | _ => ls)
+		   in  case ls of
+			[] => []
+		      | [(t,name,{u,v,face,N,dist,hit})] => 
 				    let val hit' = bump(hit, dir, dist)
 					val dist' = distance(src,hit')
 					val dist' = if (dist > 0.0) then dist' else ~dist'
@@ -48,7 +63,30 @@ structure Render : RENDER =
 			   i2 as (_,_,{dist=dist',...})] => if (dist < dist')
 								then [(i1,i2)]
 							    else [(i2,i1)]
-			| _ => raise (Error "primIntersect for more than 2 hits"))
+			| [i1 as (_,_,{dist=d1,face=f1,hit=h1,u=u1,v=v1,...}),
+			   i2 as (_,_,{dist=d2,face=f2,hit=h2,u=u2,v=v2,...}),
+			   i3 as (_,_,{dist=d3,face=f3,hit=h3,u=u3,v=v3,...})] =>
+ 			    (print "\n3 hits:  ";
+			     print "\n  d1 = "; printR d1; 
+			     print "  f1 = "; print (Int.toString f1);
+			     print "  h1 = "; printV3 h1;
+			     print "  u1 = "; printR u1;
+			     print "  v1 = "; printR v1;
+	 		     print "\n  d2 = "; printR d2; 
+			     print "  f2 = "; print (Int.toString f2);
+			     print "  h2 = "; printV3 h2;
+			     print "  u2 = "; printR u2;
+			     print "  v2 = "; printR v2;
+			     print "\n  d3 = "; printR d3; 
+			     print "  f3 = "; print (Int.toString f3);
+			     print "  h3 = "; printV3 h3;
+			     print "  u3 = "; printR u3;
+			     print "  v3 = "; printR v3;
+			     print "\n";
+			     raise (Error ("3 intersects on " ^ name)))
+			| ls => raise (Error ("primIntersect on " ^ name ^ 
+					      " has " ^ (Int.toString (length ls)) ^ " hits"))
+		   end
 	    else []
 	end
 
@@ -226,12 +264,16 @@ structure Render : RENDER =
 	    val viewPos = (0.0, 0.0, ~1.0)   (* Viewer position *)
 
 	    val _ = for(0, vres, fn row => 
-			(say "\nRendering row "; say (Int.toString row); say ":  ";
+			(if (!chat >= 0)
+			     then (say "\nRendering row "; say (Int.toString row); say ":  ")
+			 else if (!chat >= ~1)
+				  then (say (Int.toString row); say " ")
+			      else ();
 			 for (0, hres, fn col => 
 			      let val toScreen = (upperLeftX + (i2r col + 0.5) * pixelSize,
 						  upperLeftY - (i2r row + 0.5) * pixelSize, 1.0)
 				  val dir = normalize toScreen
-				  val _ = if (col mod 10 = 0) then say "!" else ()
+				  val _ = if (!chat >= 0 andalso col mod 10 = 0) then say "!" else ()
 				  val _ = if (!chat >= 1)
 					      then (print "\nDrawing pixel: "; printV3 toScreen; print "\n") 
 					  else ()

@@ -88,17 +88,26 @@ blue 0.6 0.5 3.0 const-surface apply cube
   pip 0.5 one6 -2.0 mulf one6 -2.0 mulf translate difference
 /die
 
-baseDie 15.0 rotatey 15.0 rotatex
+baseDie 
+%  15.0 rotatey 15.0 rotatex
+  15.0 rotatey 15.0 rotatex
   -1.5 -1.0 4.0 translate
 % baseDie -25.0 rotatez -20.0 rotatex
 %   2.0 0.5 3.5 translate
 % union
-mirror -90.0 rotatex 0.0 0.0 10.0 translate
+
+mirror -90.0 rotatex 0.0 0.0 10.0 translate union
 0.5 grey apply matte apply plane 0.0 -2.0 0.0 translate union
 
-union /scene
+{ /color { /q /q /q color 1.0 0.0 1.0 } } /solid-color
+1.0 0.0 0.0 point solid-color apply sphere
+	0.45 uscale
+	0.0 4.5 0.0 translate
+union
 
-0.0 0.0	0.0 point	% ambient
+/scene
+
+0.4 0.4	0.4 point	% ambient
 [light1] 		% lights
 scene			% object
 1			% depth

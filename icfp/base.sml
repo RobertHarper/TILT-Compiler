@@ -4,6 +4,7 @@ struct
 
     exception Unimplemented of string
     exception Eval of string
+    exception Error of string
 
     type m4 = Matrix.m4
     type v3 = Matrix.v3

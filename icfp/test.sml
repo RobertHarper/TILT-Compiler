@@ -1,23 +1,26 @@
 local
   val tests = 
-    ["checked-cube.gml",
-     "reflect.gml",
-     "scene4.gml",
-     "spheres.gml" ,
-     "dice.gml",
-     "scene1.gml",
-     "scene5.gml",
-     "spheres2.gml",
-     "fib.gml",
+    ["scene1.gml",
      "scene2.gml",
+     "scene3.gml",
+     "scene4.gml",
+     "scene5.gml",
      "scene6.gml",
+     "scene7.gml",
+
+     "spheres.gml" ,
+     "spheres2.gml",
+     "reflect.gml",
+     "checked-cube.gml",
+     "fib.gml",
+     "dice.gml",
      "spotlight.gml",
      "golf.gml",
-     "scene3.gml",
-     "scene7.gml",
+
      "cone2.gml",
      "cylinder.gml",
      "cylinders.gml"
+
      ]
   val failed = ref []
 in
