@@ -84,9 +84,6 @@ cmd='	PATH="'"$PATH"'"
 
 	# Required at CMU, harmless elsewhere.
 	
-	SML_VERSION="'"$SML_VERSION"'"
-	export SML_VERSION
-
 	cat << "END_EMACS" > '$elisp'
 (require '\''comint)
 
