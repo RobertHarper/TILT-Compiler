@@ -179,7 +179,12 @@ structure Linknil (* :> LINKNIL  *) =
 	    val D = NilContext.empty()
 
 	    val nilmod = phasesplit' debug (filename,(ctxt,sbnd_entries))
-
+(*	      
+	    val nilmod = check (ref true,ref false,
+				    "Nil_typecheck_post_phase-split",
+				    (Util.curry2 NilStatic.module_valid (NilContext.empty ())) o (NilRename.renameMod),
+				    filename, nilmod)
+*)
 	    val nilmod = transform(ref true, show_renamed,
 				 "Renaming1",Linearize.linearize_mod,
 				 filename, nilmod)

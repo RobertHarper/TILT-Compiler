@@ -181,17 +181,17 @@ struct
   fun selfify (con,kind) =
     (case kind of
           Type_k => SingleType_k con
-	| SingleType_k _ => kind
-	| Single_k _ => kind
+	| SingleType_k _ => SingleType_k(con) (*kind*)
+	| Single_k _ => Single_k con (*kind*)
 	| Record_k entries => 
 	    let
-	      val subst = ref (empty())
+(*	      val subst = ref (empty())*)
 	      fun mapper ((l,v),k) = 
 		let
 		  val proj = Proj_c (con,l)
-		  val kres = selfify (proj,substConInKind (!subst) k)
+		  val kres = selfify (proj,(*substConInKind (!subst)*) k)
 		in
-		  (subst := add (!subst) (v,proj);
+		  ((*subst := add (!subst) (v,proj);*)
 		   ((l,v),kres))
 		end
 	    in
