@@ -379,6 +379,8 @@ val debug = ref false
 			   val (con,index) = extract 0 (sequence2list fields_seq)
 		       in  loop (index::acc) con rest
 		       end
+		     | loop acc (Singleton_k(_,k,c)) labs = loop acc k labs
+		     | loop acc _ labs = error "expect record kind"
 		   val indices = loop [] kind labels
 	       in
 		   case (vlopt,vvopt) of
