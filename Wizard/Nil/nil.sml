@@ -1,0 +1,3 @@
+
+structure Nil = Curtain.Nil
+
