@@ -5,7 +5,7 @@ Submitter:   David Swasey <swasey@cs.cmu.edu>
 Date:        4/11/2001
 Version:     CVS
 System:	     alpha
-Severity:    minor (because its the alpha)
+Severity:    minor
 Problem:
 
 	The code we generate for multiply can lead to an as(1) warning.

@@ -4,8 +4,8 @@ Keywords:    parser parsing longid lexer
 Submitter:   tom7
 Date:        03/12/03
 Version:     CVS 12 Mar 2003
-System:      ANY
-Severity:    minor
+System:      any
+Severity:    reject
 Problem:     
              TILT's parser(lexer) accepts the following code:
       

@@ -5,7 +5,13 @@ Submitter:	<name and email address>
 Date:	<current date, in US month/day/year format>
 Version:	<TILT version number>
 System:	<e.g. solaris,alpha,linux>
-Severity:	<critical, major, minor, cosmetic>
+Severity:	<exception,major,reject,library,minor,cosmetic>
+	exception: compiler bombs
+	major: compiled programs are incorrect on the sparc or x86
+	reject: compiler rejects code it should accept (or vice versa)
+	library: libraries are insufficient or out of date
+	minor: compiled programs are incorrect on the alpha
+	cosmetic: all other bugs
 Problem:	<description of problem>
 Code:	<SML source code to reproduce the bug>
 Transcript:	<transcript of execution demonstating the bug>

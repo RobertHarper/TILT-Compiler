@@ -5,7 +5,7 @@ Submitter:   David Swasey <swasey@cs.cmu.edu>
 Date:        6/6/01
 Version:     CVS
 System:	     any
-Severity:    major
+Severity:    reject
 Problem:
 
 	[In addressing this bug, we should create regression tests that

@@ -5,7 +5,7 @@ Submitter:	swasey@cs.cmu.edu
 Date:	2/4/04
 Version:	CVS
 System:	any
-Severity:	minor
+Severity:	library
 Problem:
 
 	The SML/NJ library packaged with TILT is old and could be updated

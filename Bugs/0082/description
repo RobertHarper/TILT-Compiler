@@ -5,7 +5,7 @@ Submitter:   Leaf Petersen <leaf@cs.cmu.edu>
 Date:        8/8/02
 Version:     CVS
 System:	     any
-Severity:    minor
+Severity:    reject
 Problem:     
 	Flexible records seem to be sometimes made rigid before they
 	ought to be.  This is an old bug from the buglist in the Doc

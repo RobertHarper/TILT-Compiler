@@ -5,7 +5,7 @@ Submitter:   swasey
 Date:        10/23/02
 Version:     CVS
 System:      any
-Severity:    major
+Severity:    exception
 Problem:     The compiler bombs with tonil.sml: Use of datatype label detected.
 Code:
 	(*$import *)

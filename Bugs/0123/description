@@ -5,7 +5,7 @@ Submitter:   rwh
 Date:        08/16/02
 Version:     CVS
 System:      any
-Severity:    minor
+Severity:    cosmetic
 Problem:     compiler takes a very long time to terminate, if at all, on an example intended to tickle exponential blowup in types
 Code:        
 Transcript:  

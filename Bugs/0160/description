@@ -5,7 +5,7 @@ Submitter:   swasey
 Date:        01/22/03
 Version:     CVS
 System:      any
-Severity:    minor
+Severity:    cosmetic
 Problem:
 	IlContext.add_context_label should go away and the
 	pattern compiler should be fixed to work without it.

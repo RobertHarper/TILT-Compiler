@@ -5,7 +5,7 @@ Submitter:	swasey@cs.cmu.edu
 Date:	2/4/04
 Version:	CVS
 System:	linux
-Severity:	minor
+Severity:	exception
 Problem:
 
 	TILT uses relative paths to TAL interface files in TAL assembler

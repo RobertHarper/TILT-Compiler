@@ -5,7 +5,7 @@ Submitter:	swasey@cs.cmu.edu
 Date:	2/4/04
 Version:	CVS
 System:	any
-Severity:	minor
+Severity:	reject
 Problem:
 
 	We decided how structure sharing should work; see

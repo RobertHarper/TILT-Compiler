@@ -5,7 +5,7 @@ Submitter:	swasey@cs.cmu.edu
 Date:	2/4/04
 Version:	CVS
 System:	solaris,alpha
-Severity:	minor
+Severity:	cosmetic
 Problem:
 
 	Information about the mutator is passed to the gc using a few

@@ -5,7 +5,7 @@ Submitter:   David Swasey <swasey@cs.cmu.edu>
 Date:        3/25/2002
 Version:     CVS
 System:	     any
-Severity:    minor
+Severity:    cosmetic
 Problem:
 	Machine.defUse ought to distinguish between registers written
 	to with useful results and registers trashed.

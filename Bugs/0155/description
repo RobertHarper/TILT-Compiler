@@ -5,7 +5,7 @@ Submitter:   dreyer
 Date:        08/26/02
 Version:     
 System:      
-Severity:    minor
+Severity:    exception
 Problem:     
 
 In the example below, v should really be considered flexible, because

@@ -5,7 +5,7 @@ Submitter:   rwh
 Date:        08/18/02
 Version:     CVS
 System:      any
-Severity:    major
+Severity:    reject
 Problem:
 
 	Test m0129 fails because TILT attempts to parse code like

@@ -5,7 +5,7 @@ Submitter:   rwh
 Date:        08/16/02
 Version:     CVS
 System:      any
-Severity:    major
+Severity:    reject
 Problem:     fails to type check, perhaps because of word overloading problem
 Code:        
 	(* ../../Test/bug114/project *)

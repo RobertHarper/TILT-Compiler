@@ -5,7 +5,7 @@ Submitter:   tom7
 Date:        8/12/02
 Version:     CVS 8/12/02
 System:	     any
-Severity:    minor
+Severity:    exception
 Problem:     
 
 	The pattern compiler elaborates a list pattern by emitting

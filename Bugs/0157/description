@@ -5,7 +5,7 @@ Submitter:   leaf@cs.cmu.edu
 Date:        10/09/02
 Version:     CVS
 System:      solaris (possible others)
-Severity:    minor
+Severity:    cosmetic
 Problem:     
 	Some simple programs that should run in constant space seem to
 	exhibit slow continuous growth in the resident set size as

@@ -5,7 +5,7 @@ Submitter:   David Swasey <swasey@cs.cmu.edu>
 Date:        11/2/01
 Version:     CVS
 System:	     any
-Severity:    minor
+Severity:    cosmetic
 Problem:
 	The phase splitter generates warnings like
 
