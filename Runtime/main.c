@@ -100,6 +100,8 @@ struct option_entry {
   char *description;
 };
 
+extern int XXXXX;
+
 static int help=0, semi=0, gen=0, semipara=0, genpara=0, semiconc = 0, genconc = 0, fixheap=0, youngheap=0;
 struct option_entry table[] = 
   {0, "help", &help, "Print help info but do not execute program",
@@ -133,7 +135,7 @@ struct option_entry table[] =
    1, "maxratio", &MaxRatio, "Set the maximum ratio of of live objects to all objects",
    1, "minOffRequest", &minOffRequest, "Minimum size of mutator request when collector is off",
    1, "minOnRequest", &minOnRequest, "Minimum size of mutator request when collector is on",
-   1, "fetchSize", &fetchSize, "Number of items to fetch from the shared work stack",
+   1, "objFetchSize", &objFetchSize, "Number of items to fetch from the shared work stack",
    1, "localWorkSize", &localWorkSize, "Number of items to work on from local shared stack before accessing shared work stack",
    1, "doCopyCopySync", &doCopyCopySync, "Perform copy-copy synchronization for parallel/concurrent collectiors",
    0, "short", &shortSummary, "Print short summary of execution"};

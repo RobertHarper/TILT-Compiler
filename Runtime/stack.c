@@ -716,39 +716,39 @@ void global_root_init()
   allocStack(&tenuredGlobalLoc, numGlobals);
 }
 
-void minor_global_scan(Proc_t *proc)
-{  
-  /* For each root of potentialGlobal
-       (1) move to potentialTemp if it is uninitialized 
-       (2) move to promotedGlobalLoc all its pointer fields if it is initialized
-     Swap potentialGlobal and potentialTemp
-  */
-  int i, workDone = 0;
+void do_global_work(Proc_t *proc, int workToDo)
+{
   int lastModuleStarted = (mainThread == NULL) ? module_count : mainThread->nextThunk;
-  int origPromoted = lengthStack(&promotedGlobalLoc);
   
-  /* Every global of a module is initialized before the next module's globlas are initialized */
-  for ( ; lastModulePreprocessed<lastModuleStarted; lastModulePreprocessed++) {
+  /* A module's globals are not initialized until the module has been started */
+  while (lastModulePreprocessed<lastModuleStarted && 
+	 updateWorkDone(proc) <= workToDo) {
     mem_t start = (mem_t)((&TRACE_GLOBALS_BEGIN_VAL)[lastModulePreprocessed]);
     mem_t stop = (mem_t)((&TRACE_GLOBALS_END_VAL)[lastModulePreprocessed]);
-    workDone += stop-start;
     for ( ; start < stop; start++) {
       mem_t global = (mem_t) (*start);
       pushStack(potentialGlobal, global);
     }
+    proc->segUsage.rootsProcessed += stop - start;
+    lastModulePreprocessed++;
   }
-  workDone += lengthStack(potentialGlobal);
+  assert(isEmptyStack(potentialGlobalTemp));
   while (!isEmptyStack(potentialGlobal)) {
     mem_t global = (mem_t) popStack(potentialGlobal);
     tag_t tag = global[-1];
     if (GET_TYPE(tag) == SKIP_TYPE)
       pushStack(potentialGlobalTemp, global);
-    else 
-      workDone += getNontagNonglobalPointerLocations(global, &promotedGlobalLoc);
+    else {
+      proc->segUsage.rootsProcessed += getNontagNonglobalPointerLocations(global, &promotedGlobalLoc);
+    }
   }
   typed_swap(Stack_t *, potentialGlobal, potentialGlobalTemp);
+}
+
+void minor_global_scan(Proc_t *proc)
+{  
+  do_global_work(proc,MAXINT);
   copyStack(&promotedGlobalLoc, proc->roots);
-  proc->segUsage.rootsProcessed += workDone;
 }
 
 /* Transfers items from promotedGlobalLoc to tenuredGlobalLoc */
@@ -759,9 +759,10 @@ void minor_global_promote()
 
 void major_global_scan(Proc_t *proc)
 {
-  minor_global_scan(proc);
+  do_global_work(proc,MAXINT);
   minor_global_promote();
   assert(isEmptyStack(&promotedGlobalLoc));
+  proc->segUsage.rootsProcessed += lengthStack(&tenuredGlobalLoc);
   copyStack(&tenuredGlobalLoc, proc->roots);
 }
 

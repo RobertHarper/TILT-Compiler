@@ -14,29 +14,33 @@ typedef struct TwoRoom__t
 
 typedef struct SharedStack__t
 {
+  ptr_t *rootValData;   /* Stack contains root values - not root locations */
   ptr_t *objData;       /* Stack contains gray objectsn */
   ptr_t *segmentData;   /* Stack contains ranges of gray objects; represented as triples of (gray, start, stop) */
-  long objSize;         /* Size of objData */
-  long segmentSize;     /* Size of segmentData */
-  long objCursor;       /* Index of first unused obj stack slot */
-  long segmentCursor;   /* Index of first unused seg stack slot */
+  long rootValSize;     /* Size of corresponding stacks */
+  long objSize;         
+  long segmentSize;     
+  long rootValCursor;   /* Index of first unused obj stack slot */
+  long objCursor;
+  long segmentCursor;   
   long numLocalStack;   /* Number of local stacks that might be non-empty */
   TwoRoom_t twoRoom;    /* Used to support parallel pushes and parallel pops by forbidding concurrent pushes and pops */
 } SharedStack_t;
 
-SharedStack_t *SharedStack_Alloc(int objSize, int segmentSize);
+SharedStack_t *SharedStack_Alloc(int rootValSize, int objSize, int segmentSize);
 int isEmptySharedStack(SharedStack_t *);                /* Requires access to TwoRoom */
 void resetSharedStack(SharedStack_t *, int);            /* Resets numStack to given number */
 void popSharedStack(SharedStack_t *, 
+		    Stack_t *rootVal, int rootValRequest,
 		    Stack_t *obj, int objRequest,
 		    Stack_t *segment, int segmentRequest);  /* Increments numStack if number of items fetched > 0 */
 int pushSharedStack(SharedStack_t *, 
-		    Stack_t *obj, Stack_t *segment);         /* Decrements numStack if number of items returned > 0;
-								Returns 1 if global stack empty and numStack is 0 */
+		    Stack_t *rootVal, Stack_t *obj, Stack_t *segment);  /* Decrements numStack if number of items returned > 0;
+									   Returns 1 if global stack empty and numStack is 0 */
 int condPushSharedStack(SharedStack_t *, 
-			Stack_t *obj, Stack_t *segment);  /* Does not decrement numStack;
-							     If global stack empty and numStack is 0, return 0;
-							     else perform the transfer and return 1 */
+			Stack_t *rootVal, Stack_t *obj, Stack_t *segment);  /* Does not decrement numStack;
+									       If global stack empty and numStack is 0, return 0;
+									       else perform the transfer and return 1 */
 
 
 

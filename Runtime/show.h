@@ -16,7 +16,13 @@ void show_heap_raw(char *label, int numwords,
 		   mem_t to_low,   mem_t to_high);
 void memdump(char *title, unsigned int *start, int len, unsigned int *target);
 
-int inHeap(ptr_t v, Heap_t *heap);
 int inHeaps(ptr_t v, Heap_t **legalHeaps, Bitmap_t **legalStarts);
+
+INLINE1(inHeap)
+INLINE2(inHeap)
+int inHeap(ptr_t v, Heap_t *heap)
+{
+  return ((v >= heap->bottom) && (v <= heap->top));
+}
 
 #endif

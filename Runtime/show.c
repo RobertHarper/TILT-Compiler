@@ -10,10 +10,7 @@
 
 int traceError = 0;
 
-int inHeap(ptr_t v, Heap_t *heap)
-{
-  return ((v >= heap->bottom) && (v <= heap->top));
-}
+
 
 int inHeaps(ptr_t v, Heap_t **legalHeaps, Bitmap_t **legalStarts)
 {

@@ -438,7 +438,7 @@ void thread_init()
     for (j=0; j<(sizeof(proc->writelist) / sizeof(ptr_t)); j++)
       proc->writelist[j] = 0;
     proc->roots = createStack(10000);
-    proc->rootVals = createStack(10000);
+    allocStack(&proc->rootVals, 10000);
     proc->primaryReplicaObjFlips = createStack(200);
     proc->primaryReplicaLocRoots = createStack(500);
     proc->primaryReplicaLocFlips = createStack(1000);

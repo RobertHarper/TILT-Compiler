@@ -50,7 +50,7 @@ mem_t AllocBigArray_Gen(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
   switch (spec->type) {
     case IntField : init_iarray(obj, spec->elemLen, spec->intVal); break;
   case PointerField : init_parray(obj, spec->elemLen, spec->pointerVal); 
-                      pushStack(proc->rootVals, spec->pointerVal);
+                      pushStack(&proc->rootVals, spec->pointerVal);
                       pushStack(proc->primaryReplicaObjFlips, obj);
 		      break;
     case DoubleField : init_farray(obj, spec->elemLen, spec->doubleVal); break;
@@ -151,8 +151,8 @@ void GCStop_Gen(Proc_t *proc)
     proc->minorRange.stop = fromSpace->top;
     while (!isEmptyStack(proc->roots)) 
       locCopy1_noSpaceCheck(proc, (ploc_t) popStack(proc->roots), &proc->minorRange, &nursery->range);
-    while (!isEmptyStack(proc->rootVals)) 
-      copy1_noSpaceCheck(proc, (ptr_t) popStack(proc->rootVals), &proc->minorRange, &nursery->range);
+    while (!isEmptyStack(&proc->rootVals)) 
+      copy1_noSpaceCheck(proc, (ptr_t) popStack(&proc->rootVals), &proc->minorRange, &nursery->range);
     while (!isEmptyStack(proc->primaryReplicaObjFlips)) {
       /* Not transferScanObj_* since this object is a primaryReplica.
 	 Since this is a stop-copy collector, we can use _locCopy_ immediately */
@@ -192,10 +192,10 @@ void GCStop_Gen(Proc_t *proc)
        then the usual Cheney scan followed by sweeping the large-object region */
     gc_large_startCollect();
     while (!isEmptyStack(proc->roots)) 
-      locCopy2_noSpaceCheck(proc,(ploc_t) popStack(proc->roots), &proc->majorRange,
+      locCopy2L_noSpaceCheck(proc,(ploc_t) popStack(proc->roots), &proc->majorRange,
 			    &nursery->range, &fromSpace->range, &largeSpace->range);
     resetStack(proc->primaryReplicaObjFlips);
-    scanUntil_locCopy2_noSpaceCheck(proc,scanStart, &proc->majorRange,
+    scanUntil_locCopy2L_noSpaceCheck(proc,scanStart, &proc->majorRange,
 				    &nursery->range, &fromSpace->range, &largeSpace->range);
     assert(proc->majorRange.cursor < toSpace->top);
     toSpace->cursor = proc->majorRange.cursor;

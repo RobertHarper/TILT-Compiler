@@ -47,7 +47,8 @@ typedef unsigned int *mem_t;  /* A memory address into the stack and heap.
 #define OTHER_TYPE       0x7
 
 #define STALL_TAG (OTHER_TYPE | (0x0 << 3))
-#define PROCEED_TAG (OTHER_TYPE | (0x1 << 3))
+#define SEGSTALL_TAG (OTHER_TYPE | (0x1 << 3))   /* Is different from STALL_TAG so object is parsable starting at first tag */
+#define SEGPROCEED_TAG (OTHER_TYPE | (0x2 << 3))
 
 #define TAG_IS_FORWARD(t)  ((((tag_t)t) & 0x3) == 0)
 #define TAG_IS_OTHER(t)    ((((tag_t)t) & 0x7) == OTHER_TYPE)

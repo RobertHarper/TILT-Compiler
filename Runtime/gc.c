@@ -51,13 +51,14 @@ int YoungHeapByte = 0, MaxHeap = 0, MinHeap = 0;
 double MinRatio = 0.0, MaxRatio = 0.0;
 int MinRatioSize = 0,  MaxRatioSize = 0;
 int minOffRequest, minOnRequest;  /* Mutator handed multiples of this amount of space for parallel and concurrent collectors */
-int fetchSize = 25;               /* Number of objects to fetch from global pool */
-int segFetchSize = 2;             /* Number of objects to fetch from global pool */
+int rootValFetchSize = 100;
+int objFetchSize = 25;            
+int segFetchSize = 2;             
 int localWorkSize = 50;           /* Number of objects to work on from local pool */
 double copyWeight = 1.0 / 4.0;    /* Does not actually copy fields */
 double scanWeight = 3.0 / 4.0;
 double rootWeight = 10.0;
-int arraySegmentSize = 4 * 1024;  /* Must be greater than the compiler's maxByteRequest - notion of large array */
+int arraySegmentSize = 0;         /* Either zero for off or must be greater than the compiler's maxByteRequest - notion of large array */
 
 
 static int (*GCTryFun)(Proc_t *, Thread_t *) = NULL;

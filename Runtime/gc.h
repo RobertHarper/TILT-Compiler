@@ -104,11 +104,15 @@ extern int MinRatioSize, MaxRatioSize;
 extern long NumRoots, NumContentions, NumWrites, NumLocatives;
 extern int GenKBytesCollected;
 extern int minOffRequest, minOnRequest;  /* Mutator handed multiples of this amount of space for parallel and concurrent collectors */
-extern int fetchSize;                    /* Number of objects to fetch from global pool */
+extern int rootValFetchSize;             /* Number of root values to fetch from global pool */
+extern int objFetchSize;                 /* Number of objects to fetch from global pool */
 extern int segFetchSize;                 /* Number of (large object) segments to fetch from global pool */
 extern int localWorkSize;                /* Number of objects to work on from local pool */
 extern int doCopyCopySync;               
-extern int arraySegmentSize;             /* Large arrays are broken into segments to allow incremental copying */
+extern int arraySegmentSize;             /* If zero, not splitting large arrays.
+					    An array of more than arraySegmentSize bytes is considered large and
+					    broken into segments for incremental copying.
+					    Each segment (except possibly the last) is of size arraySegmentSize. */
 extern double copyWeight;
 extern double scanWeight;
 extern double rootWeight;

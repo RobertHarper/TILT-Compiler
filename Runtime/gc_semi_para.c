@@ -124,17 +124,18 @@ static void stop_copy(Proc_t *proc)
     ploc_t root = (ploc_t) popStack(proc->roots);
     (void) locCopy1_copyCopySync_primaryStack(proc,root,&proc->majorStack,&proc->majorRange,&fromSpace->range); 
   }
-  pushSharedStack(workStack,&proc->majorStack,&proc->majorSegmentStack);  /* We must call this even if local stack is empty */
+  pushSharedStack(workStack,&proc->rootVals,&proc->majorStack,&proc->majorSegmentStack);  /* We must call this even if local stack is empty */
 
   while (1) {
     int i, globalEmpty;
-    popSharedStack(workStack,&proc->majorStack, fetchSize, &proc->majorSegmentStack, 0);
+    popSharedStack(workStack,&proc->rootVals,0, &proc->majorStack, objFetchSize, &proc->majorSegmentStack, 0);
+    assert(isEmptyStack(&proc->rootVals));
     for (i=0; i < localWorkSize; i++) {
       ptr_t gray = popStack(&proc->majorStack);
       if (gray != NULL)
 	(void) transferScanObj_locCopy1_copyCopySync_primaryStack(proc,gray,&proc->majorStack,&proc->majorRange,&fromSpace->range);
     }
-    globalEmpty = pushSharedStack(workStack,&proc->majorStack,&proc->majorSegmentStack);  /* We must call this even if local stack is empty */
+    globalEmpty = pushSharedStack(workStack,&proc->rootVals,&proc->majorStack,&proc->majorSegmentStack);  /* We must call this even if local stack is empty */
     if (globalEmpty)
       break;
   }
@@ -231,5 +232,5 @@ void GCInit_SemiPara()
   init_int(&MaxRatioSize, 50 * 1024);
   fromSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);
   toSpace = Heap_Alloc(MinHeap * 1024, MaxHeap * 1024);  
-  workStack = SharedStack_Alloc(16384, 1024);
+  workStack = SharedStack_Alloc(0, 16384, 1024);
 }

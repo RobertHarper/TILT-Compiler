@@ -307,7 +307,7 @@ typedef struct Proc__t
   Histogram_t        gcFlipOnHistogram;
 
   Stack_t            *roots;                  /* Stack, global root locations containing root values */
-  Stack_t            *rootVals;               /* Used by incremental collector for breaking up initial root processing 
+  Stack_t            rootVals;                /* Used by incremental collector for breaking up initial root processing 
 						      and by generational for ptr array allocation */
   Stack_t            *primaryReplicaObjFlips; /* PR objects whose locs must be flipped when minor collector goes off - allocated ptr array */
   Stack_t            *primaryReplicaLocRoots; /* Locations of PRs whose values serve as roots - modified ptr array loc */

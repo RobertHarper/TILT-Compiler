@@ -50,9 +50,9 @@ void gc_large_startCollect()
 
 void gc_large_addRoot(ptr_t obj)
 {
-  mem_t objStart = obj - 1;
+  mem_t objStart; 
+  int byteLen = objectLength(obj, &objStart);
   int bytePos = (sizeof (unsigned int)) * (objStart - largeSpace->bottom);
-  int byteLen = objectLength(obj);
   int chunkPos = DivideDown(bytePos, largebitmapsize);
   int chunkLen = DivideUp(byteLen, largebitmapsize);
   if (!IsSet(markMap, chunkPos))
