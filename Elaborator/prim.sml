@@ -5,12 +5,12 @@ structure Prim :> PRIM =
     datatype floatsize = F32 | F64
 
     (* zero-length arrays and vectors need type *)
-    datatype ('con,'exp) value = int     of intsize * TilWord64.word
+    datatype ('con,'sv) value = int     of intsize * TilWord64.word
                                | uint    of intsize * TilWord64.word
 			       | float   of floatsize * string
-			       | array   of 'con * 'exp Array.array
-			       | vector  of 'con * 'exp Array.array
-			       | refcell of 'exp ref
+			       | array   of 'con * 'sv Array.array
+			       | vector  of 'con * 'sv Array.array
+			       | refcell of 'sv ref
 			       | tag     of Name.tag * 'con
 
     datatype traptype = int_tt | real_tt | both_tt
@@ -397,9 +397,22 @@ structure Prim :> PRIM =
 		  | FloatArray _ => true
 		  | OtherArray _ => true
 		  | _ => false)  (* Vectors are not updateable, and
-				  * are compared structurally *)
+				  * are compared structurally *)		 
 	  | sub t    => true
 	  | update t => true
+
+	  (* Some or all of these depend on the rounding mode,
+	   * which is a kind of store effect.  
+	   * Our use of float2int may not - this is unclear.
+	   *)
+	  | float2int => true
+	  | neg_float _ => false
+	  | abs_float _ => true
+	  | plus_float _ => true
+	  | minus_float  _ => true
+	  | mul_float _ => true
+	  | div_float _  => true
+
 	  | _ => false (* All others have no store effects *)
 (*
 	  | length_table t => false (* length does not change *)
@@ -409,7 +422,7 @@ structure Prim :> PRIM =
 	  (* Some of these may raise exceptions, but they do not have
 	   * a store effect.
 	   *)
-	  | float2int => false
+
 	  | int2float => false
 	  | int2uint _ => false
 	  | uint2int _ => false
@@ -418,12 +431,6 @@ structure Prim :> PRIM =
 	  | uinta2uinta _ => false
 	  | uintv2uintv _ => false
 
-	  | neg_float _ => false
-	  | abs_float _ => false
-	  | plus_float _ => false
-	  | minus_float  _ => false
-	  | mul_float _ => false
-	  | div_float _  => false
 	  | less_float _ => false
 	  | greater_float _ => false
 	  | lesseq_float _ => false
