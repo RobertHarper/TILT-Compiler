@@ -1,5 +1,6 @@
-(*$import Prelude TopLevel Word32 TextIO Listops TilWord32 TraceInfo Sequence Annotation Stats Util Name Prim Nil Ppprim Formatter String PPNIL *)
-(* Nil pretty-printer. *)
+(*$import Word32 TextIO Listops TilWord32 TraceInfo Sequence Annotation Stats Util Name Prim Nil Ppprim Formatter String PPNIL *)
+
+(* Nil pretty-printer that uses HTML to hyperlink variable occurrences to their binding sites *)
 
 structure PpnilHtml :> PPNIL =
   struct

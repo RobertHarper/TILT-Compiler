@@ -1,5 +1,7 @@
-(*$import Prelude Name Nil Formatter *)
+(*$import Name Nil Formatter *)
+
 (* Pretty-printing routines for the NIL *)
+
 signature PPNIL =
   sig
 
