@@ -117,7 +117,7 @@ struct
       | COMPU of Paths.compunit
       | PRIMU of Paths.compunit * Update.imports
       | IMPORTU of Paths.compunit
-      | CHECKU of Paths.compunit * Paths.iface
+      | CHECKU of var * Paths.compunit * Paths.iface
 
     fun unit_paths (unit : unit_node) : Paths.compunit =
 	(case unit
@@ -125,7 +125,7 @@ struct
 	    | COMPU p => p
 	    | PRIMU (p,_) => p
 	    | IMPORTU p => p
-	    | CHECKU (p,_) => p)
+	    | CHECKU (_,p,_) => p)
 
     fun unit_id (n : unit_node) : string =
 	(case n
@@ -133,7 +133,7 @@ struct
 	    | COMPU p => "compiled unit " ^ Paths.unitName p
 	    | PRIMU (p,_) => "primitive unit " ^ Paths.unitName p
 	    | IMPORTU p => "imported unit " ^ Paths.unitName p
-	    | CHECKU (p,_) => "checked unit " ^ Paths.unitName p)
+	    | CHECKU (_,p,_) => "checked unit " ^ Paths.unitName p)
 
     datatype node =
 	UNIT of unit_node
@@ -213,7 +213,8 @@ struct
 	     pos_ref := NONE)
 
 	fun add_eq (crc : Crc.crc, crc' : Crc.crc) : unit =
-	    equiv := Equiv.insert (!equiv, crc, crc')
+(if crc <> crc' then print ("XXX " ^ Crc.toString crc ^ "=" ^ Crc.toString crc' ^ "\n") else ();
+	    equiv := Equiv.insert (!equiv, crc, crc'))
 
 	fun eq (crcs : Crc.crc * Crc.crc) : bool =
 	    Equiv.equiv (!equiv) crcs
@@ -357,7 +358,7 @@ struct
 		    | Group.CHECKU {U,I} =>
 			let val pU = get_unit_paths U
 			    val pI = get_iface_paths I
-			in  (UNIT (CHECKU (pU,pI)), [U,I])
+			in  (UNIT (CHECKU (U,pU,pI)), [U,I])
 			end)
 	    | Group.CMD cmd =>
 		(case cmd
@@ -759,7 +760,7 @@ struct
 		   | status => badStatus (node, status, "making done")
 	    val _ = set_status (node, DONE times)
 	    val _ = (case get_node node
-		       of UNIT (CHECKU (U,I)) =>
+		       of UNIT (CHECKU (_,U,I)) =>
 			    let val I = Paths.ifaceFile I
 				val U = Paths.ifaceFile (Paths.unitIface U)
 			    in  add_eq(FileCache.crc I, FileCache.crc U)
@@ -769,21 +770,25 @@ struct
 	in  ()
 	end
 
-    fun get_context (v : var) : Update.context =
+    fun get_context' (exclude : VarSet.set, v : var) : Update.context =
 	let val reachable = get_import_transitive v
 	    fun mapper (v : var) : (string * Paths.iface) option =
-		(case get_node v
-		   of UNIT (CHECKU _) => NONE
-		    | UNIT unit_node =>
-			let val U = unit_paths unit_node
-			    val name = Paths.unitName U
-			    val iface = Paths.unitIface U
-			in  SOME (name,iface)
-			end
-		    | IFACE _ => NONE
-		    | node => error ("get_context saw " ^ (node_id node)))
+		if VarSet.member (exclude,v) then NONE
+		else
+		    (case get_node v
+		       of UNIT (CHECKU _) => NONE
+			| UNIT unit_node =>
+			    let val U = unit_paths unit_node
+				val name = Paths.unitName U
+				val iface = Paths.unitIface U
+			    in	SOME (name,iface)
+			    end
+			| IFACE _ => NONE
+			| node => error ("get_context saw " ^ (node_id node)))
 	in  List.mapPartial mapper reachable
 	end
+
+    fun get_context (v : var) : Update.context = get_context' (VarSet.empty,v)
 
     fun get_ue (node : var) : Ue.ue =
 	let val nodes = get_import_direct node
@@ -944,8 +949,9 @@ struct
 		in  Update.plan_compile (eq,context,imports,unit)
 		end
 	    | UNIT (IMPORTU unit) => Update.empty_plan
-	    | UNIT (CHECKU (unit,iface)) =>
-		let val context = get_context node
+	    | UNIT (CHECKU (U,unit,iface)) =>
+		let val exclude = VarSet.singleton U
+		    val context = get_context' (exclude, node)
 		in  Update.plan_checku (eq,context,unit,iface)
 		end
 	    | LINK exe =>
