@@ -1547,7 +1547,6 @@ intpair posix_filesys_fpathconf (int unused1, string unused)
   UNIMP();
 }
 
-
 ptr_t til_selfusage(void)
 {
   val_t fields[4];
@@ -1571,36 +1570,6 @@ ptr_t til_realtime(void)
   return alloc_intint(tp.time, tp.millitm);
 }
 
-
-ptr_t printString(ptr_t str)
-{
-  int len = stringlen(str);
-  if (NumGC < 5)
-    return;
-  printf("%.*s   GC %d  GCStatus = %d   alloc ptr = %d\n",
-	 len, (char*) str, NumGC, GCStatus,  
-	 Threads[0].saveregs[ALLOCPTR]);
-  /*
-  if (NumGC == 8)
-    printf("sp = %d   *(*(sp' + 0x70) + 4) = %d\n", 
-	   Threads[0].saveregs[SP],
-	   *(int *)(*(int *)(268606336 + 0x70) + 4));
-    */
-  return empty_record;
-}
-
-ptr_t printStringInt(ptr_t str, int n)
-{
-  int len = stringlen(str);
-  int sp =   Threads[0].saveregs[SP];
-  if (NumGC < 5)
-    return;
-  printf("%.*s %d\n", len, (char*) str, n);
-  return empty_record;
-}
-
-/* Not really appropriate here, but I'm planning on reorganizing anyway. */
-
 static char* commandline_cmd = NULL;
 static char** commandline_argv = NULL;
 
@@ -1620,12 +1589,4 @@ string_list commandline_arguments(unit ignored)
 {
   assert(commandline_argv != NULL);
   return array_to_string_list(commandline_argv);
-}
-
-ptr_t cast1(ptr_t v) { return v; }
-ptr_t cast2(ptr_t v) { return v; }
-
-ptr_t showAddr(ptr_t v) {
-  printf("showAddr: %d  NumGC = %d   fromSpace->bottom = %d\n", v, NumGC, fromSpace->bottom);
-  return empty_record;
 }
