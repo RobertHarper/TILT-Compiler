@@ -118,8 +118,11 @@ struct
     val HeapProfile = NONE : int option
     val elim_tail_call = Stats.tt("ElimTailCall")
 
-    val coercion_int = 257
-    val coercion_term = VALUE(TAG 0w257)
+    (*This value is entirely arbitrary, except that it must be > 256
+     * Even this is up for grabs if we change the definition of
+     * NilUtil.istaglike to mark Coercion_c as taglike
+     *)
+    val coercion_term = VALUE(INT 0w257)
 
    datatype work = FunWork of (state * var * con * function)
                  | ConFunWork of (state * var * (var * kind) list * con)
