@@ -163,6 +163,13 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 	                    | ETAe of int * var * (con list * exp list * exp list) list
 	                    | OPTIONALc of con | MUSTc of con
 	      
+fun pp_alias UNKNOWN = print "unknown"
+| pp_alias (OPTIONALe e) = (print "OPTIONALe "; Ppnil.pp_exp e)
+| pp_alias (MUSTe e) = (print "MUSTe "; Ppnil.pp_exp e)
+| pp_alias (OPTIONALc c) = (print "OPTIONALc "; Ppnil.pp_con c)
+| pp_alias (MUSTc c) = (print "MUSTc "; Ppnil.pp_con c)
+| pp_alias (ETAe _) = print "ETAe ..."
+
 	local
 	  type entry = used_state ref * equivalent
 	  datatype state = STATE of {curry_processed : (Name.VarSet.set * var Name.VarMap.map),
@@ -276,7 +283,10 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 	  fun add_alias(state as STATE{mapping,...},v,alias) =
 	      let val SOME(use,_) = Name.VarMap.find(mapping,v)
 		  val mapping = Name.VarMap.insert(mapping,v,(use,alias))
-(* xxx		  val _ = (print "add_alias for "; Ppnil.pp_var v; print "\n") *)
+(*
+		  val _ = (print "add_alias for "; Ppnil.pp_var v; 
+				print " --> "; pp_alias alias; print "\n")
+*)
 	      in  update_mapping(state,mapping)
 	      end
 
@@ -300,10 +310,7 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 	  fun find_availE(STATE{avail,...},e) = 
 	      if (!do_cse) then ExpTable.Expmap.find(#1 avail,e) else NONE
 	  fun add_availE(state as STATE{intype,mapping,current,curry_processed,equation,avail},e,v) = 
-	      if (!do_cse andalso (not (NilUtil.effect e))
-		  andalso (case e of
-			       Prim_e(NilPrimOp (unbox_float _), _, _) => false
-			     | _ => true))
+	      if (!do_cse andalso (not (NilUtil.effect e)))
 		  then STATE{intype=intype,mapping=mapping,current=current,
 			     curry_processed = curry_processed,
 			     equation=equation,
@@ -795,15 +802,22 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 		 [] => do_prim state (NilPrimOp(inject_nonrecord k),clist,[])
 	       | [Prim_e(NilPrimOp(record _),_,elist)] =>
 		     do_prim state (NilPrimOp(inject_record k),clist,elist)
-	       | [Var_e v] => 
-		     (case (Normalize_reduce_hnf(get_env state, find_con(state,v))) of
+	       | [Var_e rec_var] => 
+		     (case (Normalize_reduce_hnf(get_env state, find_con(state,rec_var))) of
 			  (_, Prim_c(Record_c (labs,vlist),cons)) => 
-			      let val fields = map (fn l =>
-						    Prim_e(NilPrimOp(select l),[],
-							   [Var_e v]))
-				  labs
-				  val r = Prim_e(NilPrimOp(record labs),[],fields)
-			      in  do_inject state (k,clist,[r])
+			      let val vars = map (fn l => Name.fresh_named_var (Name.label2name l)) labs
+				  fun mapper (v,l,c) =
+					let val e = Prim_e(NilPrimOp(select l),[], [Var_e rec_var])
+					in  case get_trace(state,c) of
+						SOME tinfo => [Exp_b(v,TraceKnown tinfo,e)]
+					      | NONE => let val rv = Name.fresh_named_var "opt_reify"
+							in  [Con_b(Runtime,Con_cb(rv,c)),
+							     Exp_b(v,TraceKnown (TraceInfo.Compute(rv,[])),e)]
+							end
+					end
+				  val bnds = Listops.flatten(map3 mapper (vars,labs,cons))
+				  val e = Prim_e(NilPrimOp(record labs),[], map Var_e vars)
+			      in  do_exp state (Let_e (Sequential,bnds,e))
 			      end
 			| (true, _) => do_prim state (NilPrimOp (inject_nonrecord k),clist,elist)
 			| _ => default())
@@ -813,33 +827,37 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 
 	and do_prim (state : state) (prim, clist, elist) = 
 	 let open Prim
+
 	     val elist = map (do_exp state) elist
-
-	     fun getVals [] = SOME []
-	       | getVals ((Var_e v)::rest) =
-		 (case lookup_alias(state,v) of
-		      OPTIONALe e => getVals (e::rest)
-		    | _ => NONE)
-	       | getVals (e::rest) = 
-		      if (NilUtil.is_closed_value e) then
-			  (case (getVals rest) of
-			       NONE => NONE
-			     | SOME es => SOME (e :: es))
-		      else
-			  NONE
-
              fun default() = Prim_e(prim,
 				    map ((if Normalize_allprim_uses_carg prim 
 					      then do_con else do_type)
 					 state) clist, 
 				    elist)
-	 in  case (prim,elist) of
+	     fun getVals [] = SOME []
+	       | getVals (e::rest) = 
+			if (NilUtil.is_closed_value e) then
+			  (case (getVals rest) of
+			       NONE => NONE
+			     | SOME es => SOME (e :: es))
+		        else
+			  NONE
+
+	     fun help (e as Var_e v) = 
+		 (case lookup_alias(state,v) of
+		      MUSTe e => e
+		    | OPTIONALe e => e
+		    | _ => e)
+	       | help e = e
+
+	 in  case (prim,map help elist) of
 		 (NilPrimOp(select l),[e as Var_e v]) => 
 		     (case (lookup_proj(state,v,[l])) of
 			  NONE => Prim_e(prim,[], [do_exp state e])
 			| SOME e => do_exp state e)
 	       | (NilPrimOp (inject k),_) => do_inject state (k, clist, elist)
-	       | (PrimOp(create_table t), _) => do_aggregate state (SOME (local_array,local_vector)) (create_table,t,clist,elist)
+	       | (PrimOp(create_table t), _) => do_aggregate state (SOME (local_array,local_vector)) 
+							(create_table,t,clist,elist)
 	       | (PrimOp(create_empty_table t), _) => 
 		   do_aggregate state NONE (create_empty_table,t,clist,elist)
 	       | (PrimOp(sub t), _) => 
@@ -851,14 +869,8 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 	       | (PrimOp(length_table t), _) => 
 		   do_aggregate state (SOME (local_len,local_vlen)) 
 		      (length_table,t,clist,elist)
-	       | (NilPrimOp unroll, _) => 
-		      (case (getVals elist) of
-			   SOME [Prim_e(NilPrimOp roll,_,[e])] => e
-			 | _ => default ())
-	       | (NilPrimOp (unbox_float _), _) => 
-		      (case (getVals elist) of
-			   SOME [Prim_e(NilPrimOp (box_float _),_,[e])] => e
-			 | _ => default ())
+	       | (NilPrimOp unroll, [Prim_e(NilPrimOp roll,_,[e])]) => e
+	       | (NilPrimOp (unbox_float _), [Prim_e(NilPrimOp (box_float _),_,[e])]) => e
                | (PrimOp p, _) => 
 		      (case (getVals elist) of
 			   NONE => default ()

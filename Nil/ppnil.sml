@@ -158,14 +158,9 @@ structure Ppnil	:> PPNIL =
 			 pp_con default]
 	       end
 	 | App_c (con,conlist) => HOVbox[String "APP(",
-(*
-					       pp_arrow arrow,
-					       String ",",
-*)
-					       pp_con con,
-					       String ";",
-					       pp_list' pp_con conlist,
-					       String ")"]
+					 pp_con con, String ",", Break0 0 2,
+					 pp_list' pp_con conlist,
+					 String ")"]
 	 | Mu_c (flag,vcset) => HOVbox[if flag then String "MU(" else String "MU_NR(",
 					   (pp_list' (fn (v,c) => HOVbox[pp_var v, String "=", pp_con c])
 					    (Sequence.toList vcset)),
@@ -193,7 +188,7 @@ structure Ppnil	:> PPNIL =
       | pp_primcon Ref_c = error "no ref_c soon!!"
       | pp_primcon Exn_c = String "EXN"
       | pp_primcon Exntag_c = String "EXNTAG"
-      | pp_primcon (Record_c (labs,NONE)) = HOVbox[String "RECORD[", Break,
+      | pp_primcon (Record_c (labs,NONE)) = HOVbox[String "RECORD[", Break0 0 3,
 						   pp_list pp_label labs ("",",","", false),
 						   String "]"]
       | pp_primcon (Record_c (labs,SOME vars)) = 
@@ -212,14 +207,14 @@ structure Ppnil	:> PPNIL =
       | pp_primcon (Vararg_c (oness,e)) = Hbox[String "VARARG[", pp_openness oness, pp_effect e, String "]"]
 
     and pp_confun {openness,effect,isDependent,tFormals,eFormals,fFormals,body_type} = 
-	pp_region "AllArrow(" ")"
-	[HVbox[pp_openness openness,
-	       String "; ",
+	HOVbox[String "ALLARROW(",
+		pp_openness openness,
+	        String "; ",
 	       (case effect of
 		    Total => String "TOTAL; "
 		  | Partial => String "PARTIAL; "),
 	       (pp_list' (fn (v,k) => Hbox[pp_var v,String " :: ", pp_kind k]) tFormals),
-	       String "; ", Break0 0 5,
+	       String "; ", Break0 0 3,
 	       (pp_list' (fn (vopt,c) =>
 			  (case vopt of
 			       NONE => pp_con c
@@ -227,8 +222,9 @@ structure Ppnil	:> PPNIL =
 					     then Hbox[pp_var v,String " :: ", pp_con c]
 					 else error "non-dependent but has var")) eFormals),
 	       String "; ", String (TilWord32.toDecimalString fFormals),
-	       String "; ", Break0 0 5,
-	       pp_con body_type]]
+	       String "; ", Break0 0 3,
+	       pp_con body_type,
+	       String ")"]
 
     and pp_nilprimop (select label) = Hbox[String "select[", pp_label label, String "]"]
       | pp_nilprimop nilprimop = 
@@ -330,8 +326,8 @@ structure Ppnil	:> PPNIL =
 			   pp_con sumtype, String ", ",
 			   Break0 0 5,
 			   pp_var bound, String ", ",  Break0 0 5,
-			   (pp_list (fn (w,tr,e) => Hbox[pp_word w, String ": ", pp_trace tr,
-								    String ": ", pp_exp e])
+			   (pp_list (fn (w,tr,e) => Hbox[pp_word w, String ": ", pp_trace tr, Break0 0 2,
+								    String ":: ", pp_exp e])
 			      arms ("","","", true)),
 			   Break0 0 5,
 			   pp_default default,
@@ -368,7 +364,7 @@ structure Ppnil	:> PPNIL =
 	let fun help x y = (x,y)
 	  in (case bnd of
 	        Exp_b (v,t,e) => HOVbox[pp_var v, String " : ", pp_trace t,
-					String " = ", Break, pp_exp e]
+					String " = ", Break0 0 2, pp_exp e]
 	      | Con_b (Runtime,cb) => pp_conbnd cb
 	      | Con_b (Compiletime,cb) => HOVbox[String "COMPILE_TIME ", Break, pp_conbnd cb]
 	      | Fixopen_b fixset => let val fixlist = Sequence.toList fixset
@@ -385,8 +381,8 @@ structure Ppnil	:> PPNIL =
 				       HOVbox(if (!elide_bnd) then [] else [String " : ", pp_con tipe]),
 				       String " = ",
 				       String "(",
-				       pp_var code, String ",",
-				       pp_con cenv, String ",",
+				       pp_var code, String ",", Break,
+				       pp_con cenv, String ",", Break,
 				       pp_exp venv, String ")"])
 			vcelist ("","","",true)
 		    end)
@@ -417,7 +413,7 @@ structure Ppnil	:> PPNIL =
 			   (if (null vkformats) then [String " ;; "] else [String " ;; ", Break0 0 8]) @
 			   vcformats @ [String " ;; "] @
 			   vfformats)],
-		    Break0 0 5,
+		    Break0 0 0,
 		    String (case effect of 
 				Total => " -> " 
 			      | Partial => " => "),

@@ -272,18 +272,17 @@ struct
 
 
 	fun empty_fun escape new_fid : funentry = 
-	    {static = {fid = new_fid,
-		       fidtype_var = fresh_named_var((var2string new_fid)
-						  ^ "_type"),
-		       code_var = fresh_named_var((var2string new_fid)
-						  ^ "_code"),
-		       unpack_var = fresh_named_var((var2string new_fid)
-						    ^ "_unpack"),
-		       cenv_var = fresh_named_var("free_cons"),
-		       venv_var = fresh_named_var("free_exps")},
-	     escape = escape,
-	     callee = [],
-	     frees = empty_frees}
+	    let val name = var2name new_fid
+	    in   {static = {fid = new_fid,
+		       fidtype_var = fresh_named_var(name ^ "_type"),
+		       code_var = fresh_named_var(name ^ "_code"),
+		       unpack_var = fresh_named_var(name ^ "_unpack"),
+		       cenv_var = fresh_named_var("cenv"),
+		       venv_var = fresh_named_var("tenv")},
+	          escape = escape,
+	          callee = [],
+	          frees = empty_frees}
+	    end
 	val global_escapes = ref (VarSet.empty : Name.VarSet.set)
 
 
@@ -622,7 +621,9 @@ struct
 		 (if (is_boundfid(state,v)) then add_escape v else ();
 		  (case (evar_isfree(state,frees,v)) of
 			   NONE => frees
-			 | SOME (tr,copt) => free_evar_add(frees,v,tr,copt)))
+			 | SOME (tr,copt) => let val frees = free_evar_add(frees,v,tr,copt)
+					     in  trace_find_fv(state, frees) tr
+					     end))
 	   | Prim_e (p,clist,elist) =>
 		 let fun tfold(t,f) = t_find_fv (state,f) t
 		     fun cfold(c,f) = c_find_fv (state,f) c
@@ -1012,21 +1013,12 @@ struct
 	       in  (subst, cbnds, cenv, kind)
 	       end
 
-	   val (venv_tr,venv_type) = (case (!do_single_venv, pc_free) of
-					    (true, [(_,_,tr,_,t)]) => (tr,t)
-					  | _ => 
-						let val labs = map #4 pc_free
-						    val types = map #5 pc_free
-					        in  (TraceKnown TraceInfo.Trace, 
-						     Prim_c(Record_c (labs,NONE), types))
-						end)
 
-	   val vklist = tFormals
-	   val vklist_code = vklist @ [(cenv_var,cenv_kind)]
+ 
 	   fun vc_mapper (v,tr,c) = (v,NilSubst.substConInTrace external_subst tr,
 					NilSubst.substConInCon external_subst c)
+	   val vklist = tFormals
 	   val vclist = map vc_mapper eFormals 
-	   val vclist_code = vclist @ [vc_mapper (venv_var,venv_tr,venv_type)]
 
 
 	   val codebody_tipe = c_rewrite state body_type
@@ -1042,24 +1034,54 @@ struct
 
 	   val code_body = e_rewrite inner_state body
 
+           fun is_float (TraceKnown TraceInfo.Notrace_Real) = true
+	     | is_float _ = false
+	   val boxfloat_type = Prim_c(BoxFloat_c Prim.F64, [])
+	   fun box e = Prim_e(NilPrimOp(box_float Prim.F64), [], [e])
+	   fun unbox e = Prim_e(NilPrimOp(unbox_float Prim.F64), [], [e])
+	   val trace_pointer = TraceKnown TraceInfo.Trace
+	   val trace_float = TraceKnown TraceInfo.Notrace_Real
 
-	   val (venv,code_bnds) = 
-	 	case (!do_single_venv, pc_free) of
-			 (_, []) => (Prim_e(NilPrimOp(record []),[], []), [])
-		       | (true, [(v,v',tr,_,c)]) => (e_rewrite state (Var_e v), [Exp_b(v',tr,Var_e venv_var)])
-		       | _ => let val venv_vars = map #2 pc_free
-				  val labels = map #4 pc_free
-				  val venv_bnds = map (fn (v,v',tr,_,_) => Exp_b(v',trace_rewrite state tr,
-										e_rewrite state (Var_e v)))
-						       pc_free
-				  val venv = Let_e(Sequential, venv_bnds, 
-			                           Prim_e(NilPrimOp(record labels),[], map Var_e venv_vars))
-				  val code_bnds = map (fn (_,v,tr,l,_) => Exp_b(v,trace_rewrite inner_state tr,
-										Prim_e(NilPrimOp(select l), [],
-										  [Var_e venv_var]))) pc_free
-			      in  (venv, code_bnds)
-			      end
+	   val (venv, code_bnds, venv_tr,venv_type) = 
+	      (case (!do_single_venv, pc_free) of
+		(true, [(v,v',tr,_,t)]) => let val venv = e_rewrite state (Var_e v)
+					       val venv = if (is_float tr) then box venv else venv
+					       val bnd = Exp_b(v',tr,if (is_float tr)
+									then unbox(Var_e venv_var)
+									else Var_e venv_var)
+					       val (tr,t) = if (is_float tr) 
+								then (trace_pointer,boxfloat_type) 
+								else (tr,t)
+					   in  (venv, [bnd], tr, t)
+					   end
+	      | _ => let  val venv_vars = map #2 pc_free
+			  val labels = map #4 pc_free
+			  val venv_bnds = map (fn (v,v',tr,_,t) => 
+						let val e = e_rewrite state (Var_e v)
+						    val (e,tr) = if (is_float tr) 
+									then (box e, trace_pointer)
+								else (e, trace_rewrite state tr)
+						in  Exp_b(v',tr,e)
+						end) pc_free
+			  val venv = makeLetE Sequential venv_bnds 
+					(Prim_e(NilPrimOp(record labels),[], map Var_e venv_vars))
+			  val code_bnds = map (fn (_,v,tr,l,t) => 
+						let val e = Prim_e(NilPrimOp(select l), [],
+									  [Var_e venv_var])
+						    val (e,tr) = if (is_float tr)
+									then (unbox e, trace_float)
+								else (e, trace_rewrite inner_state tr)
+						in   Exp_b(v,tr,e)
+						end) pc_free
+			  val labs = map #4 pc_free
+			  val types = map (fn (_,_,tr,_,t) => if (is_float tr) then boxfloat_type else t) pc_free
+			  val venv_type = Prim_c(Record_c (labs,NONE), types)
+		     in  (venv, code_bnds, TraceKnown TraceInfo.Trace, venv_type)
+		     end)
 
+
+	   val vklist_code = vklist @ [(cenv_var,cenv_kind)]
+	   val vclist_code = vclist @ [vc_mapper (venv_var,venv_tr,venv_type)]
 	   val code_fun = Function{effect=effect,recursive=recursive,isDependent=isDependent,
 				   tFormals=vklist_code,
 				   eFormals=vclist_code,
