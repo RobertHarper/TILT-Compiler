@@ -222,3 +222,6 @@ m0077	integer overflow
 m0078	integers
 m0079	list tabulation
 m0080	known case
+m0081	known case
+m0082	llv?
+m0083	nested loops

@@ -7,6 +7,7 @@ fun nlist 0 = 0::nil
 val rec last =
    fn nil => 0
     | x::nil => x
+    | y::x::nil => y
     | _ :: l => last l
 
 val n = 1 + (last (nlist (10)))
