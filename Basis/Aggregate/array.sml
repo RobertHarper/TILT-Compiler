@@ -190,7 +190,8 @@ structure Array : ARRAY =
 			then accum'
 		    else fold (uminus(i,0w1), accum')
 		end
-	in  fold (int32touint32(length arr - 1), init)
+	    val len = length arr
+	in  if len = 0 then init else fold (int32touint32(len - 1), init)
 	end
 
 
@@ -264,9 +265,12 @@ structure Array : ARRAY =
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:50:09  pscheng
-# added basis
+# Revision 1.2  98/03/11  20:08:14  pscheng
+# bug in foldr
 # 
+# Revision 1.1  1998/03/09  19:50:09  pscheng
+# added basis
+#
  * Revision 1.3  1997/05/05  19:59:57  george
  *   Change the term language into the quasi-A-normal form. Added a new round
  *   of lambda contraction before and after type specialization and
