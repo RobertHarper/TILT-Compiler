@@ -80,7 +80,7 @@ struct
 		  #1(foldl_acc (selfify_sdec m) empty_subst sdecs)
 
 	      and selfify_sdec (m : mod) (sdec, subst) : sdec * subst =
-		let val [sdec as SDEC(l,dec)] = sdecs_subst([sdec],subst)
+		let val sdec as SDEC(l,dec) = sdec_subst(sdec,subst)
 		    val (dec,subst) = 
 			      case dec
                                 of DEC_EXP(v,_,_,_) => 

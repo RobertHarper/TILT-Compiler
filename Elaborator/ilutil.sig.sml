@@ -163,6 +163,7 @@ signature ILUTIL =
     val con_subst : con * subst -> con
     val mod_subst : mod * subst -> mod
     val sig_subst : signat * subst -> signat
+    val sdec_subst : Il.sdec * subst -> Il.sdec
     val sdecs_subst : Il.sdecs * subst -> Il.sdecs
     val sbnds_subst : Il.sbnds * subst -> Il.sbnds
     val entry_subst : Il.context_entry * subst -> Il.context_entry

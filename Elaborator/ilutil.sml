@@ -393,6 +393,10 @@ structure IlUtil :> ILUTIL =
     (* XXX The implementation of substitutions doesn't seem to worry about variable capture.
            Perhaps this is not a problem, but I'd like to know why. *)
 
+    (*
+	We should deal with variable capture and delete the debugging
+	code.   -dave
+     *)
     local
       datatype state = STATE of ({bound_convar : var list,
 				  bound_var : var list,
@@ -1089,6 +1093,7 @@ structure IlUtil :> ILUTIL =
 *)
 	  val con_subst' = wrap' f_con
 	  val sig_subst' = wrap' f_signat
+	  val sdec_subst = wrap (fn state => fn sdec => #1(f_sdec(sdec,state)))
 	  val sdecs_subst = wrap f_sdecs
 	  val sbnds_subst = wrap f_sbnds
 	  val entry_subst = wrap f_entry'
