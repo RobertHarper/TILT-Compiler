@@ -611,8 +611,6 @@ struct
 		 | Arrow_k (ExternCode,vklist,body_kind) =>  (vklist,body_kind)
 		 | _ => (error (locate "con_valid") "Invalid closure: code component does not have code kind")
 	       val (first,(v,klast)) = split vklist
-(*	       val body_kind = varConKindSubst v env body_kind
-	       val kind = Arrow_k(Closure,first,body_kind)*)
 	       val _ = 
 		 (sub_kind (D,env_kind,klast)) orelse
 		 (print "Invalid kind for closure environment:";

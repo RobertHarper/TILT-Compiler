@@ -370,8 +370,10 @@ structure NilContext
 		     of Arrow_k (Code,vklist,body_kind) => (vklist,body_kind)
 		      | Arrow_k (ExternCode,vklist,body_kind) => (vklist,body_kind)
 		      | _ => (error  (locate "kind_of") "Invalid closure: code component does not have code kind" ))
+	       val (first,(v,klast)) = split vklist
+	       val body_kind = NilSubst.varConKindSubst v env body_kind
 	      in 
-		Arrow_k(Closure,Listops.butlast vklist,body_kind)
+		Arrow_k(Closure,first,body_kind)
 	      end
 	    
 	    | (Crecord_c entries) => 
