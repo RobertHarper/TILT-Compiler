@@ -8,6 +8,7 @@ functor MLTreeExtra(
 	) :> MLTREE_EXTRA
 	       where type MLTree.Constant.const	    = MLTree.Constant.const
 		 and type MLTree.PseudoOp.pseudo_op = MLTree.PseudoOp.pseudo_op
+		 and type MLTree.Region.region      = MLTree.Region.region
 		 and type MLTree.cond		    = MLTree.cond
 		 and type MLTree.fcond		    = MLTree.fcond
 		 and type MLTree.order		    = MLTree.order

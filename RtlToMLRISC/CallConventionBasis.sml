@@ -6,10 +6,14 @@
 functor CallConventionBasis(
 	  structure Cells:	       CELLS
 	  structure IntegerConvention: INTEGER_CONVENTION where type id = int
+	  structure MLRISCRegion:      MLRISC_REGION
 	  structure MLTreeExtra:       MLTREE_EXTRA
 	  structure StackFrame:	       STACK_FRAME
 
-	  sharing type MLTreeExtra.MLTree.Constant.const = StackFrame.offset
+	  sharing type MLRISCRegion.region =
+		       MLTreeExtra.MLTree.Region.region
+	      and type MLTreeExtra.MLTree.Constant.const =
+		       StackFrame.offset
 	) :> CALL_CONVENTION_BASIS
 	       where type id	 = int
 		 and type offset = MLTreeExtra.MLTree.Constant.const
@@ -58,6 +62,8 @@ functor CallConventionBasis(
   val returnPointer = IntegerConvention.returnPointer
   val stackPointer  = IntegerConvention.stackPointer
 
+  val stack = MLRISCRegion.stack
+
   (* -- code generation functions ------------------------------------------ *)
 
   fun addStack offset =
@@ -65,8 +71,10 @@ functor CallConventionBasis(
   fun subStack offset =
 	MLTree.SUB(MLTree.REG stackPointer, MLTree.CONST offset, MLTree.LR)
 
-  fun loadStack offset id  = MLTree.MV(id, MLTree.LOAD32(addStack offset))
-  fun storeStack offset id = MLTree.STORE32(addStack offset, MLTree.REG id)
+  fun loadStack offset id  =
+        MLTree.MV(id, MLTree.LOAD32(addStack offset, stack))
+  fun storeStack offset id =
+        MLTree.STORE32(addStack offset, MLTree.REG id, stack)
 
   fun allocateFrame frame =
 	MLTree.MV(stackPointer, subStack(StackFrame.size frame))
@@ -218,26 +226,30 @@ functor CallConventionBasis(
      * assignment -> the partial stack assignment
      * <- the mltree statements
      *)
-    fun stack _ _ nil =
+    fun place _ _ nil =
 	  []
-      | stack access base ((offset: int, register)::tail) =
+      | place access base ((offset: int, register)::tail) =
 	  let
 	    val statement = access(register,
 				   MLTree.ADD(MLTree.REG stackPointer,
 					      MLTree.CONST(base offset)))
-	    val result	  = stack access base tail
+	    val result	  = place access base tail
 	  in
 	    statement::result
 	  end
 
-    val loadInteger  = stack (fn(target, address) =>
-				MLTree.MV(target, MLTree.LOAD32 address))
-    val loadFloat    = stack (fn(target, address) =>
-				MLTree.FMV(target, MLTree.LOADD address))
-    val storeInteger = stack (fn(source, address) =>
-				MLTree.STORE32(address, MLTree.REG source))
-    val storeFloat   = stack (fn(source, address) =>
-				MLTree.STORED(address, MLTree.FREG source))
+    val loadInteger =
+          place (fn(target, address) =>
+		   MLTree.MV(target, MLTree.LOAD32(address, stack)))
+    val loadFloat =
+          place (fn(target, address) =>
+		   MLTree.FMV(target, MLTree.LOADD(address, stack)))
+    val storeInteger =
+          place (fn(source, address) =>
+		   MLTree.STORE32(address, MLTree.REG source, stack))
+    val storeFloat =
+          place (fn(source, address) =>
+		   MLTree.STORED(address, MLTree.FREG source, stack))
   in
     fun storeAssignment base (integers, floats) =
 	  storeInteger base integers@storeFloat base floats

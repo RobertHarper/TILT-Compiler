@@ -4,7 +4,7 @@
  * ========================================================================= *)
 
 functor SpillReload(
-	  structure MLTreeExtra: MLTREE_EXTRA
+	  structure MLTreeExtra:  MLTREE_EXTRA
 	) :> SPILL_RELOAD
 	       where type id	 = int
 		 and type rexp	 = MLTreeExtra.MLTree.rexp
@@ -35,15 +35,15 @@ functor SpillReload(
    *)
   fun integerAssign(MLTree.REG target, source) =
 	MLTree.MV(target, source)
-    | integerAssign(MLTree.LOAD32 target, source) =
-	MLTree.STORE32(target, source)
+    | integerAssign(MLTree.LOAD32(target, region), source) =
+	MLTree.STORE32(target, source, region)
     | integerAssign _ =
 	raise InvalidSource "unable to normalize expression"
 
   fun floatAssign(MLTree.FREG target, source) =
 	MLTree.FMV(target, source)
-    | floatAssign(MLTree.LOADD target, source) =
-	MLTree.STORED(target, source)
+    | floatAssign(MLTree.LOADD(target, region), source) =
+	MLTree.STORED(target, source, region)
     | floatAssign _ =
 	raise InvalidSource "unable to normalize expression"
 
@@ -67,8 +67,8 @@ functor SpillReload(
 	result
     | integerMoved(MLTree.REG target, source, result) =
 	MLTree.MV(target, source)::result
-    | integerMoved(MLTree.LOAD32 target, source, result) =
-	MLTree.STORE32(target, source)::result
+    | integerMoved(MLTree.LOAD32(target, region), source, result) =
+	MLTree.STORE32(target, source, region)::result
     | integerMoved _ =
 	raise InvalidSource "unable to normalize expression"
 
@@ -76,8 +76,8 @@ functor SpillReload(
 	result
     | floatMoved(MLTree.FREG target, source, result) =
 	MLTree.FMV(target, source)::result
-    | floatMoved(MLTree.LOADD target, source, result) =
-	MLTree.STORED(target, source)::result
+    | floatMoved(MLTree.LOADD(target, region), source, result) =
+	MLTree.STORED(target, source, region)::result
     | floatMoved _ =
 	raise InvalidSource "unable to normalize expression"
 
@@ -114,10 +114,10 @@ functor SpillReload(
 		MLTree.MULT(transformExp exp1, transformExp exp2)
 	    | transformExp(MLTree.DIVT(exp1, exp2, order)) =
 		MLTree.DIVT(transformExp exp1, transformExp exp2, order)
-	    | transformExp(MLTree.LOAD8 exp) =
-		MLTree.LOAD8(transformExp exp)
-	    | transformExp(MLTree.LOAD32 exp) =
-		MLTree.LOAD32(transformExp exp)
+	    | transformExp(MLTree.LOAD8(exp, region)) =
+		MLTree.LOAD8(transformExp exp, region)
+	    | transformExp(MLTree.LOAD32(exp, region)) =
+		MLTree.LOAD32(transformExp exp, region)
 	    | transformExp(MLTree.ANDB(exp1, exp2)) =
 		MLTree.ANDB(transformExp exp1, transformExp exp2)
 	    | transformExp(MLTree.ORB(exp1, exp2)) =
@@ -138,8 +138,8 @@ functor SpillReload(
 	   *)
 	  fun transformFExp(MLTree.FREG source) =
 		floatReload source
-	    | transformFExp(MLTree.LOADD exp) =
-		MLTree.LOADD(transformExp exp)
+	    | transformFExp(MLTree.LOADD(exp, region)) =
+		MLTree.LOADD(transformExp exp, region)
 	    | transformFExp(MLTree.FADDD(fexp1, fexp2)) =
 		MLTree.FADDD(transformFExp fexp1, transformFExp fexp2)
 	    | transformFExp(MLTree.FSUBD(fexp1, fexp2, order)) =
@@ -162,8 +162,8 @@ functor SpillReload(
 	   *)
 	  fun transformCCExp(ccexp as MLTree.CC _) =
 		ccexp
-	    | transformCCExp(MLTree.LOADCC exp) =
-		MLTree.LOADCC(transformExp exp)
+	    | transformCCExp(MLTree.LOADCC(exp, region)) =
+		MLTree.LOADCC(transformExp exp, region)
 	    | transformCCExp(MLTree.CMP(cond, exp1, exp2, order)) =
 		MLTree.CMP(cond, transformExp exp1, transformExp exp2,
 			   order)
@@ -208,14 +208,18 @@ functor SpillReload(
 		[MLTree.CALL(transformExp exp, defines, uses)]
 	    | transformStatement(MLTree.RET) =
 		[MLTree.RET]
-	    | transformStatement(MLTree.STORE8(exp1, exp2)) =
-		[MLTree.STORE8(transformExp exp1, transformExp exp2)]
-	    | transformStatement(MLTree.STORE32(exp1, exp2)) =
-		[MLTree.STORE32(transformExp exp1, transformExp exp2)]
-	    | transformStatement(MLTree.STORED(exp, fexp)) =
-		[MLTree.STORED(transformExp exp, transformFExp fexp)]
-	    | transformStatement(MLTree.STORECC(exp, ccexp)) =
-		[MLTree.STORECC(transformExp exp, transformCCExp ccexp)]
+	    | transformStatement(MLTree.STORE8(exp1, exp2, region)) =
+		[MLTree.STORE8(transformExp exp1, transformExp exp2,
+			       region)]
+	    | transformStatement(MLTree.STORE32(exp1, exp2, region)) =
+		[MLTree.STORE32(transformExp exp1, transformExp exp2,
+				region)]
+	    | transformStatement(MLTree.STORED(exp, fexp, region)) =
+		[MLTree.STORED(transformExp exp, transformFExp fexp,
+			       region)]
+	    | transformStatement(MLTree.STORECC(exp, ccexp, region)) =
+		[MLTree.STORECC(transformExp exp, transformCCExp ccexp,
+				region)]
 	    | transformStatement(MLTree.BCC(cond, ccexp, label)) =
 		[MLTree.BCC(cond, transformCCExp ccexp, label)]
 	    | transformStatement(MLTree.FBCC(fcond, ccexp, label)) =

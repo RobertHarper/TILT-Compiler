@@ -77,28 +77,28 @@ functor IntegerDataFlow(
     (*
      * Add the use set of a given integer expression to a given set.
      *)
-    fun useExp(MLTree.REG source, set) = IntSet.add(set, source)
-      | useExp(MLTree.LI _, set)       = set
-      | useExp(MLTree.LI32 _, set)     = set
-      | useExp(MLTree.LABEL _, set)    = set
-      | useExp(MLTree.CONST _, set)    = set
-      | useExp(MLTree.ADD exps, set)   = useExp2(exps, set)
-      | useExp(MLTree.SUB exps, set)   = useExp2'(exps, set)
-      | useExp(MLTree.MULU exps, set)  = useExp2(exps, set)
-      | useExp(MLTree.DIVU exps, set)  = useExp2'(exps, set)
-      | useExp(MLTree.ADDT exps, set)  = useExp2(exps, set)
-      | useExp(MLTree.SUBT exps, set)  = useExp2'(exps, set)
-      | useExp(MLTree.MULT exps, set)  = useExp2(exps, set)
-      | useExp(MLTree.DIVT exps, set)  = useExp2'(exps, set)
-      | useExp(MLTree.LOAD8 exp, set)  = useExp(exp, set)
-      | useExp(MLTree.LOAD32 exp, set) = useExp(exp, set)
-      | useExp(MLTree.ANDB exps, set)  = useExp2(exps, set)
-      | useExp(MLTree.ORB exps, set)   = useExp2(exps, set)
-      | useExp(MLTree.XORB exps, set)  = useExp2(exps, set)
-      | useExp(MLTree.SRA exps, set)   = useExp2'(exps, set)
-      | useExp(MLTree.SRL exps, set)   = useExp2'(exps, set)
-      | useExp(MLTree.SLL exps, set)   = useExp2'(exps, set)
-      | useExp(MLTree.SEQ _, _)	       =
+    fun useExp(MLTree.REG source, set)     = IntSet.add(set, source)
+      | useExp(MLTree.LI _, set)           = set
+      | useExp(MLTree.LI32 _, set)         = set
+      | useExp(MLTree.LABEL _, set)        = set
+      | useExp(MLTree.CONST _, set)        = set
+      | useExp(MLTree.ADD exps, set)       = useExp2(exps, set)
+      | useExp(MLTree.SUB exps, set)       = useExp2'(exps, set)
+      | useExp(MLTree.MULU exps, set)      = useExp2(exps, set)
+      | useExp(MLTree.DIVU exps, set)      = useExp2'(exps, set)
+      | useExp(MLTree.ADDT exps, set)      = useExp2(exps, set)
+      | useExp(MLTree.SUBT exps, set)      = useExp2'(exps, set)
+      | useExp(MLTree.MULT exps, set)      = useExp2(exps, set)
+      | useExp(MLTree.DIVT exps, set)      = useExp2'(exps, set)
+      | useExp(MLTree.LOAD8(exp, _), set)  = useExp(exp, set)
+      | useExp(MLTree.LOAD32(exp, _), set) = useExp(exp, set)
+      | useExp(MLTree.ANDB exps, set)      = useExp2(exps, set)
+      | useExp(MLTree.ORB exps, set)       = useExp2(exps, set)
+      | useExp(MLTree.XORB exps, set)      = useExp2(exps, set)
+      | useExp(MLTree.SRA exps, set)       = useExp2'(exps, set)
+      | useExp(MLTree.SRL exps, set)       = useExp2'(exps, set)
+      | useExp(MLTree.SLL exps, set)       = useExp2'(exps, set)
+      | useExp(MLTree.SEQ _, _)	           =
 	  raise InvalidSource "unable to analyze sequence expressions"
 
     and useExp2((exp1, exp2), set) = useExp(exp1, useExp(exp2, set))
@@ -108,16 +108,16 @@ functor IntegerDataFlow(
     (*
      * Add the use set of a given floating-point expression to a given set.
      *)
-    fun useFExp(MLTree.FREG _, set)	= set
-      | useFExp(MLTree.LOADD exp, set)	= useExp(exp, set)
-      | useFExp(MLTree.FADDD _, set)	= set
-      | useFExp(MLTree.FSUBD _, set)	= set
-      | useFExp(MLTree.FMULD _, set)	= set
-      | useFExp(MLTree.FDIVD _, set)	= set
-      | useFExp(MLTree.FABSD _, set)	= set
-      | useFExp(MLTree.FNEGD _, set)	= set
-      | useFExp(MLTree.CVTI2D exp, set) = useExp(exp, set)
-      | useFExp(MLTree.FSEQ _, _)	=
+    fun useFExp(MLTree.FREG _, set)	   = set
+      | useFExp(MLTree.LOADD(exp, _), set) = useExp(exp, set)
+      | useFExp(MLTree.FADDD _, set)	   = set
+      | useFExp(MLTree.FSUBD _, set)	   = set
+      | useFExp(MLTree.FMULD _, set)	   = set
+      | useFExp(MLTree.FDIVD _, set)	   = set
+      | useFExp(MLTree.FABSD _, set)	   = set
+      | useFExp(MLTree.FNEGD _, set)	   = set
+      | useFExp(MLTree.CVTI2D exp, set)    = useExp(exp, set)
+      | useFExp(MLTree.FSEQ _, _)	   =
 	  raise InvalidSource "unable to analyze sequence expressions"
 
     (*
@@ -125,7 +125,7 @@ functor IntegerDataFlow(
      *)
     fun useCCExp(MLTree.CC _, set) =
 	  set
-      | useCCExp(MLTree.LOADCC exp, set) =
+      | useCCExp(MLTree.LOADCC(exp, _), set) =
 	  useExp(exp, set)
       | useCCExp(MLTree.CMP(_, exp1, exp2, _), set) =
 	  useExp(exp1, useExp(exp2, set))
@@ -172,13 +172,13 @@ functor IntegerDataFlow(
 	  useExp(exp, foldr useMlrisc (foldr defineMlrisc set defines) uses)
       | useStatement(MLTree.RET, set) =
 	  set
-      | useStatement(MLTree.STORE8(exp1, exp2), set) =
+      | useStatement(MLTree.STORE8(exp1, exp2, _), set) =
 	  useExp(exp1, useExp(exp2, set))
-      | useStatement(MLTree.STORE32(exp1, exp2), set) =
+      | useStatement(MLTree.STORE32(exp1, exp2, _), set) =
 	  useExp(exp1, useExp(exp2, set))
-      | useStatement(MLTree.STORED(exp, fexp), set) =
+      | useStatement(MLTree.STORED(exp, fexp, _), set) =
 	  useExp(exp, useFExp(fexp, set))
-      | useStatement(MLTree.STORECC(exp, ccexp), set) =
+      | useStatement(MLTree.STORECC(exp, ccexp, _), set) =
 	  useExp(exp, useCCExp(ccexp, set))
       | useStatement(MLTree.BCC(_, ccexp, _), set) =
 	  useCCExp(ccexp, set)
