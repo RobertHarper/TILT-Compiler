@@ -36,6 +36,7 @@ signature MACHINE =
     val Rat     : register   (* Integer assembler temporary *)
     val Rat2    : register   (* Second temporary *)
     val Rsp     : register   (* Stack pointer *)
+    val Rth     : register   (* Thread pointer *)
     val Rheap   : register   (* Heap pointer *)
     val Rhlimit : register   (* Heap limit pointer *)
     val Rexnarg : register   (* Exception argument *)

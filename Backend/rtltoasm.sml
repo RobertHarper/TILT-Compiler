@@ -414,10 +414,10 @@ struct
 
      fun dumpEntryTables nl =
 	 let val count = length nl
-	     val nl' = map msLabel nl
+	     val nl = map msLabel nl
              fun mktable(name,suffix) =
 	       let 
-		 val temps = map (fn s => s ^ suffix) nl'
+		 val temps = map (fn s => s ^ suffix) nl
 		 val _ = app (fn s => emitString(extern_decl s)) temps
 	       in
 		 DLABEL (ML_EXTERN_LABEL name) ::

@@ -33,30 +33,27 @@ struct
       type align = Rtl.align
 
 
-    val Rzero   = R 31
-    val Rsp     = R 30
-    val Rgp     = R 29
-    val Rat     = R 28
-    val Rat2    = R 23
-
-    (* return address/exnarg never live at the
-       same time *)
-    val Rpv'    = R 27
+    val Rzero   = R 31  (* Standard Alpha convention *)
+    val Rsp     = R 30  (* Standard Alpha convention *)
+    val Rgp     = R 29  (* Standard Alpha convention *)
+    val Rat     = R 28  (* Standard Alpha convention *)
+    val Rpv'    = R 27  (* Standard Alpha convention *)
     val Rpv     = SOME Rpv'
-    val Rra     = R 26   
-    val Rexnarg = R 26  (* it's okay for exnarg and ra to be the same
+    val Rra     = R 26  (* Standard Alpha convention *)
+    val Rexnarg = R 26  (* Rexnarg and Rra are never simultaneously live
 			      since exnarg is active only when about to raise
-			      an exception which means we are not returning *)
+			      an exception which means we are not normally returning *)
 
-                             (* we'll put these in C callee-save *)
-    val Rexnptr = R 9
-    val Rhlimit = R 10
-    val Rheap   = R 11
+    val Rat2    = R 25  (* Put our second temporary in a volatile *)
+    val Rexnptr = R 15  (* non-volatile *)
+    val Rhlimit = R 14  (* non-volatile *)
+    val Rheap   = R 13  (* non-volatile *)
+    val Rth     = R 12  (* non-volatile *)
 
 
-    val Fzero   = F 31
-    val Fat     = F 30
-    val Fat2    = F 29
+    val Fzero   = F 31  (* Standard Alpha convention *)
+    val Fat     = F 30  (* volatile *)
+    val Fat2    = F 29  (* volatile *)
 
     fun isFloat (F _) = true
       | isFloat _ = false
@@ -786,7 +783,7 @@ struct
         | _ => error "allocateBlock: pop"
 
 
-   val special_iregs = listunique[Rzero, Rgp, Rat, Rsp, Rheap, Rhlimit, Rat2, Rexnptr, Rexnarg, Rpv', Rra]
+   val special_iregs = listunique[Rzero, Rgp, Rat, Rsp, Rth, Rheap, Rhlimit, Rat2, Rexnptr, Rexnarg, Rpv', Rra]
    val special_fregs = listunique[Fat, Fat2, Fzero]
 
    val general_iregs = listdiff(listdiff(int_regs,special_iregs),

@@ -1,5 +1,14 @@
 (*$import PPRTL DECALPHA MACHINEUTILS TRACETABLE BBLOCK DIVMULT TOASM Util *)
-(* Translation from Rtl to DecAlpha pseudoregister-assembly. *)
+
+(* Translation from Rtl to DecAlpha pseudoregister-assembly. 
+   Assumptions:
+     (1) The thread pointer points to a structure where the first 32 longs
+           store the saved general purpose registers.  In particular, when
+	   making C calls, the allocation pointer and allocation limit are 
+	   saved at offset given by the 8 times the register's number.
+
+*)
+         
 functor Toalpha(val do_tailcalls : bool ref
                 structure Decalpha: DECALPHA 
                 structure Pprtl: PPRTL
@@ -92,6 +101,7 @@ struct
    fun translateSReg Rtl.HEAPPTR = Rheap
      | translateSReg Rtl.HEAPLIMIT = Rhlimit
      | translateSReg Rtl.STACKPTR = Rsp
+     | translateSReg Rtl.THREADPTR = Rth
      | translateSReg Rtl.EXNPTR = Rexnptr
      | translateSReg Rtl.EXNARG = Rexnarg
      
@@ -1000,19 +1010,16 @@ struct
 	 val destlabel = l
 	 val c_call = extern_call (* case destlabel of (CE _) => true | _ => false *)
 	 val tailcall = tailcall andalso (not c_call) andalso (! do_tailcalls)
+	 val rtl_thread = Rtl.SREGI Rtl.THREADPTR
+	 val rtl_alloc = Rtl.SREGI Rtl.HEAPPTR
+	 val rtl_limit = Rtl.SREGI Rtl.HEAPLIMIT
+	 val R alloc_num = Rheap
+	 val R limit_num = Rhlimit
        in
 	    
 	 if (c_call) then
-	     let val r1 = Rtl.REGI(Name.fresh_var(),Rtl.LABEL)
-		 val r2 = Rtl.REGI(Name.fresh_var(),Rtl.LABEL)
-		 val l1 = Rtl.ML_EXTERN_LABEL "cur_alloc_pointer"
-		 val l2 = Rtl.ML_EXTERN_LABEL "cur_alloc_limit"
-	     in
-		 translate (Rtl.LADDR(l1,0,r1));
-		 translate (Rtl.LADDR(l2,0,r2));
-		 translate (Rtl.STORE32I(Rtl.EA(r1,0),Rtl.SREGI Rtl.HEAPPTR));
-		 translate (Rtl.STORE32I(Rtl.EA(r2,0),Rtl.SREGI Rtl.HEAPLIMIT))
-	     end
+	     (translate (Rtl.STORE32I(Rtl.EA(rtl_thread,8 * alloc_num), rtl_alloc));
+	      translate (Rtl.STORE32I(Rtl.EA(rtl_thread,8 * limit_num), rtl_limit)))
 	 else ();
 
 	
@@ -1027,19 +1034,10 @@ struct
 				  destroys = NONE,
 				  tailcall = tailcall})));
 
-	 (if (c_call) then
-	     let
-	       val r1 = Rtl.REGI(Name.fresh_var(),Rtl.LABEL)
-	       val r2 = Rtl.REGI(Name.fresh_var(),Rtl.LABEL)
-	       val l1 = Rtl.ML_EXTERN_LABEL "cur_alloc_pointer"
-	       val l2 = Rtl.ML_EXTERN_LABEL "cur_alloc_limit"
-	     in
-	       translate (Rtl.LADDR(l1,0,r1));
-	       translate (Rtl.LADDR(l2,0,r2));
-	       translate (Rtl.LOAD32I(Rtl.EA(r1,0),Rtl.SREGI Rtl.HEAPPTR));
-	       translate (Rtl.LOAD32I(Rtl.EA(r2,0),Rtl.SREGI Rtl.HEAPLIMIT))
-	     end
-	   else ());
+	 (if c_call then
+	     (translate (Rtl.LOAD32I(Rtl.EA(rtl_thread,8 * alloc_num), rtl_alloc));
+	      translate (Rtl.LOAD32I(Rtl.EA(rtl_thread,8 * limit_num), rtl_limit)))
+	  else ());
 
 	 if (tailcall)
 	     then (case (translateIRegOpt return) of 
@@ -1091,19 +1089,40 @@ struct
 
      | translate (Rtl.ICOMMENT str) = emit (BASE(ICOMMENT str))
 
-     | translate (Rtl.NEEDMUTATE r) =
+     | translate (Rtl.MUTATE (Rtl.EA(base,disp),newval,isptr_opt)) =
 	 let 
-	   val writelist_cursor = Rtl.ML_EXTERN_LABEL "writelist_cursor"
-	   val cursor_addr_reg  = Rtl.REGI(Name.fresh_var(),Rtl.LABEL)
-	   val cursor_val_reg1   = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
-	   val cursor_val_ireg1  = translateIReg cursor_val_reg1
+	     fun logwrite() = 
+		 let val writelist_cursor = Rtl.ML_EXTERN_LABEL "writelist_cursor"
+		     val cursor_addr = Rtl.REGI(Name.fresh_var(),Rtl.LABEL)
+		     val cursor_val = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
+		     val store_loc = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
+		 in  emit (SPECIFIC (INTOP (SUBL, Rhlimit, IMMop 8, Rhlimit)));
+		     app translate [Rtl.LADDR(writelist_cursor,0,cursor_addr),
+				    Rtl.LOAD32I(Rtl.EA(cursor_addr,0),cursor_val),
+				    Rtl.ADD(base, Rtl.IMM disp,store_loc),
+				    Rtl.STORE32I(Rtl.EA(cursor_val,0),store_loc),
+				    Rtl.ADD(cursor_val, Rtl.IMM 4, cursor_val),
+				    Rtl.STORE32I(Rtl.EA(cursor_addr,0),cursor_val)]
+		 end
 	 in
-	   emit (SPECIFIC (INTOP (SUBL, Rhlimit, IMMop 8, Rhlimit)));
-	   app translate [Rtl.LADDR(writelist_cursor,0,cursor_addr_reg),
-			  Rtl.LOAD32I(Rtl.EA(cursor_addr_reg,0),r),
-			  Rtl.ADD(r, Rtl.IMM 4, cursor_val_reg1),
-			  Rtl.STORE32I(Rtl.EA(cursor_addr_reg,0),cursor_val_reg1)]
+	   translate (Rtl.STORE32I(Rtl.EA(base,disp),newval));
+	   (case isptr_opt of
+		NONE => logwrite()
+	      | SOME isptr =>
+		    let val after = Rtl.fresh_code_label "dynmutate_after"
+		    in  translate (Rtl.BCNDI(Rtl.EQ,isptr,after,false));
+			logwrite();
+			translate (Rtl.ILABEL after)
+		    end)
 	 end
+
+     | translate (Rtl.INIT (Rtl.EA (rtl_Raddr, disp), rtl_Rdest, unused)) =
+       let
+	 val Raddr = translateIReg rtl_Raddr
+	 val Rdest = translateIReg rtl_Rdest
+       in
+	 emit (SPECIFIC (STOREI (STL, Rdest, disp, Raddr)))
+       end
 
      | translate (Rtl.INT_ALLOC (rtl_bytesize, rtl_ival, rtl_dest, tag)) = 
        let
