@@ -6,10 +6,30 @@ Date:        10/15/02
 Version:     CVS
 System:      any
 Severity:    minor
-Problem:     untilSelfWild is failing with "untilPred: matched empty"
+Problem:
+	With the code
+
+		val f = fn x :: xr => xr
+		         | true::_ => []
+
+	the compiler bombs in untilSelfWild with "untilPred: matched empty"
+
+	With the code
+
+		val f = fn (x : int) => 10
+		         | y => 11
+
+	the compiler rejects with "Redundant matches"
+
+	In both cases, the compiler should issue a redundant match warning
+	and continue compilation.  (See page 28 of the Definition.)
 Code:        
 Transcript:  
-Comments:    
+Comments:
+
+	Check that the pattern compiler properly handles other forms
+	of redundant and non-exhaustive matches.
+
 Fix:         
 Test: n126
 Owner: swasey
