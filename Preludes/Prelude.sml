@@ -123,9 +123,9 @@ structure Vector =
 	    let val lx = vector_length x
 		val ly = vector_length y
 		fun vector_eq_loop n = 
-		    (n = 0w0) orelse (equaler(unsafe_vsub(x,n),unsafe_vsub(y,n))
-					 andalso (vector_eq_loop (uminus(n,0w1))))
-	    in  (lx = ly) andalso vector_eq_loop (uminus(lx,0w1))
+		    ugte(n,lx) orelse (equaler(unsafe_vsub(x,n),unsafe_vsub(y,n))
+					 andalso (vector_eq_loop (uplus(n,0w1))))
+	    in  (lx = ly) andalso vector_eq_loop 0w0
 	    end
     end
 open Vector
