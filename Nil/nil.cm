@@ -46,6 +46,7 @@ nilerror.sml
 nilcontext.sig.sml
 nilcontext.sml
 nilcontextpre.sml
+nilcontextpre.sig.sml
 nilprimutilparam.sml
 linearize.sig.sml
 linearize.sml

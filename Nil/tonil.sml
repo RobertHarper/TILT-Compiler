@@ -148,7 +148,7 @@ struct
        NilSubst.varConKindSubst var con kind
 
    (*This will work as long as you don't do any composing of substitutions*)
-   val addToConSubst = NilSubst.add
+   val addToConSubst = NilSubst.C.sim_add
 
    (* extractPathLabels.  Splits a module "mod.lbls" into
         the "mod" and a list of labels.
@@ -2123,7 +2123,7 @@ end (* local defining splitting context *)
    and xsig_struct context (con0,sdecs) = 
        let
 	   val {crdecs, erdecs} =
-	       xsdecs context (con0, NilSubst.empty(), sdecs)
+	       xsdecs context (con0, NilSubst.C.empty(), sdecs)
 	   val kind = Record_k (Sequence.fromList crdecs)
 	   val (erlabs, ervars, ercons) = Listops.unzip3 erdecs
 	   val type_r = Prim_c(Record_c (erlabs,SOME ervars), ercons)

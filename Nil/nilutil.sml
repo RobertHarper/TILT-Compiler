@@ -61,7 +61,7 @@ struct
   val true_con = Prim_c(Sum_c{tagcount=0w2,totalcount=0w2,known=SOME 0w1},[con_tuple_inject[]])
   val string_con = Prim_c(Vector_c,[Prim_c(Int_c Prim.W8,[])])
   val match_tag = Const_e(Prim.tag(IlUtil.match_tag,unit_con))
-  val match_exn = Prim_e(NilPrimOp (inj_exn "match"),[unit_con],[match_tag,unit_exp])
+  val match_exn = Prim_e(NilPrimOp (inj_exn "match"),[],[match_tag,unit_exp])
   val false_exp = Prim_e(NilPrimOp (inject_nonrecord 0w0),[false_con],[])
   val true_exp = Prim_e(NilPrimOp (inject_nonrecord 0w1),[true_con],[])
   val int_con = Prim_c(Int_c Prim.W32,[])
@@ -171,6 +171,8 @@ struct
 
   local
     val substConInKind = fn subst => subtimer ("Selfify:substConInKind",NilSubst.substConInKind subst)
+    val empty = NilSubst.C.empty
+    val add = NilSubst.C.sim_add
   in
   fun selfify (con,kind) =
     (case kind of
@@ -179,13 +181,13 @@ struct
 	| Single_k _ => kind
 	| Record_k entries => 
 	    let
-	      val subst = ref (NilSubst.empty())
+	      val subst = ref (empty())
 	      fun mapper ((l,v),k) = 
 		let
 		  val proj = Proj_c (con,l)
 		  val kres = selfify (proj,substConInKind (!subst) k)
 		in
-		  (subst := NilSubst.add (!subst) (v,proj);
+		  (subst := add (!subst) (v,proj);
 		   ((l,v),kres))
 		end
 	    in
@@ -827,7 +829,7 @@ end
 					    then mu_con
 					else Proj_c(mu_con,generate_tuple_label(which+1)))
 	  val vc_list' = Listops.mapcount mapper vc_list
-	  val conmap = NilSubst.fromList vc_list'
+	  val conmap = NilSubst.C.simFromList vc_list'
 	  val c = (case (Listops.assoc_eq(eq_var,v,vc_list)) of
 		     SOME c => c | NONE => error "bad mu type")
       in  NilSubst.substConInCon conmap c
@@ -1086,14 +1088,14 @@ end
 
   fun alpha_mu is_bound (vclist) = 
       let fun folder((v,_),subst) = if (is_bound v)
-				       then NilSubst.add subst (v,Var_c(Name.derived_var v))
+				       then NilSubst.C.sim_add subst (v,Var_c(Name.derived_var v))
 				    else subst
-	  val subst = foldl folder (NilSubst.empty()) vclist
+	  val subst = foldl folder (NilSubst.C.empty()) vclist
 	  fun substcon c = NilSubst.substConInCon subst c
 	  fun lookup var = (case (substcon (Var_c var)) of
 				(Var_c v) => v
 			      | _ => error "substcon returned non Var_c")
-      in  if (NilSubst.is_empty subst)
+      in  if (NilSubst.C.is_empty subst)
 	      then (vclist)
 	  else (map (fn (v,c) => (lookup v, substcon c)) vclist)
       end
@@ -1231,8 +1233,8 @@ end
 	  | loop (subst,((l,v),k)::rest) = 
 	  if (Name.eq_label(label,l))
 	    then NilSubst.substConInKind subst k
-	  else loop (NilSubst.add subst (v,Proj_c(con,l)),rest)
-      in  loop (NilSubst.empty(),lvk_list)
+	  else loop (NilSubst.C.sim_add subst (v,Proj_c(con,l)),rest)
+      in  loop (NilSubst.C.empty(),lvk_list)
       end
 
     fun convert_sum_to_special 

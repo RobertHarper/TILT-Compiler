@@ -1,4 +1,4 @@
-(*$import Nil NilContext *)
+(*$import Nil NilContextPre *)
 
 signature NILHNF = 
   sig

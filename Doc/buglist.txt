@@ -37,7 +37,26 @@ HIGH PRIORITY
         abstract.)  Symptom: Parser/join.sml does not typecheck
         (the hil code ought not typecheck if we did typechecking, 
         the phase-split code definitely does not typecheck)
-        
+        Also, Alpha/divmult.sml fails for the same reason.
+	Also, Alpha/toalpha.sml.
+	The real culprit with these is a sharing spec in
+        decalpha.sig.sml, which manifests itself in other places.
+		
+
+(9) Problem with elaboration:
+	datatype foo = Foo of int
+
+	(*Works fine*)
+	fun f x = g (fn x => Foo x)
+	and g fooer = fooer 3
+
+	(*Works fine*)
+	fun g fooer = fooer 3
+	and f x = g Foo
+
+	(*Doesn't work*)
+	fun f x = g Foo
+	and g fooer = fooer 3
 
 
 NORMAL PRIORITY

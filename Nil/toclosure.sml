@@ -1524,7 +1524,7 @@ struct
 				c_rewrite (copy_state(state ,v)) c, k)
 	     val con_env = Crecord_c(map (fn (p,_,_,l) => (l,c_rewrite state (path2con p))) vkl_free)
 	     val k' = NilSubst.substConInKind 
-			(NilSubst.fromList [(cenv_var,NilRename.renameCon con_env)]) (NilRename.renameKind k)
+			(NilSubst.C.simFromList [(cenv_var,NilRename.renameCon con_env)]) (NilRename.renameKind k)
 	     val closure_cb = Con_cb(v,Closure_c (Var_c code_var, con_env))
 	 in  [code_cb, closure_cb]
 	 end			

@@ -998,7 +998,7 @@ structure Toil
 			    val _ = if eq_con(context'',fun_con,func)
 					then ()
 				    else (error_region();
-					  print "function constraint does not match body type\n";
+					  print "function constraint does not match function type\n";
 					  print "Actual type: "; pp_con func; print "\n";
 					  print "Constraint type: "; pp_con fun_con; print "\n")
 			    local 

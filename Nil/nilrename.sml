@@ -1,4 +1,4 @@
-(*$import Ppnil NILRENAME Stats NilError NilRewrite *)
+(*$import Ppnil NILRENAME Stats NilError NilRewrite Option *)
 
 structure NilRename :> NILRENAME = 
   struct
@@ -14,6 +14,7 @@ structure NilRename :> NILRENAME =
 
     fun error' s = error "" s
 
+    val isSome = Option.isSome
 
     structure VarMap = Name.VarMap
     structure VarSet = Name.VarSet

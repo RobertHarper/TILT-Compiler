@@ -1,4 +1,4 @@
-(*$import Nil NilContext NilSubst *)
+(*$import Nil NilContextPre NilSubst *)
 
 signature NORMALIZE = 
   sig
@@ -8,7 +8,7 @@ signature NORMALIZE =
     type exp = Nil.exp
     type module = Nil.module
     type context = NilContextPre.context
-    type 'a subst = 'a NilSubst.subst
+    type con_subst = NilSubst.con_subst
 
     (*Print debugging messages*)
     val debug : bool ref
@@ -37,9 +37,9 @@ signature NORMALIZE =
      * respect to the context
      *)
     datatype progress = PROGRESS | HNF | IRREDUCIBLE
-    val kind_normalize' : (context * (con subst)) -> kind -> kind
-    val con_normalize' : (context * (con subst)) -> con -> con
-    val exp_normalize' : (context * (con subst)) -> exp -> exp
+    val kind_normalize' : (context * (con_subst)) -> kind -> kind
+    val con_normalize' : (context * (con_subst)) -> con -> con
+    val exp_normalize' : (context * (con_subst)) -> exp -> exp
 
     val is_hnf       : con -> bool
     val reduce_hnf   : context * con -> bool * con   (* bool indicates whether HNF was reached *)

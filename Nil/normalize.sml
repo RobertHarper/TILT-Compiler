@@ -1,4 +1,4 @@
-(*$import Ppnil NilUtil NilContext NilSubst NORMALIZE *)
+(*$import Ppnil NilUtil NilContextPre NilSubst NORMALIZE *)
 
 structure Normalize :> NORMALIZE =
 struct	
@@ -9,14 +9,16 @@ struct
   open Nil 
   open Prim
 
-  type 'a subst = 'a NilSubst.subst
+  type con_subst = NilSubst.con_subst
   val substConInKind= NilSubst.substConInKind
   val substConInExp = NilSubst.substConInExp
   val substConInCon = NilSubst.substConInCon
-  val empty = NilSubst.empty
-  val add = NilSubst.add
-  val substitute = NilSubst.substitute
-  val fromList = NilSubst.fromList
+  val empty = NilSubst.C.empty
+  val add = NilSubst.C.sim_add
+  val addr = NilSubst.C.addr
+  val substitute = NilSubst.C.substitute
+  val fromList = NilSubst.C.simFromList
+  val printConSubst = NilSubst.C.print
 
   val map_annotate = NilUtil.map_annotate
   val is_var_c = NilUtil.is_var_c
@@ -92,13 +94,13 @@ struct
 	 let
 	   fun folder (((label,var),kind),subst) = 
 	     let
-	       val kind = NilSubst.substConInKind subst kind
+	       val kind = substConInKind subst kind
 	       val con = pull (Proj_c (c,label),kind)
-	       val subst = NilSubst.add subst (var,con)
+	       val subst = add subst (var,con)
 	     in
 	       ((label,con),subst)
 	     end
-	   val (entries,subst) = Listops.foldl_acc folder (NilSubst.empty()) (Sequence.toList elts)
+	   val (entries,subst) = Listops.foldl_acc folder (empty()) (Sequence.toList elts)
 	 in
 	   (Crecord_c entries)
 	 end
@@ -126,11 +128,11 @@ struct
 
   local
       datatype entry = 
-	EXP of exp * (NilContext.context * (con subst))
-      | CON of con * (NilContext.context  * (con subst))
-      | KIND of kind * (NilContext.context * (con subst))
-      | BND of bnd * (NilContext.context * (con subst))
-      | MODULE of module * (NilContext.context * (con subst))
+	EXP of exp * (NilContext.context * (con_subst))
+      | CON of con * (NilContext.context  * (con_subst))
+      | KIND of kind * (NilContext.context * (con_subst))
+      | BND of bnd * (NilContext.context * (con_subst))
+      | MODULE of module * (NilContext.context * (con_subst))
       val stack = ref ([] : entry list)
 
       val depth = ref 0
@@ -160,25 +162,25 @@ struct
 			      print "\nand context"; 
 			      NilContext.print_context context;
 			      print "\n and subst";
-			      NilSubst.printConSubst s;
+			      printConSubst s;
 			      print "\n\n")
 			     | show (CON(c,(context,s))) =
 				     (print "con_normalize called with constructor =\n";
 				      Ppnil.pp_con c;
 				      print "\nand context"; NilContext.print_context context;
-				      print "\n and subst";  NilSubst.printConSubst s;
+				      print "\n and subst";  printConSubst s;
 				      print "\n\n")
 			     | show (KIND(k,(context,s))) =
 				     (print "kind_normalize called with kind =\n";
 				      Ppnil.pp_kind k;
 				      print "\nand context"; NilContext.print_context context;
-				      print "\n and subst";  NilSubst.printConSubst s;
+				      print "\n and subst";  printConSubst s;
 				      print "\n\n")
 			     | show (BND(b,(context,s))) =
 				     (print "bnd_normalize called with bound =\n";
 				      Ppnil.pp_bnd b;
 				      print "\nand context"; NilContext.print_context context;
-				      print "\n and subst";  NilSubst.printConSubst s;
+				      print "\n and subst";  printConSubst s;
 				      print "\n\n")
 			     | show (MODULE(m,(context,s))) =
 				     (print "module_normalize called with module =\n";
@@ -188,7 +190,7 @@ struct
                                          name = "",
                                          pass = ""};
 				      print "\nand context"; NilContext.print_context context;
-				      print "\n and subst";  NilSubst.printConSubst s;
+				      print "\n and subst";  printConSubst s;
 				      print "\n\n")
 		       in  app show (rev st)
 		       end
@@ -348,7 +350,7 @@ struct
 			Ppnil.pp_kind kind; 
 			(if (!show_context)
 			   then (print "\nand context"; NilContext.print_context D;
-				 print "\n and subst";  NilSubst.printConSubst subst)
+				 print "\n and subst";  printConSubst subst)
 			 else ());
 			 print "\n\n")
 		else ()
@@ -390,7 +392,7 @@ struct
 			if (!show_context)
 			    then (print "\nand context"; NilContext.print_context D)
 			else ();
-			print "\n and subst";  NilSubst.printConSubst subst;
+			print "\n and subst";  printConSubst subst;
 			print "\n\n")
 		else ()
 	val res = con_normalize state con
@@ -715,7 +717,7 @@ struct
 		  then (print "exp_normalize called with expression =\n";
 			Ppnil.pp_exp exp; 
 			print "\nand context"; NilContext.print_context D;
-			print "\n and subst";  NilSubst.printConSubst subst;
+			print "\n and subst";  printConSubst subst;
 			print "\n\n")
 		else ()
 	val res = exp_normalize state exp
@@ -850,9 +852,9 @@ struct
 		    if (length defs = 1) 
 			then (v,mu_con)
 		    else (v,Proj_c(mu_tuple_con,NilUtil.generate_tuple_label(n+1)))
-		val subst = NilSubst.fromList(Listops.mapcount mapper defs)
+		val subst = fromList(Listops.mapcount mapper defs)
 		val (_,c) = List.nth(defs,which-1)
-	    in  NilSubst.substConInCon subst c
+	    in  substConInCon subst c
 	    end
 	in  (case #2(reduce_hnf(D,mu_con)) of
 		 mu_tuple as (Mu_c (_,defs)) => extract mu_tuple (defs,1)
@@ -881,7 +883,7 @@ struct
 		   end
 	    end
 
-  and con_reduce state (constructor : con) : progress * con subst * con  = 
+  and con_reduce state (constructor : con) : progress * con_subst * con  = 
     (case constructor of
           (Prim_c _) => (HNF, #2 state, constructor)
 	| (Mu_c _) => (HNF, #2 state, constructor)
@@ -905,8 +907,7 @@ struct
 
 	| (Let_c (sort,cbnd as (Con_cb(var,con)::rest),body)) =>
 	    let val (D,subst) = state
-		val con = NilSubst.substConInCon subst con
-		val subst = add subst (var,con)
+		val subst = addr (subst,var,con)
 	    in  (PROGRESS,subst,Let_c(sort,rest,body))
 	    end
 	| (Let_c (sort,[],body)) => (PROGRESS,#2 state,body)
@@ -948,37 +949,37 @@ struct
 
 
 
-    and reduce_once (D,con) = let val (progress,subst,c) = con_reduce(D,NilSubst.empty()) con
+    and reduce_once (D,con) = let val (progress,subst,c) = con_reduce(D,empty()) con
 			      in  (case progress 
 				     of IRREDUCIBLE => (case NilContext.find_kind_equation (D,c) 
-							  of SOME c => NilSubst.substConInCon subst c
-							   | NONE => NilSubst.substConInCon subst c)
-				      | _ => NilSubst.substConInCon subst c)
+							  of SOME c => substConInCon subst c
+							   | NONE => substConInCon subst c)
+				      | _ => substConInCon subst c)
 			      end
     and reduce_until (D,pred,con) = 
         let fun loop n (subst,c) = 
             let val _ = if (n>1000) then error "reduce_until exceeded 1000 reductions" else ()
 	    in  case (pred c) of
-                SOME info => REDUCED(valOf(pred (NilSubst.substConInCon subst c)))
+                SOME info => REDUCED(valOf(pred (substConInCon subst c)))
 	      | NONE => let val (progress,subst,c) = con_reduce(D,subst) c
 			in  case progress of
 				PROGRESS => loop (n+1) (subst,c) 
-			      | HNF => (case pred (NilSubst.substConInCon subst c) of
-		                    SOME _ => REDUCED(valOf(pred (NilSubst.substConInCon subst c)))
-				  | NONE => UNREDUCED (NilSubst.substConInCon subst c))
+			      | HNF => (case pred (substConInCon subst c) of
+		                    SOME _ => REDUCED(valOf(pred (substConInCon subst c)))
+				  | NONE => UNREDUCED (substConInCon subst c))
 			      | IRREDUCIBLE => 
 				  (case NilContext.find_kind_equation(D,c) 
 				     of SOME c => loop (n+1) (subst,c)
-				      | NONE => UNREDUCED (NilSubst.substConInCon subst c))
+				      | NONE => UNREDUCED (substConInCon subst c))
 			end
 	    end
-        in  loop 0 (NilSubst.empty(),con)
+        in  loop 0 (empty(),con)
         end
     and reduce_hnf (D,con) = 
         let fun loop n (subst,c) = 
             let val _ = if (n>maxDepth) 
 			    then (print "reduce_hnf exceeded max reductions\n";
-				  Ppnil.pp_con (NilSubst.substConInCon subst c); print "\n\n";
+				  Ppnil.pp_con (substConInCon subst c); print "\n\n";
 				  error "reduce_hnf exceeded max reductions")
 			 else ()
 		val _ = if (n > 0 andalso n mod warnDepth = 0) 
@@ -989,13 +990,13 @@ struct
 	        val (progress,subst,c) = con_reduce(D,subst) c  
 	    in  case progress of
 			 PROGRESS => loop (n+1) (subst,c) 
-		       | HNF => (true, NilSubst.substConInCon subst c)
+		       | HNF => (true, substConInCon subst c)
 		       | IRREDUCIBLE => 
 			   (case NilContext.find_kind_equation(D,c)
 			      of SOME c => loop (n+1) (subst,c)
-			       | NONE => (false, NilSubst.substConInCon subst c))
+			       | NONE => (false, substConInCon subst c))
 	    end
-        in  loop 0 (NilSubst.empty(),con)
+        in  loop 0 (empty(),con)
         end
 
     and reduce(D,con) = con_normalize D con
@@ -1014,10 +1015,9 @@ struct
 	let fun loop subst [] = NilSubst.substExpInCon subst c
 	      | loop subst ((v,c)::rest) = 
 	           let val e = Raise_e(NilUtil.match_exn,c)
-		   in  loop (NilSubst.add subst (v,NilSubst.substExpInExp 
-					      subst e)) rest
+		   in  loop (NilSubst.E.addr (subst,v,e)) rest
 		   end
-	in  loop (NilSubst.empty()) vclist
+	in  loop (NilSubst.E.empty()) vclist
 	end
 
     and projectRecordType(D:context, c:con, l:label) = 
@@ -1142,9 +1142,9 @@ struct
 				Con_cb (v,c) => (v,c)
 			      | Open_cb(v,vklist,c,k) => (v,Let_c(Sequential,[cbnd],Var_c v))
 			      | Code_cb(v,vklist,c,k) => (v,Let_c(Sequential,[cbnd],Var_c v)))
-		       val c = NilSubst.substConInCon subst c
+		       val c = substConInCon subst c
 		       val D = NilContext.insert_equation(D,v,c)
-		       val subst = NilSubst.add subst (v,c)
+		       val subst = add subst (v,c)
 		   in  (D,subst)
 		   end
 	     | Exp_b (var, _, exp) =>
@@ -1165,7 +1165,7 @@ struct
 		(D,subst)
 	      end)
      in
-       List.foldl folder (D,NilSubst.empty()) bnds
+       List.foldl folder (D,empty()) bnds
      end
 
    and type_of_prim (D,prim,cons,exps) = 
@@ -1217,7 +1217,7 @@ struct
 	      val (D,subst) = type_of_bnds (D,bnds)
 	      val c = type_of (D,exp)
 	    in
-	      NilSubst.substConInCon subst c
+	      substConInCon subst c
 	    end
 	   | Prim_e (NilPrimOp prim,cons,exps) => type_of_prim (D,prim,cons,exps)
 	   | Prim_e (PrimOp prim,cons,exps) =>   
@@ -1258,11 +1258,11 @@ struct
 			      print "\n";
 			      error "Ill Typed expression - not an arrow"))
 
-	      val subst = NilSubst.fromList (zip (#1 (unzip tformals)) cons)
+	      val subst = fromList (zip (#1 (unzip tformals)) cons)
 	      val con = NilSubst.substConInCon subst body
 		  
 	    in  removeDependence 
-		  (map (fn (v,c) => (v,NilSubst.substConInCon subst c)) formals)
+		  (map (fn (v,c) => (v,substConInCon subst c)) formals)
 		  con
 	    end
 

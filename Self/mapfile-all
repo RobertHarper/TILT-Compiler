@@ -464,6 +464,9 @@ NilError Nil/nilerror
 NILREWRITE Nil/rewrite.sig
 NilRewrite Nil/rewrite
 
+NILRENAME 	Nil/nilrename.sig
+NilRename	Nil/nilrename
+
 NILSUBST Nil/subst.sig
 NilSubst Nil/subst
 
@@ -475,11 +478,17 @@ NilPrimUtilParam Nil/nilprimutilparam
 NILUTIL Nil/nilutil.sig
 NilUtil Nil/nilutil
 
+NILCONTEXTPRE	Nil/nilcontextpre.sig
+NilContextPre Nil/nilcontextpre
+
 NILCONTEXT Nil/nilcontext.sig
 NilContext Nil/nilcontext
 
 NORMALIZE Nil/normalize.sig
 Normalize Nil/normalize
+
+NILHNF	Nil/nilhnf.sig
+NilHNF	Nil/nilhnf
 
 NILSTATIC Nil/nilstatic.sig
 NilStatic Nil/nilstatic
@@ -611,6 +620,3 @@ MakeDep Top/makedep
 MANAGER Top/manager.sig
 Manager Top/manager
 Top Top/top
-
-
-

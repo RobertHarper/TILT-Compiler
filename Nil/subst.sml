@@ -35,95 +35,7 @@ structure NilSubst :> NILSUBST =
     structure VarMap = Name.VarMap
     structure VarSet = Name.VarSet
 
-    fun contains map var = isSome (VarMap.find (map,var))
-
-    type 'a subst = 'a VarMap.map
-
-    fun unique [] = true
-      | unique ((v,_)::rest) = 
-      (not (List.exists (fn (v',_) => Name.eq_var (v,v')) rest))
-      andalso unique rest
-
-    fun empty () : 'a subst = VarMap.empty
-
-    fun toList (subst : 'a subst) = VarMap.listItemsi subst
-
-    fun fromList (list : (var * 'a) list) : 'a subst = 
-      let
-	val _ = 
-	  if !debug then
-	    assert (locate "fromList PRE") 
-	    [ 
-	     (unique list, fn () => print "variable duplicated in list")
-	     ]
-	  else
-	    ()
-
-	fun fold ((var,value),subst) = 
-	  VarMap.insert(subst,var,value)
-	  
-	val subst =  List.foldl fold VarMap.empty list
-      in
-	subst
-      end
-
-    fun add subst (var,value) : 'a subst =
-      let
-	val _ = 
-	  if !debug then
-	    assert (locate "add PRE") 
-	    [ 
-	     (not (contains subst var), 
-	      fn () => print ("variable occurs in substitution"^(Name.var2string var)))
-	     ]
-	  else
-	    ()
-	    
-	val subst = VarMap.insert (subst,var,value)
-      in
-	subst
-      end
-
-      fun substitute subst var =
-	VarMap.find (subst,var)
-
-      fun is_empty subst = (VarMap.numItems subst) = 0
-
-      (* val compose : ('a subst -> 'a -> 'a) -> ('a subst * 'a subst) -> 'a subst
-       *  subst_fn (compose subst_fn (subst2,subst1))
-       *  is equivalent to (subst_fn subst2) o (subst_fn subst1)
-       *)
-      fun compose subst_fn (subst1,subst2) = 
-	let
-	  val subst2 = VarMap.map (subst_fn subst1) subst2
-	  fun combine (value1,value2) = value2
-	  val subst = VarMap.unionWith combine (subst1,subst2)
-	in
-	  subst
-	end
-
-      fun merge (subst1,subst2) =
-	let
-	  fun combine (value1,value2) = value2
-	  val subst = VarMap.unionWith combine (subst1,subst2)
-	in
-	  subst
-	end
-
-      fun print (printer : 'a -> unit) (subst: 'a subst) = 
-	let
-	  fun print1 (v,a) = 
-	    (TextIO.print (Name.var2string v);
-	     TextIO.print "->";
-	     printer a;
-	     TextIO.print "\n")
-	in
-	  (Util.lprintl "Substitution is";
-	   VarMap.appi print1 subst;
-	   Util.printl "")
-	end
-
-      
+    type 'a map = 'a VarMap.map
     (* Substitutions *)
     local
       open NilRewrite
@@ -132,20 +44,20 @@ structure NilSubst :> NILSUBST =
 
       type varset = VarSet.set
 
-      type state = {esubst : exp subst,
-		    csubst : con subst}
+      type state = {esubst : exp map,
+		    csubst : con map}
 
-      val contains = fn subst => subtimer ("Subst:contains",contains subst)
-      val substitute = fn subst => subtimer ("Subst:substitute",substitute subst)
-	
+      val substitute = fn args => subtimer ("Subst:substitute",VarMap.find) args
+
+      val add = fn args => subtimer ("Subst:add",VarMap.insert) args
+
+      fun is_empty s = (VarMap.numItems s) = 0
+      fun empty () = VarMap.empty
+
       fun exp_var_xxx (state : state as {esubst,csubst},var,any) = 
 	let val var' = Name.derived_var var
 	in ({csubst = csubst,
-	     esubst = 
-	     if (contains esubst var) then
-	       error (locate "exp_var_xxx") "already bound"
-	     else
-	       add esubst (var, Var_e var')},
+	     esubst = add (esubst,var, Var_e var')},
 	    SOME var')
 	end
 
@@ -153,17 +65,14 @@ structure NilSubst :> NILSUBST =
       fun con_var_xxx (state : state as {esubst,csubst},var,any) = 
 	let val var' = Name.derived_var var
 	in ({esubst = esubst,
-	     csubst = 
-	     if (contains csubst var) then
-	       error (locate "con_var_xxx") "already bound"
-	     else add csubst (var, Var_c var')},
+	     csubst = add (csubst,var, Var_c var')},
 	    SOME var')
 	end
 
       fun conhandler (state : state as {csubst,...},con : con) =
 	(case con
 	   of Var_c var => 
-	     (case substitute csubst var
+	     (case substitute (csubst,var)
 		of SOME con => 
 		  (subst_counter(); 
 		   CHANGE_NORECURSE (state,con))
@@ -173,7 +82,7 @@ structure NilSubst :> NILSUBST =
       fun exphandler (state : state as {esubst,...},exp : exp) =
 	(case exp
 	   of Var_e var => 
-	     (case substitute esubst var
+	     (case substitute (esubst,var)
 		of SOME exp => 
 		  (subst_counter(); 
 		   CHANGE_NORECURSE (state,exp))
@@ -197,9 +106,8 @@ structure NilSubst :> NILSUBST =
            rewrite_cbnd = substExpConInCBnd',
            rewrite_bnd = substExpConInBnd',...} = rewriters exp_con_handler
  
-      fun empty_state (esubst : exp subst,csubst : con subst) : state = 
+      fun empty_state (esubst : exp map,csubst : con map) : state = 
 	{esubst = esubst, csubst = csubst}
-
 
       fun substExpConInXXX substituter (esubst,csubst) item = 
 	let
@@ -225,8 +133,6 @@ structure NilSubst :> NILSUBST =
 	  substituter (empty_state (empty(), csubst)) item
 
     in
-      type con_subst = con subst
-      type exp_subst = exp subst
 
       val substConInCon = substConInXXX substExpConInCon'
       val substExpInExp = substExpInXXX substExpConInExp'
@@ -266,7 +172,7 @@ structure NilSubst :> NILSUBST =
       val substExpConInKind = substExpConInXXX(substExpConInKind')
 
     end  
-
+(*
     (*Substitutions for single variables*)
     local
       open NilRewrite
@@ -362,11 +268,108 @@ structure NilSubst :> NILSUBST =
       val varExpConSubst  = varXXXYYYSubst ("varExpConSubst",pp_exp,pp_con,varExpConSubst')
       val varExpKindSubst = varXXXYYYSubst ("varExpKindSubst",pp_exp,pp_kind,varExpKindSubst')
     end
+*)
+
+    fun varConExpSubst var con exp = substConInExp (VarMap.insert (VarMap.empty,var,con)) exp
+    fun varConConSubst var con con2 = substConInCon (VarMap.insert (VarMap.empty,var,con)) con2
+    fun varConKindSubst var con kind = substConInKind (VarMap.insert (VarMap.empty,var,con)) kind
+
+    fun varExpExpSubst var exp1 exp2 = substExpInExp (VarMap.insert (VarMap.empty,var,exp1)) exp2
+    fun varExpConSubst var exp con = substExpInCon (VarMap.insert (VarMap.empty,var,exp)) con
+    fun varExpKindSubst var exp kind = substExpInKind (VarMap.insert (VarMap.empty,var,exp)) kind
 
 
+    type con_subst = con VarMap.map
+    type exp_subst = exp VarMap.map
 
-    val con_subst_compose = compose substConInCon
+
+    functor SubstFn(type item
+		    type item_subst = item VarMap.map
+		    val varItemItemSubst : var -> item -> item -> item
+		    val substItemInItem : item_subst -> item -> item 
+		    val printer : item -> unit) 
+      :> SUBST where type item = item
+		 and type item_subst = item_subst =
+    struct
       
-    val printConSubst = print Ppnil.pp_con
+      type var = Name.var
+      type item = item
+      type item_subst = item_subst
 
+      fun empty () : item_subst = VarMap.empty
+	
+      fun substitute subst var = VarMap.find (subst,var)
+	
+      fun toList (subst : item_subst) = VarMap.listItemsi subst
+	
+      fun sim_add subst (var,value) : item_subst = VarMap.insert (subst,var,value)
+      
+      fun addl (var,item,subst) = 
+	VarMap.insert (VarMap.map (varItemItemSubst var item) subst,
+		       var,item)
+
+      fun addr  (subst,var,item) = 
+	VarMap.insert (subst,var,substItemInItem subst item)
+
+      fun is_empty subst = (VarMap.numItems subst) = 0
+	
+      fun compose (subst1,subst2) = 
+	let
+	  val subst2 = VarMap.map (substItemInItem subst1) subst2
+	  val subst = VarMap.unionWith #2 (subst1,subst2)
+	in
+	  subst
+	end
+      
+      fun merge (subst1,subst2) = VarMap.unionWith #2 (subst1,subst2)
+
+      fun simFromList (list : (var * item) list) : item_subst = 
+	let
+	  fun fold ((var,value),subst) = 
+	    VarMap.insert(subst,var,value)
+	    
+	  val subst =  List.foldl fold VarMap.empty list
+	in
+	  subst
+	end
+
+      fun seqFromList (list : (var * item) list) : item_subst = 
+	let
+	  fun fold ((var,value),subst) = 
+	    VarMap.insert(subst,var,substItemInItem subst value)
+	    
+	  val subst =  List.foldl fold VarMap.empty list
+	in
+	  subst
+	end
+
+      fun printf (printer : item -> unit) (subst: item_subst) = 
+	let
+	  fun print1 (v,a) = 
+	    (TextIO.print (Name.var2string v);
+	     TextIO.print "->";
+	     printer a;
+	     TextIO.print "\n")
+	in
+	  (Util.lprintl "Substitution is";
+	   VarMap.appi print1 subst;
+	   Util.printl "")
+	end
+
+      val print = printf printer
+    end
+
+    structure C = SubstFn(type item = con
+			  type item_subst = con_subst
+			  val varItemItemSubst = varConConSubst
+			  val substItemInItem = substConInCon
+			  val printer = Ppnil.pp_con)
+      
+      
+    structure E = SubstFn(type item = exp
+			  type item_subst = exp_subst
+			  val varItemItemSubst = varExpExpSubst
+			  val substItemInItem = substExpInExp
+			  val printer = Ppnil.pp_exp)
+      
   end

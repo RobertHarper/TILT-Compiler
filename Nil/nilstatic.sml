@@ -1,4 +1,4 @@
-(*$import ANNOTATION PRIMUTIL NIL PPNIL ALPHA NILCONTEXT NILERROR NORMALIZE NILSUBST Stats NILSTATIC Normalize NilUtil NilHNF *)
+(*$import NILSTATIC Nil Ppnil NilContext NilError NilSubst Stats Normalize NilUtil NilHNF *)
 structure NilStatic :> NILSTATIC where type context = NilContext.context = 
 struct	
   
@@ -160,7 +160,8 @@ struct
 			    kind_of args)
 
   structure Subst = NilSubst
-  type 'a subst = 'a Subst.subst
+  type con_subst = Subst.con_subst
+  type exp_subst = Subst.exp_subst
   val substConInExp = Subst.substConInExp
   val substConInCon = Subst.substConInCon
   val substConInKind = Subst.substConInKind
@@ -171,8 +172,8 @@ struct
   val varConConSubst = Subst.varConConSubst
   val varConKindSubst = Subst.varConKindSubst
   val varExpConSubst = Subst.varExpConSubst
-  val empty_subst = Subst.empty
-  val con_subst_compose = Subst.con_subst_compose
+  val empty_subst = Subst.C.empty
+  val con_subst_compose = Subst.C.compose
 
   (*From NilUtil*)
   val generate_tuple_label = NilUtil.generate_tuple_label
@@ -723,8 +724,8 @@ struct
 		 orelse
 		 (error (locate "con_valid'") "Constructor function failed: argument not subkind of expected kind")
 (*	       val _ = print "XXX con_valid on App_c 5 DONE\n" *)
-	       fun folder (v,c,subst) = NilSubst.add subst (v,c)
-	       val subst = Listops.foldl2 folder (NilSubst.empty()) (formal_vars,actuals)
+	       fun folder (v,c,subst) = NilSubst.C.sim_add subst (v,c)
+	       val subst = Listops.foldl2 folder (NilSubst.C.empty()) (formal_vars,actuals)
 	     in  
 	       substConInKind subst body_kind
 	     end
@@ -836,8 +837,8 @@ struct
 	  val kind1 = substConInKind subst1 kind1
 	  val kind2 = substConInKind subst2 kind2
 	  val D' = insert_kind (D,var',kind1)
-	  val subst1 = Subst.add subst1 (var1,Var_c var')
-	  val subst2 = Subst.add subst2 (var2,Var_c var')
+	  val subst1 = Subst.C.sim_add subst1 (var1,Var_c var')
+	  val subst2 = Subst.C.sim_add subst2 (var2,Var_c var')
 	in
 	  (subeq_kind is_eq (D,kind1,kind2),(D',subst1,subst2))
 	end
@@ -912,9 +913,7 @@ struct
 			      equiv_depth := !equiv_depth +1;
 			      (if !equiv_depth = 1 then subtimer ("Tchk:type_equiv",con_equiv) (D,c1,c2,Type_k)
 			       else (type_equiv_count();
-				     print ("Type equiv depth is "^(Int.toString (!equiv_depth))^"\n");
-				     (con_equiv (D,c1,c2,Type_k)) before
-				     (print ("Returning from depth "^(Int.toString (!equiv_depth))^"\n"))))
+				     (con_equiv (D,c1,c2,Type_k))))
 				 before (equiv_depth := !equiv_depth -1)
 				 )
 
@@ -1015,50 +1014,52 @@ struct
     end
 
   (* The substitution returned maps variables in the second list to the first. *)
-  and vklist_equiv (D, vklist1, vklist2) : context * con subst * bool =
+  and vklist_equiv (D, vklist1, vklist2) : context * con_subst * bool =
       let 
 	fun folder((v1,k1),(v2,k2),(D,rename,match)) = 
 	  let 
-	    val k2 = subtimer("Tchk:Equiv:substConInKin",substConInKind rename) k2
+	    val k2 = subtimer("Tchk:Equiv:substConInKind",substConInKind rename) k2
 	    val match = match andalso subtimer("Tchk:Equiv:kind_equiv",kind_equiv)(D,k1,k2)
 	    val rename = if (eq_var(v1,v2)) then rename
-			 else Subst.add rename (v2,Var_c v1)
+			 else Subst.C.sim_add rename (v2,Var_c v1)
 	    val D = insert_kind(D,v1,k1)
 	  in  (D,rename,match)
 	  end
       in  
 	if (length vklist1 = length vklist2)
-	  then Listops.foldl2 folder (D,Subst.empty(),true) (vklist1, vklist2)
-	else (D, Subst.empty(), false)
+	  then Listops.foldl2 folder (D,empty_subst(),true) (vklist1, vklist2)
+	else (D, empty_subst(), false)
       end
     
-  and vlistopt_clist_equiv (D, rename, NONE, clist1, NONE, clist2) : context * con subst * bool =
-    (D, rename,
-     Listops.eq_list(fn (c1,c2) => con_equiv(D,c1,subtimer("Tchk:Equiv:substConInCon",Subst.substConInCon rename) c2,
+  and vlistopt_clist_equiv (D, cRename, NONE, clist1, NONE, clist2) : context * (exp_subst * con_subst) * bool =
+    (D, (Subst.E.empty(),cRename),
+     Listops.eq_list(fn (c1,c2) => con_equiv(D,c1,subtimer("Tchk:Equiv:substConInCon",Subst.substConInCon cRename) c2,
 					     Type_k), clist1, clist2))
     | vlistopt_clist_equiv (D, rename, NONE, clist1, vlistopt2, clist2) =
     vlistopt_clist_equiv (D, rename, vlistopt2, clist2, NONE, clist1)
-    | vlistopt_clist_equiv (D, rename, SOME vlist1, clist1, vlistopt2, clist2) =
-    let fun folder(v1,c1,vopt2,c2,(D,rename,match)) = 
-      let val c2 = subtimer("Tchk:Equiv:substConInCon",Subst.substConInCon rename) c2
-	      val match = match andalso con_equiv(D,c1,c2,Type_k)
-	      val rename = (case vopt2 of
-				NONE => rename
-			      | SOME v2 => if (eq_var(v1,v2)) then rename
-					   else Subst.add rename (v2,Var_c v1))
-	      val D = NilContext.insert_con(D,v1,c1)
-	  in  (D,rename,match)
-	  end
-	  val vlist2 = (case vlistopt2 of
-			    NONE => map (fn _ => NONE) clist2
-			  | SOME vars => map (fn v => SOME v) vars)
-	  val vl1 = length vlist1
-	  val vl2 = length vlist2
-      in  if (vl1 = vl2 andalso vl1 = length clist1 andalso vl2 = length clist2)
-	      then Listops.foldl4 folder (D,rename,true) 
-		  (vlist1,clist1,vlist2,clist2)
-	  else (D, rename, false)
-      end
+    | vlistopt_clist_equiv (D, cRename, SOME vlist1, clist1, vlistopt2, clist2) =
+    let 
+      fun folder(v1,c1,vopt2,c2,(D,rename as (eRename,cRename),match)) = 
+	let 
+	  val c2 = subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon rename) c2
+	  val match = match andalso con_equiv(D,c1,c2,Type_k)
+	  val rename = (case vopt2 of
+			  NONE => rename
+			| SOME v2 => if (eq_var(v1,v2)) then rename
+				     else (Subst.E.sim_add eRename (v2,Var_e v1),cRename))
+	  val D = NilContext.insert_con(D,v1,c1)
+	in  (D,rename,match)
+	end
+      val vlist2 = (case vlistopt2 of
+		      NONE => map (fn _ => NONE) clist2
+		    | SOME vars => map (fn v => SOME v) vars)
+      val vl1 = length vlist1
+      val vl2 = length vlist2
+    in  if (vl1 = vl2 andalso vl1 = length clist1 andalso vl2 = length clist2)
+	  then Listops.foldl4 folder (D,(Subst.E.empty(),cRename),true)
+	    (vlist1,clist1,vlist2,clist2)
+	else (D, (Subst.E.empty(),cRename), false)
+    end
 
 
   and con_structural_equiv (D,c1,c2) : kind option =
@@ -1071,7 +1072,7 @@ struct
 	     (Prim_c(Record_c (labs1,vlistopt1),clist1), 
 	      (Prim_c(Record_c (labs2,vlistopt2),clist2))) =>
 	     base (Listops.eq_list(eq_label,labs1,labs2) andalso
-		   #3(vlistopt_clist_equiv(D,Subst.empty(),
+		   #3(vlistopt_clist_equiv(D,empty_subst(),
 					 vlistopt1,clist1,vlistopt2,clist2)))
 	    | (Prim_c(pcon1 as Sum_c{tagcount,totalcount,known},clist1), 
 	       Prim_c(pcon2,clist2)) =>
@@ -1092,11 +1093,11 @@ struct
 			let val D = NilContext.insert_kind(D,v1,Type_k)
 			    val rename = if (eq_var(v1,v2))
 					     then rename
-					 else Subst.add rename (v2,Var_c v1)
+					 else Subst.C.sim_add rename (v2,Var_c v1)
 			in  build (D,rename) (rest1,rest2)
 			end
 		      | build acc _ = acc
-		    val (D,rename) = build (D,Subst.empty()) (vc1,vc2)
+		    val (D,rename) = build (D,Subst.C.empty()) (vc1,vc2)
 		    fun pred ((_,c1),(_,c2)) = 
 			    con_equiv(D,c1,subtimer("Tchk:Equiv:substConInCon",Subst.substConInCon rename) c2, Type_k)
 		in  if ((ir1 = ir2) andalso Listops.eq_list(pred,vc1,vc2))
@@ -1108,19 +1109,19 @@ struct
 		base(openness1 = openness1 andalso effect1 = effect2 
 		     andalso nf1 = nf2 
 		     andalso 
-		     let val (D,rename,match) = vklist_equiv(D,vklist1,vklist2)
+		     let val (D,cRename,match) = vklist_equiv(D,vklist1,vklist2)
 		     in  match andalso
 			 let val (D,rename,match) = 
-			     vlistopt_clist_equiv(D,rename,vlistopt1,clist1,
-						   vlistopt2,clist2)
+			   vlistopt_clist_equiv(D,cRename,vlistopt1,clist1,
+						vlistopt2,clist2)
 			 in  match andalso
-			     type_equiv(D,c1,subtimer("Tchk:Equiv:substConInCon",Subst.substConInCon rename) c2)
+			   type_equiv(D,c1,subtimer("Tchk:Equiv:substExpConInCon",Subst.substExpConInCon rename) c2)
 			 end
 		     end)
 
 	      | (ExternArrow_c (clist1,c1), ExternArrow_c (clist2,c2)) => 
 		let val (D,_,match) = 
-		    vlistopt_clist_equiv(D,Subst.empty(),NONE,clist1,
+		    vlistopt_clist_equiv(D,Subst.C.empty(),NONE,clist1,
 					 NONE,clist2)
 		in  base(type_equiv(D,c1,c2))
 		end
@@ -1138,8 +1139,8 @@ struct
 			   | loop subst (((l,v),k)::rest) = 
 			     if (eq_label(l,l1))
 				 then SOME(subtimer("Tchk:Equiv:substConInKind",Subst.substConInKind subst) k)
-			     else loop (Subst.add subst (v,Proj_c(c1,l))) rest
-		     in  loop (Subst.empty()) (Sequence.toList lvk_seq)
+			     else loop (Subst.C.sim_add subst (v,Proj_c(c1,l))) rest
+		     in  loop (Subst.C.empty()) (Sequence.toList lvk_seq)
 		     end
 		 | _ => NONE)
 	      | (App_c (f1,clist1), App_c (f2,clist2)) =>
@@ -1150,11 +1151,11 @@ struct
 			  if equal then 
 			      let val equal = con_equiv(D,c1,c2,k)
 				  val D = NilContext.insert_kind(D,v,Single_k c1)
-				  val subst = Subst.add subst (v,c1)
+				  val subst = Subst.C.sim_add subst (v,c1)
 			      in  (D,subst,equal)
 			      end
 			  else (D,subst,equal)
-			val (D,subst,equal) = Listops.foldl3 folder (D,Subst.empty(),true) 
+			val (D,subst,equal) = Listops.foldl3 folder (D,Subst.C.empty(),true) 
 			                          (vklist,clist1,clist2)
 		      in if equal then SOME(subtimer("Tchk:Equiv:substConInKind",NilSubst.substConInKind subst) k) 
 			 else NONE
@@ -1166,15 +1167,15 @@ struct
 	      | (Annotate_c _, _) => error' "Annotate_c not WHNF"
 	      | (Typecase_c _, _) => error' "Typecase_c not handled"
 	      | _ => NONE)
-(*	val _ = case res of
-	    NONE => (print "con_structural_equiv returning NONE\n";
-		  print "c1 = "; Ppnil.pp_con c1; print "\n";
-		  print "c2 = "; Ppnil.pp_con c2; print "\n";
-		  print "\n")
-	  | _ => ()*)
+       val _ = (case res of
+		  NONE => (print "con_structural_equiv returning NONE\n";
+			   print "c1 = "; Ppnil.pp_con c1; print "\n";
+			   print "c2 = "; Ppnil.pp_con c2; print "\n";
+			   print "\n")
+		| _ => ())
    in res
-    end 
-
+   end 
+ 
 (* Term level type checking.  *)
 
   and value_valid (D,value) = 
@@ -1634,7 +1635,7 @@ struct
 
        
        
-  and bnds_valid (D,bnds) = (foldl bnd_valid' (D,Subst.empty()) bnds)
+  and bnds_valid (D,bnds) = (foldl bnd_valid' (D,Subst.C.empty()) bnds)
   and bnd_valid (state,bnd) = bnd_valid' (bnd,state)
   and bnd_valid'' (bnd,state) = 
     let
@@ -1642,7 +1643,8 @@ struct
       val con_valid = subtimer ("Tchk:Bnd:con_valid",con_valid)
       val cbnd_valid = subtimer ("Tchk:Bnd:cbnd_valid",cbnd_valid)
       val substConInCon = fn subst => subtimer("Tchk:Bnd:substConInCon",substConInCon subst)
-      val add = fn subst => subtimer("Tchk:Subst.add in bnd_valid",Subst.add subst)
+      val add = fn subst => subtimer("Tchk:Subst.add in bnd_valid",Subst.C.sim_add subst)
+      val addr = subtimer("Tchk:Subst.addr in bnd_valid",Subst.C.addr)
 
 (*      val bnd = substConInBnd subst bnd *)
 
@@ -1724,7 +1726,7 @@ struct
 		  Con_cb (v,c) => (v,c)
 		| Open_cb(v,vklist,c,k) => (v,Let_c(Sequential,[cbnd],Var_c v))
 		| Code_cb(v,vklist,c,k) => (v,Let_c(Sequential,[cbnd],Var_c v)))
-	     val subst = add subst (v,substConInCon subst c)
+	     val subst = addr (subst,v,c)
 	   in  (D,subst)
 	   end
 	  | Exp_b (var, tracinfo,exp) =>
@@ -1952,7 +1954,7 @@ struct
 	      perr_e exp;
 	      error (locate "exp_valid") "Formal/actual parameter mismatch")
 
-	   val subst = Subst.fromList (zip (#1 (unzip tformals)) cons)
+	   val subst = Subst.C.simFromList (zip (#1 (unzip tformals)) cons)
 	   val formals = map (Subst.substConInCon subst) formals
 	     
 
@@ -2002,7 +2004,7 @@ struct
 	       val body = Subst.substConInCon subst body
 	     in
 	       case vars_opt
-		 of SOME vars => substExpInCon (Subst.fromList (zip vars texps)) body
+		 of SOME vars => substExpInCon (Subst.E.simFromList (zip vars texps)) body
 		  | NONE => body
 	     end
 
