@@ -125,7 +125,7 @@ struct option_entry table[] =
    0, "showheaps", &SHOW_HEAPS, "Show heaps before and after each GC",
    0, "showglobals", &SHOW_GLOBALS, "Show globals before and after each GC",
    1, "showatgc", &LEAST_GC_TO_CHECK, "Check/show heaps starting at this GC",
-   1, "stackletSize", &StackletSize, "Stack size of thread stacklets measured in Kbytes",
+   1, "stackletSize", &MLStackletSize, "Stack size of thread stacklets measured in Kbytes",
    1, "proc", &NumProc, "Use this many processors",
    1, "largeheap", &largeheapsize, "Set large object heap size in Kbytes",
    1, "minheap", &MinHeap, "Set minimum size of heap in Kbytes",

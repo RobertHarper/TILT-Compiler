@@ -143,23 +143,37 @@ void copy2L_noSpaceCheck(Proc_t *proc, ptr_t obj, CopyRange_t *copyRange,
     gc_large_addRoot(obj);
 }
 
-/* splitAlloc_primaryStack
+/* splitAlloc_copyCopySync_primaryStack
    (1) Returns the size of the object (which equals bytesCopied if object was copied).
        Otherwise, object was already copied.
 */
-INLINE(splitAlloc_primaryStack)
-int splitAlloc_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
+INLINE(splitAlloc_copyCopySync_primaryStack)
+int splitAlloc_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
 { 
   tag_t tag;
-  int bytesCopied = splitAlloc(proc,white,copyRange);
+  int bytesCopied = splitAlloc_copyCopySync(proc,white,copyRange);
   if (bytesCopied) {
-    proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+    /* XXX   proc->segUsage.pagesTouched += Heap_TouchPage(from,white);   */
     pushStack(localStack, white);
   }
   return bytesCopied;
 }
 
-
+/* copy_copyCopySync_replicaStack
+   (1) Returns the size of the object (which equals bytesCopied if object was copied).
+       Otherwise, object was already copied.
+*/
+INLINE(copy_copyCopySync_replicaStack)
+int copy_copyCopySync_replicaStack(Proc_t *proc, ptr_t white, Stack_t *localStack, CopyRange_t *copyRange, Heap_t *from)
+{ 
+  tag_t tag;
+  int bytesCopied = copy_copyCopySync(proc,white,copyRange);
+  if (bytesCopied) {
+    /* XXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
+    pushStack(localStack, (ptr_t) white[-1]);
+  }
+  return bytesCopied;
+}
 
 /* copy1_copyCopySync_replicaStack */
 INLINE(copy1_copyCopySync_replicaStack)
@@ -181,11 +195,12 @@ void splitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *l
   if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = splitAlloc_copyCopySync(proc,white,copyRange);
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
       pushStack(localStack, white);
     }
   }
 }
+
 
 /* splitAlloc1L_copyCopySync_primaryStack */
 INLINE(splitAlloc1L_copyCopySync_primaryStack)
@@ -194,7 +209,7 @@ void splitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *
   if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = splitAlloc_copyCopySync(proc,white,copyRange);
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
       pushStack(localStack, white);
     }
   }
@@ -266,7 +281,7 @@ void copy1_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localSt
   if ((val_t) white - (val_t)from->range.low < from->range.diff) {
     int bytesCopied = copy_copyCopySync(proc,white,copyRange);
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
       pushStack(localStack, white);
     }
   }
@@ -282,7 +297,7 @@ void locCopy1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *local
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
       pushStack(localStack, white);
     }
   }
@@ -298,7 +313,7 @@ void locSplitCopy1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
       pushStack(localStack, white);
     }
   }
@@ -314,7 +329,7 @@ void locCopy1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loca
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
       pushStack(localStack, white);
     }
   }
@@ -351,7 +366,7 @@ void copy2L_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localS
     int bytesCopied = copy_copyCopySync(proc,white,copyRange);
     ptr_t gray = (ptr_t) white[-1];
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
       pushStack(localStack, white);
     }
   }
@@ -359,7 +374,7 @@ void copy2L_copyCopySync_primaryStack(Proc_t *proc, ptr_t white, Stack_t *localS
     int bytesCopied = copy_copyCopySync(proc,white,copyRange);
     ptr_t gray = (ptr_t) white[-1];
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from2,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from2,white);  */
       pushStack(localStack, white);
     }
   }
@@ -378,7 +393,7 @@ void locCopy2L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loca
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
       pushStack(localStack, white);
     }
   }
@@ -387,7 +402,7 @@ void locCopy2L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loca
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from2,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from2,white);  */
       pushStack(localStack, white);
     }
   }
@@ -405,7 +420,7 @@ void locAlloc1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loca
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
       pushStack(localStack, white);
     }
   }
@@ -421,7 +436,7 @@ void locSplitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t 
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);   */
       pushStack(localStack, white);
     }
   }
@@ -438,7 +453,7 @@ void locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
       pushStack(localStack, white);
     }
   }
@@ -458,7 +473,7 @@ void locAlloc2L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loc
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from,white);  */
       pushStack(localStack, white);
     }
   }
@@ -467,7 +482,7 @@ void locAlloc2L_copyCopySync_primaryStack(Proc_t *proc, ploc_t loc, Stack_t *loc
     ptr_t gray = (ptr_t) white[-1];
     *loc = gray;
     if (bytesCopied) {
-      proc->segUsage.pagesTouched += Heap_TouchPage(from2,white); 
+      /* XXXX proc->segUsage.pagesTouched += Heap_TouchPage(from2,white);  */
       pushStack(localStack, white);
     }
   }

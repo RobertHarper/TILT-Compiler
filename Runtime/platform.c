@@ -225,37 +225,46 @@ void showPerfMon(int which)
       break;
     }
   printf("===========================================\n");
-  for (i=0; i<picCursor; i++) {
+  for (i=0; i<picCursor+1; i++) {
     unsigned long count0 = (which == 0) ? pic0[i] : pic2[i];
     unsigned long count1 = (which == 0) ? pic1[i] : pic3[i];
+    if (i < picCursor) {
+      pic0[picCursor] += pic0[i];
+      pic1[picCursor] += pic1[i];
+      pic2[picCursor] += pic2[i];
+      pic3[picCursor] += pic3[i];
+      printf("%3d | ", i);
+    }
+    else
+      printf("All | ");
     if (which == 2)
       assert(perfType == SysBasic);
     switch (perfType) {
       case UserBasic: 
       case BothBasic: 
-	printf("%3d | %7d  | %7d  |   %4.1f\n", i, count0, count1, ((double) count0) / count1);
+	printf("%7d  | %7d  |   %4.2f\n", count0, count1, ((double) count0) / count1);
 	break;
       case SysBasic:
 	if (which == 2)
-	  printf("%3d | %7d  | %7d  |   %4.1f  | %7d  | %7d  |  %4.1f\n", i, 
+	  printf("%7d  | %7d  |   %4.2f  | %7d  | %7d  |  %4.2f\n", 
 		 pic0[i], pic1[i], ((double) pic0[i]) / pic1[i],
 		 pic2[i], pic3[i], ((double) pic2[i]) / pic3[i]);
 	else 
-	  printf("%3d | %7d  | %7d  |   %4.1f\n", i, count0, count1, ((double) count0) / count1);
+	  printf("%7d  | %7d  |   %4.2f\n", count0, count1, ((double) count0) / count1);
 	break;
       case UserDCache:
       case SysDCache:
-	printf("%3d | %7d  | %7d  | %7d  |   %4.1f\n", i, count0, count1, count0 - count1, 100.0 * count1 / count0);
+	printf("%7d  | %7d  | %7d  |   %4.2f\n", count0, count1, count0 - count1, 100.0 * count1 / count0);
 	break;
       case UserECache:
       case SysECache:
-	printf("%3d | %7d  | %7d  | %7d  |   %4.1f\n", i, count0, count1, count0 - count1, 100.0 * count1 / count0);
+	printf("%7d  | %7d  | %7d  |   %4.2f\n", count0, count1, count0 - count1, 100.0 * count1 / count0);
 	break;
       case UserEWrite:
-	printf("%3d | %7d  | %7d\n", i, count0, count1);
+	printf("%7d  | %7d\n", count0, count1);
 	break;
       case UserESnoop:
-	printf("%3d | %7d  |   %7d\n", i, count0, count1);
+	printf("%7d  | %7d\n", count0, count1);
 	break;
     }
   }

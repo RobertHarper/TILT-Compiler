@@ -57,6 +57,9 @@ extern Barriers_t *barriers;                          /* Used by all parallel/co
 /* GCFromML has a non-standard calling convention */
 void GCFromC(Thread_t *, int RequestSizeBytes, int isMajor);
 
+/* Is there enough allocation and write buffer space in processor to map thread? */
+int GCSatisfiable(Proc_t *proc, Thread_t *th);
+
 /* These are initialization and finalization routines. */
 void GCInit(void);
 void GCInit_Semi(void);
@@ -77,26 +80,18 @@ void GCPoll_GenConc(Proc_t *);
 
 /* Actual collection routines */
 
-int GCFromScheduler(Proc_t *, Thread_t *);  /* Returns whether thread can be mapped */
+void GCFromScheduler(Proc_t *, Thread_t *);  
 void GCFromMutator(Thread_t *);                  /* Does not return; goes to scheduler; argument may be NULL  */
-void GCRelease(Proc_t *proc);          /* Called by scheduler when a thread is unmapped */
+void GCReleaseThread(Proc_t *proc);          /* Called by scheduler when a thread is unmapped */
 
-/* Can we continue execution without a stop-and-copy */
-int GCTry_Semi(Proc_t *, Thread_t *);
-int GCTry_Gen(Proc_t *, Thread_t *);
-int GCTry_SemiPara(Proc_t *, Thread_t *);
-int GCTry_GenPara(Proc_t *, Thread_t *);
-int GCTry_SemiConc(Proc_t *, Thread_t *);
-int GCTry_GenConc(Proc_t *, Thread_t *);
-int GCTry_SemiStack(Proc_t *, Thread_t *);
-
-/* Perform a stop-and-copy collection */
-void GCStop_Semi(Proc_t *);
-void GCStop_Gen(Proc_t *);
-void GCStop_SemiPara(Proc_t *);
-void GCStop_GenPara(Proc_t *);
-void GCStop_SemiStack(Proc_t *);
-/* Concurrent collectors do not have a Stop version */
+/* The collector functions */
+void GC_Semi(Proc_t *, Thread_t *);
+void GC_Gen(Proc_t *, Thread_t *);
+void GC_SemiPara(Proc_t *, Thread_t *);
+void GC_GenPara(Proc_t *, Thread_t *);
+void GC_SemiConc(Proc_t *, Thread_t *);
+void GC_GenConc(Proc_t *, Thread_t *);
+void GC_SemiStack(Proc_t *, Thread_t *);
 
 /* Must be called each time a thread is released */
 void GCRelease_Semi(Proc_t *proc);
@@ -155,8 +150,8 @@ extern double stackSlotWeight;
    The fraction "reserve" is reserved for concurrent collector.
 */
 long ComputeHeapSize(long oldsize, double oldratio, int withhold, double reserve);
-double HeapAdjust1(int request, int withhold,  double reserve, Heap_t *from1, Heap_t *to);
-double HeapAdjust2(int request, int withhold,  double reserve,  Heap_t *from1, Heap_t *from2, Heap_t *to);
+double HeapAdjust1(int request, int unused, int withhold,  double reserve, Heap_t *from1, Heap_t *to);
+double HeapAdjust2(int request, int unused, int withhold,  double reserve,  Heap_t *from1, Heap_t *from2, Heap_t *to);
 int expandedToReduced(int size, double rate);
 int reducedToExpanded(int size, int rate);
 

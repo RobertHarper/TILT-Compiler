@@ -49,35 +49,9 @@ void GCRelease_Semi(Proc_t *proc)
 }
 
 
-int GCTry_Semi(Proc_t *proc, Thread_t *th)
+static void GCCollect_Semi(Proc_t *proc)
 {
-  assert(proc->userThread == NULL);
-  assert(th->proc == NULL);
-  /* First time through */
-  if (proc->allocLimit == StartHeapLimit) {
-    proc->allocStart = fromSpace->bottom;
-    proc->allocCursor = fromSpace->bottom;
-    proc->allocLimit = fromSpace->top;
-    fromSpace->cursor = fromSpace->top;
-  }
-  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
-  process_writelist(proc,NULL,NULL);
-  if (th->requestInfo > 0) {
-    int bytesAvailable = sizeof(val_t) * (proc->allocLimit - proc->allocCursor);
-    return (th->requestInfo <= bytesAvailable);
-  }
-  else if (th->requestInfo < 0) {
-    int bytesAvailable = sizeof(val_t) * (proc->writelistEnd - proc->writelistCursor);
-    return ((-th->requestInfo) <= bytesAvailable);
-  }
-  else 
-    assert(0);
-  return 0;
-}
-
-void GCStop_Semi(Proc_t *proc)
-{
-  int bytesRequested = 0;
+  long totalRequested = 0, totalUnused = 0;
   mem_t allocCursor = proc->allocCursor;
   mem_t allocLimit = proc->allocLimit;
   Thread_t *curThread = NULL;
@@ -89,10 +63,11 @@ void GCStop_Semi(Proc_t *proc)
   assert(NumProc == 1);
   assert(proc->userThread == NULL);
   assert(allocCursor <= allocLimit);
-  assert(bytesRequested >= 0);
+  assert(totalRequested >= 0);
 
   paranoid_check_all(fromSpace, NULL, NULL, NULL, NULL);
 
+  proc->gcSegment1 = MajorWork;
   proc->gcSegment2 = FlipBoth;
 
   /* Write list can be ignored */
@@ -102,10 +77,11 @@ void GCStop_Semi(Proc_t *proc)
   /* Compute the roots from the stack and register set */
   assert(isEmptyStack(proc->rootLocs));
   procChangeState(proc, GCStack);
+  totalUnused += sizeof(val_t) * (proc->allocLimit - proc->allocCursor);
   ResetJob();
   while ((curThread = NextJob()) != NULL) {
     if (curThread->requestInfo >= 0)
-      bytesRequested += curThread->requestInfo;
+      totalRequested += curThread->requestInfo;
     thread_root_scan(proc,curThread);
   }
   procChangeState(proc, GCGlobal);
@@ -131,7 +107,7 @@ void GCStop_Semi(Proc_t *proc)
   paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);
 
   /* Resize the tospace, discard fromspace, flip space */
-  liveRatio = HeapAdjust1(bytesRequested, 0, 0.0, fromSpace, toSpace);
+  liveRatio = HeapAdjust1(totalRequested, totalUnused, 0, 0.0, fromSpace, toSpace);
   add_statistic(&proc->majorSurvivalStatistic, liveRatio);
   Heap_Resize(fromSpace,0,1);
   typed_swap(Heap_t *, fromSpace, toSpace);
@@ -144,6 +120,26 @@ void GCStop_Semi(Proc_t *proc)
   assert(proc->writelistCursor == proc->writelistStart);
 
   NumGC++;
+}
+
+void GC_Semi(Proc_t *proc, Thread_t *th)
+{
+  /* Threads should not be mapped */
+  assert(proc->userThread == NULL);
+  assert(th->proc == NULL);
+  /* If allocation pointer is StartHeapLimit, we give the single processor the whole heap */
+  if (proc->allocLimit == StartHeapLimit) {
+    proc->allocStart = fromSpace->bottom;
+    proc->allocCursor = fromSpace->bottom;
+    proc->allocLimit = fromSpace->top;
+    fromSpace->cursor = fromSpace->top;
+  }
+  proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
+  process_writelist(proc,NULL,NULL);
+  if (GCSatisfiable(proc,th))
+    return;
+  GCCollect_Semi(proc);
+  assert(GCSatisfiable(proc,th));
 }
 
 

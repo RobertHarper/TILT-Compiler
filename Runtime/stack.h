@@ -27,7 +27,6 @@
 #define GET_SPECIAL_REC_POS4(type) ((type >> (2 + 6 + 8 + 8)) & 255)
 
 void show_stack(mem_t sp, mem_t cur_retadd, mem_t top);
-
 void stack_init(void);
 void add_global_root(Proc_t *proc, mem_t global);
 void do_global_work(Proc_t *proc, int workToDo);  /* Do some global work */

@@ -24,11 +24,11 @@ int ftime(struct timeb *tp);   /* This should be in sys/timeb.h but isn't on the
 #include <libgen.h>
 
 #include "tag.h"
+#include "stack.h"
 #include "thread.h"
 #include "create.h"
 #include "posix.h"
 #include "global.h"
-#include "stack.h"
 #include "exn.h"
 
 #ifdef sparc

@@ -24,7 +24,7 @@ struct
     val do_forced_constant_records = ref true
     val do_single_crecord = ref true
 
-    val diag = ref true
+    val diag = ref false
     val debug = Stats.ff("TortlBaseDebug")
     val debug_simp = Stats.ff("tortl_base_debug_simp")
     val debug_bound = ref false
@@ -650,7 +650,8 @@ struct
 		reset_state(false,(fresh_named_var "code", fresh_code_label "code"));
 		clear_stats())
 	   end
-       fun unset_global_state() = (show_stats(); set_global_state("",[],VarSet.empty));
+       fun unset_global_state() = (if (!diag) then show_stats() else ();
+				   set_global_state("",[],VarSet.empty));
 
 				   
        fun get_unitname() = !unitname

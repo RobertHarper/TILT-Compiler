@@ -177,7 +177,9 @@ struct
 			     val bnds2 = map (fn v => Exp_b(v,TraceUnknown,unit_exp)) eFormals
 			 in  SOME(replace, bnds1 @ bnds2, body)
 			 end
-		   | SOME (Candidate _) => (print "Warning: dead function "; pp_var v; print "\n"; NONE)
+		   | SOME (Candidate _) => (if (!debug)
+						then (print "Warning: dead function "; pp_var v; print "\n")
+					    else (); NONE)
 		   | _ => NONE)
 
 	end

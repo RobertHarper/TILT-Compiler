@@ -71,12 +71,10 @@ struct
 
   fun comp (base_file,rtlmod) = 
     let val asm_file = base2s base_file
-	val _ = print "\n================================================\n"
-	val _ = print "Starting translation to TIL-Sparc assembly\n"
+	val _ = print "\n===== Translating to TIL-Sparc assembly      =====\n"
 	val _ = Printutils.openOutput asm_file
 	val _ = Rtltosparc.allocateModule rtlmod
 	val _ = Printutils.closeOutput()
-	val _ = print "Generation of TIL-Sparc assembly files complete\n"
     in asm_file
     end
 

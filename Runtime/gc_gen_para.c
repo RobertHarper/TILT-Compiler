@@ -65,29 +65,12 @@ void GCRelease_GenPara(Proc_t *proc)
   proc->segUsage.bytesAllocated += alloc;
 }
 
-int GCTry_GenPara(Proc_t *proc, Thread_t *th)
-{
-  int roundSize = RoundUp(th->requestInfo, minOffRequest);
+static long totalRequest = 0;
+static long totalUnused = 0;
 
-  if ((th->request != MajorGCRequestFromC) && th->requestInfo > 0) {
-    GetHeapArea(nursery,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
-    if (proc->allocStart) {
-      if (collectDiag >= 3) 
-	printf("Proc %d: Grabbed %d page(s) at %d\n",proc->procid,roundSize/pagesize,proc->allocStart);
-      return 1;
-    }
-  }
-  else if (th->requestInfo < 0) {
-    unsigned int bytesAvailable = sizeof(val_t) * (proc->writelistEnd - proc->writelistCursor);
-    return ((-th->requestInfo) <= bytesAvailable);
-  }
-  return 0;
-}
-
-void GCStop_GenPara(Proc_t *proc)
+static void GCCollect_GenPara(Proc_t *proc)
 {
   int isFirst = 0;                    /* Am I the first processor? */
-  static long req_size;            /* These are shared across processors. */
   Thread_t *curThread = NULL;
   ploc_t rootLoc, globalLoc;
   ptr_t PRObj;
@@ -105,7 +88,7 @@ void GCStop_GenPara(Proc_t *proc)
       GCType = Major;
     else 
       GCType = Minor;
-    req_size = 0;
+    totalRequest = totalUnused = 0;
     resetSharedStack(workStack, NumProc);
     ResetJob();                        /* Reset counter so all user threads are scanned */
   }
@@ -118,11 +101,12 @@ void GCStop_GenPara(Proc_t *proc)
 
   /* All processors compute thread-specific roots in parallel
      and determine whether a major GC has been requested. */
+  FetchAndAdd(&totalUnused, sizeof(val_t) * (proc->allocLimit - proc->allocCursor));
   procChangeState(proc, GCStack);
   while ((curThread = NextJob()) != NULL) {
     /* If negative, requestnfo signifies full writelist */
     if (curThread->requestInfo >= 0)
-      FetchAndAdd(&req_size, curThread->requestInfo);
+      FetchAndAdd(&totalRequest, curThread->requestInfo);
     thread_root_scan(proc,curThread);
     if (GCType == Minor && curThread->request == MajorGCRequestFromC)  /* Upgrade to major GC */
       GCType = Major;      
@@ -265,14 +249,18 @@ void GCStop_GenPara(Proc_t *proc)
 
     /* Globals, statistics, resize/reset/flip */
     if (GCType == Minor) {
+      int i, copied = 0;
       minor_global_promote(proc);
-      liveRatio = (double) (fromSpace->cursor - fromSpace->prevCursor) / (double) (nursery->cursor - nursery->bottom); 
-      fromSpace->prevCursor = fromSpace->cursor;
+      for (i=0; i<NumProc; i++) {
+	Proc_t *p = getNthProc(i);;
+	copied += bytesCopied(&p->cycleUsage) + bytesCopied(&p->segUsage);
+      }
+      liveRatio = (double) (copied) / (double) (nursery->cursor - nursery->bottom); 
       add_statistic(&proc->minorSurvivalStatistic, liveRatio);
     }
     else {
       gc_large_endCollect();
-      liveRatio = HeapAdjust2(req_size,0,0.0,nursery,fromSpace,toSpace);
+      liveRatio = HeapAdjust2(totalRequest,totalUnused,0,0.0,nursery,fromSpace,toSpace);
       add_statistic(&proc->majorSurvivalStatistic, liveRatio);
       Heap_Resize(fromSpace, 0, 1);
       typed_swap(Heap_t *, fromSpace, toSpace);
@@ -292,10 +280,29 @@ void GCStop_GenPara(Proc_t *proc)
   strongBarrier(barriers, 5);
 }
 
+void GC_GenPara(Proc_t *proc, Thread_t *th)
+{
+  int roundSize = RoundUp(th->requestInfo, minOffRequest);
+
+  /* Check for forced Major GC's */
+  if (th->request != MajorGCRequestFromC) {
+    if (GCSatisfiable(proc,th))
+      return;
+    if (th->requestInfo > 0) {
+      GetHeapArea(nursery,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
+      if (proc->allocStart != NULL)
+	return;
+    }   
+  }
+  GCCollect_GenPara(proc);
+  GetHeapArea(nursery,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
+  assert(GCSatisfiable(proc,th));
+}
+
 void GCPoll_GenPara(Proc_t *proc)
 {
   if (checkBarrier(barriers,0) > 0)
-    GCStop_GenPara(proc);
+    GCCollect_GenPara(proc);
 }
 
 void GCInit_GenPara() 

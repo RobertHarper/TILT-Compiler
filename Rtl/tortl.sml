@@ -1887,13 +1887,6 @@ struct
 				      main = mainName,
 				      global = partialRecordLabels}
 
-	     (* XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX *)
-	     val _ = (print "XXXXXXXXXXXXX    "; 
-		      print (Int.toString partialFields); print " partial fields  ";
-		      print (Int.toString totalFields); print " total fields   ";
-		      print (Int.toString partialRecords); print " partial records  ";
-		      print (Int.toString totalRecords); print " total records   \n")
-
 	     val _ = resetDepth()
 	     val _ = resetWork()
 	     val _ = unset_global_state ()

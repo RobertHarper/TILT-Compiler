@@ -15,24 +15,35 @@
 #define pagesize 8192
 #endif
 
-extern int StackletSize;
+extern int MLStackletSize, CStackletSize;
 extern int primaryStackletOffset, replicaStackletOffset;
 struct StackChain__t;
+/* Inconsistent    - no information on primary or replica
+   Pending         - primary not used; replica uninitialized but needs to be copied before primary modified
+   Copying         - primary not used; replica snapshot being made, copying from primary snapshot
+   InactiveCopied  - primary not used; replica snapshot made (and scanned by end of GC)
+   ActiveCopied    - primary used; replica snapshot made (and scanned by end of GC)
+*/
+typedef enum StackletState__t {Inconsistent, Pending, Copying, InactiveCopied, ActiveCopied} StackletState_t;
 
 /* Each stacklet is actually a pair of stacklets.  The variable stackletOffset indicatse which one we use */
 typedef struct Stacklet__t
 {
   int  count;                    /* Reference count of how many stack chains I belong to */
   int mapped;                    /* Has memory been mapped to this stacklet */
-  int active;                    /* The stack is or has been used by the mutator so the replica cannot be used for flipping. */
-  mem_t baseBottom;              /* Base region of mapped memory with cursor - Other region obtained by adding constant offset. */
+  StackletState_t state;
+ /* Base region of mapped memory with cursor - Other region obtained by adding constant offset. */
+  mem_t baseExtendedBottom;      /* True bottom of stack - extra area for C */
+  mem_t baseBottom;              /* Normal bottom of stack */
   mem_t baseCursor;
   mem_t baseTop;
   mem_t retadd;                  /* retadd necessary for resumption */
   /* These fields are for scanning the stack */
+  mem_t replicaCursor;                 /* These 2 fields are recorded when the replica is copied from the primary */
+  mem_t replicaRetadd;                 /*   so that the replica stacklet can be later scanned */
   unsigned int topRegstate;            /* Register state (mask) at top frame */
   unsigned int bottomRegstate;         /* Register state (mask) at bottom frame */
-  Stack_t             *callinfoStack;  /* Corresponds to stack frames of this stacklet */
+  Stack_t  *callinfoStack;             /* Corresponds to stack frames of this stacklet */
 } Stacklet_t;
 
 struct StackChain__t
@@ -60,7 +71,7 @@ Stacklet_t *NewStacklet(StackChain_t *); /* Allocate new stacklet to chain */
 Stacklet_t *EstablishStacklet(StackChain_t *stackChain, mem_t sp); /* fix stackchain cursor (possible exceptions); return active stacklet */
 void PopStacklet(StackChain_t *); /* Pop most recent stacklet - at least one must remain */
 mem_t StackError(struct ucontext *, mem_t);
-void Stacklet_Copy(Stacklet_t *);   /* Replica area copied from primary area of stacklet */
+int Stacklet_Copy(Stacklet_t *);   /* Replica area copied from primary area of stacklet; returns whether caller was copier */
 void Stacklet_KillReplica(Stacklet_t *);                  /* Mark replica area inconsistent with primary area */
 void DequeueStacklet(StackChain_t *stackChain);
 
@@ -107,8 +118,6 @@ struct Heap__t
   mem_t mappedTop;         /* The top of the memory region that is mapped. */
   mem_t writeableTop;      /* The top of the memory region that is unprotected. */
   mem_t cursor;            /* The next allocation point in the logical heap. bottom <= cursor <= top */
-  mem_t prevCursor;        /* The value of cursor at the end of the last GC - 
-			      used to compute liveness ratio in generational collector */
   int   size;              /* bottom - top in bytes - makes inHeap faster */
   struct range__t range;   /* The physical range bottom to physicalTop */
   pthread_mutex_t *lock;   /* Used to synchronize multiple access to heap object. */
@@ -129,6 +138,8 @@ int Heap_TouchPage(Heap_t *h, mem_t addr) /* Returns 1 if fresh */
 {
   int offset = sizeof(val_t) * (addr - h->bottom);
   int page = DivideDown(offset, pagesize);
+  return 0;
+  /*
   int word = page >> 5;
   int bit = page & 31;
   int mask = 1 << bit;
@@ -136,6 +147,12 @@ int Heap_TouchPage(Heap_t *h, mem_t addr) /* Returns 1 if fresh */
   assert(sizeof(int) == 4);
   h->freshPages[word] = info | mask;
   return !(mask & info);
+  */
+  /*
+  int info = h->freshPages[page];
+  h->freshPages[page] = 1;
+  return !info;
+  */
 }
 
 void Heap_Resize(Heap_t *, long newSize, int reset);  /* Resizes the heap, making mprotect calls if paranoid;

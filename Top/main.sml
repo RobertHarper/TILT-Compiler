@@ -24,7 +24,7 @@ struct
       | isSlave _ = false
 	
     (* runCmd : cmd -> unit *)
-    fun runCmd (Make mapfiles) = (print "main.sml calling app make\n"; List.app Manager.make mapfiles)
+    fun runCmd (Make mapfiles) = List.app Manager.make mapfiles
       | runCmd (SetFlag flag) = Stats.bool flag := true
       | runCmd (ResetFlag flag) = Stats.bool flag := false
       | runCmd (Clean mapfile) = Manager.purge mapfile
@@ -103,10 +103,8 @@ struct
 
     (* main : string * string list -> OS.Process.status *)
     fun main (_, args) =
-	let val _ = print "main\n"
-	    val _ = UtilError.showErrors := false
+	let val _ = UtilError.showErrors := false
 	    val cmds = cmdline args
-	    val _ = print "calling run\n"
 	in
 	    (run cmds; OS.Process.success)
 	    handle e => (print "tilt: ";

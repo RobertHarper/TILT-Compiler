@@ -42,38 +42,35 @@ void HashTableInsert(HashTable_t *h, HashEntry_t *e)
   slot->key = e->key;
   slot->data = e->data;
 }
+
 HashEntry_t * HashTableLookup(HashTable_t *h, unsigned long key, int insert)
 {
   /* delta and h->size must be relatively prime; 
      if we assume h->size is a power of 2, it is sufficient to make delta odd */
   unsigned int b = 0x58d2d93f;
-  unsigned int start = (key * b) & h->logmask;
-  unsigned int delta = (((key * b) >> 8) | 1) & h->logmask;
+  unsigned int keyb = key * b;
+  unsigned int start = keyb & h->logmask;
+  unsigned int delta = ((keyb >> 8) | 1) & h->logmask;
   unsigned int cur = start;
   int count=0;
-  while (1)
-    {
-      count++;
-      if (h->table[cur].key == key) /* found it */
-	{
-	  return &(h->table[cur]);
-	}
-      if (h->table[cur].key == 0xffffffff) /* uninitialized */
-	{
-	  if (insert) 
-	    { return &(h->table[cur]); }
-	  else 
-            return NULL;
-	}
-      cur = (cur + delta) & h->logmask;
-      if (cur == start)
-	{
-	  printf("hash table size is %d\n",h->size);
-	  printf("key, start, delta, count = %d %d %d %d\n",key,start,delta,count);
-	  printf("FATAL ERROR in hash lookup: table full\n");
-	  exit(-1);
-	}
+  while (1) {
+    count++;
+    /*    printf("key = %x  cur = %xd\n", key, cur); */
+    if (h->table[cur].key == key) /* found it */
+      return &(h->table[cur]);
+    if (h->table[cur].key == 0xffffffff) { /* uninitialized */
+      if (insert) 
+	return &(h->table[cur]); 
+      return NULL;
     }
+    cur = (cur + delta) & h->logmask;
+    if (cur == start) {
+      printf("hash table size is %d\n",h->size);
+      printf("key, start, delta, count = %d %d %d %d\n",key,start,delta,count);
+      printf("FATAL ERROR in hash lookup: table full\n");
+      exit(-1);
+    }
+  }
   return NULL;
 }
 

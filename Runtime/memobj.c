@@ -24,7 +24,10 @@ int NumStackChain = 100;
 mem_t StopHeapLimit  = (mem_t) 1; /* A user thread heap limit used to indicates that it has been interrupted */
 mem_t StartHeapLimit = (mem_t) 2; /* A user thread heap limit used to indicates that it has not been given space */
 
-int StackletSize = 128; /* mesaure in Kb */
+/* Sizes measured in Kb */
+int MLStackletSize = 128;        /* Normal area available to ML */
+int CStackletSize = 32;          /* Extra area made available when calling C */
+int GuardStackletSize;           /* Guard page at bottom */
 int primaryStackletOffset, replicaStackletOffset;
 
 static const int megabyte  = 1024 * 1024;
@@ -119,38 +122,44 @@ void Stacklet_Dealloc(Stacklet_t *stacklet)
 void Stacklet_KillReplica(Stacklet_t *stacklet)
 {
   assert(stacklet->count > 0);
-  stacklet->active = 1;
+  if (stacklet->state == Pending)
+    Stacklet_Copy(stacklet);
+  while (stacklet->state == Copying)
+    ;
+  CompareAndSwap(&stacklet->state, InactiveCopied, ActiveCopied);
+  assert(stacklet->state == Inconsistent ||
+	 stacklet->state == ActiveCopied);
 }
 
 static Stacklet_t* Stacklet_Alloc(StackChain_t *stackChain)
 {
   int i;
   Stacklet_t *res = NULL;
-  int size = StackletSize * kilobyte;  /* for just one of the two: primary and replica */
-  int safety = pagesize;
+  int size = (GuardStackletSize + MLStackletSize + CStackletSize) * kilobyte;  /* for just one of the two: primary and replica */
 
   for (i=0; i<NumStacklet; i++)
-    if (Stacklets[i].count == 0) {
+    if (CompareAndSwap(&Stacklets[i].count, 0, 1) == 0) {
       res = &Stacklets[i];
       break;
     }
   assert(res != NULL);
 
-  res->count = 1;
-  res->active = 0;
+  res->state = Inconsistent;
   if (!res->mapped) {
-    mem_t start = stackstart + (2 * i * size) / (sizeof (val_t)), middle, end;
+    mem_t start = my_mmap((caddr_t) (stackstart + (2 * i * size) / (sizeof (val_t))), 
+			  2 * size, 
+			  PROT_READ | PROT_WRITE);
+    mem_t middle = start + size / (sizeof (val_t));
+    mem_t end = start + 2 * size / (sizeof (val_t));
 
-    start = my_mmap((caddr_t) start, 2 * size, PROT_READ | PROT_WRITE); /* Might get different base */
-    middle = start + size / (sizeof (val_t));
-    end = start + 2 * size / (sizeof (val_t));
-    res->baseBottom = start + safety / (sizeof (val_t));
-    res->baseTop    = middle - safety / (sizeof (val_t));
-    res->baseTop    = res->baseTop - ((safety + 128) / sizeof(val_t)); /* Get some initial room in multiples of 64 bytes; 
-								  Sparc requires at least 68 byte for the save area */
-    my_mprotect(0, (caddr_t) start,                                   safety, PROT_NONE);
-    my_mprotect(1, (caddr_t) (middle - (safety / sizeof(val_t))), 2 * safety, PROT_NONE);
-    my_mprotect(2, (caddr_t) (end    - (safety / sizeof(val_t))),     safety, PROT_NONE);
+    res->baseExtendedBottom = start + (GuardStackletSize * kilobyte) / (sizeof (val_t));
+    res->baseBottom         = res->baseExtendedBottom + (CStackletSize * kilobyte) / (sizeof (val_t));
+    res->baseTop            = res->baseBottom + (MLStackletSize * kilobyte) / (sizeof (val_t));
+    assert(res->baseTop == middle);
+    res->baseTop            -= (128 / sizeof(val_t));     /* Get some initial room in multiples of 64 bytes; 
+				   		                   Sparc requires at least 68 byte for the save area */
+    my_mprotect(0, (caddr_t) start,  GuardStackletSize * kilobyte, PROT_NONE);  /* Guard page at bottom of primary */
+    my_mprotect(1, (caddr_t) middle, GuardStackletSize * kilobyte, PROT_NONE);  /* Guard page at bottom of replica */
 
     res->callinfoStack = createStack(size / (32 * sizeof (val_t)));
     res->mapped = 1;
@@ -189,16 +198,31 @@ Stacklet_t *NewStacklet(StackChain_t *stackChain)
 }
 
 /* Copy primary into replica */
-void Stacklet_Copy(Stacklet_t *stacklet)
+int Stacklet_Copy(Stacklet_t *stacklet)
 {
-  int activeSize = (stacklet->baseTop - stacklet->baseCursor) * sizeof(val_t);
-  mem_t primaryBottom = stacklet->baseBottom + (primaryStackletOffset / sizeof(val_t));
-  mem_t replicaBottom = stacklet->baseBottom + (replicaStackletOffset / sizeof(val_t));
-  mem_t primaryCursor = stacklet->baseCursor + (primaryStackletOffset / sizeof(val_t));
-  mem_t replicaCursor = stacklet->baseCursor + (replicaStackletOffset / sizeof(val_t));
-  assert(stacklet->count > 0);
-  assert(stacklet->baseBottom <= stacklet->baseCursor && stacklet->baseCursor <= stacklet->baseTop);
-  memcpy(replicaCursor, primaryCursor, activeSize);
+  StackletState_t state;
+
+  state = CompareAndSwap(&stacklet->state, Pending, Copying);
+  if (state == Pending) {
+    int activeSize = (stacklet->baseTop - stacklet->baseCursor) * sizeof(val_t);
+    mem_t primaryBottom = stacklet->baseBottom + (primaryStackletOffset / sizeof(val_t));
+    mem_t replicaBottom = stacklet->baseBottom + (replicaStackletOffset / sizeof(val_t));
+    mem_t primaryCursor = stacklet->baseCursor + (primaryStackletOffset / sizeof(val_t));
+    mem_t replicaCursor = stacklet->baseCursor + (replicaStackletOffset / sizeof(val_t));
+    assert(stacklet->count > 0);
+    assert(stacklet->baseBottom <= stacklet->baseCursor && stacklet->baseCursor <= stacklet->baseTop);
+    resetStack(stacklet->callinfoStack);
+    stacklet->replicaCursor = stacklet->baseCursor;
+    stacklet->replicaRetadd = stacklet->retadd;
+    memcpy(replicaCursor, primaryCursor, activeSize);
+    stacklet->state = InactiveCopied;
+    return 1;
+  }
+  while (stacklet->state == Copying)
+    ;
+  assert(stacklet->state != Inconsistent &&
+	 stacklet->state != Pending);
+  return 0;
 }
 
 
@@ -273,8 +297,6 @@ StackChain_t* StackChain_Copy(StackChain_t *src)
   for (i=0; i<src->cursor; i++) {
     res->stacklets[i] = src->stacklets[i];
     src->stacklets[i]->count++;
-    res->stacklets[i]->active = 0;
-    Stacklet_Copy(src->stacklets[i]);
   }
   return res;
 }
@@ -309,7 +331,7 @@ void StackChain_Dealloc(StackChain_t *stackChain)
 Stacklet_t* GetStacklet(mem_t add)
 {
   int i;
-  mem_t offsetAdd = add - StackletSize * kilobyte / sizeof(val_t);
+  mem_t offsetAdd = add - (CStackletSize + MLStackletSize) * kilobyte / sizeof(val_t);
   for (i=0; i<NumStacklet; i++) {
     Stacklet_t *s = &Stacklets[i];
     if (s->count && 
@@ -340,7 +362,6 @@ void HeapInitialize(void)
     heap->top = 0;
     heap->bottom = 0;
     heap->cursor = 0;
-    heap->prevCursor = 0;
     heap->mappedTop = 0;
     heap->writeableTop = 0;
     heap->lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
@@ -365,11 +386,12 @@ void GetHeapArea(Heap_t *heap, int size, mem_t *bottom, mem_t *cursor, mem_t *to
     *bottom = *cursor = *top = 0;
   }
   else {
-    val_t forceRead = *newHeapCursor;     /* Do most machines have non-blockig read? */
+    /* Do most machines have non-blockig read? */
+    /* val_t forceRead = *newHeapCursor;     */
     *bottom = region;
     *cursor = region;
     *top = newHeapCursor;
-    PadHeapArea(*bottom,*top);
+    /* PadHeapArea(*bottom,*top); */
   }
 }
 
@@ -411,7 +433,6 @@ Heap_t* Heap_Alloc(int MinSize, int MaxSize)
   res->size = maxsize_pageround;
   res->bottom = (mem_t) my_mmap((caddr_t) start, maxsize_pageround, PROT_READ | PROT_WRITE);
   res->cursor = res->bottom;
-  res->prevCursor = res->bottom;
   res->top    = res->bottom + MinSize / (sizeof (val_t));
   res->writeableTop = res->bottom + maxsize_pageround / (sizeof (val_t));
   res->mappedTop = res->writeableTop;
@@ -441,6 +462,7 @@ int Heap_ResetFreshPages(Heap_t *h)
 {
   int MaxSize = sizeof(val_t) * (h->mappedTop - h->bottom);
   int i, pages = DivideUp(MaxSize,pagesize);
+  return 0;
   memset(h->freshPages, 0, DivideUp(pages, 32) * sizeof(int));
   return pages;
 }
@@ -463,7 +485,6 @@ int Heap_GetAvail(Heap_t *h)
 void Heap_Reset(Heap_t *h)
 {
   h->cursor = h->bottom;
-  h->prevCursor = h->bottom;
 }
 
 void Heap_Resize(Heap_t *h, long newSize, int reset)
@@ -480,7 +501,6 @@ void Heap_Resize(Heap_t *h, long newSize, int reset)
   }
   if (reset) {
     h->cursor = h->bottom;
-    h->prevCursor = h->bottom;
   }
   h->top = h->bottom + (newSize / sizeof(val_t));
 
@@ -492,8 +512,7 @@ void Heap_Resize(Heap_t *h, long newSize, int reset)
     my_mprotect(7,(caddr_t) (h->bottom + newSizeRound / sizeof(val_t)), oldWriteableSize - newSizeRound, PROT_NONE);
     h->writeableTop = h->bottom + newSizeRound / sizeof(val_t);
   }
-  assert(h->bottom <= h->prevCursor);
-  assert(h->prevCursor <= h->cursor);
+  assert(h->bottom <= h->cursor);
   assert(h->cursor <= h->top);
   assert(h->top <= h->writeableTop);
   assert(h->writeableTop <= h->mappedTop);
@@ -527,8 +546,9 @@ void memobj_init()
 #endif
   StackInitialize();
   HeapInitialize();
+  GuardStackletSize = pagesize / kilobyte;
   primaryStackletOffset = 0;
-  replicaStackletOffset = StackletSize * kilobyte;
+  replicaStackletOffset = (GuardStackletSize + MLStackletSize + CStackletSize) * kilobyte;
   /* So we don't pay mmap for first thread - general case? XXXX */
   { int i;
     Stacklet_t *temp[5];

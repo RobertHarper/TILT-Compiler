@@ -86,6 +86,6 @@ void stats_init(void);
 void stats_finish(void);
 
 void resetTimeList();
-void addTimeList(void *proc, int which, int data);
+double addTimeList(void *proc, int which, int data);
 int showTimeList(double min);
 #endif

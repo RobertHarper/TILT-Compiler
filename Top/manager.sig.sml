@@ -45,6 +45,7 @@ signature HELP =
 	val base2uo : string -> string
 	val chat : string -> unit
 	val chat_ref : bool ref
+	val chat_verbose : bool ref
 	val chat_strings : int -> string list -> int
 	    
 	val startTime : string -> unit

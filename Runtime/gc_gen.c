@@ -65,31 +65,10 @@ void GCRelease_Gen(Proc_t *proc)
   proc->segUsage.bytesAllocated += alloc;
 }
 
-int GCTry_Gen(Proc_t *proc, Thread_t *th)
-{
-  assert(proc->userThread == NULL);
-  assert(th->proc == NULL);
-  if (proc->allocLimit == StartHeapLimit) {
-    proc->allocStart = nursery->bottom;
-    proc->allocCursor = nursery->bottom;
-    proc->allocLimit = nursery->top;
-    nursery->cursor = nursery->top;
-  }
-  if (th->requestInfo < 0) {
-    unsigned int bytesAvailable = sizeof(val_t) * (proc->writelistEnd - proc->writelistCursor);
-    return ((-th->requestInfo) <= bytesAvailable);
-  }
-  else if ((th->request != MajorGCRequestFromC) && th->requestInfo > 0) {
-    unsigned int bytesAvailable = (val_t) proc->allocLimit - 
-				  (val_t) proc->allocCursor;
-    return (th->requestInfo <= bytesAvailable);
-  }
-  return 0;
-}
 
-void GCStop_Gen(Proc_t *proc)
+void GCCollect_Gen(Proc_t *proc)
 {
-  int req_size = 0;
+  int totalRequest = 0, totalUnused = 0;
   Thread_t *curThread = NULL;
   double liveRatio = 0.0;
   ploc_t rootLoc, globalLoc;
@@ -103,7 +82,6 @@ void GCStop_Gen(Proc_t *proc)
 
   /* Sanity checks */
   assert(NumProc == 1);
-  assert((0 <= req_size) && (req_size < pagesize));
   assert(nursery->cursor     <= nursery->top);
   assert(fromSpace->cursor <= fromSpace->top);
   assert(toSpace->cursor   <= toSpace->top);
@@ -114,10 +92,11 @@ void GCStop_Gen(Proc_t *proc)
   assert(isEmptyStack(proc->rootLocs));
   procChangeState(proc, GCStack);
   ResetJob();
+  totalUnused += sizeof(val_t) * (proc->allocLimit - proc->allocCursor);
   while ((curThread = NextJob()) != NULL) {
     /* If negative, requestnfo signifies full writelist */
     if (curThread->requestInfo >= 0)
-      req_size += curThread->requestInfo;
+      totalRequest += curThread->requestInfo;
     thread_root_scan(proc,curThread);
     if (GCType == Minor && curThread->request == MajorGCRequestFromC)  /* Upgrade to major GC */
       GCType = Major;      
@@ -164,8 +143,8 @@ void GCStop_Gen(Proc_t *proc)
     proc->minorRange.stop = proc->minorRange.cursor;
     ClearCopyRange(&proc->minorRange);
     paranoid_check_all(nursery, fromSpace, fromSpace, NULL, largeSpace);
-    liveRatio = (double) (fromSpace->cursor - fromSpace->prevCursor) / (double) (nursery->cursor - nursery->bottom); 
-    fromSpace->prevCursor = fromSpace->cursor;
+    liveRatio = (double) (bytesCopied(&proc->cycleUsage) + bytesCopied(&proc->segUsage)) / 
+                (double) (nursery->cursor - nursery->bottom); 
     add_statistic(&proc->minorSurvivalStatistic, liveRatio);
   }
   else if (GCType == Major) {
@@ -207,7 +186,7 @@ void GCStop_Gen(Proc_t *proc)
     paranoid_check_all(nursery, fromSpace, toSpace, NULL, largeSpace);
 
     /* Resize the tenured toSpace. Discard fromSpace. Flip Spaces. */
-    liveRatio = HeapAdjust2(req_size, 0, 0.0, nursery, fromSpace, toSpace);
+    liveRatio = HeapAdjust2(totalRequest, totalUnused, 0, 0.0, nursery, fromSpace, toSpace);
     add_statistic(&proc->majorSurvivalStatistic, liveRatio);
     Heap_Resize(fromSpace,0,1);
     typed_swap(Heap_t *, fromSpace, toSpace);
@@ -229,6 +208,24 @@ void GCStop_Gen(Proc_t *proc)
   NumGC++;
 }
 
+void GC_Gen(Proc_t *proc, Thread_t *th)
+{
+  assert(proc->userThread == NULL);
+  assert(th->proc == NULL);
+  /* First time */
+  if (proc->allocLimit == StartHeapLimit) {
+    proc->allocStart = nursery->bottom;
+    proc->allocCursor = nursery->bottom;
+    proc->allocLimit = nursery->top;
+    nursery->cursor = nursery->top;
+  }
+  /* Check for forced Major GC's */
+  if (th->request != MajorGCRequestFromC &&
+      GCSatisfiable(proc,th))
+    return;
+  GCCollect_Gen(proc);
+  assert(GCSatisfiable(proc,th));
+}
 
 void GCInit_Gen() 
 {

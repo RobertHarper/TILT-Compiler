@@ -10,9 +10,9 @@ structure Til :> COMPILER =
     (* defaultPlatform () -> platform *)
     fun defaultPlatform () =
 	(case Platform.platform()
-	   of Platform.SOLARIS => (print "Sun detected.  Using Til-Sparc\n";
+	   of Platform.SOLARIS => (print "Sun detected.  Using Til-Sparc.\n";
 				   TIL_SPARC)
-	    | Platform.DUNIX => (print "Alpha detected.  Using Til-Alpha\n";
+	    | Platform.DUNIX => (print "Alpha detected.  Using Til-Alpha.\n";
 				 TIL_ALPHA)
 	    | _ => (print "Unsupported platform detected.  Using Til-Alpha.\n";
 		    TIL_ALPHA))

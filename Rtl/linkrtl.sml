@@ -33,10 +33,8 @@ struct
 				    structure Operations = Operations)
 *)
     fun compile' (debug,unitname,nilmodule) = 
-	let val _ = print "\n============================================\n";
-	    val _ = print "Starting translation to RTL\n"
+	let val _ = print "===== Translating to RTL             =====\n"
 	    val rtlmod = Tortl.translate(unitname, nilmodule)
-	    val _ = print "Translation to RTL complete\n"
 	    val _ = if debug orelse !show_rtl
 			then (print "RTL code:\n";
 			      Pprtl.pp_Module rtlmod;

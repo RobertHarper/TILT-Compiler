@@ -1598,12 +1598,10 @@ val _ = print "plet0\n"
         (* Rule 244 *)
 	| Ast.LocalDec (dec1,dec2) => 
 	      let 
-		  val _ = print "LocalDec 0\n"
 		  val sbnd_ctxt_list1 = xdec true (context,dec1)
 		  val (_,context') = add_context_sbnd_ctxts(context,sbnd_ctxt_list1)
 		  val sbnd_ctxt_list2 = xdec false (context',dec2)
 		  val (_,context'') = add_context_sbnd_ctxts(context',sbnd_ctxt_list2)
-		  val _ = print "LocalDec 1\n"
 		  fun genSubstFromSbnd (subst, self, SBND(l,BND_MOD(v,_,m))) =
 		      let val self2 = join_path_labels(self, [l])
 			  val subst = (case (mod2path m) of
@@ -1626,7 +1624,6 @@ val _ = print "plet0\n"
 		  fun getDecFromSbndCtxt (_, CONTEXT_SDEC(SDEC(_,dec))) = SOME dec
 		    | getDecFromSbndCtxt _ = NONE
 		  val localVars = map getVarFromDec (List.mapPartial getDecFromSbndCtxt sbnd_ctxt_list1)
-		  val _ = (print "localVars: "; app (fn v => (pp_var v; print "    ")) localVars; print "\n")
 		  val localVars = Name.VarSet.addList(Name.VarSet.empty,localVars)
 (*
 		  fun con_reduce' ctxt c = 
@@ -1687,7 +1684,6 @@ val _ = print "plet0\n"
 		  val sbnd_ctxt_list1 = map reduceSbndCtxt sbnd_ctxt_list1
 		  val sbnd_ctxt_list2 = map reduceSbndCtxt sbnd_ctxt_list2
 
-		  val _ = print "LocalDec 2\n"
 		  fun addCtxtEntryFree (CONTEXT_SDEC(SDEC(_, dec)), set) = 
 		      (case dec of
 			   DEC_EXP(_,c,eOpt,_) => let val set = Name.VarSet.union(set, con_free c)
@@ -1702,7 +1698,6 @@ val _ = print "plet0\n"
 
 		  val ctxtFrees = foldl addCtxtEntryFree Name.VarSet.empty 
 		                  (map #2 (sbnd_ctxt_list1 @ sbnd_ctxt_list2))
-		  val _ = print "LocalDec 3\n"
 
 		  fun renameSbndCtxt (SOME (SBND(l,bnd)),ctxtEntry as CONTEXT_SDEC(SDEC(_,dec))) =
 		      let val v = getVarFromDec dec
@@ -1714,7 +1709,6 @@ val _ = print "plet0\n"
 		    | renameSbndCtxt arg = arg
 
 		  val sbnd_ctxt_list1 = map renameSbndCtxt sbnd_ctxt_list1
-		  val _ = print "LocalDec 4\n"
 		  val res = sbnd_ctxt_list1 @ sbnd_ctxt_list2
 	      in  res
 	      end

@@ -935,12 +935,23 @@ void transferScanObj_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(Proc
 
 
 void transferScanObj_copyWriteSync_locSplitAlloc1L_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, 
-								       Stack_t *objStack, Stack_t *segmentStack, CopyRange_t *copyRange,
-								       Heap_t *from_range, Heap_t *large_range)
+									     Stack_t *objStack, Stack_t *segmentStack, 
+									     CopyRange_t *copyRange,
+									     Heap_t *from_range, Heap_t *large_range)
 {
   genericScan(proc, primaryGray, 0, 0, objStack, segmentStack, copyRange,
 	      from_range, NULL, large_range,
 	      DoCopyCopy, DoCopyWrite, LocAlloc, OneSpaceLarge, Transfer, PrimaryStack, DoSplitLarge, SpaceCheck);
+}
+
+void scanObj_copyWriteSync_locCopy1_copyCopySync_replicaStack(Proc_t *proc, ptr_t replicaGray, 
+									     Stack_t *objStack, Stack_t *segmentStack, 
+									     CopyRange_t *copyRange,
+									     Heap_t *from_range, Heap_t *large_range)
+{
+  genericScan(proc, replicaGray, 0, 0, objStack, segmentStack, copyRange,
+	      from_range, NULL, large_range,
+	      DoCopyCopy, DoCopyWrite, LocCopy, OneSpaceLarge, NoTransfer, ReplicaStack, DoSplitLarge, SpaceCheck);
 }
 
 void transferScanSegment_copyWriteSync_locSplitAlloc1_copyCopySync_primaryStack(Proc_t *proc, ptr_t primaryGray, int start, int end,

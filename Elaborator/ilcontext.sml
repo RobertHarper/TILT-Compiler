@@ -491,12 +491,13 @@ struct
 					SOME (l, _) => VarMap.insert(vm,v,l)
 				      | NONE => error "Missing variable in sub_context"))
 				  Name.VarMap.empty keepVars
-	    val _ = print "sub_context ok\n"
+(*
 	    val _ = print ("sub_context: " ^
 			   Int.toString(PathMap.numItems p2) ^
 			   " items in smaller context. " ^ 
 			   (Int.toString (VarMap.numItems unresolved))
 			   ^ " items in unresolved of smaller context.\n")
+*)
 	in  (diff, unresolved)
 	end
 

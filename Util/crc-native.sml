@@ -146,6 +146,7 @@ crc_append arr (Word8.toInt e)) () v
 
     type crc = string
     val output_crc = BinIO_Util.output_string
+    fun toString (crc : crc) = crc : string
 
     exception InputCrc
     fun input_crc is = 

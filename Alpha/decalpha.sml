@@ -15,8 +15,8 @@ struct
     val writelistAlloc_disp = threadScratch_disp + 8 + 8 + 8 * 3 + 8 * 32 + 8 * 32
     val writelistLimit_disp = writelistAlloc_disp + 4  (* ploc_t is 4 bytes *)
     val stackLimit_disp     = writelistLimit_disp + 4
-    val globalOffset_disp   = stackLimit_disp + 4      (* mem_t is 4 bytes *)
-    val stackletOffset_disp   = globalOffset_disp + 4
+    val globalOffset_disp   = stackLimit_disp + 4
+    val stackletOffset_disp = globalOffset_disp + 4
     val arrayOffset_disp   = stackletOffset_disp + 4
 
 structure Machine = 

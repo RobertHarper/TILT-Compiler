@@ -60,14 +60,14 @@ struct
        val names = map (fn (Rtl.PROC{name,...}) => name) procs
        local
 	   val {callee_map, rtl_scc = recursive_components, ...} = Recursion.procGroups prog
-	   val _ = print (" There are " ^
+	   val _ = print ("  " ^
 			 (Int.toString (length procs)) ^
-			 " procedures and  " ^
+			 " procedures.  " ^
 			 (Int.toString (length recursive_components)) ^
-			 " recursive components with the largest being of size " ^
+			 " recursive components.   Largest component has size " ^
 			 (Int.toString (foldr Int.max 0
 					(map length recursive_components))) ^
-			 "\n")
+			 ".\n")
 (*	   
 	   fun getComponent groups proc =
 	       let

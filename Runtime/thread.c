@@ -164,7 +164,7 @@ void ReleaseJob(Proc_t *proc)
   /* Update processor's version of allocation range and write list and process */
   proc->allocCursor = (mem_t) th->saveregs[ALLOCPTR];
   proc->writelistCursor = th->writelistAlloc;
-  GCRelease(proc);
+  GCReleaseThread(proc);
   procChangeState(proc, Scheduler);
 
   /* Null out thread's version of allocation and write-list */
@@ -333,9 +333,8 @@ void resetUsage(Usage_t *u)
   u->counter = usageCount;
 }
 
-long updateWorkDone(Proc_t *proc)
+long updateUsage(Usage_t *u)
 {
-  Usage_t *u = &proc->segUsage;
   u->workDone = (long) (u->fieldsCopied * fieldCopyWeight + 
 			u->fieldsScanned * fieldScanWeight +
 			u->ptrFieldsScanned * ptrFieldScanWeight +
@@ -345,6 +344,16 @@ long updateWorkDone(Proc_t *proc)
 			u->globalsProcessed * globalWeight +
 			u->stackSlotsProcessed * stackSlotWeight);
   return u->workDone;
+}
+
+long updateWorkDone(Proc_t *proc)
+{
+  return updateUsage(&proc->segUsage);
+}
+
+long bytesCopied(Usage_t *u)
+{
+  return 4 * (u->fieldsCopied + u->objsCopied);
 }
 
 static void attributeUsage(Usage_t *from, Usage_t *to)
@@ -439,6 +448,7 @@ void thread_init()
     reset_statistic(&proc->bytesAllocatedStatistic);
     reset_statistic(&proc->bytesReplicatedStatistic);
     reset_statistic(&proc->bytesCopiedStatistic);
+    reset_statistic(&proc->workStatistic);
     reset_statistic(&proc->minorSurvivalStatistic);
     reset_statistic(&proc->heapSizeStatistic);
     reset_statistic(&proc->majorSurvivalStatistic);
@@ -451,6 +461,7 @@ void thread_init()
     reset_histogram(&proc->gcFlipOnHistogram);
     reset_statistic(&proc->gcStackStatistic);
     reset_statistic(&proc->gcGlobalStatistic);
+    reset_statistic(&proc->gcReleaseStatistic);
     SetCopyRange(&proc->minorRange, proc, NULL, NULL, NULL, NULL, 0);
     SetCopyRange(&proc->majorRange, proc, NULL, NULL, NULL, NULL, 0);
     proc->numCopied = proc->numShared = proc->numContention = 0;
@@ -460,6 +471,7 @@ void thread_init()
     proc->numLocative = 0;
     proc->lastHashKey = 0;
     proc->lastHashData = NULL;
+    proc->lastCallinfoCursor.callinfo = NULL;
   }
   pthread_cond_init(&EmptyCond,NULL);
   pthread_mutex_init(&EmptyLock,NULL);
@@ -475,6 +487,7 @@ static char* state2str(ProcessorState_t procState)
   case GC: return "GC";
   case GCStack: return "GCStack";
   case GCGlobal: return "GCGlboal";
+  case GCRelease: return "GCRelease";
   case GCWork: return "GCWork";
   default : return "unknownProcState";
   }
@@ -505,10 +518,10 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
       /* First do statistics dependent on whether GC is major or minor */
       attributeUsage(&proc->segUsage, &proc->cycleUsage);
       if (flipOff || procState == Done) {
-	int bytesCopied = 4 * (proc->cycleUsage.fieldsCopied + proc->cycleUsage.objsCopied);
 	add_statistic(&proc->bytesAllocatedStatistic, proc->cycleUsage.bytesAllocated);
 	add_statistic(&proc->bytesReplicatedStatistic, proc->cycleUsage.bytesReplicated);
-	add_statistic(&proc->bytesCopiedStatistic, bytesCopied);
+	add_statistic(&proc->bytesCopiedStatistic, bytesCopied(&proc->cycleUsage));
+	add_statistic(&proc->workStatistic, updateUsage(&proc->cycleUsage));
 	resetUsage(&proc->cycleUsage);
       }
       if (proc->gcSegment1 == MinorWork) {
@@ -558,6 +571,10 @@ void procChangeState(Proc_t *proc, ProcessorState_t procState)
   case GCGlobal:
     add_statistic(&proc->gcGlobalStatistic, diff);
     assert(procState != Mutator && procState != Scheduler);
+    break;
+  case GCRelease:
+    add_statistic(&proc->gcReleaseStatistic, diff);
+    assert(procState != Mutator);
     break;
   }
   proc->state = procState;
@@ -721,14 +738,8 @@ Abort
     case GCRequestFromC: 
     case MajorGCRequestFromC: {
       /* Allocate space or check write buffer to see if we have enough space */
-      int satisfied = GCFromScheduler(proc, th);
+      GCFromScheduler(proc, th);
       procChangeState(proc, Scheduler);
-      while (!satisfied) {
-	printf("Warning: Proc %d: could not resume thread %d after calling GCFromScheduler.  Retrying...\n",
-	       proc->procid, th->tid);
-	satisfied = GCFromScheduler(proc, th);
-	procChangeState(proc, Scheduler);
-      }
       /* Note that another processor can change th->saveregs[ALLOCLIMIT] to Stop at any point */
       if (th->requestInfo > 0)
 	assert(th->requestInfo + (val_t) proc->allocCursor <= (val_t) proc->allocLimit);

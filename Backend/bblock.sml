@@ -10,6 +10,7 @@ struct
    structure Tracetable = Tracetable
    open Machineutils Machine Core
 
+   val diag = ref false
    val doTimer = Stats.ff("DoBblockTimer")
    fun subtimer(str,f) = if (!doTimer)
 			     then Stats.subtimer(str,f)
@@ -190,7 +191,7 @@ struct
        val stepsNeeded = outerLoop 1
        val size = length all_labels
 
-       val _ = if (stepsNeeded > 1 andalso size > 50)
+       val _ = if (!diag andalso stepsNeeded > 1 andalso size > 50)
 		   then (print "function ";
 			 print (msLabel first_label);
 			 print " with "; 

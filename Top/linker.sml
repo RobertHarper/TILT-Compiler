@@ -2,6 +2,7 @@
 structure Linker :> LINKER =
   struct
 
+    val debug = ref false
     val doConsistent = Stats.tt("doConsistent")
     val debug_asm = Stats.bool("debug_asm")
     val keep_link_asm = Stats.ff("keep_link_asm")
@@ -93,8 +94,8 @@ structure Linker :> LINKER =
 				  (name,crc)::acc)
 		       | SOME crc2 => 
 			     let val msg = "The unit object " ^ unitname ^ " builds\n" ^
-				           "on a version of " ^ name ^ " which is inconsistent\n" ^
-					   "with which it is linked."
+				           "on a version of " ^ name ^ " with CRC " ^ (Crc.toString crc) ^ "\n" ^
+					   " which is inconsistent with the actual version with CRC " ^ (Crc.toString crc2) ^ "\n"
 			     in  if (crc = crc2)
 				     then acc
 				 else if (!doConsistent)
@@ -190,6 +191,10 @@ structure Linker :> LINKER =
 			    | SOME #"$" => rev a
 			    | SOME _ => let val unitname = decode (read_unitname_and_colon is)
 					    val crc = Crc.input_crc is
+					    (*
+					    val _ = (print "input_pairs: unitname = "; print unitname; 
+						     print "  CRC = "; print (Crc.toString crc); print "\n")
+						*)
 					    val _ = read_string(is,"\n")
 					in loop((unitname,crc)::a)
 					end
@@ -260,7 +265,7 @@ structure Linker :> LINKER =
 	    in li (iue_next,eue_next,rest)
 	    end
 	  val (imports, exports) = li ([],[],linkinfo)
-	  val _ = (print "imports: "; app print (map #1 imports); print "\n\n")
+(*	  val _ = (print "imports: "; app print (map #1 imports); print "\n\n") *)
 	  val o_files = map #ofile linkinfo
       in  (imports, exports, o_files)
       end
@@ -270,7 +275,7 @@ structure Linker :> LINKER =
       | run' (cmd :: args) =
 	let
 	    val command = List.foldr (fn (a,b) => a ^ " " ^ b) "" (cmd::args)
-	    val _ = (print "Running: "; print command; print "\n")
+	    val _ = if (!debug) then (print "Running: "; print command; print "\n") else ()
 	in
 	    if Util.system command then ()
 	    else error (cmd ^ " failed")

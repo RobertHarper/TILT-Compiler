@@ -48,6 +48,7 @@ void init_int(int *, int);
 void init_double(double *, double);
 long FetchAndAdd(long *, int);
 long TestAndSet(long *);
+int CompareAndSwap(int *location, int testValue, int swapValue); /* Returns value in memory location */
 void flushStore(void);
 
 extern int LEAST_GC_TO_CHECK;

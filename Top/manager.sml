@@ -27,12 +27,13 @@ struct
 
     (* ---- Some diagnostic message helper functions ---- *)
     val chat_ref = Stats.tt("ManagerChat")
+    val chat_verbose = Stats.ff("ManagerVerbose")
     fun chat s = if !chat_ref then (print s; TextIO.flushOut TextIO.stdOut)
 		 else ()
     fun chat_strings skip imports =
 	let fun f(str,acc) = 
 	    let val cur = 2 + size str
-	    in  if (acc + cur > 80)
+	    in  if (acc + cur > 120)
 		    then (chat "\n        "; chat str; 6 + cur)
 		else (chat "  "; chat str; acc + cur)
 	    end
@@ -52,8 +53,7 @@ struct
     val start = ref (NONE : Time.time option)
     val msgs = ref ([] : string list)
     fun showTime (printTime,str) = 
-	let 
-	    val cur = Time.now()
+	let val cur = Time.now()
 	    val curString = if (printTime)
 				then let 
 					 val temp = (Date.fromTimeLocal cur)
@@ -70,8 +70,9 @@ struct
 	    fun loop i = if (i<0) then "" else " " ^ (loop (i-1))
 	    val padding = loop (30 - size str)
 	    val msg = (str ^ padding ^ ": " ^ curString ^ "   " ^ 
-		       (Real.toString diff) ^ " seconds since start.\n")
-	in  msgs := msg :: (!msgs); chat msg
+		       (Real.toString diff) ^ " sec\n")
+	in  msgs := msg :: (!msgs); 
+	    if (!chat_verbose) then chat msg else ()
 	end
     fun startTime str = (msgs := []; 
 			 start := SOME(Time.now()); 
@@ -466,7 +467,7 @@ structure Slave :> SLAVE =
 struct
     open Help
     val error = fn s => Util.error "manager.sml" s
-    val stat_each_file = Stats.tt("TimeEachFile")
+    val stat_each_file = Stats.ff("TimeEachFile")
     val showWrittenContext = Stats.ff("ShowWrittenContext")
     val writeUnselfContext = Stats.ff("WriteUnselfContext")
 
@@ -509,7 +510,8 @@ struct
     
     val writePartialContextRaw = Stats.timer("WritingContext",writePartialContextRaw)
     structure Cache = FileCache(type internal = Il.partial_context
-				val equaler = LinkIl.IlContextEq.eq_partial_context
+				(* val equaler = LinkIl.IlContextEq.eq_partial_context *)
+				val equaler = (fn _ => false)
 				val reader = readPartialContextRaw
 				val writer = writePartialContextRaw)
     fun getContext uifiles =
@@ -531,7 +533,7 @@ struct
 		     chat " imports of total size "; chat (Int.toString cached_size); chat " were cached.\n";
 		     chat "   "; chat (Int.toString (length uncached)); chat " imports of total size ";
 		     chat (Int.toString uncached_size);  chat " were uncached and took ";
-		     chat (Real.toString diff); chat " seconds.  ";
+		     chat (Real.toString diff); chat " seconds.";
 (*		     chat "\n\nCACHED: "; chat_strings 20 cached;
 		     chat "\n\nUNCACHED: "; chat_strings 20 uncached;
 *)		     chat "]\n")
@@ -580,12 +582,12 @@ struct
 
 	    fun elaborate()=  
 		let val ctxt = getContext (map Help.base2ui importAbsBases)
-		    val _ = Help.chat ("\n  [Parsing " ^ smlFile ^ "]\n")
+		    val _ = Help.chat ("  [Parsing " ^ smlFile ^ "]\n")
 		    val (lines,fp, _, dec) = LinkParse.parse_impl smlFile
 		    val _ = if (lines > 3000) 
 				then (chat "  [Large file: ";
 				      chat (Int.toString lines);
-				      chat " lines.  Flushing file cache.]\n";
+				      chat " lines.   Flushing file cache.]\n";
 				      Cache.flushAll())
 			    else ()
 		    (* Elaborate the source file, generating a .ui file *)
@@ -641,7 +643,7 @@ struct
 	in  ()
 	end
 
-    fun setup () = (print "Starting slave.\n";
+    fun setup () = (chat "Starting slave.\n";
 		    Cache.flushAll())
 
 
@@ -675,9 +677,11 @@ struct
 						 raise e))
 			   val diff = Time.-(Time.now(), start)
 			   val _ = if (Time.toReal diff > 0.5)
-				       then (chat "Sending ACK_INTERFACE: interface took ";
-					     chat (Time.toString diff);
-					     chat " seconds \n";
+				       then (if (!chat_verbose)
+						 then (chat "Sending ACK_INTERFACE: interface took ";
+						       chat (Time.toString diff);
+						       chat " seconds \n")
+					     else ();
 					     Comm.send (Comm.toMaster, Comm.ACK_INTERFACE job))
 				   else ()
 			   val _ = (generate il_module
@@ -692,7 +696,7 @@ struct
 			       else
 				   Comm.send (Comm.toMaster, Comm.ACK_ASSEMBLY job)
 
-			   val _ = if (!stat_each_file)
+			   val _ = if (!chat_ref andalso !stat_each_file)
 				       then (Stats.print_timers();
 					     Stats.clear_stats())
 				   else ()
@@ -1039,13 +1043,16 @@ struct
 			    val _ = chat ("Imports read.\n");
 			    val _ = refreshDag (!graph);
 			    val _= (chat "Dependency graph computed: ";
-				    chat (Int.toString (Dag.numNodes (!graph))); print " nodes and ";
-				    chat (Int.toString (Dag.numEdges (!graph))); print " edges.\n")
+				    chat (Int.toString (Dag.numNodes (!graph))); chat " nodes and ";
+				    chat (Int.toString (Dag.numEdges (!graph))); chat " edges.\n")
+(*
 			    val reducedGraph = Dag.removeTransitive (!graph)
 			    val _ = graph := reducedGraph
 			    val _ = (chat "Reduced dependency graph computed: ";
-				     chat (Int.toString (Dag.numNodes (!graph))); print " nodes and ";
-				     chat (Int.toString (Dag.numEdges (!graph))); print " edges.\n")
+				     chat (Int.toString (Dag.numNodes (!graph))); chat " nodes and ";
+				     chat (Int.toString (Dag.numEdges (!graph))); chat " edges.\n")
+*)
+			    val _ = chat "Not reducing dependency graph/\n"
 			in  ()
 			end
 			 
@@ -1080,8 +1087,9 @@ struct
 
 		val diff = Time.toReal(Time.-(Time.now(), start))
 		val diff = (Real.realFloor(diff * 100.0)) / 100.0
-		val _ = chat ("Generated " ^ dot ^ " in " ^ (Real.toString diff) ^ " seconds.\n") 
-
+		val _ = if (!chat_verbose)
+			    then chat ("Generated " ^ dot ^ " in " ^ (Real.toString diff) ^ " seconds.\n") 
+			else ()
 	    in  dot
 	    end
 
@@ -1188,10 +1196,10 @@ struct
 		      val dest_o_exists = Cache.exists ofile
 			  
 		      val direct_imports = get_import_direct unitname
-		      val direct_imports_base = map get_relBase direct_imports
+		      val direct_imports_base = map get_absBase direct_imports
 		      val direct_imports_ui = map Help.base2ui direct_imports_base
 		      val (latest_import_file, latest_import_time) = Cache.lastModTime direct_imports_ui
-			  
+			       
 		      val sml_changed = 
 			  (dest_ui_exists andalso
 			   dest_uo_exists andalso 
@@ -1291,13 +1299,16 @@ struct
 		end
 	    val units = rev (StringOrderedSet.toList (foldl folder StringOrderedSet.empty finalTargets))
 
-	    val _ = (chat (Int.toString (length units));
-		     chat " necessary units: \n")
-		     (* chat_strings 20 units *)
+	    val _ = if (!chat_verbose)
+			then (chat (Int.toString (length units));
+			      chat " necessary units: ";
+			      chat_strings 20 units; print "\n")
+		    else ()
 	    val _ = showTime (true,"Start compiling files")
 	    fun waitForSlaves() = 
 		let fun ack_inter (name,(platform::u::_::_)) = 
-		          (markProceeding u; 
+		          (Cache.flushSome [(base2ui (get_absBase u))];
+			   markProceeding u; 
 			   chat ("  [" ^ name ^ " compiled interface of " ^ u ^ "]\n"))
 		      | ack_inter _ = error "Acknowledgement message not at least three words"
 		    fun ack_asm (name,(platform::u::base::importBases)) = 
@@ -1327,7 +1338,10 @@ struct
 			in  not isDone
 			end
 		    fun ack_obj (name,(platform::u::_::_)) = 
-		          let val pendingTime = markDone u
+		          let val _ = Cache.flushSome [(base2ui (get_absBase u))];
+			      val _ = Cache.flushSome [(base2o (get_absBase u))]
+			      val _ = Cache.flushSome [(base2uo (get_absBase u))]
+			      val pendingTime = markDone u
 			      val diff = Time.toReal(Time.-(Time.now(),pendingTime))
 			      val diff = (Real.realFloor(diff * 100.0)) / 100.0
 			  in  chat ("  [" ^ name ^ " compiled object of " ^ u ^ " in " ^
@@ -1348,7 +1362,7 @@ struct
 			else loop (waiting, ready, done)  (* some more may have become ready now *)
 		    end
 		    val (waiting, ready, done) = loop (waiting, [], [])
-		    val _ = if (null done)
+		    val _ = if (null done orelse (not (!chat_verbose)))
 				then ()
 			    else (chat "  [These files are up-to-date already:";
 				  chat_strings 40 done;
@@ -1386,26 +1400,31 @@ struct
 			      val unsorted = List.mapPartial mapper units
 			      fun greater ((_,x),(_,y)) = x > (y : real)
 			      val sorted = ListMergeSort.sort greater unsorted
-			      val _ = chat "------- Times to compile files in ascending order -------\n"
-			      val (underOne,overOne) = List.partition (fn (_,t) => t < 1.0) sorted
-			      val (underTen, overTen) = List.partition (fn (_,t) => t < 10.0) overOne
-			      val (underThirty, overThirty) = List.partition (fn (_,t) => t < 30.0) overOne
-			      val _ = (print (Int.toString (length underOne));
-				       print " files under 1.0 second.\n")
-			      val _ = (print (Int.toString (length underTen));
-				       print " files from 1.0 to 10.0 seconds.\n")
-			      val _ = (print (Int.toString (length overTen));
-				       print " files from 10.0 to 30.0 seconds:  ";
-				       chat_strings 40 (map #1 overThirty); print "\n")
-			      val _ = (print (Int.toString (length overThirty));
-				       print " files over 30.0 seconds:\n")
-			      val _ = app (fn (unit,t) => 
-					   let val t = (Real.realFloor(t * 100.0)) / 100.0
-					     in  chat ("  " ^ unit ^ 
-						       (Util.spaces (20 - (size unit))) ^
-						       " took " ^ 
-						       (Real.toString t) ^ " seconds.\n")
-					     end) overThirty
+			      val _ = 
+				  if (!chat_verbose)
+				      then let val _ = chat "------- Times to compile files in ascending order -------\n"
+					       val (underOne,overOne) = List.partition (fn (_,t) => t < 1.0) sorted
+					       val (underTen, overTen) = List.partition (fn (_,t) => t < 10.0) overOne
+					       val (underThirty, overThirty) = List.partition (fn (_,t) => t < 30.0) overOne
+					       val _ = (print (Int.toString (length underOne));
+							print " files under 1.0 second.\n")
+					       val _ = (print (Int.toString (length underTen));
+							print " files from 1.0 to 10.0 seconds.\n")
+					       val _ = (print (Int.toString (length overTen));
+							print " files from 10.0 to 30.0 seconds:  ";
+							chat_strings 40 (map #1 overThirty); print "\n")
+					       val _ = (print (Int.toString (length overThirty));
+							print " files over 30.0 seconds:\n")
+					       val _ = app (fn (unit,t) => 
+							    let val t = (Real.realFloor(t * 100.0)) / 100.0
+							    in  chat ("  " ^ unit ^ 
+								      (Util.spaces (20 - (size unit))) ^
+								      " took " ^ 
+								      (Real.toString t) ^ " seconds.\n")
+							    end) overThirty
+					   in  ()
+					   end
+				  else ()
 			    in  COMPLETE (Time.now())
 			    end
 		    else
@@ -1461,7 +1480,10 @@ struct
 			end
 		    val packages = map mapper requiredUnits
 		in  (chat "Manager calling linker with: ";
-		     chat_strings 30 requiredUnits;
+		     if (!chat_verbose)
+			 then chat_strings 30 requiredUnits
+		     else chat_strings 30 ["..." ^ (Int.toString ((length requiredUnits) - 1)) ^ " units...", 
+					   (List.last requiredUnits)];
 		     chat "\n";
 		     Linker.mk_exe {units = packages, exe_result = exe})
 		end
@@ -1597,10 +1619,14 @@ struct
   open Help
 
   val slave = Slave.run
+  val stat_final = Stats.ff("TimeFinal")
+
   fun helper runner (mapfile : string, cs : bool) =
 	let val _ = if !(Stats.tt "Reset stats between calls") then Stats.clear_stats() else ()
 	in  runner(mapfile, cs);
-	    Stats.print_stats()
+	    if (!chat_ref andalso !stat_final)
+		then Stats.print_stats()
+	    else ()
 	end
 
   fun master mapfile = 
@@ -1608,7 +1634,7 @@ struct
 	  val _ = startTime "Starting compilation"
 	  val _ = helper Master.run (mapfile, true)
 	  val _ = showTime (true,"Finished compilation")
-      in  reshowTimes()
+      in  if (!chat_ref) then reshowTimes() else ()
       end
   fun slaves (slaveList : (int * string) list) =
       let val dirs = Dirs.getDirs()

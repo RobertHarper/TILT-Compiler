@@ -68,6 +68,7 @@ static void stop_copy(Proc_t *proc)
   ResetJob();                        /* Reset counter so all user threads are scanned */
   req_size = 0;
 
+  proc->gcSegment1 = MajorWork;
   proc->gcSegment2 = FlipBoth;
 
   /* All threads get local structures ready */
@@ -129,7 +130,7 @@ static void stop_copy(Proc_t *proc)
     /* Check the tospace heap */
     paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);
     /* Resize heaps and do stats */
-    liveRatio = HeapAdjust1(req_size, 0, 0.0, fromSpace, toSpace);
+    liveRatio = HeapAdjust1(req_size, 0, 0, 0.0, fromSpace, toSpace);
     add_statistic(&proc->majorSurvivalStatistic, liveRatio);
     Heap_Resize(fromSpace, 0, 1);
     typed_swap(Heap_t *, fromSpace, toSpace);
@@ -144,7 +145,7 @@ static void stop_copy(Proc_t *proc)
 
 }
 
-int GCTry_SemiStack(Proc_t *proc, Thread_t *th)
+void GC_SemiStack(Proc_t *proc, Thread_t *th)
 {
   /*  int roundSize = Max(th->requestInfo, minOffRequest);    */
    int numRequest = DivideDown(Heap_GetAvail(fromSpace), minOffRequest);
@@ -152,28 +153,16 @@ int GCTry_SemiStack(Proc_t *proc, Thread_t *th)
 
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   process_writelist(proc,NULL,NULL);
+  if (GCSatisfiable(proc,th))   
+    return;
   if (th->requestInfo > 0) {
     GetHeapArea(fromSpace,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
-    if (proc->allocStart) {
-      return 1;
-    }
+    if (proc->allocStart) 
+      return;
   }
-  else if (th->requestInfo < 0) {
-    unsigned int bytesAvailable = sizeof(val_t) * (proc->writelistEnd - proc->writelistCursor);
-    return ((-th->requestInfo) <= bytesAvailable);
-  }
-  else 
-    assert(0);
-  return 0;
-}
-
-
-void GCStop_SemiStack(Proc_t *proc)
-{
-  assert(proc->userThread == NULL);
-  assert(proc->writelistCursor <= proc->writelistEnd);
-
   stop_copy(proc);
+  GetHeapArea(fromSpace,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
+  assert(GCSatisfiable(proc,th));
 }
 
 void GCInit_SemiStack()

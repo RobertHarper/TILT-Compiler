@@ -8,6 +8,7 @@
 #include "thread.h"
 #include "stack.h"
 #include <string.h>
+#include <strings.h>
 #include <sys/time.h>
 #include <sys/timeb.h>
 #include <sys/resource.h>
@@ -177,19 +178,85 @@ int doubleCompare(const void *a, const void *b)
   return (*(double *)a) > (*(double *)b);
 }
 
-static void show_statistic(char *str, Statistic_t *s, double totalSum)
+/* --------------- Debugging Stuff ---------------- */
+static double times[2000];
+static int which[2000];
+static int data[2000];
+int cursor = 0;
+
+void initTimeList()
 {
+  bzero(times, sizeof(times));
+  bzero(which, sizeof(which));
+  bzero(data, sizeof(data));
+}
+
+void resetTimeList()
+{
+  cursor = 0;
+}
+
+int showTimeList(double min)
+{
+  int i;
+  if (cursor == 0 || times[cursor-1] < min)
+    return 0;
+  for (i=0; i<cursor; i++) {
+    printf("%2d - %5d  %4.2lf ms     ", which[i], data[i], times[i]);
+    if ((i % 5) == 4)
+      printf("\n");
+  }
+  printf("\n\n");
+  return 1;
+}
+
+double addTimeList(void *procVoid, int w, int d)
+{
+  Proc_t *proc = (Proc_t *)procVoid;
+  double t = segmentTime(proc);
+  which[cursor] = w;
+  data[cursor] = d;
+  times[cursor] = t;
+  cursor++;
+  if (cursor >= sizeof(which) / sizeof(int)) {
+    printf("Time list overflowed with %d entries:\n", sizeof(which) / sizeof(int));
+    showTimeList(0.0);
+    assert(0);
+  }
+  return t;
+}
+
+static void show_time_statistic_header()
+{
+  printf("                              Sum (s)        Count     Min(ms)   Avg(ms)  Max(ms)\n");
+  printf("        -------------|-----------------------------------------------------------\n");
+}
+
+static void show_time_statistic(char *str, Statistic_t *s, double totalSum)
+{
+  double percent;
   double partialSum = s->sum / 1000.0;
   totalSum /= 1000.0;
+  percent = (100.0 * partialSum) / totalSum;
+
   if (s->sum == 0.0)
     return;
-  if (totalSum >= 0.0)
-    printf("         %s (s) = %8.2lf (%4.1f%%)    Cnt = %6d      Min/Avg/Max (ms) = %5.2f < %5.2f < %6.2f\n",
-	   str, partialSum, (100.0 * partialSum) / (totalSum + eps), 
-	   s->count, s->min, s->sum/s->count, s->max);
+  printf("         %s |   %8.2lf", str, partialSum);
+  if (totalSum >= 0.0) {
+    if (percent == 100.0)
+      printf(" ( 100%%)");
+    else 
+      printf(" (%4.1f%%)", percent);
+  }
   else
-    printf("         %s                         Cnt = %6d      Min/Avg/Max      = %5.2f < %5.2f < %6.2f\n",
-	   str, s->count, s->min, s->sum/s->count, s->max);
+    printf("        ");
+  printf("   %6d      %6.2f    %6.2f   %6.2f\n", s->count, s->min, s->sum/s->count, s->max);
+}
+
+static void show_statistic(char *str, Statistic_t *s)
+{
+  if (s->count > 0)
+    printf("       %s   %6.2f < %6.2f < %6.2f\n", str, s->min, s->sum/s->count, s->max);
 }
 
 static void show_history(char *name, History_t *h)
@@ -215,12 +282,14 @@ static void show_bucket_end(double v)
 {
   if (v == MAXDOUBLE)
     printf(" INF");
+  else if (v == 1000.0)
+    printf(" 1K");
   else if (v >= 1.0 || v < 0.001)
-    printf("%4.0f",v);
+    printf("%3.0f",v);
   else if (v >= 0.001) {
     char buf[16];
     sprintf(buf,"%.3g",v);
-    printf("%4s",&buf[1]);
+    printf("%3s",&buf[1]);
   }
     
 }
@@ -231,7 +300,7 @@ static void show_bucket(Histogram_t *h, int i)
   show_bucket_end(h->bucketStart[i]);
   printf(",");
   show_bucket_end(h->bucketEnd[i]);
-  printf(") = %4d", h->bucket[i]);
+  printf(") = %5d", h->bucket[i]);
 }
 
 static void show_histogram(char *name, Histogram_t *h)
@@ -239,10 +308,10 @@ static void show_histogram(char *name, Histogram_t *h)
   int i, j;
   if (h->stat.sum == 0.0)
     return;
-  printf("         %10s (ms) :    ", name);
+  printf("  %10s (ms) :    ", name);
   if (h->bucket[0]) {
     show_bucket(h,0);
-    printf("            ");
+    printf("     ");
   }
   if (h->bucket[37])
     show_bucket(h,37);
@@ -254,7 +323,7 @@ static void show_histogram(char *name, Histogram_t *h)
 	significant = 1;
     if (!significant)
       continue;
-    printf("            ");
+    printf("     ");
     for (j=0; j<6; j++) {
       show_bucket(h,6*i+j+1);
       printf("   ");
@@ -275,6 +344,7 @@ void add_statString(char *msg)
 void stats_init()
 {   
   statString[0] = 0;
+  initTimeList();
   getrusage(RUSAGE_SELF,&start_rusage);
   clock_gettime(CLOCK_REALTIME, &start_tp);
 }
@@ -325,18 +395,21 @@ void stats_finish()
   if (!shortSummary) {
     for (i=0; i<NumProc; i++) {
       Proc_t *proc = getNthProc(i);
-      printf("PROC #%d: Allocated       = %8.0f kb         Copied    = %8.0f kb\n",
-	     i, proc->bytesAllocatedStatistic.sum / 1024.0, proc->bytesCopiedStatistic.sum / 1024.0);
-      printf("         Total       (s) = %8.2lf\n", proc->totalTimer.last / 1000.0);
-      show_statistic(" Scheduler ", &proc->schedulerStatistic, proc->totalTimer.last);
-      show_statistic(" Mutator   ", &proc->mutatorHistogram.stat, proc->totalTimer.last);
-      show_statistic(" GCNone    ", &proc->gcNoneStatistic, proc->totalTimer.last);
-      show_statistic(" GCWork    ", &proc->gcWorkHistogram.stat, proc->totalTimer.last);
-      show_statistic("  GCGlob   ", &proc->gcGlobalStatistic, proc->gcWorkHistogram.stat.sum);
-      show_statistic("  GCStack  ", &proc->gcStackStatistic, proc->gcWorkHistogram.stat.sum);
-      show_statistic("  GCMajor  ", &proc->gcMajorWorkHistogram.stat, proc->gcWorkHistogram.stat.sum);
-      show_statistic("  GCFlipOn ", &proc->gcFlipOnHistogram.stat, proc->gcWorkHistogram.stat.sum);
-      show_statistic("  GCFlipOff", &proc->gcFlipOffHistogram.stat, proc->gcWorkHistogram.stat.sum);
+      printf("PROC #%d: Allocated  = %8.0f kb\n", i, proc->bytesAllocatedStatistic.sum / 1024.0);
+      printf("         Copied     = %8.0f kb\n", proc->bytesCopiedStatistic.sum / 1024.0); 
+      printf("         Work       = %8.0f kw\n", proc->workStatistic.sum / 1024.0);
+      show_time_statistic_header();
+      printf("         Total       |   %8.2lf\n", proc->totalTimer.last / 1000.0);
+      show_time_statistic(" Scheduler ", &proc->schedulerStatistic, proc->totalTimer.last);
+      show_time_statistic(" Mutator   ", &proc->mutatorHistogram.stat, proc->totalTimer.last);
+      show_time_statistic(" GCNone    ", &proc->gcNoneStatistic, proc->totalTimer.last);
+      show_time_statistic(" GCWork    ", &proc->gcWorkHistogram.stat, proc->totalTimer.last);
+      show_time_statistic("  GCRelease", &proc->gcReleaseStatistic, proc->gcWorkHistogram.stat.sum);
+      show_time_statistic("  GCGlobal ", &proc->gcGlobalStatistic, proc->gcWorkHistogram.stat.sum);
+      show_time_statistic("  GCStack  ", &proc->gcStackStatistic, proc->gcWorkHistogram.stat.sum);
+      show_time_statistic("  GCMajor  ", &proc->gcMajorWorkHistogram.stat, proc->gcWorkHistogram.stat.sum);
+      show_time_statistic("  GCFlipOn ", &proc->gcFlipOnHistogram.stat, proc->gcWorkHistogram.stat.sum);
+      show_time_statistic("  GCFlipOff", &proc->gcFlipOffHistogram.stat, proc->gcWorkHistogram.stat.sum);
       if (!skipHistogram) {
 	show_histogram(" GCWork Histogram", &proc->gcWorkHistogram);
 	show_histogram(" GCMajorWork Hist", &proc->gcMajorWorkHistogram);
@@ -344,9 +417,11 @@ void stats_finish()
 	show_histogram(" GCFlipOn    Hist", &proc->gcFlipOnHistogram);
 	/*      show_histogram("Mutator Histogram", &proc->mutatorHistogram); */
       }
-      show_statistic("MinSurvRate", &proc->minorSurvivalStatistic, -1.0);
-      show_statistic("MajSurvRate", &proc->majorSurvivalStatistic, -1.0);
-      show_statistic("HeapSize   ", &proc->heapSizeStatistic, -1.0);
+      /* These are not really per-processor */
+      printf("\n");
+      show_statistic("MinSurvRate ", &proc->minorSurvivalStatistic);
+      show_statistic("MajSurvRate ", &proc->majorSurvivalStatistic);
+      show_statistic("HeapSize(kb)", &proc->heapSizeStatistic);
     }
   }
 
@@ -385,40 +460,5 @@ void stats_finish()
   i = fwrite(statString,1,statStringCursor,fd);
   assert(statStringCursor == i);
   fclose(fd);
-}
-
-/* --------------- Debugging Stuff ---------------- */
-static double times[1000];
-static int which[1000];
-static int data[1000];
-int cursor = 0;
-
-void resetTimeList()
-{
-  cursor = 0;
-}
-
-void addTimeList(void *procVoid, int w, int d)
-{
-  Proc_t *proc = (Proc_t *)procVoid;
-  which[cursor] = w;
-  data[cursor] = d;
-  times[cursor] = segmentTime(proc);
-  cursor++;
-  assert(cursor < 1000);
-}
-
-int showTimeList(double min)
-{
-  int i;
-  if (cursor == 0 || times[cursor-1] < min)
-    return 0;
-  for (i=0; i<cursor; i++) {
-    printf("%2d - %5d  %4.2lf ms     ", which[i], data[i], times[i]);
-    if ((i % 5) == 4)
-      printf("\n");
-  }
-  printf("\n\n");
-  return 1;
 }
 

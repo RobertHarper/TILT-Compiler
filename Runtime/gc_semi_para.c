@@ -53,13 +53,15 @@ void GCRelease_SemiPara(Proc_t *proc)
   proc->segUsage.bytesAllocated += alloc;
 }
 
+static long totalRequest = 0;
+static long totalUnused = 0;
+
 static void stop_copy(Proc_t *proc)
 {
   int i;
   int isFirst = 0;
   mem_t to_alloc_start;         /* Designated thread records this initially */
   Thread_t *curThread = NULL;
-  static long req_size;            /* These are shared across processors. */
   ploc_t rootLoc, globalLoc;
   
   /* Using a weak barrier, we detect the first thread and permit it to do some preliminary work 
@@ -73,10 +75,11 @@ static void stop_copy(Proc_t *proc)
     Heap_Resize(toSpace, Heap_GetSize(fromSpace) + NumProc * minOffRequest, 1);
     resetSharedStack(workStack,NumProc);
     ResetJob();                        /* Reset counter so all user threads are scanned */
-    req_size = 0;
+    totalRequest = totalUnused = 0;
   }
   strongBarrier(barriers,1);
 
+  proc->gcSegment1 = MajorWork;
   proc->gcSegment2 = FlipBoth;
 
   /* All threads get local structures ready */
@@ -92,11 +95,14 @@ static void stop_copy(Proc_t *proc)
     procChangeState(proc, GCGlobal);
     major_global_scan(proc);
   }
+
+
   /* All other processors compute thread-specific roots in parallel */
   procChangeState(proc, GCStack);
+  FetchAndAdd(&totalUnused, sizeof(val_t) * (proc->allocLimit - proc->allocCursor));
   while ((curThread = NextJob()) != NULL) {
     if (curThread->requestInfo >= 0)
-      FetchAndAdd(&req_size, curThread->requestInfo);
+      FetchAndAdd(&totalRequest, curThread->requestInfo);
     thread_root_scan(proc,curThread);
   }
 
@@ -113,7 +119,7 @@ static void stop_copy(Proc_t *proc)
 		  &proc->majorObjStack,&proc->majorSegmentStack);  /* We must call this even if local stack is empty */
 
   while (1) {
-    int i, globalEmpty;
+    int globalEmpty;
     ptr_t gray;
     popSharedStack(workStack,&proc->threads, threadFetchSize, 
 		   proc->globalLocs, globalLocFetchSize, 
@@ -123,8 +129,9 @@ static void stop_copy(Proc_t *proc)
     assert(isEmptyStack(proc->globalLocs));
     assert(isEmptyStack(proc->rootLocs));
     while (!recentWorkDone(proc, localWorkSize) &&
-	   (gray = popStack(&proc->majorObjStack)) != NULL) 
-      (void) scanObj_locCopy1_copyCopySync_replicaStack(proc,gray,&proc->majorObjStack,&proc->majorRange,fromSpace);
+	   (gray = popStack(&proc->majorObjStack)) != NULL) {
+      scanObj_locCopy1_copyCopySync_replicaStack(proc,gray,&proc->majorObjStack,&proc->majorRange,fromSpace);
+    }
 
     globalEmpty = pushSharedStack(workStack,&proc->threads,proc->globalLocs, proc->rootLocs, 
 				  &proc->majorObjStack,&proc->majorSegmentStack);  /* We must call this even if local stack is empty */
@@ -133,7 +140,6 @@ static void stop_copy(Proc_t *proc)
   }
   ClearCopyRange(&proc->majorRange);
   strongBarrier(barriers,2);
-
 
   /* Only the designated thread needs to perform the following */
   if (isFirst) {
@@ -145,7 +151,7 @@ static void stop_copy(Proc_t *proc)
     /* Check the tospace heap */
     paranoid_check_all(fromSpace, NULL, toSpace, NULL, NULL);
     /* Resize heaps and do stats */
-    liveRatio = HeapAdjust1(req_size,0,0.0,fromSpace,toSpace);
+    liveRatio = HeapAdjust1(totalRequest,totalUnused,0,0.0,fromSpace,toSpace);
     add_statistic(&proc->majorSurvivalStatistic, liveRatio);
     Heap_Resize(fromSpace, 0, 1);
     typed_swap(Heap_t *, fromSpace, toSpace);
@@ -169,38 +175,27 @@ void GCPoll_SemiPara(Proc_t *proc)
 }
 
 
-int GCTry_SemiPara(Proc_t *proc, Thread_t *th)
+void GC_SemiPara(Proc_t *proc, Thread_t *th)
 {
   int roundSize = RoundUp(th->requestInfo,minOffRequest);
 
   flushStore();
-
+  /* Threads should not be mapped */
+  assert(proc->userThread == NULL);
+  assert(th->proc == NULL);
   proc->numWrite += (proc->writelistCursor - proc->writelistStart) / 3;
   process_writelist(proc,NULL,NULL);
+  if (GCSatisfiable(proc,th))   
+    return;
   if (th->requestInfo > 0) {
     GetHeapArea(fromSpace,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
-    if (proc->allocStart) {
-      if (collectDiag >= 3) 
-	printf("Proc %d: Grabbed %d page(s) at %d\n",proc->procid,roundSize/pagesize,proc->allocStart);
-      return 1;
-    }
-    return 0;
+    if (proc->allocStart != NULL)
+      return;
   }
-  else if (th->requestInfo < 0) {
-    unsigned int bytesAvailable = sizeof(val_t) * (proc->writelistEnd - proc->writelistCursor);
-    return ((-th->requestInfo) <= bytesAvailable);
-  }
-  assert(0);
-}
-
-void GCStop_SemiPara(Proc_t *proc)
-{
-  assert(proc->userThread == NULL);
-  assert(proc->writelistCursor <= proc->writelistEnd);
-
   stop_copy(proc);
+  GetHeapArea(fromSpace,roundSize,&proc->allocStart,&proc->allocCursor,&proc->allocLimit);
+  assert(GCSatisfiable(proc,th));
 }
-
 
 void GCInit_SemiPara()
 {

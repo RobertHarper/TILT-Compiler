@@ -79,8 +79,7 @@ int usageCount = 50;
 double minorCollectionRate = 2.0;   /* Ratio of minor coll rate to alloc rate */
 double majorCollectionRate = 2.0;   /* Ratio of major coll rate to alloc rate */
 
-static int (*GCTryFun)(Proc_t *, Thread_t *) = NULL;
-static void (*GCStopFun)(Proc_t *) = NULL;
+static void (*GCFun)(Proc_t *, Thread_t *) = NULL;
 static void (*GCReleaseFun)(Proc_t *) = NULL;
 static void (*GCPollFun)(Proc_t *) = NULL;
 
@@ -116,9 +115,9 @@ long ComputeHeapSize(long oldsize, double oldratio, int withhold, double reserve
   return newSize;
 }
 
-double HeapAdjust(int request, int withhold, double reserve, Heap_t **froms, Heap_t *to)
+double HeapAdjust(int request, int unused, int withhold, double reserve, Heap_t **froms, Heap_t *to)
 {
-  long copied = 0, occupied = 0, live = 0, newSize = 0;
+  long copied = 0, occupied = -unused, live = 0, newSize = 0;
   double liveRatio = 0.0;
 
   assert(request >= 0);
@@ -148,21 +147,21 @@ double HeapAdjust(int request, int withhold, double reserve, Heap_t **froms, Hea
   return liveRatio;
 }
 
-double HeapAdjust1(int request, int withhold, double reserve, Heap_t *from1, Heap_t *to)
+double HeapAdjust1(int request, int unused, int withhold, double reserve, Heap_t *from1, Heap_t *to)
 {
   Heap_t *froms[2];
   froms[0] = from1;
   froms[1] = NULL;
-  return HeapAdjust(request, withhold, reserve, froms, to);
+  return HeapAdjust(request, unused, withhold, reserve, froms, to);
 }
 
-double HeapAdjust2(int request, int withhold,  double reserve, Heap_t *from1, Heap_t *from2, Heap_t *to)
+double HeapAdjust2(int request, int unused, int withhold,  double reserve, Heap_t *from1, Heap_t *from2, Heap_t *to)
 {
   Heap_t *froms[3];
   froms[0] = from1;
   froms[1] = from2;
   froms[2] = NULL;
-  return HeapAdjust(request, withhold, reserve, froms, to);
+  return HeapAdjust(request, unused, withhold, reserve, froms, to);
 }
 
 void GCInit(void)
@@ -174,50 +173,43 @@ void GCInit(void)
 
   switch (collector_type) {
   case Semispace:
-    GCTryFun = GCTry_Semi;
-    GCStopFun = GCStop_Semi;
+    GCFun = GC_Semi;
     GCReleaseFun = GCRelease_Semi;
     GCPollFun = NULL;
     GCInit_Semi();
     break;
   case Generational:
-    GCTryFun = GCTry_Gen;
-    GCStopFun = GCStop_Gen;
+    GCFun = GC_Gen;
     GCReleaseFun = GCRelease_Gen;
     GCPollFun = NULL;
     GCInit_Gen();
     break;
   case SemispaceParallel:
-    GCTryFun = GCTry_SemiPara;
-    GCStopFun = GCStop_SemiPara;
+    GCFun = GC_SemiPara;
     GCReleaseFun = GCRelease_SemiPara;
     GCPollFun = GCPoll_SemiPara;
     GCInit_SemiPara();
     break;
   case GenerationalParallel:
-    GCTryFun = GCTry_GenPara;
-    GCStopFun = GCStop_GenPara;
+    GCFun = GC_GenPara;
     GCReleaseFun = GCRelease_GenPara;
     GCPollFun = GCPoll_GenPara;
     GCInit_GenPara();
     break;
   case SemispaceConcurrent:
-    GCTryFun = GCTry_SemiConc;
-    GCStopFun = NULL;
+    GCFun = GC_SemiConc;
     GCReleaseFun = GCRelease_SemiConc;
     GCPollFun = GCPoll_SemiConc;
     GCInit_SemiConc();
     break;
   case GenerationalConcurrent:
-    GCTryFun = GCTry_GenConc;
-    GCStopFun = NULL;
+    GCFun = GC_GenConc;
     GCReleaseFun = GCRelease_GenConc;
     GCPollFun = GCPoll_GenConc;
     GCInit_GenConc();
     break;
   case SemispaceStack:
-    GCTryFun = GCTry_SemiStack;
-    GCStopFun = GCStop_SemiStack;
+    GCFun = GC_SemiStack;
     GCReleaseFun = GCRelease_SemiStack;
     GCPollFun = NULL; /* GCPoll_SemiStack; */
     GCInit_SemiStack();
@@ -515,50 +507,40 @@ void GCPoll(Proc_t *proc)
 }
 
 
-/* Is there enough room in proc to satisfy mapping th onto it */
-int GCSatisfied(Proc_t *proc, Thread_t *th, int honorMajorGC)
+/* Is there enough room in proc to satisfy mapping th onto it?  
+   Does not consider overriding factors such as intentionally signalled 
+   major GC or flipping collector on and off.
+ */
+int GCSatisfiable(Proc_t *proc, Thread_t *th)
 {
   /* requestInfo < 0 means that many bytes in write buffer is requested 
-     requestInfo > 0 means that many bytes of allocation is requested */
+     requestInfo > 0 means that many bytes of allocation is requested 
+     requestInfo == 0 is illegal
+  */
   if (th->requestInfo < 0) {
-    if ((val_t)proc->writelistCursor - th->requestInfo <= (val_t)proc->writelistEnd)
-      return 1;
+    return ((val_t)proc->writelistCursor - th->requestInfo <= (val_t)proc->writelistEnd);
   } 
-  else if ((!honorMajorGC || th->request != MajorGCRequestFromC) && th->requestInfo > 0) {
-    if (th->requestInfo + (val_t) proc->allocCursor <= (val_t) proc->allocLimit) 
-      return 1; 
+  else if (th->requestInfo > 0) {
+    return (th->requestInfo + (val_t) proc->allocCursor <= (val_t) proc->allocLimit);
   }
-  return 0;
+  else
+    assert(0);
 }
 
-/* If there is enough allocation/writelist space in proc to satisy th, return 1.
-   If not, try to allocate more and return 2 if succeeded.
-   If there is still not room, perform a stop-copy GC and return 3 if the th is satisfied by proc.
-   If not, try to allocate more and return 4 if succeeded.
-   Otherwise, return 0. */
-int GCFromScheduler(Proc_t *proc, Thread_t *th)
+
+void GCFromScheduler(Proc_t *proc, Thread_t *th)
 {  
   procChangeState(proc, GC);
   assert(proc->userThread == NULL);
   assert(th->proc == NULL);
-  if (GCSatisfied(proc,th,1))
-    return 1;
-  if (GCTryFun != NULL && (*GCTryFun)(proc,th))  /* Might have to do work dependent on collector */
-    return 2;
   procChangeState(proc, GC);                     /* Definitely have to do work when stop/copy */
-  proc->gcSegment1 = MajorWork;                  /* Non-generational collectors only do major GC's */
-  if (GCStopFun != NULL) 
-    (*GCStopFun)(proc);
-  if (GCSatisfied(proc,th,0))
-    return 3;
-  if (GCTryFun != NULL && (*GCTryFun)(proc,th))
-    return 4;
-  return 0;
+  ((*GCFun)(proc,th));
+  assert(GCSatisfiable(proc,th));
 }
 
-void GCRelease(Proc_t *proc)
+void GCReleaseThread(Proc_t *proc)
 {  
-  procChangeState(proc, GC);
+  procChangeState(proc, GCRelease);
   (*GCReleaseFun)(proc);
 }
 

@@ -30,7 +30,7 @@ struct
     structure FidSet = VarSet
     structure FidMap = VarMap
     type fid = var
-    fun chat s = print s
+    fun chat s = if (!debug) then print s else ()
 
     (* -------------- types and values manipulating free variables ------------- *)
     (* lists are kept in reverse order; map allow fast lookup/membership  *)
