@@ -26,17 +26,12 @@ structure Signature :> SIGNATURE =
 
 
  local
-     val Cpolyinst = ref (NONE : (Il.context * Il.sdecs -> Il.sbnd list * Il.sdecs * Il.con list) option)
+     val Cpolyinst : (context * sdecs -> sbnd list * sdecs * con list) ref =
+	ref (fn _ => error "polyinst not installed")
  in
-     fun installHelpers{polyinst} =
-	 ((case !Cpolyinst of
-	      NONE => ()
-	    | SOME _ => (print "WARNING: installHelpers called more than once.\n";
-			 print "         Possibly because CM.make does not have the semantics of a fresh make\n"));
-	   Cpolyinst := SOME polyinst)
-     fun polyinst arg = let val SOME polyinst = !Cpolyinst
-			in  polyinst arg
-			end
+     fun installHelpers{polyinst : context * sdecs -> sbnd list * sdecs * con list} : unit =
+	(Cpolyinst := polyinst)
+     fun polyinst arg = !Cpolyinst arg
  end
 
     (* ----------------- Misc Helper Functions ----------------------- *)
@@ -504,9 +499,10 @@ structure Signature :> SIGNATURE =
 	in  foldl constrain sdecs kind_plabels
 	end
     handle WhereError => sdecs
-	 | e => (print "\nsig2 = "; pp_signat sig2;
-		 print "\nsdecs= "; pp_sdecs sdecs;
-		 print "\n";
+	 | e => (debugdo (fn () =>
+			  (print "\nsig2 = "; pp_signat sig2;
+			   print "\nsdecs= "; pp_sdecs sdecs;
+			   print "\n"));
 		 raise e)
 
      (* it is difficult to correctly optimize this case: we try to catch only some cases *)
@@ -532,9 +528,10 @@ structure Signature :> SIGNATURE =
 	       | _ => xsig_where_structure_slow(context,sdecs,labs1,m2,sig2))
 	end
     handle WhereError => sdecs
-	 | e => (print "\nsig2 = "; pp_signat sig2;
-		 print "\nsdecs= "; pp_sdecs sdecs;
-		 print "\n";
+	 | e => (debugdo (fn () =>
+			  (print "\nsig2 = "; pp_signat sig2;
+			   print "\nsdecs= "; pp_sdecs sdecs;
+			   print "\n"));
 		 raise e)
 
 
@@ -928,19 +925,19 @@ structure Signature :> SIGNATURE =
 		     val _ = if (a1 = a2) then ()
 			     else raise (FAILURE "arrow mismatch in xcoerce")
 		     val p2 = PATH(v2,[])
-		     val (_,m3body,_) = xcoerce(add_context_mod'(context,v2,s2),
-						p2,s2,s1)
-		     val m4_arg = MOD_APP(path2mod path_actual, m3body)
-		     val m4var = fresh_named_var "var_actual_xcoerce"
-		     val p4 = PATH(m4var,[])
-		     val (_,m4body,_) = xcoerce(add_context_mod'(context,m4var,s1'),
-						p4,s1',s2')
-		     val m4body = mod_subst(m4body,subst_add_modvar(empty_subst,m4var,m4_arg))
 		     val context' = add_context_mod'(context,v2,s2)
-		     val s = GetModSig(context',m4body)
+		     val (_,m3,_) = xcoerce(context',p2,s2,s1)
+		     val subst = subst_add_modvar(empty_subst,v1,MOD_VAR v2)
+		     val s1' = sig_subst(s1',subst)
+		     val v1' = fresh_named_var "var_actual_xcoerce"
+		     val p1' = PATH(v1',[])
+		     val context'' = add_context_mod'(context',v1',s1')
+		     val (_,m4,_) = xcoerce(context'',p1',s1',s2')
+		     val arg = MOD_APP(path2mod path_actual, m3)
+		     val body = MOD_LET(v1',arg,m4)
 		 in (true,
-		     MOD_FUNCTOR(a1,v2,s2,m4body,s),
-		     SIGNAT_FUNCTOR(v2,s2,s,a1))
+		     MOD_FUNCTOR(a1,v2,s2,body,s2'),
+		     sig_target)
 		 end
 	   | (SIGNAT_STRUCTURE sdecs_actual,
 	      SIGNAT_STRUCTURE sdecs_target) =>
@@ -1208,13 +1205,6 @@ structure Signature :> SIGNATURE =
 
     (* ---------- The exported signature coercion routines ------------ *)
 
-    (* We provide both xcoerce_seal and xcoerce_seal' because
-       Module_IsValuable can be expensive.
-
-       pds: There is another reason.  Module_IsValuable is buggy for
-       modules that are not syntactic values.  I could not compile the
-       basis after replacing xcoerce_seal with #1 o xcoerce_seal'.  *)
-
     fun xcoerce_seal (context : context,
 		      mod_actual : mod,
 		      sig_actual : signat,
@@ -1222,41 +1212,23 @@ structure Signature :> SIGNATURE =
 	    let val var_actual = fresh_named_var "origSeal"
 		val path_actual = PATH(var_actual,[])
 		val context' = add_context_mod'(context,var_actual,sig_actual)
-		val (coerced,m,_) = xcoerce(context', path_actual, sig_actual, sig_target)
-	    in  if coerced then MOD_LET(var_actual, mod_actual, MOD_SEAL(m, sig_target))
+		val (coerced,mod_coerced,_) =
+		    xcoerce(context', path_actual, sig_actual, sig_target)
+	    in  if coerced
+		then MOD_LET(var_actual, mod_actual,
+			     MOD_SEAL(mod_coerced, sig_target))
 		else mod_actual
-	    end
-
-    fun xcoerce_seal' (context : context,
-		       mod_actual : mod,
-		       sig_actual : signat,
-		       sig_target : signat) : mod * signat option =
-	    let val var_actual = fresh_named_var "origSeal"
-		val path_actual = PATH(var_actual,[])
-		val context' = add_context_mod'(context,var_actual,sig_actual)
-	    in
-		(case xcoerce(context', path_actual, sig_actual, sig_target)
-		   of (false,_,_) => (mod_actual,SOME sig_actual)
-		    | (true,m,s) =>
-		       let val mod_result = MOD_LET(var_actual, mod_actual, MOD_SEAL(m, sig_target))
-			   val sigopt_unsealed =
-			       if Module_IsValuable (context, mod_actual) then
-				   let val subst = subst_add_modvar(empty_subst,var_actual,mod_actual)
-				       val sig_unsealed = sig_subst (s, subst)
-				   in  SOME sig_unsealed
-				   end
-			       else NONE
-		       in  (mod_result, sigopt_unsealed)
-		       end)
 	    end
 
     fun xcoerce_functor (context : context,
 			 path_actual : path,
 			 sig_actual : signat,
-			 sig_target : signat) : mod * signat =
-	    let val (_,mod_coerced, sig_coerced) =
+			 sig_target : signat) : mod =
+	    let val (coerced,mod_coerced,_) =
 		    xcoerce(context, path_actual, sig_actual, sig_target)
-	    in  (mod_coerced, sig_coerced)
+	    in  if coerced
+		then mod_coerced
+		else path2mod path_actual
 	    end
 
     fun sig_describe_size s =
