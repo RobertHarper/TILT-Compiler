@@ -782,7 +782,7 @@ structure Datatype
 				else ()
 			val p = (case ls of
 			 [_] => 
-			     (case (Context_Lookup(context,lab)) of
+			     (case (Context_Lookup_Label(context,lab)) of
 				  SOME (p,_) => p
 				| NONE => ((* print "constr_lookup failed to find path: ";
 					   pp_label lab; print "\n"; *)

@@ -588,8 +588,8 @@ structure Toil
 				   else unbound())
 	     end
        | Ast.DelayExp expr =>
-	     (case (Context_Lookup(context,symbol_label (Symbol.varSymbol "Susp")),
-		   Context_Lookup(context,symbol_label (Symbol.tycSymbol "susp"))) of
+	     (case (Context_Lookup_Label(context,symbol_label (Symbol.varSymbol "Susp")),
+		    Context_Lookup_Label(context,symbol_label (Symbol.tycSymbol "susp"))) of
 		 (SOME (_,PHRASE_CLASS_MOD(sm,_,SIGNAT_FUNCTOR(_,SIGNAT_STRUCTURE(_,[sdec]),_,_))), 
 		  SOME(_,PHRASE_CLASS_CON(sc,sk,_,_))) =>  
 		 (let 
@@ -1155,7 +1155,7 @@ val _ = print "plet0\n"
 		     fun help tyvar = 
 			  let val type_str = Symbol.name tyvar
 			      val type_lab = symbol_label tyvar
-			      val is_eq =  ((size type_str > 1) andalso 
+			      val is_eq =  ((size type_str >= 2) andalso 
 					    (String.substring(type_str,0,2) = "''"))
 			  in  (type_lab,is_eq)
 			  end
@@ -1265,7 +1265,7 @@ val _ = print "plet0\n"
 		local fun help tyvar = 
 		    let val type_str = Symbol.name tyvar
 			val type_lab = symbol_label tyvar
-			val is_eq =  ((size type_str > 1) andalso 
+			val is_eq =  ((size type_str >= 2) andalso 
 				      (String.substring(type_str,0,2) = "''"))
 		    in  (type_lab,is_eq)
 		    end
@@ -1384,7 +1384,7 @@ val _ = print "plet0\n"
 		local fun help tyvar = 
 		    let val type_str = Symbol.name tyvar
 			val type_lab = symbol_label tyvar
-			val is_eq =  ((size type_str > 1) andalso 
+			val is_eq =  ((size type_str >= 2) andalso 
 				      (String.substring(type_str,0,2) = "''"))
 		    in  (type_lab,is_eq)
 		    end
@@ -1636,10 +1636,10 @@ val _ = print "plet0\n"
 	| Ast.FixDec {fixity,ops} => let (* given symbol is in FixSymbol space *)
 				       fun helper sym = 
 					   let val sym' = Symbol.varSymbol(Symbol.name sym)
-					   in (symbol_label sym', fixity)
+					       val lab = symbol_label sym'
+					   in (NONE, CONTEXT_FIXITY (lab, fixity))
 					   end
-				       val vf_list = map helper ops
-				     in [(NONE,CONTEXT_FIXITY vf_list)]
+				     in map helper ops
 				     end
 
 	(* These cases are unhandled *)
@@ -1690,7 +1690,7 @@ val _ = print "plet0\n"
       (case ty of
 	 Ast.VarTy tyvar => 
 	     let val sym = AstHelp.tyvar_strip tyvar
-	     in (case (Context_Lookup(context,symbol_label sym)) of
+	     in (case (Context_Lookup_Label(context,symbol_label sym)) of
 		     SOME(p,PHRASE_CLASS_CON (_,_,SOME inline_con,true)) => inline_con
 		   | SOME(p,PHRASE_CLASS_CON (_,_,_,_)) => path2con p
 		   | _ => (error_region(); print "unbound type constructor: ";
@@ -1854,7 +1854,7 @@ val _ = print "plet0\n"
       --------------------------------------------------------- *)
      and xsigexp(context,sigexp) : signat =
        (case sigexp of
-	  Ast.VarSig s => (case (Context_Lookup(context,symbol_label s)) of
+	  Ast.VarSig s => (case (Context_Lookup_Label(context,symbol_label s)) of
 			       SOME(_,PHRASE_CLASS_SIG (v,s)) => SIGNAT_VAR v
 			     | _ => (error_region();
 				     print "unbound signature: "; 
@@ -1956,7 +1956,7 @@ val _ = print "plet0\n"
 				    val type_var = fresh_var()
 				    val eq_var = fresh_var()
 				    val type_str = Symbol.name tv_sym
-				    val is_eq =  ((size type_str > 1) andalso 
+				    val is_eq =  ((size type_str >= 2) andalso 
 						  (String.substring(type_str,0,2) = "''"))
 				    val eq_con = con_eqfun(CON_VAR type_var)
 				    val type_sdec = SDEC(type_lab,DEC_CON(type_var,KIND_TUPLE 1, 

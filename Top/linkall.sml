@@ -20,7 +20,7 @@ struct
     fun specific_comp_file file =
 	let 
 	    val (_,fp,_,dec) = LinkParse.parse_impl file
-	    val il_mod = (case LinkIl.elab_dec(LinkIl.plus_context[], fp, dec) of
+	    val il_mod = (case LinkIl.elab_dec(LinkIl.initial_context(), fp, dec) of
 			      NONE => error (file ^ " failed to elaborate")
 			    | SOME il_mod => il_mod)
 	    val nil_mod = Linknil.il_to_nil (file,il_mod)

@@ -105,7 +105,8 @@ struct
 		      val _ = msg "working on fixopen_b\n"
 		      fun folder ((v,function),s) =
 			  let val funcon = NilUtil.function_type Code function
-			  in  add_code (s, v, funcon, LOCAL_CODE (Name.var2string v))
+			  in  add_code (s, v, funcon, LOCAL_CODE ((get_unitname()) ^ "_" 
+								  ^ (Name.var2string v)))
 			  end
 		      val var_fun_list = (Sequence.toList var_fun_seq)
 		      val state = foldl folder state var_fun_list
@@ -196,7 +197,7 @@ struct
 	 | Code_cb (conwork as (name,vklist,c)) => 
 		let val funkind = Arrow_k(Code,vklist,Single_k c)
 		    val funcon = Let_c(Sequential,[cbnd],Var_c name)
-		    val l = LOCAL_CODE(Name.var2string name)
+		    val l = LOCAL_CODE((get_unitname()) ^ "_" ^ (Name.var2string name))
 		    val state = add_conterm (state,name,funkind, SOME(VALUE(CODE l)))
 		    val _ = if phase = Compiletime
 				then ()
@@ -1618,7 +1619,7 @@ struct
       fun doconfun is_top (state,vname,vklist,body) =
 	  let 
 	      val name = (case (Name.VarMap.find(!exports,vname)) of
-			      NONE => LOCAL_CODE (Name.var2string vname)
+			      NONE => LOCAL_CODE ((get_unitname()) ^ "_" ^ (Name.var2string vname))
 			    | SOME [] => error "export has no labels"
 			    | SOME (l::_) => l)
 	      val _ = reset_state(is_top, (vname, name))
@@ -1652,7 +1653,7 @@ struct
 						 fFormals=vflist,body,...}) =
 	  let 
 	      val name = (case (Name.VarMap.find(!exports,vname)) of
-			      NONE => LOCAL_CODE (Name.var2string vname)
+			      NONE => LOCAL_CODE ((get_unitname()) ^ "_" ^ (Name.var2string vname))
 			    | SOME [] => error "export has no labels"
 			    | SOME (l::_) => l)
 	      val _ = reset_state(is_top, (vname, name))
@@ -1735,12 +1736,14 @@ struct
 		   | mapper (ExportType(l,v)) = (v, help l)
 	     in  val named_exports = map mapper exports
 	     end
+
 	     val mainCodeVar = Name.fresh_named_var("main_" ^ unitname ^ "_code")
 	     val mainCodeName = ML_EXTERN_LABEL("main_" ^ unitname ^ "_code")
 	     val mainName = ML_EXTERN_LABEL("main_" ^ unitname ^ "_doit")
 	     val _ = resetDepth()
 	     val _ = resetWork()
-	     val _ = reset_global_state ((mainCodeVar,mainCodeName)::named_exports,
+	     val _ = reset_global_state (unitname,
+					 (mainCodeVar,mainCodeName)::named_exports,
 					 toplevel_locals)
 		 
 	     val exp = Let_e(Sequential, bnds,NilUtil.true_exp)
@@ -1808,7 +1811,7 @@ struct
 
 	     val _ = resetDepth()
 	     val _ = resetWork()
-	     val _ = reset_global_state ([], Name.VarSet.empty)
+	     val _ = reset_global_state ("", [], Name.VarSet.empty)
 
 	 in module
 	 end

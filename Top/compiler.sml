@@ -101,17 +101,18 @@ structure Til : COMPILER =
 	val uptoClosureConvert = Stats.ff("UptoClosureConvert")
 	val uptoRtl = Stats.ff("UptoRtl")
 	val uptoAsm = Stats.ff("UptoAsm")
-	fun compile (ctxt: context, unitName: string, 
-		     sbnd_entries: (sbnd option * context_entry) list , ctxt': context) : string =
+	fun compile (unitName : string,
+		     fileBase: string, 
+		     il_module) : string = 
 	    let val _ = if (!uptoElaborate) then raise Stop else ()
-		val nilmod = Linknil.il_to_nil(unitName, (ctxt, sbnd_entries))
+		val nilmod = Linknil.il_to_nil(unitName, il_module)
 		val _ = if (!uptoPhasesplit orelse !uptoClosureConvert)
 			    then raise Stop else ()
 		val rtlmod = Linkrtl.nil_to_rtl (unitName,nilmod)
 		val _ = if (!uptoRtl) then raise Stop else ()
 
 
-		(* rtl_to_asm creates unitName.s file with main label * `unitName_doit' *)
+		(* rtl_to_asm creates fileBase.s file with main label * `fileName_doit' *)
 		val rtl_to_asm = 
 		    case !platform of
 			 TIL_ALPHA => Linkalpha.rtl_to_asm
@@ -119,14 +120,14 @@ structure Til : COMPILER =
 		       | _ => error "No MLRISC"
 (*		       | MLRISC_ALPHA => AlphaLink.rtl_to_asm *)
 (*		       | MLRISC_SPARC => SparcLink.rtl_to_asm*)
-		val (sFile,_) = rtl_to_asm(unitName, rtlmod)    
+		val (sFile,_) = rtl_to_asm(fileBase, rtlmod)    
 		val _ = if (!uptoAsm) then raise Stop else ()
 
-		val oFile = base2o unitName
+		val oFile = base2o fileBase
 		val _ = assemble(sFile, oFile)
 	    in  oFile
 	    end
-	handle Stop => (let val oFile = base2o unitName
+	handle Stop => (let val oFile = base2o fileBase
 			    val os = TextIO.openOut oFile
 			    val _ = TextIO.output(os,"Dummy .o file\n")
 			in  TextIO.closeOut os; oFile

@@ -45,8 +45,9 @@ sig
    val uninit_val : TilWord32.word
 
    (* (global) RTL translation state *)
-   val reset_global_state : (var * label) list * Name.VarSet.set -> unit
+   val reset_global_state : string * (var * label) list * Name.VarSet.set -> unit
    val reset_state : bool * (var * label) -> unit
+   val get_unitname : unit -> string
    val get_proc : unit -> Rtl.proc
    val set_args : reg list * regi -> unit
    val add_proc : Rtl.proc -> unit

@@ -30,13 +30,11 @@ structure InfixParse
       ----------------------------------------------------------------------------- *)
     fun fixity_to_level (Fixity.NONfix) = error "no level for NONfix"
       | fixity_to_level (Fixity.INfix (a,b)) = a div 2
-    fun path_fixity_lookup path [] = NONE
-      | path_fixity_lookup [s] ((l,f)::rest) = if (eq_label(l,symbol_label s)) 
-						   then 
-						       (case f of
-							    (Fixity.INfix _) => SOME f 
-							  | _ => NONE)
-					       else path_fixity_lookup [s] rest
+    fun path_fixity_lookup [s] fm = 
+	(case Name.LabelMap.find(fm,symbol_label s) of
+	     NONE => NONE
+	   | SOME (f as (Fixity.INfix _)) => SOME f 
+	   | _ => NONE)
       | path_fixity_lookup _ _ = NONE
     fun exp_fixity_lookup table (Ast.VarExp p) = path_fixity_lookup p table
       | exp_fixity_lookup table (Ast.MarkExp (e,r)) = exp_fixity_lookup table e
@@ -161,19 +159,9 @@ structure InfixParse
       end
 
 
-    fun parse_exp (table : fixity_table, Ast.FlatAppExp exp_fix_list) = 
+    fun parse_exp (table : Fixity.fixity Name.LabelMap.map, Ast.FlatAppExp exp_fix_list) = 
       let
-	val table = (app_lab, Fixity.infixleft 10) :: table
-	val _ = debugdo (fn () => 
-			  (print "parse_exp: table is\n";
-			   app (fn (s,f) => (Ppil.pp_label s;
-					     print " -> "; 
-					     print (case f of
-						      Fixity.NONfix => "nonfix"
-						    | Fixity.INfix(a,b) => (Int.toString a) ^ "," ^ 
-							  (Int.toString b));
-					     print "\n")) table;
-			   print "\n"))
+	val table = Name.LabelMap.insert(table,app_lab, Fixity.infixleft 10) 
 	fun apper ((_,f),(_,a)) = (false,Ast.AppExp{function=f,argument=a})
 	fun tupler (args : (bool * Ast.exp) list) = (false,Ast.TupleExp(map #2 args))
 	fun exp_recurse reduced_driver e = e
@@ -196,9 +184,9 @@ structure InfixParse
 		    print "\n";
 		    error "done with all precedence level and still have a list of exps")
       end
-      | parse_exp (table : fixity_table, e) = e
+      | parse_exp (table : Fixity.fixity Name.LabelMap.map, e) = e
 
-    fun parse_pat (table : fixity_table, 
+    fun parse_pat (table : Fixity.fixity Name.LabelMap.map, 
 		   is_nonconst_constr : Ast.symbol list -> bool, 
 		   pat_list : Ast.pat list) : Ast.pat list = 
       let
@@ -209,7 +197,7 @@ structure InfixParse
 					 app (fn p => (AstHelp.pp_pat p; print "\n")) pats;
 					 error "parse_pat on subcall yielded multiple patterns"))
 	val _ = debugdo (fn () => (print "entered parse_pat\n"))
-	val table = (app_lab, Fixity.infixleft 10) :: table  
+	val table = Name.LabelMap.insert(table,app_lab, Fixity.infixleft 10) 
 	fun apper (f,a) = Ast.AppPat{constr=f,argument=a}
 	val tupler = Ast.TuplePat
 	fun is_applicable (Ast.VarPat p) = is_nonconst_constr p
@@ -220,7 +208,7 @@ structure InfixParse
 	       | Ast.VarPat _  => pat
 	       | Ast.IntPat _  => pat
 	       | Ast.WordPat _  => pat
-	       |  Ast.StringPat _  => pat
+	       | Ast.StringPat _  => pat
 	       | Ast.CharPat _ => pat
 	       | Ast.RecordPat {def,flexibility} => Ast.RecordPat{def=map (fn (s,p) => (s,self_one p)) def,
 								   flexibility=flexibility}

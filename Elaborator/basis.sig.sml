@@ -4,6 +4,6 @@ signature BASIS =
   sig
 
     val empty_context : Il.context
-    val initial_context : unit -> Il.module
+    val initial_context : unit -> Il.context
 
   end

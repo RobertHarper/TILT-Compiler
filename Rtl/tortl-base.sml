@@ -102,6 +102,7 @@ struct
 			       convarmap = VarMap.empty,
 			       gcstate = [GC_INF]}
    val global_state : state ref = ref (make_state())
+   val unitname = ref ""
 
    fun stat_state ({convarmap,...} : state) = 
        (VarMap.appi (fn (v,_) => (Ppnil.pp_var v; print " ")) convarmap; print "\n\n")
@@ -516,12 +517,12 @@ struct
 
 
 
-       fun reset_global_state (exportlist,ngset) = 
+       fun reset_global_state (un,exportlist,ngset) = 
 	   let fun exp_adder((v,l),m) = (case VarMap.find(m,v) of
 					     NONE => VarMap.insert(m,v,[l])
 					   | SOME ls => VarMap.insert(m,v,l::ls))
 	       fun gl_adder(v,s) = VarSet.add(s,v)
-	   in  (
+	   in  (unitname := un;
 		global_state :=  make_state();
 		exports := (foldl exp_adder VarMap.empty exportlist);
 		globals := ngset;
@@ -530,7 +531,7 @@ struct
 		reset_mutable();
 		reset_state(false,(fresh_named_var "code", fresh_code_label "code")))
 	   end
-
+       fun get_unitname() = !unitname
        fun get_code() = map ! (rev (!il))
        fun get_proc() = 
 	let val (_,name) = !currentfun

@@ -559,19 +559,21 @@ structure IlUtil
 	  end
 
 
-      type subst = exp Name.PathMap.map * con Name.PathMap.map * mod Name.PathMap.map
-      val empty_subst = (Name.PathMap.empty, Name.PathMap.empty, Name.PathMap.empty)
-      fun subst_is_empty(e,c,m) = (Name.PathMap.numItems e = 0) andalso
-	                          (Name.PathMap.numItems c = 0) andalso
-				  (Name.PathMap.numItems m = 0)
+      type subst = exp Name.PathMap.map * con Name.PathMap.map * mod Name.PathMap.map * var Name.VarMap.map
+      val empty_subst = (Name.PathMap.empty, Name.PathMap.empty, Name.PathMap.empty, Name.VarMap.empty)
+      fun subst_is_empty(e,c,m,s) = (Name.PathMap.numItems e = 0) andalso
+	                            (Name.PathMap.numItems c = 0) andalso
+				    (Name.PathMap.numItems m = 0) andalso
+				    (Name.VarMap.numItems s = 0)
 
-      fun subst_add_exp((e,c,m), p, exp) = (Name.PathMap.insert(e, p, exp), c, m)
-      fun subst_add_con((e,c,m), p, con) = (e, Name.PathMap.insert(c, p, con), m)
-      fun subst_add_mod((e,c,m), p, module) = (e, c, Name.PathMap.insert(m, p, module))
+      fun subst_add_exp((e,c,m,s), p, exp) = (Name.PathMap.insert(e, p, exp), c, m,s)
+      fun subst_add_con((e,c,m,s), p, con) = (e, Name.PathMap.insert(c, p, con), m,s)
+      fun subst_add_mod((e,c,m,s), p, module) = (e, c, Name.PathMap.insert(m, p, module),s)
 
       fun subst_add_expvar(subst, v, e) = subst_add_exp(subst, (v,[]), e)
       fun subst_add_convar(subst, v, c) = subst_add_con(subst, (v,[]), c)
       fun subst_add_modvar(subst, v, m) = subst_add_mod(subst, (v,[]), m)
+      fun subst_add_sigvar((e,c,m,s), v, v') = (e, c, m, Name.VarMap.insert(s, v, v'))
 
       fun subst_add_exppath(subst, PATH p, e) = subst_add_exp(subst, p, e)
       fun subst_add_conpath(subst, PATH p, c) = subst_add_con(subst, p, c)
@@ -618,6 +620,12 @@ structure IlUtil
 		       else (case Name.PathMap.find(#3 subst,p) of
 				 NONE => NONE
 			       | SOME m => (count := (!count) + 1; SOME m)))
+	  fun sig_handler count (subst : subst) s =
+	      (case s of
+		   SIGNAT_VAR v => (case Name.VarMap.find(#4 subst,v) of
+					NONE => NONE
+				      | SOME v' => (count := (!count) + 1; SOME (SIGNAT_VAR v')))
+		 | _ => NONE)
 
 	  fun handlers count subst =
 	       STATE(default_bound,
@@ -625,7 +633,7 @@ structure IlUtil
 			exp_handler = exp_handler count subst,
 			con_handler = con_handler count subst,
 			mod_handler = mod_handler count subst,
-			sig_handler = default_sig_handler})
+			sig_handler = sig_handler count subst})
 	  fun wrap f_obj (obj,subst) = if (subst_is_empty subst)
 					   then obj
 				       else f_obj (handlers (ref 0) subst) obj
@@ -848,11 +856,7 @@ structure IlUtil
     val dt_str = "+O-X+D"
     val cluster_str = "+C"
 
-    fun is_open lab = 
-	let val str = label2name lab
-	    val c = String.sub(str,0)
-	in  (c = #"+" orelse c = #"-") andalso substring (open_str,str)
-	end
+    fun is_open lab = substring (open_str,label2name lab)
     fun is_nonexport lab =  substring (nonexport_str,label2name lab)
     fun is_eq lab = substring (eq_str,label2name lab)
     fun is_dt lab = substring (dt_str,label2name lab)
@@ -876,9 +880,9 @@ structure IlUtil
       let
 	val str = Name.label2name lab
 	val len = size str
-	fun loop n = if (n < len andalso 
+	fun loop n = if ((n+1) < len andalso 
 			(String.sub(str,n) = #"+" orelse
-			String.sub(str,n) = #"-"))
+			 String.sub(str,n) = #"-"))
 			then loop (n+2) else n
 	val start = loop 0
       in String.substring(str,start,len - start)

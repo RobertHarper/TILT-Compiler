@@ -460,7 +460,7 @@ structure Pat
 
 
       local
-	  val SOME(_,PHRASE_CLASS_EXP(_,actualtype,_,_)) = Context_Lookup'(context,casevar)
+	  val SOME(_,PHRASE_CLASS_EXP(_,actualtype,_,_)) = Context_Lookup_Var(context,casevar)
       in  val jopt = (case actualtype of
 			  CON_SUM{names,noncarriers,carrier,special} => special
 			| _ => NONE)
@@ -836,7 +836,7 @@ structure Pat
 				    val str = SCON(vector (CON_UINT W8,
 							   Array.fromList(map mapper (explode ss))))
 				    val string_eq_label = to_eq(symbol_label (Symbol.tycSymbol "string"))
-				    val string_eq = (case (Context_Lookup(context,string_eq_label)) of
+				    val string_eq = (case (Context_Lookup_Label(context,string_eq_label)) of
 							 SOME(_,PHRASE_CLASS_EXP(e,_,_,_)) => e
 						       | _ => error "string-equality undefined")
 				in  APP(string_eq, exp_tuple[VAR v, str])

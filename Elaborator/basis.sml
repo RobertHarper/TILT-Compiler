@@ -44,7 +44,7 @@ structure Basis
       val default_fixity_table = map (fn (str,f) => (symbol_label(varSymbol(str)), f)) table
     end
 
-    fun initial_context () : Il.module = 
+    fun initial_context () : Il.context =
       let
 	  val context = ref empty_context
 	  val entries = ref []
@@ -59,7 +59,7 @@ structure Basis
 	  fun mk_var str = fresh_named_var str
 
 	  (* ------------ Do the fixity ---------------- *)
-	  val _ = add_ce(CONTEXT_FIXITY default_fixity_table)
+	  val _ = map (fn lf => add_ce(CONTEXT_FIXITY lf)) default_fixity_table
 
 	  fun exp_entry (str,e) = 
 	      let val var = fresh_named_var str
@@ -394,8 +394,12 @@ structure Basis
 		     else ()
 	  end
 
-
-      in  (!context, rev (!entries))
+(*
+	  val _ = if (null (!entries))
+		      then ()
+		  else error "initial context has entries"
+*)
+      in  !context
       end
 
 

@@ -41,15 +41,15 @@ struct
 	    CON_TYVAR tyvar => (case (tyvar_deref tyvar) of
 				NONE => elab_error "unresolved type does not permit equailty"
 			      | SOME c => self (name,c))
-	  | CON_VAR v => (let val (type_label,pc) = (case Context_Lookup'(ctxt,v) of
-							 SOME p => p
-						       | _ => raise NoEqExp)
+	  | CON_VAR v => (let val SOME(type_label,pc) = Context_Lookup_Var(ctxt,v) 
 			      val eq_label = to_eq type_label
-			  in (case (Context_Lookup(ctxt,eq_label)) of
+			  in (case (Context_Lookup_Label(ctxt,eq_label)) of
 				  SOME(_,PHRASE_CLASS_EXP(e,_,_,_)) => (e, con_eqfun name)
 				| _ => (case pc of
 					    PHRASE_CLASS_CON(_,_,SOME c,_) => self(con,c)
-					  | _ => raise NoEqExp))
+					  | _ => (print "No eq expression available for CON_VAR "; pp_var v;
+						  print " .  Perhaps due to shadowing\n";
+						  raise NoEqExp)))
 			  end)
 	  | CON_OVAR ocon => self (name,CON_TYVAR (ocon_deref ocon))
 	  | CON_INT is => (ETAPRIM(eq_int is,[]), con_eqfun con)
@@ -180,11 +180,9 @@ struct
 				   | _ => raise NoEqExp
 			     end
 		       | CON_VAR v => 
-			     (let val type_label = (case (Context_Lookup'(ctxt,v)) of
-							SOME(l,_) => l
-						      | _ => raise NoEqExp)
+			     (let val SOME (type_label,_) = Context_Lookup_Var(ctxt,v)
 				  val eq_label = to_eq type_label
-			      in (case (Context_Lookup(ctxt,eq_label)) of
+			      in (case (Context_Lookup_Label(ctxt,eq_label)) of
 				      SOME(_,PHRASE_CLASS_MOD(m,_,_)) => m
 				    | _ => raise NoEqExp)
 			      end)

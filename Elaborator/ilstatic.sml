@@ -21,7 +21,7 @@ structure IlStatic
 
 
    fun reduce_sigvar(context,v) = 
-	(case (Context_Lookup'(context,v)) of
+	(case (Context_Lookup_Var(context,v)) of
 	     SOME(_,PHRASE_CLASS_SIG(v,s)) => s
 	   | SOME _ => (print "reduce_sigvar given SIGVAR = "; pp_var v;
 			print "in ctxt bound but not to signature: \n"; Ppil.pp_context context;
@@ -285,7 +285,7 @@ structure IlStatic
 
 	       val tyvar_ctxts = tyvar_getctxts tyvar
 	       val (ev,cv,mv) = con_free c
-	       fun var_bound ctxt v = (case Context_Lookup'(ctxt,v) of
+	       fun var_bound ctxt v = (case Context_Lookup_Var(ctxt,v) of
 					   SOME _ => true
 					 | _ => false)
 	       fun bounded ctxt = 
@@ -636,7 +636,7 @@ structure IlStatic
       (case con of
        (CON_TYVAR tv) => KIND_TUPLE 1 
      | (CON_VAR v) => 
-	   (case Context_Lookup'(ctxt,v) of
+	   (case Context_Lookup_Var(ctxt,v) of
 		SOME(_,PHRASE_CLASS_CON(_,k,_,_)) => k
 	      | SOME _ => error ("CON_VAR " ^ (var2string v) ^ " not bound to a con")
 	      | NONE => error ("CON_VAR " ^ (var2string v) ^ " not bound"))
@@ -717,7 +717,7 @@ structure IlStatic
       (case con of
        (CON_TYVAR tv) => KIND_TUPLE 1 
      | (CON_VAR v) => 
-	   (case Context_Lookup'(ctxt,v) of
+	   (case Context_Lookup_Var(ctxt,v) of
 		SOME(_,PHRASE_CLASS_CON(_,k,_,_)) => k
 	      | SOME _ => error ("CON_VAR " ^ (var2string v) ^ " not bound to a con")
 	      | NONE => error ("CON_VAR " ^ (var2string v) ^ " not bound"))
@@ -894,7 +894,7 @@ structure IlStatic
 				   | NONE => (va,con))
      | ETAPRIM (p,cs) => (true, etaize (IlPrimUtil.get_type' p cs))
      | ETAILPRIM (ip,cs) => (true, etaize(IlPrimUtil.get_iltype' ip cs))
-     | VAR v => (case Context_Lookup'(ctxt,v) of
+     | VAR v => (case Context_Lookup_Var(ctxt,v) of
 		     SOME(_,PHRASE_CLASS_EXP(_,c,_,_)) => (true,c)
 		   | SOME _ => let val str = Name.var2string v
 			       in  error ("VAR " ^ str ^ " looked up to a non-value")
@@ -1272,7 +1272,7 @@ structure IlStatic
    and GetModSig' (module, ctxt : context) : bool * signat =
      (case module of
        (MOD_VAR v) => 
-	   (case Context_Lookup'(ctxt,v) of
+	   (case Context_Lookup_Var(ctxt,v) of
 		SOME(_,PHRASE_CLASS_MOD(_,_,s)) => (true,s)
 	      | SOME _ => error ("MOD_VAR " ^ (Name.var2string v) ^ " bound to a non-module")
 	      | NONE => error ("MOD_VAR " ^ (Name.var2string v) ^ " not bound"))
@@ -1461,7 +1461,7 @@ structure IlStatic
 				    NONE => NONE
 				  | SOME c => ReduceAgain c)
 	    | CON_VAR v => 
-		   (case (Context_Lookup'(ctxt,v)) of
+		   (case (Context_Lookup_Var(ctxt,v)) of
 			SOME(_,PHRASE_CLASS_CON (_,_,SOME c,_)) => 
 			    ReduceAgainWith(c,PATH(v,[]))
 		      | SOME(_,PHRASE_CLASS_CON (_,_,NONE,_)) => NONE
@@ -1560,7 +1560,7 @@ structure IlStatic
 	 Decs_Valid(add_context_dec(ctxt,SelfifyDec ctxt a),rest)
 
      and Dec_Valid (ctxt : context, dec) = 
-	 let fun var_notin v  = (Context_Lookup'(ctxt,v); false) handle _ => true
+	 let fun var_notin v  = (Context_Lookup_Var(ctxt,v); false) handle _ => true
        in  (case dec of
 	      DEC_EXP(v,c,eopt,_) => 
 		  (var_notin v) andalso 

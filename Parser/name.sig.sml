@@ -50,13 +50,11 @@ signature NAME =
     val deconstruct_label : label -> int * string 
     val construct_label : int * string -> label
     val deconstruct_var : var -> int * string
-    val construct_var : int * string -> var
+    val construct_var : int * string -> bool *  var (* true if already in use *)
     val deconstruct_loc : loc -> int
     val construct_loc : int -> loc
     val deconstruct_tag : tag -> int * string
     val construct_tag : int * string -> tag
-    val update_var_counter : int -> unit
-    val update_label_counter : int -> unit
 
     (* Hash tables *)
     val mk_var_hash_table : (int * exn) -> (var, 'val) HashTable.hash_table

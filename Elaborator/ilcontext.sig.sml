@@ -14,7 +14,6 @@ signature ILCONTEXT =
 	type decs = Il.decs
 	type sdec = Il.sdec
 	type sdecs = Il.sdecs
-	type fixity_table = Il.fixity_table
 	type path = Il.path
 	type context_entry = Il.context_entry
 	type phrase_class = Il.phrase_class
@@ -26,7 +25,7 @@ signature ILCONTEXT =
 	val add_context_decs  : context * decs -> context
 	val add_context_sdec  : context * sdec -> context
 	val add_context_sdecs : context * sdecs -> context
-	val add_context_fixity : context * fixity_table -> context
+	val add_context_fixity : context * label * Fixity.fixity -> context
 	val add_context_overexp : context * label * var * (con * exp) list -> context
 	val add_context_entries : context * context_entry list -> context
 
@@ -39,13 +38,14 @@ signature ILCONTEXT =
 	val add_context_con  : context * label * var * kind * con option -> context
 	val add_context_con' : context *         var * kind * con option -> context
 
-	val plus_context : Il.context list -> Il.context
+	val sub_context  : Il.context * Il.context -> Il.partial_context  (* a - b *)
+	val plus_context : Il.context * Il.partial_context list -> Il.context
 
 	(* ---- These lookup functions don't perform selfification ---- *)		
-	val Context_Fixity  : context -> fixity_table
-	val Context_Lookup  : context * label -> (path * phrase_class) option
-	val Context_Lookup' : context * var   -> (label * phrase_class) option
-	val Context_Lookup_Path : context * path -> (label * phrase_class) option
-	val Context_Ordering : context -> path list
+	val Context_Fixity       : context -> Fixity.fixity Name.LabelMap.map
+	val Context_Lookup_Label : context * label -> (path * phrase_class) option
+	val Context_Lookup_Var   : context * var   -> (label * phrase_class) option
+	val Context_Lookup_Path  : context * path  -> (label * phrase_class) option
+	val Context_Ordering     : context -> path list
 
     end

@@ -23,22 +23,17 @@ structure LinkIl :> LINKIL  =
 	open Il IlUtil Ppil IlStatic Formatter
 	val error = fn s => Util.error "linkil.sml" s
 
-        type module = (Il.context * (Il.sbnd option * Il.context_entry) list)
 	val _ = Ppil.convar_display := Ppil.VALUE_ONLY
 
 	fun SelfifySdec ctxt (SDEC(l,dec)) = SDEC(l,SelfifyDec ctxt dec)
-	fun local_add_context_entries self_ctxt (acc_ctxt,entries) = 
-	    let fun folder (CONTEXT_SDEC sdec,(self_ctxt,acc_ctxt)) = 
-		    let val sdec = SelfifySdec self_ctxt sdec
-		    in  (IlContext.add_context_sdec(self_ctxt,sdec),
-			 IlContext.add_context_sdec(acc_ctxt,sdec))
+	fun local_add_context_entries (acc_ctxt,entries) = 
+	    let fun folder (CONTEXT_SDEC sdec,acc_ctxt) = 
+		    let val sdec = SelfifySdec acc_ctxt sdec
+		    in  IlContext.add_context_sdec(acc_ctxt,sdec)
 		    end
-		  | folder (ce,(self_ctxt,acc_ctxt)) = 
-		    let val self_ctxt = IlContext.add_context_entries(self_ctxt,[ce])
-			val acc_ctxt = IlContext.add_context_entries(acc_ctxt,[ce])
-		    in  (self_ctxt,acc_ctxt)
-		    end
-	    in  #2(foldl folder (self_ctxt,acc_ctxt) entries)
+		  | folder (ce,acc_ctxt) = 
+		        IlContext.add_context_entries(acc_ctxt,[ce])
+	    in  foldl folder acc_ctxt entries
 	    end
 
 	val empty_context = IlContext.empty_context
@@ -142,13 +137,7 @@ structure LinkIl :> LINKIL  =
 	fun initial_context() = 
 	  (case (!cached_initial_context) of
 	       SOME ctxt => ctxt
-	     | _ => let val (initial_context, sbnd_entries) = Basis.initial_context()
-(*
-			val entries = map #2 sbnd_entries
-			fun folder (entry,ctxt) = 
-			    IlContext.add_context_entries(ctxt,[IlStatic.SelfifyEntry ctxt entry])
-			val initial_context = foldl folder initial_context entries
- *)
+	     | _ => let val initial_context = Basis.initial_context()
 			val _ = cached_initial_context := (SOME initial_context)
 		    in  initial_context
 		    end)
@@ -158,29 +147,30 @@ structure LinkIl :> LINKIL  =
 	    case xspec(base_ctxt, fp, specs) of
 		SOME sdecs => 
 		    let val ctxts = map CONTEXT_SDEC sdecs
-			val ctxt = local_add_context_entries base_ctxt (empty_context,ctxts) 
-		    in  SOME ctxt
+			val new_ctxt = local_add_context_entries (base_ctxt,ctxts) 
+			val partial_ctxt = IlContext.sub_context(new_ctxt,base_ctxt)
+		    in  SOME partial_ctxt
 		    end
 	      | NONE => NONE
 
 	fun elab_dec (base_ctxt, fp, dec) = 
-	    case xdec(base_ctxt,fp,dec) 
-		of SOME sbnd_ctxtent_list => 
+	    case xdec(base_ctxt,fp,dec) of
+		SOME sbnd_ctxtent_list => 
 		    let val sbnds = List.mapPartial #1 sbnd_ctxtent_list
 			val ctxtents = map #2 sbnd_ctxtent_list
-			val ctxt = local_add_context_entries base_ctxt (empty_context,ctxtents) 
+			val new_ctxt = local_add_context_entries (base_ctxt,ctxtents) 
 			val _ = if (!show_hil)
-				    then  (print "SBNDS:\n"; Ppil.pp_sbnds sbnds;
+				    then  (
+					   print "\nCONTEXT:\n";
+					   Ppil.pp_context base_ctxt;
+					   print "SBNDS:\n"; Ppil.pp_sbnds sbnds;
 					   print "\nENTRIES:\n"; 
 					   (app (fn e => (Ppil.pp_context_entry e; 
 							  print "\n")) ctxtents);
-(*
-					   print "\nCONTEXT:\n";
-					   Ppil.pp_context base_ctxt;
-*)
 					   print "\n")
 				else ()
-		    in  SOME(ctxt,sbnd_ctxtent_list)
+			val partial_ctxt = IlContext.sub_context(new_ctxt, base_ctxt)
+		    in  SOME(base_ctxt,partial_ctxt,sbnd_ctxtent_list)
 		    end
 	      | NONE => NONE
 

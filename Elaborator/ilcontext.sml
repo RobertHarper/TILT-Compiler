@@ -14,7 +14,6 @@ struct
     type tag = Name.tag
     type sdec = Il.sdec
     type sdecs = Il.sdecs
-    type fixity_table = Il.fixity_table
     type path = Il.path
     type context_entry = Il.context_entry
 	
@@ -29,7 +28,7 @@ struct
     (* --------------- BASICS ------------------------------- *)
     type var_seq_map = (label * phrase_class) VarMap.map * var list
     fun var_seq_insert ((m,s),v,value) = (VarMap.insert(m,v,value),v::s)
-    val empty_context = CONTEXT{fixityList = [],
+    val empty_context = CONTEXT{fixityMap = LabelMap.empty,
 				labelMap = LabelMap.empty,
 				pathMap = PathMap.empty,
 				ordering = []}
@@ -42,26 +41,26 @@ struct
     type phrase_class_p = path * phrase_class
 
 
-    fun Context_Fixity (CONTEXT {fixityList,...}) = fixityList
+    fun Context_Fixity (CONTEXT {fixityMap,...}) = fixityMap
     fun Context_Ordering (CONTEXT {ordering,...}) = rev ordering
-    fun Context_Lookup  (CONTEXT {labelMap, ...}, lab) = Name.LabelMap.find(labelMap, lab)
-    fun Context_Lookup_Path (CONTEXT {pathMap, ...}, PATH path) = Name.PathMap.find(pathMap, path)
-    fun Context_Lookup' (CONTEXT {pathMap, ...}, v) = Name.PathMap.find(pathMap, (v,[]))
+    fun Context_Lookup_Label (CONTEXT {labelMap, ...}, lab) = LabelMap.find(labelMap, lab)
+    fun Context_Lookup_Path (CONTEXT {pathMap, ...}, PATH path) = PathMap.find(pathMap, path)
+    fun Context_Lookup_Var (CONTEXT {pathMap, ...}, v) = PathMap.find(pathMap, (v,[]))
 
 
     (* --------------------- EXTENDERS ---------------------------------------- *)
-    fun add_context_fixity(CONTEXT {fixityList, labelMap, pathMap, ordering}, f) = 
-	CONTEXT({fixityList = f @ fixityList,
+    fun add_context_fixity(CONTEXT {fixityMap, labelMap, pathMap, ordering}, label, fixity) = 
+	CONTEXT({fixityMap = LabelMap.insert(fixityMap,label,fixity),
 		 labelMap = labelMap,
 		 pathMap = pathMap,
 		 ordering = ordering})
 
     fun reduce_signat ctxt (SIGNAT_VAR v) = 
-	(case (Context_Lookup'(ctxt,v)) of
+	(case (Context_Lookup_Var(ctxt,v)) of
 	     SOME(_,PHRASE_CLASS_SIG(v,s)) => s
 	   | _ => error "reduce_signat found unbound sigvar")
       | reduce_signat ctxt (SIGNAT_OF (PATH(v,labs))) = 
-	  let val s = (case Context_Lookup'(ctxt,v) of
+	  let val s = (case Context_Lookup_Var(ctxt,v) of
 			   SOME(_,PHRASE_CLASS_MOD(_,_,s)) => s
 			 | SOME _ => error ("SIGNAT_OF(" ^ (Name.var2string v) ^ ",...) unbound"))
 	      fun find l [] = error "cannot find label in SIGNAT_OF"
@@ -75,20 +74,36 @@ struct
 	  in  foldl project s labs
 	  end
 
+    fun shadow (labelMap, pathMap, lab) = 
+	(case (LabelMap.find(labelMap,lab) : (path * phrase_class) option) of
+	     NONE => (labelMap, pathMap)
+	   | SOME (PATH p,_) => 
+		 let val newlab = fresh_internal_label(label2name lab)
+		 in  (case PathMap.find(pathMap,p) of
+			  NONE => error "inconsistent context"
+			| SOME (_, pc) => 
+			      let val pathMap = PathMap.insert(pathMap,p,(newlab, pc))
+				  val (labelMap,_) = LabelMap.remove(labelMap, lab)
+				  val labelMap = LabelMap.insert(labelMap, newlab,(PATH p, pc))
+			      in  (labelMap, pathMap)
+			      end)
+		 end)
+	     
     fun add_sdec(ctxt, pathopt, sdec as (SDEC(l,dec))) = 
 	let fun mk_path v = (case pathopt of
 				 NONE => PATH(v,[])
 			       | SOME p => join_path_labels(p,[l]))
-	    fun help(CONTEXT {fixityList, labelMap, pathMap, ordering},
+	    fun help(CONTEXT {fixityMap, labelMap, pathMap, ordering},
 		     v, from_path, pc_maker) =
 		let val path = mk_path v
 		    val obj = from_path path
 		    val pc = pc_maker obj
 		    val PATH vpath = path
-		    val labelMap = Name.LabelMap.insert(labelMap,l,(path,pc))
-		    val pathMap = Name.PathMap.insert(pathMap,vpath,(l,pc))
+		    val (labelMap, pathMap) = shadow(labelMap, pathMap, l)
+		    val labelMap = LabelMap.insert(labelMap,l,(path,pc))
+		    val pathMap = PathMap.insert(pathMap,vpath,(l,pc))
 		    val ordering = path :: ordering
-		in CONTEXT{fixityList = fixityList,
+		in CONTEXT{fixityMap = fixityMap,
 			   labelMap = labelMap,
 			   pathMap = pathMap,
 			   ordering = ordering}
@@ -121,21 +136,23 @@ struct
 
 
 
-    fun add_context_sig(CONTEXT {fixityList, labelMap, pathMap, ordering},
+    fun add_context_sig(CONTEXT {fixityMap, labelMap, pathMap, ordering},
 			l, v, signat) = 
 	let val pc = PHRASE_CLASS_SIG(v,signat)
 	    val path = (v,[])
-	in  CONTEXT({fixityList = fixityList,
+	    val (labelMap, pathMap) = shadow(labelMap, pathMap, l)
+	in  CONTEXT({fixityMap = fixityMap,
 		     labelMap = Name.LabelMap.insert(labelMap,l,(PATH path, pc)),
 		     pathMap = Name.PathMap.insert(pathMap,path,(l, pc)),
 		     ordering = (PATH path)::ordering})
 	end
 
-    fun add_context_overexp(CONTEXT {fixityList, labelMap, pathMap, ordering},
+    fun add_context_overexp(CONTEXT {fixityMap, labelMap, pathMap, ordering},
 			    l, v, celist) = 
 	let val pc = PHRASE_CLASS_OVEREXP celist
 	    val path = (v,[])
-	in  CONTEXT({fixityList = fixityList,
+	    val (labelMap, pathMap) = shadow(labelMap, pathMap, l)
+	in  CONTEXT({fixityMap = fixityMap,
 		     labelMap = Name.LabelMap.insert(labelMap,l,(PATH path, pc)),
 		     pathMap = Name.PathMap.insert(pathMap,path,(l,pc)),
 		     ordering = (PATH path)::ordering})
@@ -143,7 +160,7 @@ struct
 
     fun add_context_entry(ctxt, entry) = 
 	(case entry of
-	     CONTEXT_FIXITY f => add_context_fixity(ctxt,f)
+	     CONTEXT_FIXITY (l,f) => add_context_fixity(ctxt,l,f)
 	   | CONTEXT_SDEC sdec => add_sdec(ctxt,NONE,sdec)
 	   | CONTEXT_SIGNAT (l,v,s) => add_context_sig(ctxt,l,v,s)
 	   | CONTEXT_OVEREXP(l,v,celist) => add_context_overexp(ctxt,l,v,celist))
@@ -174,16 +191,17 @@ struct
 
 
 
-    (* faster when first context is larger than second *)
-    fun plus (ctxt1 as CONTEXT{fixityList = fl1, labelMap = lm1, pathMap = pm1, ordering = ord1},
-	      ctxt2 as CONTEXT{fixityList = fl2, labelMap = lm2, pathMap = pm2, ordering = ord2}) =
+    (* adding the partial context to the context *)
+    fun plus (ctxt as CONTEXT{fixityMap = fl1, labelMap = lm1, pathMap = pm1, ordering = ord1},
+	      (CONTEXT{fixityMap = fl2, labelMap = lm2, pathMap = pm2, ordering = ord2}, unresolved),
+	      used) =
 	let 
-	    fun inCtxt(p,ctxt) = (case (Context_Lookup'(ctxt,p)) of
-				      NONE => false
-				    | SOME _ => true)
-	    fun inOrig p = inCtxt(p,ctxt1)
 	    fun folder(PATH p,(lm,pm,ord,subst)) =
-		let val SOME(lab,pc) = Name.PathMap.find(pm2, p)
+		let val (lab,pc) = (case Name.PathMap.find(pm2, p) of
+					   SOME lab_pc => lab_pc
+					 | NONE => (print "missing path ";
+						    pp_path (PATH p); print "\n";
+						    error "missing path"))
 		    val in_current = (case (Name.PathMap.find(pm, p)) of
 					  NONE => false
 					| SOME _ => true)
@@ -195,6 +213,7 @@ struct
 				     val subst = subst_add_expvar(subst,v,VAR v')
 				     val subst = subst_add_convar(subst,v,CON_VAR v')
 				     val subst = subst_add_modvar(subst,v,MOD_VAR v')
+				     val subst = subst_add_sigvar(subst,v,v')
 				 in  (p',subst)
 				 end
 			else (p, subst)
@@ -229,23 +248,104 @@ struct
 								    exp_subst(e,subst))) celist
 				 in  PHRASE_CLASS_OVEREXP celist
 				 end)
-		    val lm = Name.LabelMap.insert(lm,lab,(PATH p,pc))
+		    val lm = LabelMap.insert(lm,lab,(PATH p,pc))
 		    val pm = Name.PathMap.insert(pm,p,(lab,pc))
 		    val ord = (PATH p) :: ord
 		in (lm, pm, ord, subst)
 		end
-	    val fixityList = fl1 @ fl2
+	    val fixityMap = LabelMap.unionWith (fn (first,second) => second) (fl1,fl2)
+            (* The initial substitution comes from unresolved *)
+	    val subst = Name.VarMap.foldli 
+		(fn (v,l,subst) => 
+		 (case Name.LabelMap.find(lm1,l) of
+		      SOME (PATH(v',[]), pc) =>
+			  if (eq_var (v,v'))
+			      then subst
+			  else (case pc of
+				    PHRASE_CLASS_EXP _ => subst_add_expvar(subst,v,VAR v')
+				  | PHRASE_CLASS_CON _ => subst_add_convar(subst,v,CON_VAR v')
+				  | PHRASE_CLASS_MOD _ => subst_add_modvar(subst,v,MOD_VAR v')
+				  | PHRASE_CLASS_SIG _ => subst_add_sigvar(subst,v,v')
+				  | PHRASE_CLASS_OVEREXP _ => subst_add_expvar(subst,v,VAR v'))
+		    | _ => error ("add_context could not resolve " ^ (Name.label2name l))))
+		 empty_subst unresolved
 	    (* use foldr since ord's are backwards *)
-	    val (labelMap,pathMap,ordering,_) = foldr folder (lm1,pm1,ord1,empty_subst) ord2
-	in  CONTEXT{fixityList = fixityList,
+	    val (labelMap,pathMap,ordering,_) = foldr folder (lm1,pm1,ord1,subst) ord2
+	in  (used,
+	     CONTEXT{fixityMap = fixityMap,
 		    labelMap = labelMap,
 		    pathMap = pathMap,
-		    ordering = ordering}
+		    ordering = ordering})
 	end 
-    
-      fun plus_context [] = empty_context
-	| plus_context [ctxt] = ctxt
-	| plus_context (ctxt1::ctxt2::rest) = plus_context((plus(ctxt1,ctxt2)) :: rest)
+
+      fun plus_context (ctxt, partial_ctxts) = 
+	  let fun loop (ctxt,[],used) = ctxt
+		| loop (ctxt,pctxt::rest,used) = 
+	            let val (used,ctxt) = plus(ctxt,pctxt,used)
+		    in  loop (ctxt, rest, used)
+		    end
+	  in  loop (ctxt,partial_ctxts,Name.VarSet.empty)
+	  end
+
+(*
+      fun check_context (CONTEXT{fixityMap, labelMap, pathMap, ordering}) = 
+	  let val _ = (Name.PathMap.appi 
+		       (fn (p,(l,_)) => 
+			    (case Name.LabelMap.find(labelMap,l) of
+				 NONE => error "check_context: missing label in pathmap"
+			       | SOME (p',_) => if (eq_path(PATH p,p'))
+						    then ()
+						else (print "check_context: mismatch path: ";
+						      pp_path (PATH p); print " != ";
+						      pp_path p'; print "\n";
+						      error "check_context: mismatch path")))
+		       pathMap)
+	      val _ = (Name.LabelMap.appi 
+		       (fn (l,(PATH p,_)) => 
+			    (case Name.PathMap.find(pathMap,p) of
+				 NONE => error "check_context: missing path in labelmap"
+			       | SOME (l',_) => if (eq_label(l,l'))
+						    then ()
+						else error "check_context: mismatch label"))
+		       labelMap)
+	  in  ()
+	  end
+*)
+
+      fun sub_context (bigger : Il.context, smaller : Il.context) : Il.partial_context = 
+	  let 
+(*	      val _ = check_context bigger 
+	      handle e => (print "bigger context failed consistency: ";
+			   Ppil.pp_context bigger;
+			   raise e)
+	      val _ = check_context smaller
+	      handle e => (print "smaller context failed consistency: ";
+			   Ppil.pp_context smaller;
+			   raise e)
+*)
+	      val CONTEXT{fixityMap=f1, labelMap=l1, pathMap=p1, ordering=o1} = bigger
+	      val CONTEXT{fixityMap=f2, labelMap=l2, pathMap=p2, ordering=o2} = smaller
+	      val f3 = LabelMap.filteri (fn (l1,_) => (case LabelMap.find(f2,l1) of
+							   NONE => true
+							 | SOME _ => false)) f1
+	      val o3 = List.filter (fn PATH vpath => (case Name.PathMap.find(p2,vpath) of
+							  NONE => true
+							| SOME _ => false)) o1
+	      val l3 = Name.LabelMap.filteri (fn (l,_) => 
+					      (case Name.LabelMap.find(l2,l) of
+						   NONE => true
+						 | SOME _ => false)) l1
+	      val p3 = Name.PathMap.filteri (fn (p,_) => 
+					     (case Name.PathMap.find(p2,p) of
+						  NONE => true
+						| SOME _ => false)) p1
+	      val diff = CONTEXT{fixityMap = f3, labelMap = l3, pathMap = p3, ordering = o3} 
+	      (* Could be more clever and figure out only what is needed *)
+	      val unresolved = Name.PathMap.foldli 
+		                  (fn ((v,[]),(l,_),vm) => Name.VarMap.insert(vm,v,l)
+				    | (_,_,vm) => vm) Name.VarMap.empty p2
+	  in  (diff, unresolved)
+	  end
 
 end
 

@@ -23,62 +23,57 @@ end
 
 signature HELP = 
     sig
-	structure StringSet : ORD_SET where type Key.ord_key = string
-	type filebase = string
-	type unitname = string
 	val base2int : string -> string
 	val base2o : string -> string
 	val base2s : string -> string
 	val base2sml : string -> string
 	val base2ui : string -> string
 	val base2uo : string -> string
-	val cache_context : int ref
 	val chat : string -> unit
 	val chat_ref : bool ref
 	val chat_strings : int -> string list -> int
+	    
+	val showTime : string -> unit
+	val reshowTimes : unit -> unit
+    end
 
-	val forget_stat : string -> unit
+signature FILECACHE = 
+    sig
+	type internal
+	val flushAll : unit -> unit
+	val flushSome : string list -> unit
 	val exists : string -> bool
 	val modTime : string -> Time.time
-
-	val getContext : string list -> LinkIl.context
-	val writeContext : string * Il.context -> unit
-	val get_base : string -> string
-	val get_import_direct : string -> string list
-	val get_import_transitive : string -> string list
-	val get_position : string -> int
-	val get_ui_crc : string -> Crc.crc
-	val parse_depend : string -> (string -> string list) -> string -> string list
-
-	val setMapping : bool * string -> unit  (* true indicates master *)
-	val list_units : unit -> string list
-	val stat_each_file : bool ref
-	val stop_early_compiling_sml_to_ui : bool ref
-
-	(* Given a list of units, divide into 3 groups: WAITING, READY, PENDING, DONE.
-	   Units are initially WAITING if they have imports and READY if they have none.
-	   When a unit is marked DONE explicitly, more units will become READY. *)
-	val partition : string list -> string list * string list * string list * string list
-	val markPending : string -> unit
-	val markDone  : string -> unit
-  end
+	val size : string -> int
+	val read : string -> bool * internal    (* Was it cached? *) 
+	val write : string * internal -> bool   (* Did we write?  *)
+	val crc : string -> Crc.crc
+	val tick : unit -> unit
+    end 
 
 signature SLAVE = 
 sig
+    datatype result = WORK of string | WAIT | READY
     val slaveTest : unit -> unit
     val setup : unit -> unit
-    val once : unit -> bool      (* true indicates some work was done *)
-    val run : unit -> unit
+    val step : unit -> result
+    val run : unit -> unit       (* run slave repeatedly and restart on termination *)
 end
 
 signature MASTER = 
 sig
     type state
     val masterTest : unit -> unit
-    val once : string * string list -> string list * state * (state -> bool * state option)
-	                                           (* true indicates all available slaves were utilized *)
-    val run : string * string list -> string list  (* Takes the mapfile and a list of units that are desired,
-						        returning a list of units that are required *)
+    (* Takes the mapfile, a list of units that are desired,
+       and a name of the executable.  Generates the executable
+       and compiles the necessart units. *)
+    val once : string * string list * string option -> 
+	{setup : unit -> state,
+	 step : state -> bool * state option,  	  (* true indicates all available slaves were utilized *)
+	 complete : unit -> unit}
+    val run : string * string list * string option -> unit 
+    val graph : string -> unit
+    val purge : string -> unit
 end
 
 signature MANAGER = 

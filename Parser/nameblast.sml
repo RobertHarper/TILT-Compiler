@@ -3,14 +3,19 @@
 structure NameBlast :> NAMEBLAST =
   struct
 
-    structure Util = Util
     open Util
     open Name
     open Blaster
-
     val error = fn s => error "nameblast.sml" s
 
-	
+    val varMap = ref (Name.VarMap.empty : Name.var Name.VarMap.map)
+    fun resetVarMap() = varMap := Name.VarMap.empty
+    fun addMap(v,v') = (case (Name.VarMap.find(!varMap,v)) of
+			    NONE => varMap := (Name.VarMap.insert(!varMap,v,v'))
+			  | SOME _ => (error "addMap called on variable already in map"))
+    fun lookupMap v = Name.VarMap.find(!varMap,v)
+
+
     fun blastOutVar os v =
 	let val (n,str) = deconstruct_var v
 	in  blastOutInt os n
@@ -18,8 +23,22 @@ structure NameBlast :> NAMEBLAST =
 
     fun blastInVar is = 
 	let val n = blastInInt is
-	    val _ = update_var_counter n
-	in  construct_var(n, "")
+	    val (inUse, v) = construct_var(n, "")
+	in  (case lookupMap v of
+		 SOME v' => v'
+	       | NONE => let val v' = if inUse then Name.derived_var v else v
+			     val _ = addMap(v,v')
+(*
+			     val _ = if (eq_var(v,v'))
+					 then ()
+				     else (print "blastInVar alpha-varying: ";
+					   print (Name.var2string v); 
+					   print "  -> "; 
+					   print (Name.var2string v'); 
+					   print "\n")
+*)
+			 in  v'
+			 end)
 	end
     
     fun blastOutTag os t =
@@ -28,10 +47,8 @@ structure NameBlast :> NAMEBLAST =
 	     blastOutString os str)
 	end
 
-
     fun blastInTag is = 
 	let val n = blastInInt is
-	    val _ = update_label_counter n
 	    val str = blastInString is
 	in  construct_tag(n, str)
 	end
@@ -44,7 +61,6 @@ structure NameBlast :> NAMEBLAST =
 
     fun blastInLabel is = 
 	let val n = blastInInt is
-	    val _ = update_label_counter n
 	    val str = blastInString is
 	in  construct_label(n, str)
 	end

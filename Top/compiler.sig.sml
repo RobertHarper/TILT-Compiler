@@ -1,4 +1,4 @@
-(*$import Prelude *)
+(*$import Prelude Il *)
 (* Abstract view of the compiler - from HIL and down; to be used by
  * the separate compilation system. *)
 
@@ -16,7 +16,7 @@ signature COMPILER =
    val uptoPhasesplit : bool ref
    val uptoRtl : bool ref
 
-   val compile : context * string * (sbnd option * context_entry) list * context -> string
+   val compile : string * string * Il.module -> string  (* unitName, fileBase *)
 
    (* compile(ctxt, unitName, sbnds, ctxt') compiles sbnds to an obj file `unitName.platform.o'. 
     * ctxt is the context in which the sbnds

@@ -19,7 +19,6 @@ structure Il :> IL =
     datatype path = PATH of var * labels
     datatype arrow = TOTAL | PARTIAL
 
-    type fixity_table = (label * Fixity.fixity) list 
 
     datatype exp = OVEREXP of con * bool * exp Util.oneshot (* type, valuable, body *)
                  | SCON    of value
@@ -116,13 +115,13 @@ structure Il :> IL =
     and context_entry = 
 	CONTEXT_SDEC   of sdec
       | CONTEXT_SIGNAT of label * var * signat
-      | CONTEXT_FIXITY of fixity_table
+      | CONTEXT_FIXITY of label * Fixity.fixity
       | CONTEXT_OVEREXP of label * var * (con * exp) list
 
-    and context = CONTEXT of  {fixityList : fixity_table,
-			       labelMap : (path * phrase_class) Name.LabelMap.map,
-			       pathMap : (label * phrase_class) Name.PathMap.map,
-			       ordering : path list}
+    and context = CONTEXT of  {fixityMap : Fixity.fixity Name.LabelMap.map,
+			       pathMap  : (label * phrase_class) Name.PathMap.map,
+			       ordering : path list,
+			       labelMap : (path * phrase_class) Name.LabelMap.map}
 
     and phrase_class = PHRASE_CLASS_EXP     of exp * con * exp option * bool
                      | PHRASE_CLASS_CON     of con * kind * con option * bool
@@ -137,6 +136,7 @@ structure Il :> IL =
     type sdecs = sdec list
     type sbnds = sbnd list
 
-    type module = context * (sbnd option * context_entry) list
+    type partial_context = context * label Name.VarMap.map  (* A context with free variables *)
+    type module = context * partial_context * (sbnd option * context_entry) list
 
 end

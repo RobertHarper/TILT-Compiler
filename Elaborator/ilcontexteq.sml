@@ -5,14 +5,34 @@ structure IlContextEq
     :> ILCONTEXTEQ =
 struct
 
+    val error = fn str => Util.error "ilcontexteq.sml" str
     val debug = Stats.ff("IlcontexteqDebug")
     val blast_debug = Stats.ff("BlastDebug")
     val useOldBlast = ref false
 
+    (* --- State is kept in this module so avoid excessive parameter passing --- *)
     val cur_out = ref (NONE : BinIO.outstream option)
     val cur_in = ref (NONE : BinIO.instream option)
     fun curOut() = valOf(!cur_out)
     fun curIn() = valOf(!cur_in)
+
+
+    fun exportOut f os arg =
+	let val _ = cur_out := SOME os
+	    val _ = NameBlast.resetVarMap()
+	    val res = f arg
+	    val _ = cur_out := NONE
+	    val _ = NameBlast.resetVarMap()
+	in  res
+	end
+    fun exportIn f is arg =
+	let val _ = cur_in := SOME is
+	    val _ = NameBlast.resetVarMap()
+	    val res = f arg
+	    val _ = cur_in := NONE
+	    val _ = NameBlast.resetVarMap()
+	in  res
+	end
 
     open Util
     open IlContext
@@ -723,42 +743,56 @@ struct
 		 in  Fixity.INfix (m,n)
 		 end
 
-	fun blastOutFixityTable ft = 
-	    blastOutList (blastOutPair blastOutLabel blastOutFixity) ft
-	fun blastInFixityTable () = 
-	    blastInList (fn() => blastInPair blastInLabel blastInFixity) 
+	fun blastOutFixityMap fm = 
+	    NameBlast.blastOutLabelmap (curOut()) (fn _ => blastOutFixity) fm
+	fun blastInFixityMap () = 
+	    NameBlast.blastInLabelmap (curIn()) (fn _ => blastInFixity())
 
 
-	fun blastOutLabelMap label_list = 
-	    NameBlast.blastOutLabelmap (curOut()) (fn _ => blastOutPair blastOutPath blastOutPC) label_list
-	fun blastInLabelMap () = 
-	    NameBlast.blastInLabelmap (curIn()) (fn _ => blastInPair blastInPath blastInPC)
-
-	fun blastOutPathMap pathMap =
-	    (NameBlast.blastOutPathmap (curOut()) (fn _ => blastOutPair blastOutLabel blastOutPC) pathMap)
-
+	fun blastOutPathMap label_list = 
+	    NameBlast.blastOutPathmap (curOut()) (fn _ => blastOutPair blastOutLabel blastOutPC) label_list
 	fun blastInPathMap () = 
 	    NameBlast.blastInPathmap (curIn()) (fn _ => blastInPair blastInLabel blastInPC)
 
-    fun blastOutContext os (CONTEXT {fixityList, labelMap, pathMap, ordering}) = 
-	(cur_out := (SOME os);
-	 blastOutFixityTable fixityList;
-	 blastOutLabelMap labelMap;
+	fun reconstructLabelMap pathMap = 
+	    let fun folder(p,(l,pc),pmap) = Name.LabelMap.insert(pmap,l,(PATH p,pc))
+	    in  Name.PathMap.foldli folder Name.LabelMap.empty pathMap 
+	    end
+
+	fun blastOutUnresolved unresolved = 
+	    NameBlast.blastOutVarmap (curOut()) (fn _ => blastOutLabel) unresolved
+
+	fun blastInUnresolved () : Name.label Name.VarMap.map =
+	    NameBlast.blastInVarmap (curIn()) (fn _ => blastInLabel())
+
+    fun blastOutContext (CONTEXT {fixityMap, labelMap, pathMap, ordering}) = 
+	(blastOutFixityMap fixityMap;
 	 blastOutPathMap pathMap;
 	 blastOutList blastOutPath ordering)
 
-    fun blastInContext is = 
-	let val _ = cur_in := (SOME is)
-	    val fixityList = blastInFixityTable ()
-	    val labelMap = blastInLabelMap ()
+    fun blastInContext () = 
+	let val fixityMap = blastInFixityMap ()
 	    val pathMap = blastInPathMap ()
 	    val ordering = blastInList blastInPath
-	in CONTEXT {fixityList = fixityList, labelMap = labelMap,
+	    val labelMap = reconstructLabelMap pathMap
+	in CONTEXT {fixityMap = fixityMap, labelMap = labelMap,
 		    pathMap = pathMap, ordering = ordering}
 	end
 
+    fun blastOutPartialContext (ctxt, unresolved) = 
+	(blastOutContext ctxt;
+	 blastOutUnresolved unresolved)
 
+    fun blastInPartialContext () = 
+	let val ctxt = blastInContext()
+	    val unresolved = blastInUnresolved()
+	in  (ctxt, unresolved)
+	end
 
+    val blastOutContext = exportOut blastOutContext
+    val blastOutPartialContext = exportOut blastOutPartialContext
+    val blastInContext = fn (is : BinIO.instream) => exportIn blastInContext is ()
+    val blastInPartialContext = fn (is : BinIO.instream) => exportIn blastInPartialContext is ()
 
 	(* alpha-conversion () necessary when checking contexts for
 	 * equality.  This () done by explicitly maintaining a `var
@@ -800,21 +834,31 @@ struct
 						       Ppil.pp_var v'; print "\n")) vm
 	    end
 
+	fun extend_vm_unresolved (ur, ur' : label Name.VarMap.map, vm, vlist) : vm * var list =
+	    let val reverse = Name.VarMap.foldli 
+		                   (fn (v,l,lm) => Name.LabelMap.insert(lm,l,v)) 
+		                   Name.LabelMap.empty ur'
+		fun folder (v, l, (vm, vlist)) =
+		      case Name.LabelMap.find(reverse,l) of
+			   SOME v' => (VM.add(v,v',vm), v :: vlist)
+			 | NONE => (print "label "; Ppil.pp_label l;
+				    print " not found in ur'\n"; 
+				    raise NOT_EQUAL)
+	    in  Name.VarMap.foldli folder (vm, vlist) ur
+	    end
 
-	fun extend_vm_context (c : context, c' : context, vm) : vm * var list =
+	fun extend_vm_context (c : context, c' : context, vm, vlist) : vm * var list =
 	    let val ord = Context_Ordering c
 		val ord' = Context_Ordering c'
 		fun getVar(PATH(v,[])) = SOME v
 		  | getVar _ = NONE
 		val vlist = List.mapPartial getVar ord
 		val vlist' = List.mapPartial getVar ord'
-		fun mapper ctxt v = (case Context_Lookup'(ctxt,v) of
-				    SOME (l,_) => (* () this too conservative? *)
-					if (IlUtil.is_nonexport l)
-					    then NONE else SOME(l, v)
-				  | NONE => (print "extend_vm_context: could not find var = ";
-					     Ppil.pp_var v; print "\n";
-					     error "extend_vm_context"))
+		fun mapper ctxt v = (case Context_Lookup_Var(ctxt,v) of
+					 SOME (l,_) => SOME(l, v)
+				       | NONE => (print "extend_vm_context: could not find var = ";
+						  Ppil.pp_var v; print "\n";
+						  error "extend_vm_context"))
 		val lvlist = List.mapPartial (mapper c) vlist
 		val lvlist' = List.mapPartial (mapper c') vlist'
 
@@ -822,13 +866,14 @@ struct
 			    then (print "extend_vm_contxt: lvlist length not equal\n";
 				  raise NOT_EQUAL)
 			else ()
-		fun folder ((l,v), vm) =
-		      case Context_Lookup(c',l) of
-			   SOME(PATH (v',_),_) => VM.add(v,v',vm)
+		fun folder ((l,v), (vm,vlist)) =
+		      case Context_Lookup_Label(c',l) of
+			   SOME(PATH (v',_),_) => (VM.add(v,v',vm), v::vlist)
 			 | NONE => (print "label "; Ppil.pp_label l;
 				    print " not found in c'\n"; 
 				    raise NOT_EQUAL)
-	    in (foldr folder vm lvlist, map #2 lvlist)
+	       (* Note use of foldr *)
+	    in foldr folder (vm,vlist) lvlist
 	    end
 
 	fun sdecs_lookup([],l) = NONE
@@ -1130,7 +1175,7 @@ struct
 				  print "\n\n")
 			else ()
 			val res = 
-			    (case (Context_Lookup'(c,v), Context_Lookup'(c',VM.lookup vm v)) of
+			    (case (Context_Lookup_Var(c,v), Context_Lookup_Var(c',VM.lookup vm v)) of
 				 (SOME (_, pc), SOME (_, pc')) => eq_pc(vm,pc,pc')
 			       | _ => false)
 				handle e => (diag "eq_cntxt caught exception\n";
@@ -1144,20 +1189,22 @@ struct
 	    in  res
 	    end	    
 
-	fun eq_context (c: context, c': context) : bool =
+	fun eq_partial_context ((c,u): partial_context, (c',u'): partial_context) : bool =
 	    let 
-(*
-		val _ = (print "context c = \n";
-			 Ppil.pp_context c; 
-			 print "\n";
-			 print "context c' = \n";
-			 Ppil.pp_context c'; 
-			 print "\n")
-*)
-		val (vm,vlist) = extend_vm_context(c,c',VM.empty)
-(*		val _ = (print "vm = "; VM.show_vm vm; print "\n") *)
+		val (vm,vlist) = extend_vm_unresolved(u,u',VM.empty,[])
+		val (vm,vlist) = extend_vm_context(c,c',vm,vlist)
+(*		val _ = (print "vm = "; VM.show_vm vm; print "\n") 
+		val _ =( print "c = "; Ppil.pp_context c; print "\n\n";
+			print "c' = "; Ppil.pp_context c'; print "\n\n") *)
 	    in eq_cntxt(vm,c,c',vlist)
 	    end handle NOT_EQUAL => false
+
+
+	fun eq_context (c: context, c': context) : bool = 
+	    let val pc = (c, Name.VarMap.empty)
+		val pc' = (c', Name.VarMap.empty)
+	    in  eq_partial_context (pc, pc')
+	    end
 
     end
 

@@ -55,9 +55,9 @@ structure Name :> NAME =
 	  val _ = counter := res + 1
       in res
       end
-    fun update_counter counter n = counter := (Int.max(!counter,n + 1))
-    val update_var_counter = update_counter var_counter
-    val update_label_counter = update_counter label_counter
+    fun update_var_counter n = var_counter := (Int.max(!var_counter,n + 1))
+    fun update_label_counter n = label_counter := (Int.max(!label_counter,n + 1))
+    fun update_tag_counter n = tag_counter := (Int.max(!tag_counter,n + 1))
 
     (* these values copied from NJ source env/env.sml *)
     val varInt = 0 and sigInt = 1 and strInt = 2 and fsigInt = 3 and 
@@ -76,14 +76,31 @@ structure Name :> NAME =
     fun namespaceint (hash,str) = hash - (Symbol.number(Symbol.varSymbol str))
 
 
-    fun construct_var (i : int, s : string) : var = 
-      let val s = if (size s > 0 andalso (Char.isDigit(String.sub(s,0))))
+    fun construct_var (i : int, s : string) : bool * var = 
+      let val _ = update_var_counter i
+	  val s = if (size s > 0 andalso (Char.isDigit(String.sub(s,0))))
 		    then "v" ^ s else s
+	  val inUse = (case VarMap.find(!varmap,i) of
+			   NONE => false
+			 | SOME _ => true)
 	  val _ = varmap := (VarMap.insert(!varmap,i,s))
-      in  i
+      in  (inUse, i)
+      end
+    fun construct_label (i,s) = 
+	let val _ = update_label_counter i
+	in  (i,s)
+	end
+    fun construct_tag  (i,s) = 
+	let val _ = update_tag_counter i
+	in  (i,s)
 	end
 
-    fun fresh_named_var str = construct_var(inc_counter var_counter, str)
+    fun construct_loc x = x
+    fun deconstruct_label x = x
+    fun deconstruct_tag x = x
+    fun deconstruct_loc x = x
+
+    fun fresh_named_var str : var = #2(construct_var(inc_counter var_counter, str))
     fun fresh_var() = inc_counter var_counter
     fun gen_var_from_symbol v : var = fresh_named_var(Symbol.name v)
 
@@ -105,7 +122,6 @@ structure Name :> NAME =
     fun internal_label s : label = (internal_hash s,s)
     fun is_label_internal ((num,str) : label) = internal_hash str = num
 
-    val construct_var = fn (c,s) => construct_var (c,s)
 
     fun symbol_label sym : label = 
 	let val str = Symbol.name sym
@@ -188,12 +204,7 @@ structure Name :> NAME =
       structure PathSet  = SplaySetFn(PathKey) 
 
 
-    fun construct_label x = x
-    fun deconstruct_label x = x
-    fun construct_tag x = x
-    fun deconstruct_tag x = x
-    fun construct_loc x = x
-    fun deconstruct_loc x = x
+
 
     val derived_var      = (*Stats.subtimer("Name:derived_var",*)(derived_var)
     val fresh_named_var  = (*Stats.subtimer("Name:fresh_named_var",*)(fresh_named_var)

@@ -14,8 +14,6 @@ signature IL =
     datatype path = PATH of var * labels
     datatype arrow = TOTAL | PARTIAL
 
-    type fixity_table = (label * Fixity.fixity) list 
-
     datatype exp = OVEREXP of con * bool * exp Util.oneshot (* type, valuable, body *)
                  | SCON    of value
                  | PRIM    of prim * con list * exp list   (* fully applied primitivies only *)
@@ -113,14 +111,46 @@ signature IL =
     and context_entry = 
 	CONTEXT_SDEC   of sdec
       | CONTEXT_SIGNAT of label * var * signat
-      | CONTEXT_FIXITY of fixity_table
+      | CONTEXT_FIXITY of label * Fixity.fixity
       | CONTEXT_OVEREXP of label * var * (con * exp) list
 
-    and context = CONTEXT of  {fixityList : fixity_table,
-			       labelMap : (path * phrase_class) Name.LabelMap.map,
-			       pathMap  : (label * phrase_class) Name.PathMap.map,
-			       ordering : path list}
+    (* A context contains 
+         (A) A mapping from labels to fixity information,
+	 (B) A mapping of labels and variables to some classifier information.  
+       The underlying structure of this second mapping consists of 
+         (a) An ordered mapping of variables to classifier (phrase_class).
+	     Entries in this mapping can never be shadowed so it is
+	     illegal to insert a new entry with the same variable.
+         (b) An unordered mapping of labels to variables which are in the first mapping.
+	     Entries in this mapping can be shadowed so it is possible
+	     to insert a new entry with a label that already exists.
+       There are 3 additional operations we want to make possible:
+         (1) Strutures that have "open" labels signify that their components
+	     must be searched when performing lookup by label.  Thus, the
+	     corresponding internal name might be a path (and not just a variable).
+	     To support these "open" lookups, we must extend variables to paths.
+	 (2) We want to make obtaining classifier from a label fast.
+	 (3) We want to obtain the label that maps onto a particular variable.
+	     This is possible if the label has not been shadowed.
+       To support this we use the following structures.
+         (i)   pathMap: An unordered mapping that takes a paths to a label and a classifier
+	 (ii)  ordering: A reversed list of the paths to maintain the ordering required by (a)
+	                 since the pathMap in (i) is unordered
+	 (iii) labelMap: A mapping that takes a label to a path and a classifier
+       Notes:
+         (!) Because of the possibility of shadowing, an insertion of a new label
+             may require the previous existing labels to be changed in both
+	     the labelMap and the pathMap.
+         (+) The labelMap is redundant and can be reconstructed from pathMap.
+	     Thus, it does not need to be written out to disk.
+	 (-) The label field in pathMap might be NONE if the corresponding label
+	     has been shadowed.
+    *)
 
+    and context = CONTEXT of  {fixityMap : Fixity.fixity Name.LabelMap.map,
+			       pathMap  : (label * phrase_class) Name.PathMap.map,
+			       ordering : path list,
+			       labelMap : (path * phrase_class) Name.LabelMap.map}
 
     and phrase_class = PHRASE_CLASS_EXP     of exp * con * exp option * bool
                      | PHRASE_CLASS_CON     of con * kind * con option * bool
@@ -135,6 +165,7 @@ signature IL =
     type sdecs = sdec list
     type sbnds = sbnd list
 
-    type module = context * (sbnd option * context_entry) list
+    type partial_context = context * label Name.VarMap.map  (* A context with free variables *)
+    type module = context * partial_context * (sbnd option * context_entry) list
 
 end

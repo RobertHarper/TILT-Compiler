@@ -439,8 +439,6 @@ struct
 	   | _ => HOVbox[Hbox[pp_var v, String "."], 
 			 pp_list pp_label ls ("",".","",false)])
 
-    and pp_fixity_list lf_list = pp_list (fn (l,f) => HOVbox[pp_label l, String " : ", pp_fixity f])
-                                         lf_list ("(",", ",")", false)
     and pp_bnd' seen bnd = 
 	let fun help x y = (x,y)
 	  in (case bnd of
@@ -528,17 +526,20 @@ struct
       | pp_context_entry' (CONTEXT_FIXITY _) = String "CONTEXT_FIXITY ???"
       | pp_context_entry' (CONTEXT_OVEREXP _) = String "CONTEXT_OVEREXP ???"
 
-    fun pp_context' (CONTEXT{pathMap, ordering, ...}) = 
-	let fun lookup (PATH p) = let val SOME (lab,pc) = Name.PathMap.find(pathMap,p)
-				  in  (lab,p,pc)
-				  end
-	    val label_pathpc_list = map lookup (rev ordering)
-	    fun doer(lbl,path,pc) = HOVbox[pp_label lbl,
-					   String " --> ",
-					   pp_path (PATH path),
-					   String " = ",
-					   pp_phrase_class true [] pc]
-	in  pp_list doer label_pathpc_list ("[",", ", "]", true)
+    fun pp_context' (CONTEXT{fixityMap, pathMap, ordering, ...}) = 
+	let fun fixity_doer (l, f) = Hbox[pp_label l, String " : ", pp_fixity f]
+	    fun path_doer (PATH path) = 
+		let val SOME(label, pc) = Name.PathMap.find(pathMap, path)
+		in  HOVbox[pp_label label,
+			   String " --> ",
+			   pp_path (PATH path),
+			   String " : ",
+			   pp_phrase_class true [] pc]
+		end
+	in  Vbox[String "Fixity: ",
+		 pp_list fixity_doer (Name.LabelMap.listItemsi fixityMap) ("","", "", true),
+		 String "Pathmap: ",
+		 pp_list path_doer (rev ordering) ("","","", true)]
 	end
 
 

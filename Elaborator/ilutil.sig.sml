@@ -140,6 +140,7 @@ signature ILUTIL =
     val subst_add_expvar : subst * var * exp -> subst
     val subst_add_convar : subst * var * con -> subst
     val subst_add_modvar : subst * var * mod -> subst
+    val subst_add_sigvar : subst * var * var -> subst
     val subst_add_exppath : subst * path * exp -> subst
     val subst_add_conpath : subst * path * con -> subst
     val subst_add_modpath : subst * path * mod -> subst

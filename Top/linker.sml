@@ -246,9 +246,9 @@ structure Linker :> LINKER =
       in case imports of
 	  nil => (* everything has been resolved *)
 	      let val link = "link_" ^ exe_result
-		  val bases = map #base units
+		  val unitnames = map #unit units
 		  val local_labels = map (fn un => Rtl.ML_EXTERN_LABEL
-					  ("main_" ^ un ^ "_doit")) bases
+					  ("main_" ^ un ^ "_doit")) unitnames
 		  val link_s = (case !Til.platform of
 				Til.TIL_ALPHA => Linkalpha.link
 			      |	Til.TIL_SPARC => Linksparc.link
