@@ -1,9 +1,16 @@
+
  ! (1) Assumes that the thread pointer points to a structure containing
  ! 32 longs constituting the integer register set followed by 16 doubles
  ! constituting the floating-point register set
- ! (2) Assumes that the thread pointer is unmodified by call to gcFromML
+ ! (2) Assumes that the thread pointer is unmodified by call to GCFromML
 
-#include <sys/trap.h>
+ ! We maintain the invariant that there is only one valid register window while the mutator is
+ ! running.  That is, the C parts of the runtime may use register windows (SAVE and RESTORE) but we
+ ! compensate with FLUSHW.
+	
+ ! Code that transitions from ML to C must set the thread-specific value notInML (used by signal
+ ! handlers).  Code that transitions from C to ML must clear notInML and perform FLUSHW.
+	
 #define _asm_
 #include "general.h"
 #include "thread.h"
@@ -208,18 +215,19 @@ load_regs_ok:
 	.size	load_regs,(.-load_regs)
 
 
- ! ----------------- GCFromML ---------------------------------
+ ! ----------------- GCFromML -------------------------------
  ! return address comes in normal return address register
  ! temp register contains request size + heap pointer
- ! does not use a stack frame 
+ ! does not use a stack frame
  ! ----------------------------------------------------------
 	.proc	07
 	.align  4
 GCFromML:	
-	flushw
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually 
 	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
-	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
+	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]
+	mov	1, %r1
+	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs					
 	nop
@@ -245,10 +253,11 @@ GCFromML:
 	.proc	07
 	.align  4
 NewStackletFromML:	
-	flushw
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually 
 	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
-	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
+	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]
+	mov	1, %r1
+	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs					
 	nop
@@ -270,10 +279,11 @@ NewStackletFromML:
 	.proc	07
 	.align  4
 PopStackletFromML:	
-	flushw
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually 
 	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
 	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
+	mov	1, %r1
+	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs					
 	nop
@@ -297,7 +307,7 @@ returnToML:
 	flushw	
 	mov	CFIRSTARG_REG, THREADPTR_REG		! restore THREADPTR_REG
 	mov	CSECONDARG_REG, %r4			! use r4 as temp for return address
-	st	%g0, [THREADPTR_REG + notinml_disp]	! set notInML to zero
+	st	%g0, [THREADPTR_REG + notinml_disp]	! returning to ML
 	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
 	call	load_regs				! don't need to save return address
 	nop						
@@ -315,6 +325,7 @@ returnToML:
  ! -------------------------------------------------------------------------------
  ! returnFromGCFromML is called from the runtime with the thread pointer argument
  ! thread pointer as 1st argument
+ ! Note returnToML does the normal C -> ML transition work for us.
  ! -------------------------------------------------------------------------------
 	.proc	07
 	.align  4
@@ -334,12 +345,11 @@ returnFromGCFromML:
 	.proc	07
 	.align  4
 GCFromC:
-	ta	ST_FLUSH_WINDOWS	
-	flushw
 	mov	CFIRSTARG_REG, THREADPTR_REG
 	stw	%r1 , [THREADPTR_REG+Csaveregs_disp+4]		! we save r1, r4, r15 manually 
 	stw	%r4 , [THREADPTR_REG+Csaveregs_disp+16]	
 	stw	LINK_REG, [THREADPTR_REG + Csaveregs_disp + LINK_DISP]	
+								! don't change notInML
 	add	THREADPTR_REG, Csaveregs_disp, %r1		! use C save area of thread pointer
 	call	save_regs					
 	nop
@@ -367,7 +377,6 @@ MinorGCFromC:
 	.proc	07
 	.align  4
 returnFromGCFromC:
-	flushw
 	mov	CFIRSTARG_REG, THREADPTR_REG		! restore THREADPTR_REG
 							! don't change notInML
 	add	THREADPTR_REG, Csaveregs_disp, %r1	! use C save area of thread pointer structure
@@ -385,12 +394,12 @@ returnFromGCFromC:
 
  ! ------------------------------------------------------------------------------------
  ! returnFromYield is called from the runtime with the thread pointer argument
- ! Yield was called from ML code as a C function so we don't need to call load_regs here
+ ! Yield was called from ML code as a C function so load_regs_MLtoC will take care of
+ ! C -> ML transition work for us.
  ! -------------------------------------------------------------------------------------
 	.proc	07
 	.align  4
 returnFromYield:
-	flushw	
 	mov	CFIRSTARG_REG, THREADPTR_REG
 	mov	THREADPTR_REG, %l0			! Calls from C expect thread reg in %l0
 	ld	[THREADPTR_REG + MLsaveregs_disp + SP_DISP], SP_REG	
@@ -410,7 +419,6 @@ returnFromYield:
 	.proc	07
 	.align  4
 save_regs_MLtoC:
-	flushw
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]	! save_regs does not save r1 (used for arg)
 	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure	
 	stw	%r4, [%r1+16]				! save_regs does not save r4
@@ -424,7 +432,7 @@ save_regs_MLtoC:
 	nop
 	mov	%r4, %o7				! restore return address
 	mov	1, %r4
-	st	%r4, [THREADPTR_REG + notinml_disp]	! set notInML to one
+	st	%r4, [THREADPTR_REG + notinml_disp]	! leaving ML
 	ld	[%r1+16], %r4				! restore r4 which we use as temp
 	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg
 	mov	THREADPTR_REG, %l0			! when calling C code, %l0 (but not %g2) is unmodified
@@ -443,7 +451,7 @@ save_regs_MLtoC:
 load_regs_MLtoC:
 	flushw
 	mov	%l0, THREADPTR_REG			! restore THREADPTR_REG
-	st	%g0, [THREADPTR_REG + notinml_disp]	! set notInML to zero
+	st	%g0, [THREADPTR_REG + notinml_disp]	! entering ML
 	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
 	stw	%o0, [%r1 + 32]				! overwrite GP result register
 	std	%f0, [%r1 + 128]			! overwrite FP result register	
@@ -456,47 +464,3 @@ load_regs_MLtoC:
 	retl
 	nop
         .size load_regs_MLtoC,(.-load_regs_MLtoC)	
-
-
-
-	.proc	07
-	.align  4
-load_regs2:	
-	ld	[THREADPTR_REG+32], %r8 
- !	ld	[THREADPTR_REG+0], %r0         g0 - no std role              
- 	ld	[THREADPTR_REG+4], %r1	! g1 - no std role(volatile);     EXNPTR
- 	ld	[THREADPTR_REG+8], %r2	! g2 - reserved for app software; THREADPTR 
- !	ld	[THREADPTR_REG+12], %r3        g3 - reserved for app software
- 	ld	[THREADPTR_REG+16], %r4      ! g4 - no std role (volatile);    ALLOCPTR
- 	ld	[THREADPTR_REG+20], %r5      ! g5 - no std role (volatile);    ALLOCLIMIT
- !	ld	[THREADPTR_REG+24], %r6        g6 - reserved for system software      
- !	ld	[THREADPTR_REG+28], %r7        g7 - reserved for system software          
-	ld	[THREADPTR_REG+36], %r9 
-	ld	[THREADPTR_REG+ 40], %r10
-	ld	[THREADPTR_REG+ 44], %r11
-	ld	[THREADPTR_REG+ 48], %r12
-	ld	[THREADPTR_REG+ 52], %r13
-	ld	[THREADPTR_REG+ 56], %r14
-	! skip return address/link register
-	ld	[THREADPTR_REG+ 64], %r16
-	ld	[THREADPTR_REG+ 68], %r17
-	ld	[THREADPTR_REG+ 72], %r18
-	ld	[THREADPTR_REG+ 76], %r19
-	ld	[THREADPTR_REG+ 80], %r20
-	ld	[THREADPTR_REG+ 84], %r21
-	ld	[THREADPTR_REG+ 88], %r22
-	ld	[THREADPTR_REG+ 92], %r23
-  	ld	[THREADPTR_REG+ 96], %r24 
-  	ld	[THREADPTR_REG+ 100], %r25
-  	ld	[THREADPTR_REG+ 104], %r26
-  	ld	[THREADPTR_REG+ 108], %r27
-  	ld	[THREADPTR_REG+ 112], %r28
-  	ld	[THREADPTR_REG+ 116], %r29
- !	ld	[THREADPTR_REG+ 120], %r30
- ! 	ld	[THREADPTR_REG+ 124], %r31
-
-	retl
-	nop
-	
-        .size load_regs2,(.-load_regs2)
-		

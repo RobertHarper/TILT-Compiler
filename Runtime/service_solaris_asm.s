@@ -1,6 +1,14 @@
-	
+
  ! start_client makes assumption about how to invoke closures and thread pointer structure
+
+ ! We maintain the invariant that there is only one valid register window while the mutator is
+ ! running.  That is, the C parts of the runtime may use register windows (SAVE and RESTORE) but we
+ ! compensate with FLUSHW.
 	
+ ! Code that transitions from ML to C must set the thread-specific value notInML (used by signal
+ ! handlers).  Code that transitions from C to ML must clear notInML and perform FLUSHW.
+	
+
 #define _asm_
 #include "general.h"
 #include "thread.h"
@@ -8,7 +16,6 @@
 	.section ".text"
 	.align	4
  	.globl	start_client
- 	.globl	start_client_retadd_val
 	.globl  global_exnrec
         .globl  GetTick
 	.globl	raise_exception_raw
@@ -119,7 +126,7 @@ start_client:
 	mov	%r4, ASMTMP_REG				! move thunk to temp
 	ld	[%r1+16], %r4				! restore r4 which is not restored by load_regs
 	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
-	st	%g0, [THREADPTR_REG + notinml_disp]             ! leaving to ML
+	st	%g0, [THREADPTR_REG + notinml_disp]     ! entering ML
 	ld	[ASMTMP_REG + 0], LINK_REG		! fetch code pointer
 	ld	[ASMTMP_REG + 4], %o0			! fetch type env
 	ld	[ASMTMP_REG + 8], %o1			! fetch term env
@@ -128,10 +135,8 @@ start_client:
 	st	%sp, [EXNPTR_REG + 4]			! initialize stack pointer of global handler
 	jmpl	LINK_REG, %o7				! jump to thunk
 	nop
-start_client_retadd_val:					! used by stack.c
-	nop
 	mov	1, ASMTMP_REG
-	st	ASMTMP_REG, [THREADPTR_REG + notinml_disp]
+	st	ASMTMP_REG, [THREADPTR_REG + notinml_disp]	! returning from ML
 	st	%r1, [THREADPTR_REG+MLsaveregs_disp+4]		! r1 saved manually
 	st	%r4, [THREADPTR_REG+MLsaveregs_disp+16]		! r4 saved manually
 								! r15 not saved - unneeded
@@ -139,14 +144,9 @@ start_client_retadd_val:					! used by stack.c
 	call	save_regs					! need to save register set to get 
 								!   alloction pointer into thread state
 	nop
-	flushw
 	ld	[THREADPTR_REG + proc_disp], ASMTMP_REG		! get system thread pointer
 	ld	[ASMTMP_REG], SP_REG				! run on system thread stack	
 	call	Finish
-	nop
-        sethi   %hi($$errormsg),%o0				! should not return from Finish
-	or      %o0,%lo($$errormsg),%o0  
-	call	printf
 	nop
 	call	abort
 	nop
@@ -154,12 +154,12 @@ start_client_retadd_val:					! used by stack.c
 
 	
  ! -------------------------------------------------------------------------------
- ! Yield is called by mutator like a C function so save_regs_MLtoC has just been called
+ ! Yield was called from ML code as a C function so save_regs_MLtoC will take care of
+ ! ML -> C transition work for us.
  ! -------------------------------------------------------------------------------
 	.proc	07
 	.align	4
 Yield:
-	flushw
 	ld	[THREADPTR_REG + proc_disp],ASMTMP_REG  ! get system thread pointer into temp
 	ld	[ASMTMP_REG], SP_REG			! run on system thread stack
 	call	YieldRest				
@@ -169,23 +169,22 @@ Yield:
 	.size	Yield,(.-Yield)
 
  ! -------------------------------------------------------------------------------
- ! Spawn is called by mutator like a C function so save_regs_MLtoC has been called
- ! Switch to system stack here
+ ! Spawn was called from ML code as a C function so save_regs_MLtoC and load_regs_MLtoC
+ ! will take care of ML <-> C transition work for us.
  ! -------------------------------------------------------------------------------
 	.globl  Spawn
 	.proc	07
 	.align	4
 Spawn:
-	flushw	
 	st	LINK_REG, [THREADPTR_REG + LINK_DISP]    ! note that this is return address of Spawn
 	ld	[THREADPTR_REG + proc_disp],ASMTMP_REG   ! get system thread pointer into temp
-	ld	[ASMTMP_REG], SP_REG			! run on system thread stack
+	ld	[ASMTMP_REG], SP_REG			 ! run on system thread stack
 	call	SpawnRest
 	nop
-	mov	RESULT_REG, THREADPTR_REG
-	ld	[THREADPTR_REG + SP_DISP], SP_REG	! back to user thread stack
+	mov	RESULT_REG, THREADPTR_REG		 ! returning to ML
+	ld	[THREADPTR_REG + SP_DISP], SP_REG	 ! back to user thread stack
 	ld	[THREADPTR_REG + LINK_DISP], LINK_REG	
-	mov	THREADPTR_REG, %l0			! load_regs_MLtoC expects thread pointer in l0
+	mov	THREADPTR_REG, %l0			 ! load_regs_MLtoC expects thread pointer in l0
 	retl
 	nop
 	.size	Spawn,(.-Spawn)
@@ -198,15 +197,12 @@ Spawn:
 	.proc	07
 	.align	4
 scheduler:	
-	flushw	
 	ld	[CFIRSTARG_REG], SP_REG			! run on system thread stack
 	call	schedulerRest
 	nop
 	call	abort
 	nop
 	.size	scheduler,(.-scheduler)
-
-
 
  ! ------------------------------------------------------------
  ! global_exnhandler when all else fails
@@ -215,9 +211,10 @@ scheduler:
 	.proc	07
 	.align	4
 global_exnhandler:
-	flushw
-	st	EXNARG_REG, [THREADPTR_REG + EXNARG_DISP]    ! note that this is return address of Yield
+	st	EXNARG_REG, [THREADPTR_REG + EXNARG_DISP]       ! note that this is return address of Yield
 	ld	[EXNPTR_REG + 4], SP_REG
+	mov	1, %r1
+	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs
 	nop
@@ -238,7 +235,7 @@ global_exnhandler:
 raise_exception_raw:
 	flushw
 	mov	%o0, THREADPTR_REG
-	st	%g0, [THREADPTR_REG + notinml_disp]	! set notInML to zero
+	st	%g0, [THREADPTR_REG + notinml_disp]	! entering ML
 	mov	%o1, %r4				! save exn arg since load_regs leaves r4 alone
 	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
 	call	load_regs
@@ -264,10 +261,11 @@ raise_exception_raw:
 	.proc	07
 	.align  4
 OverflowFromML:
-	flushw
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually
 	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
 	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
+	mov	1, %r1
+	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs					
 	nop
@@ -287,10 +285,11 @@ OverflowFromML:
 	.proc	07
 	.align  4
 DivFromML:
-	flushw
 	stw	%r1 , [THREADPTR_REG+MLsaveregs_disp+4]		! we save r1, r4, r15 manually
 	stw	%r4 , [THREADPTR_REG+MLsaveregs_disp+16]	
 	stw	LINK_REG, [THREADPTR_REG + MLsaveregs_disp + LINK_DISP]	
+	mov	1, %r1
+	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs					
 	nop
@@ -315,13 +314,3 @@ global_exnrec:
 	.word	0	
 	.type   global_exnrec,#object
 	.size   global_exnrec,(.-global_exnrec)
-	
-	.align 4
-$$errormsg:
-	.ascii "Thread Finish returned!!!\n\000"
-
-	.align 4
-$$global_exnmsg:
-	.ascii "Runtime Error: Uncaught exception!!!\n\000"
-	
-
