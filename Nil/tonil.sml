@@ -44,7 +44,7 @@ struct
 
    val elaborator_specific_optimizations = ref true
    val optimize_empty_structure = ref true
-
+   val select_carries_types = ref false
    fun error msg = Util.error "tonil.sml" msg
 
    val printl = Util.printl
@@ -264,25 +264,34 @@ struct
          of labels, produce the term corresponding to r.lbls
     *)
    fun selectFromRec (r,t,lbls) = 
-     let
-       fun loop [] = (r,t)
-	 | loop (lbl::lbls) = 
-	 let
-	   val (r,t) = loop lbls
-	   val (labels,cons) = 
-	     case strip_record t
-	       of SOME (labels,cons) => (labels,cons)
-		| NONE => error "Expected record type in selectFromRec"
-	   val t = case find2 (fn (l,c) => eq_label (l,lbl)) (labels,cons)
-		     of SOME (label,con) => con
-		      | NONE => error "Label not found in record projection"
-	 in
-	   (Prim_e(NilPrimOp(select lbl), cons, [r]),t)
-	 end
-       val (r,t) = loop (rev lbls)
-     in
-       r
-     end
+     if !select_carries_types then
+       let
+	 fun loop [] = (r,t)
+	   | loop (lbl::lbls) = 
+	   let
+	     val (r,t) = loop lbls
+	     val (labels,cons) = 
+	       case strip_record t
+		 of SOME (labels,cons) => (labels,cons)
+		  | NONE => error "Expected record type in selectFromRec"
+	     val t = case find2 (fn (l,c) => eq_label (l,lbl)) (labels,cons)
+		       of SOME (label,con) => con
+			| NONE => error "Label not found in record projection"
+	   in
+	     (Prim_e(NilPrimOp(select lbl), cons, [r]),t)
+	   end
+	 val (r,t) = loop (rev lbls)
+       in
+	 r
+       end
+     else
+       let
+	 fun loop [] = r
+	   | loop (lbl::lbls) = 
+	   Prim_e(NilPrimOp(select lbl), [], [loop lbls])
+       in
+	 loop (rev lbls)
+       end
 
    fun chooseName (NONE, vmap) = splitFreshVar vmap
      | chooseName (SOME (var,var_c,var_r), vmap) = (var, var_c, var_r, vmap)
@@ -1760,9 +1769,13 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 	   val (exp_record, con_record, valuable) = xexp context il_exp
 
 	   val con = projectFromRecord con_record [label]
-	   val cons = case strip_record con_record 
-			of SOME (labels,cons) => cons
-			 | _ => error "Expected record type"
+	   val cons = 
+	     if !select_carries_types then
+	       case strip_record con_record 
+		 of SOME (labels,cons) => cons
+		  | _ => error "Expected record type"
+	     else
+	       []
        in
 	   (Prim_e (NilPrimOp (select label), cons, [exp_record]), con, valuable)
        end
@@ -2012,9 +2025,13 @@ val _ = (print "-----about to compute type_r;  exp_body_type =\n";
 		   name_r
 	       else
 		 let
-		   val cons = case strip_record type_r 
-				of SOME (labels,cons) => cons
-				 | NONE => error "Expected record type"
+		   val cons = 
+		     if !select_carries_types then
+		       case strip_record type_r 
+			 of SOME (labels,cons) => cons
+			  | NONE => error "Expected record type"
+		     else
+		       []
 		 in
 		   Prim_e (NilPrimOp (select label), cons, [name_r])
 		 end

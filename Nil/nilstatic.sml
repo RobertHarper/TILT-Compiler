@@ -27,7 +27,7 @@ struct
   open Prim
 
   val debug = ref false
-  
+  val select_carries_types = ref false
 
   local
       datatype entry = 
@@ -175,6 +175,7 @@ struct
   val all3 = Listops.all3
   val split = Listops.split
   val opt_cons = Listops.opt_cons
+  val find2 = Listops.find2
 
   (*From PrimUtil*)
   val same_intsize = PrimUtil.same_intsize
@@ -226,14 +227,6 @@ struct
 
 
   fun error s = Util.error "nilstatic.sml" s
-
-  fun find2 p listpair = 
-    let
-      fun find_one (a,b,NONE) = if p(a,b) then SOME (a,b) else NONE
-	| find_one (_,_,state) = state
-    in
-      ListPair.foldl find_one NONE listpair
-    end
 
   (*replace v::S(c) with c in formals and body*)
   fun substSingleton ((var,Singleton_k(p,kind,scon)),(rev_formals,subst)) =
@@ -974,28 +967,38 @@ struct
 	| (select label,given_types,[exp]) =>
 	 let
 	   val (exp,con) = exp_valid (D,exp)
-	   val (given_types,_) = unzip (map (curry2 con_valid D) given_types)
 	   val (labels,found_types) = 
 	     (case strip_record con 
 		of SOME x => x
 		 | NONE => 
 		  (perr_e_c (exp,con);
 		   (error "Projection from value of non record type" handle e => raise e)))
+	   val type_args = 
+	     if !select_carries_types then
+	       let
+		 val (given_types,_) = unzip (map (curry2 con_valid D) given_types)
+	       in
+		 if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch in record select") 
+		   (given_types,found_types) then
+		   found_types
+		 else
+		   (perr_e (Prim_e (NilPrimOp (select label),given_types,[exp]));
+		    print "Record has type: ";
+		    perr_c con;
+		    error ("Mismatch in field types for record select of label "^(label2string label)))
+	       end
+	     else
+	       case given_types 
+		 of [] => []
+		  | _ => error "Select does not carry types"
 	 in
-	   if c_all2 alpha_equiv_con (o_perr_c_c "Length mismatch in record select") 
-	     (given_types,found_types) then
-	     case find2 (fn (l,c) => eq_label (l,label)) (labels,found_types)
-	       of SOME (_,con) => 
-		 ((select label,found_types,[exp]),con)
-		| NONE => 
-		 (perr_e_c (exp,con);
-		  printl ("Label "^(label2string label)^" projected from expression");
-		  (error "No such label" handle e => raise e))
-	   else
-	     (perr_e (Prim_e (NilPrimOp (select label),given_types,[exp]));
-	      print "Record has type: ";
-	      perr_c con;
-	      error ("Mismatch in field types for record select of label "^(label2string label)))
+	   case find2 (fn (l,c) => eq_label (l,label)) (labels,found_types)
+	     of SOME (_,con) => 
+	       ((select label,type_args,[exp]),con)
+	      | NONE => 
+	       (perr_e_c (exp,con);
+		printl ("Label "^(label2string label)^" projected from expression");
+		(error "No such label" handle e => raise e))
 	 end
 	| (inject {tagcount,field},cons,exps as ([] | [_])) =>  
 	 let
@@ -1544,13 +1547,13 @@ struct
 		   (case strip_arrow code_type
 		      of SOME ((Code | ExternCode),effect,tformals,formals,numfloats,body_c) => 
 			let
-			  val (tformals',(v,last_k)) = split tformals
-			  val (formals',last_c) = split formals
+			  val (tformals,(v,last_k)) = split tformals
+			  val (formals,last_c) = split formals
 			in
 			  if alpha_sub_kind (ckind,last_k) andalso
 			    alpha_equiv_con (vcon,last_c) 
 			    then
-			      AllArrow_c (Closure,effect,tformals',formals',numfloats,body_c)
+			      AllArrow_c (Closure,effect,tformals,formals,numfloats,body_c)
 			  else
 			    (perr_k_k (last_k,ckind);
 			     perr_c_c (last_c,vcon);
