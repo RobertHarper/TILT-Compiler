@@ -302,6 +302,7 @@ struct
 	      | IALIGN x        => String (".align "^align2s x)
 	      | ILABEL l        => String (local_label2s l^":")
 	      | HALT            => String ("halt")
+	      | ICOMMENT s => String ("ICOMMENT -- " ^ s)
 
   fun labelortag2s (PTR l) = label2s l
     | labelortag2s (TAG i) = word2str i

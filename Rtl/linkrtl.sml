@@ -1,5 +1,6 @@
 signature LINKRTL = 
 sig
+    structure Tortl : TORTL
     structure Rtl : RTL
     structure Pprtl : PPRTL
     val compile : string -> Rtl.module

@@ -191,6 +191,7 @@ struct
     | ILABEL     of local_label
     | IALIGN of align
     | HALT
+    | ICOMMENT of string
 
   datatype labelortag = PTR of label | TAG of Word32.word
 

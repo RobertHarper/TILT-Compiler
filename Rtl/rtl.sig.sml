@@ -259,6 +259,7 @@ sig
     | ILABEL of local_label
     | IALIGN of align       (* alignment of blocks *)
     | HALT                  (* needed for termination of main *)    
+    | ICOMMENT of string
 
   datatype labelortag = PTR of label | TAG of Word32.word
 

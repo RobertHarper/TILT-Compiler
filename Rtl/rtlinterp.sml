@@ -343,7 +343,9 @@ fun trap() =
 		       crash "bad instream")
     fun find_out i = (find_int(w2i i,!outstream_table) 
 		      handle FindInt =>
-			crash "bad outstream")
+			  (print "bad outstream: "; 
+			   print (W.toDecimalString i);
+			   crash "bad outstream"))
 
     fun destring (r) :string =
       let 
