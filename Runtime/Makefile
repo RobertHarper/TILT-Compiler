@@ -21,7 +21,7 @@ CFLAGS=#-DHEAPPROFILE
 ASFLAGS=
 AR=ar
 
-sparc_cc=gcc -Dsparc -Winline -Wimplicit -g -Wa,-xarch=v8plus
+sparc_cc=gcc -Dsparc -D_REENTRANT -Winline -Wimplicit -g -Wa,-xarch=v8plus
 sparc_dbg_cc=$(sparc_cc) -DDEBUG
 sparc_opt_cc=$(sparc_cc) -O2 -finline-functions
 sparc_as=as -Dsparc -xarch=v8plus -P
