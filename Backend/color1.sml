@@ -96,10 +96,12 @@ struct
 			   ([],[]) => [valOf(Regset.find (fn _ => true) nodes)]
 			   | _ => [])
 
+(*
 		val _ = (print "(GOOD,BAD,RANDOM) = ";
 			print (Int.toString (length good_nodes)); print ", ";
 			print (Int.toString (length bad_nodes)); print ", ";
 			print (Int.toString (length random_nodes)); print "\n")
+*)
 
 	   in app delete_node good_nodes;
 	      app delete_node bad_nodes;
