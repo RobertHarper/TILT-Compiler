@@ -159,3 +159,4 @@
 0163 [closed]	Pattern compiler causing elaborator to bomb.
 0164 [closed]	Garbage collector skipping global roots.
 0165 [open]	Elaborator shadowing variables.
+0166 [open]	Elaborator adding classifiers with unbound, free variables to context.
