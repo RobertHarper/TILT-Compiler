@@ -40,15 +40,10 @@ pat.sml
 
 toil.sig.sml
 toil.sml
-(*
-ileval.sig.sml
-ileval.sml
-*)
 linkil.sig.sml 
 linkil.sml 
-(* elaborator.sig.sml *)
-ilcontexteq.sig.sml
-ilcontexteq.sml 
+ileq.sml
+ilblast.sml
 
 error.sig.sml
 error.sml
