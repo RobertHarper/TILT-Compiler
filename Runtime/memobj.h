@@ -63,6 +63,7 @@ void StackChain_Dealloc(StackChain_t *);
 StackChain_t* StackChain_Copy(void *, StackChain_t *);  /* Dupliacte stacklets and link to replicas */
 int StackChain_Size(StackChain_t *);  /* Total sizes of active area of stacklets */
 
+int StackletId(Stacklet_t *stacklet);
 mem_t StackletPrimaryTop(Stacklet_t *stacklet);
 mem_t StackletPrimaryCursor(Stacklet_t *stacklet);
 mem_t StackletPrimaryBottom(Stacklet_t *stacklet);
