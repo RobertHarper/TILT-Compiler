@@ -1,4 +1,4 @@
-(*$import TORTL RTL PPRTL TORTLBASE RTLTAGS NIL NILUTIL PPNIL Stats *)
+(*$import TORTL TORTLSUM RTL PPRTL TORTLBASE RTLTAGS NIL NILUTIL PPNIL Stats *)
 
 (* ASSUMPTIONS and GUARANTEES:
 	(1) Integer types are represented by the tags 0 to 3.
@@ -135,16 +135,17 @@ val debug_bound = ref false
 				  val (con_ir,_,state) = xcon(state,fresh_var(),sumcon, NONE)
 				  (* the 5 fields of the sum are: tag, known, tagcount, total, type args *)
 				  (* since there is exactly one type arg, it is directly stored *)
-				  val _ = add_instr(LOAD32I(EA(con_ir,4*4),con_ir))
+				  val summand_con_ir = alloc_regi TRACE
+				  val _ = add_instr(LOAD32I(EA(con_ir,4*4),summand_con_ir))
 				  val tmp = alloc_regi NOTRACE_INT
 				  val tagi = alloc_regi NOTRACE_INT
 				  (* XXX should check dynamically for exntag too *)
 				  val _ = (add_instr(ILABEL beginl);
-					   add_instr(CMPUI(LE, con_ir, IMM 4, tmp)); (* check ints *)
+					   add_instr(CMPUI(LE, summand_con_ir, IMM 4, tmp)); (* check ints *)
 					   add_instr(BCNDI(NE, tmp, boxl, false));
-					   add_instr(CMPUI(LE, con_ir, IMM 255, tmp)); (* check for other small types *)
+					   add_instr(CMPUI(LE, summand_con_ir, IMM 255, tmp)); (* check for other small types *)
 					   add_instr(BCNDI(NE, tmp, noboxl, false));
-					   add_instr(LOAD32I(EA(con_ir,0),tagi));
+					   add_instr(LOAD32I(EA(summand_con_ir,0),tagi));
 					   add_instr(CMPUI(EQ, tagi, IMM 4, tmp)); (* check for sums *)
 					   add_instr(BCNDI(NE, tmp, boxl, false));
 					   add_instr(CMPUI(EQ, tagi, IMM 8, tmp)); (* check mus *)
@@ -188,13 +189,15 @@ val debug_bound = ref false
 
 		  val (con_ir,_,state) = xcon(state,fresh_var(),sumcon,NONE)
 		  (* the 5 fields of the sum are: tag, known, tagcount, total, type args *)
-		  val _ = add_instr(LOAD32I(EA(con_ir,4*4),con_ir))
+		  val summand_con_ir = alloc_regi TRACE
+		  val _ = add_instr(LOAD32I(EA(con_ir,4*4),summand_con_ir))
 		  (* since there is more than one type arg, it is stored in a record *)
-		  val _ = add_instr(LOAD32I(EA(con_ir,4*(w2i field_sub)),con_ir)) (* field type *)
+		  val field_con_ir = alloc_regi TRACE
+		  val _ = add_instr(LOAD32I(EA(summand_con_ir,4*(w2i field_sub)),field_con_ir)) (* field type *)
 
-		  val _ = (add_instr(CMPUI(LE, con_ir, IMM 255, tmp)); (* check for small types *)
+		  val _ = (add_instr(CMPUI(LE, field_con_ir, IMM 255, tmp)); (* check for small types *)
 			   add_instr(BCNDI(NE, tmp, nonrecordl, false));
-			   add_instr(LOAD32I(EA(con_ir,0),tagi));  (* load tag of the type *)
+			   add_instr(LOAD32I(EA(field_con_ir,0),tagi));  (* load tag of the type *)
 			   add_instr(CMPUI(NE, tagi, IMM 5, tmp)); (* check for record *)
 			   add_instr(BCNDI(NE, tmp, nonrecordl, false)))
 
@@ -314,14 +317,15 @@ val _ = (print "xtagsum - field_type = \n"; Ppnil.pp_con field_type;
 		  val (con_ir,_,state) = xcon(state,fresh_var(),sumcon, NONE)
 		  (* the 5 fields of the sum are: tag, known, tagcount, total, type args *)
 		  (* since there is exactly one type arg, it is directly stored *)
-		  val _ = add_instr(LOAD32I(EA(con_ir,4*4),con_ir))
+		  val summand_con_ir = alloc_regi TRACE
+		  val _ = add_instr(LOAD32I(EA(con_ir,4*4),summand_con_ir))
 		  val tmp = alloc_regi NOTRACE_INT
 		  val tagi = alloc_regi NOTRACE_INT
-		  val _ = (add_instr(CMPUI(LE, con_ir, IMM 4, tmp)); (* check ints *)
+		  val _ = (add_instr(CMPUI(LE, summand_con_ir, IMM 4, tmp)); (* check ints *)
 			   add_instr(BCNDI(NE, tmp, boxl, false));
-			   add_instr(CMPUI(LE, con_ir, IMM 255, tmp)); (* check for other small types *)
+			   add_instr(CMPUI(LE, summand_con_ir, IMM 255, tmp)); (* check for other small types *)
 			   add_instr(BCNDI(NE, tmp, noboxl, false));
-			   add_instr(LOAD32I(EA(con_ir,0),tagi));
+			   add_instr(LOAD32I(EA(summand_con_ir,0),tagi));
 			   add_instr(CMPUI(EQ, tagi, IMM 4, tmp)); (* check for sums *)
 			   add_instr(BCNDI(NE, tmp, boxl, false));
 			   add_instr(CMPUI(EQ, tagi, IMM 8, tmp)); (* check mus *)
@@ -357,13 +361,15 @@ val _ = (print "xtagsum - field_type = \n"; Ppnil.pp_con field_type;
 		  val (con_ir,_,state) = xcon(state,fresh_var(),sumcon, NONE)
 
 		  (* the 5 fields of the sum are: tag, known, tagcount, total, type args *)
-		  val _ = add_instr(LOAD32I(EA(con_ir,4*4),con_ir))
+		  val summand_con_ir = alloc_regi TRACE
+		  val field_con_ir = alloc_regi TRACE
+		  val _ = add_instr(LOAD32I(EA(con_ir,4*4),summand_con_ir))
 		  (* since there is more than one type arg, it is stored in a record *)
-		  val _ = add_instr(LOAD32I(EA(con_ir,4*(w2i field_sub)),con_ir))
+		  val _ = add_instr(LOAD32I(EA(summand_con_ir,4*(w2i field_sub)),field_con_ir))
 
-		  val _ = (add_instr(CMPUI(GE, con_ir, IMM 255, tmp));
+		  val _ = (add_instr(CMPUI(GE, field_con_ir, IMM 255, tmp));
 			   add_instr(BCNDI(EQ, tmp, nonrecordl, false));
-			   add_instr(LOAD32I(EA(con_ir,0),tag));
+			   add_instr(LOAD32I(EA(field_con_ir,0),tag));
 			   add_instr(CMPUI(EQ, tag, IMM 5, tmp));
 			   add_instr(BCNDI(NE, tmp, recordl, false)))
 		  (* non-record case *)
@@ -374,7 +380,7 @@ val _ = (print "xtagsum - field_type = \n"; Ppnil.pp_con field_type;
 		  (* XXX this will break if record is a multi-record  *)		  
                   (* record case *)
 		  val _ = (add_instr(ILABEL recordl);
-			   add_instr(LOAD32I(EA(con_ir,4),numfields)))
+			   add_instr(LOAD32I(EA(field_con_ir,4),numfields)))
 
 		  val _ = add_instr(LOAD32I(EA(exp_ir,~4),sumrectag))
 		  val _ = add_instr(LI(0wxf8000000,tmp2))

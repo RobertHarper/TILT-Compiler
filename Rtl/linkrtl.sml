@@ -1,4 +1,4 @@
-(*$import LINKRTL Linknil TortlBase Tortl Util TilWord32 Rtl RtlTags Pprtl *)
+(*$import LINKRTL Linknil TortlBase TortlSum Tortl Util TilWord32 Rtl RtlTags Pprtl *)
 
 structure Linkrtl :> LINKRTL =
 struct

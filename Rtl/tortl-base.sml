@@ -337,35 +337,15 @@ val debug_bound = ref false
 		  in (is_hnf c',c')
 		  end)
 
-    fun simplify_type_help' env c : bool * con = 
-	let fun help(is_recur,v,vc_seq) = 
-	    let val env' = insert_kind(env,v,Type_k,NONE)
-	    in  simplify_type_help' env' (NilUtil.muExpand(is_recur,vc_seq,v))
-	    end
-	in
-	    (case simplify_type_help env c of
-		 (_, Mu_c (is_recur,vc_seq)) => 
-		     (case (Sequence.toList vc_seq) of
-			  [(v,c)] => help (is_recur,v, vc_seq)
-			| _ => error "simplify_type given non-single Mu_c")
-	       | (_, Proj_c(Mu_c (is_recur,vc_seq),l)) => 
-			  let fun loop n [] = error "bad Proj_c(Mu_c,...)"
-				| loop n ((v,_)::rest) = if (eq_label(NilUtil.generate_tuple_label n,l))
-							     then v else loop (n+1) rest
-			  in  help(is_recur,loop 1 (Sequence.toList vc_seq), vc_seq)
-			  end
-	       | (hnf,c) => (hnf,c))
-	end
 
     fun get_shape ({env,...} : state) c = NilStatic.get_shape env c
     fun make_shape ({env,...} : state) k = NilStatic.make_shape env k
     fun simplify_type ({env,...} : state) c : bool * con = 
 	simplify_type_help env c
-    fun simplify_type' ({env,...} : state) c : bool * con = 
-	simplify_type_help' env c
+
 
 val simplify_type = fn state => Stats.subtimer("tortl_simplify_type",simplify_type state)
-val simplify_type' = fn state => Stats.subtimer("tortl_simplify_type",simplify_type' state) 
+
 
     local
 	fun help2 state (tagcount,totalcount,known,carrier) = 

@@ -1,3 +1,5 @@
+(*$import TORTLBASE Name *)
+
 signature TORTL_SUM = 
 sig
 

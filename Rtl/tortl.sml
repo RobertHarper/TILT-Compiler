@@ -1,4 +1,4 @@
-(*$import TORTL RTL PPRTL TORTLBASE RTLTAGS NIL NILUTIL PPNIL Stats *)
+(*$import TORTL RTL PPRTL TORTLSUM TORTLBASE RTLTAGS NIL NILUTIL PPNIL Stats *)
 
 (* empty records translate to 256; no allocation *)
 (* to do: strive for VLABEL not VGLOBAL *)
@@ -201,10 +201,6 @@ val debug_bound = ref false
 	      let 
 		  val label = alloc_local_data_label "string"
 		  val sz = Array.length a
-		  val tagword = TW32.orb(TW32.lshift(TW32.fromInt sz,int_len_offset),intarray)
-		  val _ = add_data(COMMENT "static string tag")
-		  val _ = add_data(INT32 tagword)
-		  val _ = add_data(DLABEL label)
 		  val (state,vl) = (Array.foldr (fn (e,(state,vls)) => 
 					 let val (a,b,state) = xexp(state,Name.fresh_var(),e,NONE,NOTID)
 					 in  (state,(a,b)::vls)
@@ -251,9 +247,20 @@ val debug_bound = ref false
 		    | general_packager [_] = error "did not receive a var_val"
 		    | general_packager _ = error "did not receive 1 value"
 		      
+
 		  val c = (case c of
 			       Prim_c _ => c
 			     | _ => #2(simplify_type state c))
+		  val shift_amount = (case c of
+					  Prim_c(Int_c Prim.W8, []) => 0
+					| Prim_c(Int_c Prim.W32, []) => 2
+					| Prim_c(BoxFloat_c Prim.F64, []) => 2
+					| _ => 2)
+		  val tagword = TW32.orb(TW32.lshift(TW32.fromInt sz,
+						     shift_amount + int_len_offset),intarray)
+		  val _ = add_data(COMMENT "static vector/array tag")
+		  val _ = add_data(INT32 tagword)
+		  val _ = add_data(DLABEL label)
 		  val _ = (case c of
 			       Prim_c(Int_c Prim.W8, []) => layout 4 char_packager
 			     | Prim_c(Int_c Prim.W32, []) => layout 1 word_packager
