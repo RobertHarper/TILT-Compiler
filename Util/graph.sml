@@ -126,6 +126,63 @@ struct
 	  g'
        end
 
+  local
+      datatype color = White | Black | Gray
+      val noParent = ~1
+      type parent = int Array.array	(* maps each node to it's parent or noParent *)
+      type path = int list		(* [n1,...,nk] is a path from n1 to nk *)
+
+      (* cyclePath : parent * int * int -> path
+       * Given the first and last nodes of a cycle, use parent links to compute
+       * the path from first to last.
+       *)
+      fun cyclePath (parent,first,last) =
+	  let	      
+	      (* The only way that a parent link can be noParent is if last = first.
+	       * The loop is structured to deal with that case.
+	       *)
+	      fun loop u acc =
+		  if u = first then acc
+		  else let val v = Array.sub(parent, u)
+		       in  loop v (v::acc)
+		       end
+	  in
+	      loop last [last]
+	  end
+
+      exception Cycle of path
+      fun foundCycle x = raise Cycle (cyclePath x)
+
+      fun dfsVisit (G as (edges, color, parent), u) =
+	  let val _ = Array.update(color,u,Gray)
+	      val edgeList = Array.sub(edges,u)
+	      fun mapper v = case Array.sub(color,v)
+			       of White => (Array.update(parent,v,u);
+					    dfsVisit (G,v))
+				| Gray => foundCycle (parent,v,u)
+				| Black => ()
+	  in
+	      app mapper edgeList;
+	      Array.update(color,u,Black)
+	  end
+
+      fun dfs (G as (edges, color, parent)) =
+	  for (0, Array.length edges,
+	       fn v => if Array.sub(color, v) = White
+			   then dfsVisit (G,v)
+		       else ())
+  in
+      (* findCycle : graph -> node list *)
+      fun findCycle (g as GRAPH {nodes=ref nodes, edges=ref edges,...}) =
+	  let val count = Array.length edges
+	      val color = Array.array(count, White)
+	      val parent = Array.array(count, noParent)
+	  in
+	      (dfs (edges,color,parent); nil)
+	      handle Cycle c => map (fn i => Array.sub(nodes, i)) c
+	  end
+  end
+
   fun dfs' (g,visited,start) =
     let fun dfs node =
 	     if Array.sub(visited,node) then nil
@@ -191,7 +248,7 @@ structure Dag :> DAG =
 struct
 
     val error = fn str => Util.error "graph.sml" str
-    exception UnknownNode
+    exception HashUnknownNode
     local
 	structure HashKey =
 	    struct
@@ -204,12 +261,11 @@ struct
 	    struct
 		type node = string
 		open HashTable
-		fun make i = HashTable.mkTable(i,UnknownNode)
+		fun make i = HashTable.mkTable(i,HashUnknownNode)
 	    end
     in
 	structure Graph = Graph(Node)
     end			
-
 
     local
 	structure StringKey = 
@@ -233,6 +289,8 @@ struct
     end
 
     type node = string
+    exception UnknownNode of node
+    exception Cycle of node list
     type 'a graph = {main        : Graph.graph,                      (* Primary info *)
 		     attributes : (int * 'a) StringMap.map ref,  
 		     cached      : bool ref,                         (* Cache up-to-date? *)
@@ -278,11 +336,11 @@ struct
     fun nodeWeight ({attributes, ...} : 'a graph, node) = 
 	(case StringMap.find(!attributes, node) of
 	     NONE => (print ("nodeWeight could not find " ^ node ^ "\n");
-		      raise UnknownNode)
+		      raise (UnknownNode node))
 	   | SOME (w,_) => w)
     fun nodeAttribute ({attributes, ...} : 'a graph, node) = 
 	(case StringMap.find(!attributes, node) of
-	     NONE => raise UnknownNode
+	     NONE => raise (UnknownNode node)
 	   | SOME (_,a) => a)
     fun nodes ({main,...} : 'a graph) = Graph.nodes main
     fun numNodes ({main,attributes,...} : 'a graph) = 
@@ -298,14 +356,22 @@ struct
 	let val edges = Graph.edges main (Graph.hash main node)
 	in  map (Graph.unhash main) edges
 	end
+    val children' = children
     fun numChildren(g as {main,...} : 'a graph, node : string) = 
 	length(Graph.edges main (Graph.hash main node))
     fun numEdges(g as {main,...} : 'a graph) = 
 	foldl (fn (n,acc) => acc + (numChildren(g,n))) 0 (nodes g)
 
+    (* checkAcyclic : 'a graph -> unit.  May raise Cycle. *)
+    fun checkAcyclic ({main,...} : 'a graph) =
+	case (Graph.findCycle main)
+	  of nil => ()
+	   | nodes => raise Cycle nodes
+	      
     fun refresh({cached = ref true, ...} : 'a graph) = ()
       | refresh(g as {main, cached, reverse, upInfo, downInfo, ...} : 'a graph) = 
-	let val _ = reverse := Graph.rev main
+	let val _ = checkAcyclic g
+	    val _ = reverse := Graph.rev main
 	    val _ = upInfo := StringMap.empty
 	    val _ = downInfo := StringMap.empty
 	    fun get_upInfo node = 
@@ -361,12 +427,12 @@ struct
     fun ancestorWeight (g as {upInfo, ...} : 'a graph, node) = 
 	(refresh g;
 	 case StringMap.find(!upInfo, node) of
-	     NONE => raise UnknownNode
+	     NONE => raise (UnknownNode node)
 	   | SOME {ancestorWeight,...} => ancestorWeight)
     fun descendentWeight (g as {downInfo, ...} : 'a graph, node) : int = 
 	(refresh g;
 	 case StringMap.find(!downInfo, node) of
-	     NONE => raise UnknownNode
+	     NONE => raise (UnknownNode node)
 	   | SOME {descendentWeight,...} => descendentWeight)
     fun parents (g as {main, reverse,...} : 'a graph, node) = 
 	let val _ = refresh g
@@ -376,7 +442,7 @@ struct
     fun ancestors (g as {upInfo,...} : 'a graph, node) = 
 	(refresh g; 
 	 (case (StringMap.find(!upInfo, node)) of
-	      NONE => raise UnknownNode
+	      NONE => raise (UnknownNode node)
 	    | SOME {ancestors = a,... } => StringOrderedSet.toList a))
 
     datatype nodeStatus = Black  (* Completed nodes whose outgoing edges will not be shown *)

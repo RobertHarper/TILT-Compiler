@@ -38,15 +38,23 @@ sig
    val dfs : graph -> int -> int list
    val sc_components : (node -> unit) -> graph -> int list list
    val reachable : graph -> node list -> (int -> bool)
+
+   (* (findCycle g) is nil if g is acyclic.  Otherwise, it's
+    * a non-empty list [n1, ..., nk] of nodes such that the edges
+    * (n1,n2), ..., (n_{k-1},nk), (nk,n1) exist in g.
+    *)
+   val findCycle : graph -> node list
 end
 
 signature DAG =
 sig
     type node = string
     type 'a graph
-    exception UnknownNode
+    exception UnknownNode of node	(* Presents the offender (see parents') *)
+    exception Cycle of node list	(* Presents a cycle a' la' findCycle. *)
 
     val refresh : 'a graph -> unit                      (* Force the cache to be computed *)
+    							(* may raise Cycle *)
 
     val empty : unit -> 'a graph                        (* Create a new graph *)
     val insert_node : 'a graph * node * int * 'a -> unit
@@ -60,6 +68,7 @@ sig
     val descendentWeight : 'a graph * node -> int
     val nodes : 'a graph -> node list
     val children : 'a graph * node -> node list
+    val children' : 'a graph * node -> node list    (* Doesn't use cache -- safe for exn handlers  *)
     val parents : 'a graph * node -> node list
     val ancestors : 'a graph * node -> node list    (* topologically sorted with descendants first *)
 
