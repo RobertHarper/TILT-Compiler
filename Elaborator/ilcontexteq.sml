@@ -6,6 +6,7 @@ structure IlContextEq
 struct
 
     val error = fn str => Util.error "ilcontexteq.sml" str
+    val showUnequal = Stats.ff("IlcontexteqShowUnequal")
     val debug = Stats.ff("IlcontexteqDebug")
     val blast_debug = Stats.ff("BlastDebug")
     val useOldBlast = ref false
@@ -35,6 +36,7 @@ struct
 	(case IntMap.find(!inMap,i) of
 	     SOME v => v
 	   | NONE => let val v = Name.fresh_var()
+			 val _ = (print "int2var adding "; print (Int.toString i); print "  to  "; Ppil.pp_var v; print "\n")
 			 val _ = inMap := IntMap.insert(!inMap,i,v)
 		     in  v
 		     end)
@@ -1225,16 +1227,19 @@ struct
 	    in  res
 	    end	    
 
-	fun eq_partial_context ((c,u): partial_context, (c',u'): partial_context) : bool =
+	fun eq_partial_context (pc as (c,u): partial_context, pc' as (c',u'): partial_context) : bool =
 	    let 
 		val (vm,vlist) = extend_vm_unresolved(u,u',VM.empty,[])
 		val (vm,vlist) = extend_vm_context(c,c',vm,vlist)
-(*		val _ = (print "vm = "; VM.show_vm vm; print "\n") 
-		val _ =( print "c = "; Ppil.pp_context c; print "\n\n";
-			print "c' = "; Ppil.pp_context c'; print "\n\n") *)
-	    in eq_cntxt(vm,c,c',vlist)
-	    end handle NOT_EQUAL => false
-
+		val res = eq_cntxt(vm,c,c',vlist)
+		    handle NOT_EQUAL => false
+		val _ = if (!showUnequal andalso not res)
+			    then (print "vm = "; VM.show_vm vm; print "\n";
+				  print "pc = "; Ppil.pp_pcontext pc; print "\n\n";
+				  print "pc' = "; Ppil.pp_pcontext pc'; print "\n\n")
+			else ()
+	    in  res
+	    end
 
 	fun eq_context (c: context, c': context) : bool = 
 	    let val pc = (c, Name.VarMap.empty)

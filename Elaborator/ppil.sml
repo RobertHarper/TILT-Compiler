@@ -9,6 +9,8 @@ struct
     open Prim Ppprim Tyvar
 
     val convarMode = Stats.int("convarMode")
+    val showOnlyModule = Stats.ff("showOnlyModule")
+
     val _ = convarMode := 0  (* 0 - variable only; 1 - value only; 2 - variable and value *)
     val error = fn s => error "ppil.sml" s
 
@@ -557,21 +559,38 @@ struct
 			   String " : ",
 			   pp_phrase_class true [] pc]
 		end
-	in  Vbox[String "---- Fixity ----",
+	    fun isModule (SOME (_, PHRASE_CLASS_MOD _)) = true
+	      | isModule (SOME (_, PHRASE_CLASS_SIG _)) = true
+	      | isModule _ = false
+	    val ordering = if (!showOnlyModule)
+			       then List.filter (fn (PATH p) => isModule (Name.PathMap.find(pathMap, p))) ordering
+			   else ordering
+	    val pathRes = [String "---- Pathmap ----",
+			   Break,
+			   pp_list path_doer (rev ordering) ("","","", true),
+			   Break]
+
+	in  if (!showOnlyModule)
+		then pathRes
+	    else 
+		[String "---- Fixity ----",
 		 Break,
 		 pp_list fixity_doer (Name.LabelMap.listItemsi fixityMap) ("","", "", true),
 		 Break,
 		 String "---- Overload ----",
 		 Break,
 		 pp_list overload_doer (Name.LabelMap.listItemsi overloadMap) ("","", "", true),
-		 Break,
-		 String "---- Pathmap ----",
-		 Break,
-		 pp_list path_doer (rev ordering) ("","","", true),
-		 Break]
+		 Break] @ pathRes
 	end
 
-    fun pp_pcontext' ((ctxt, free) : Il.partial_context) = pp_context' ctxt
+    fun pp_pcontext' ((ctxt, free) : Il.partial_context) = 
+	let val fmts = pp_context' ctxt
+	    fun free_doer (v,l) = Hbox[pp_var v, String " ---> ", pp_label l]
+	    val fmt = pp_list free_doer (Name.VarMap.listItemsi free) ("", "", "", true)
+	in  Vbox (fmt :: Break :: fmts)
+	end
+
+    val pp_context' = fn args => Vbox (pp_context' args)
 
 
     val pp_var = help' pp_var
