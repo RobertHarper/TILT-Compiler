@@ -209,6 +209,12 @@ value_t mla_input(value_t _des, value_t numtoread)
   assert(0);
 }
 
+value_t cvt_real2int(double x)
+
+{
+  return (value_t)x;
+}
+
 
 
 
