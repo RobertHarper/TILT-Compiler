@@ -1,4 +1,4 @@
-(*$import Ast IL *)
+(*$import Ast Il *)
 (* Handles infix parsing of pattern and expressions. *)
 signature INFIXPARSE = 
   sig
@@ -18,7 +18,6 @@ signature INFIXPARSE =
 	 longer infix.  It DOES recursively traverse all subpatterns as
 	 patterns contain no declarations that could change infix information *)
 
-    structure Il : IL
     val debug : bool ref
     val parse_exp : Il.fixity_table * Ast.exp -> Ast.exp option
     val parse_pat : Il.fixity_table * (Ast.symbol list -> bool) 

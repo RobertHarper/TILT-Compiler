@@ -1,11 +1,7 @@
 (*$import NIL PPNIL NILSUBST Stats *)
-functor NilSubstFn(structure Nil : NIL
-		   structure PpNil : PPNIL
-		   sharing PpNil.Nil = Nil) 
-  :> NILSUBST where type exp = Nil.exp 
-	      where type con = Nil.con 
-	      where type kind = Nil.kind 
-	      where type bnd = Nil.bnd
+functor NilSubstFn(structure PpNil : PPNIL)
+
+  :> NILSUBST 
   = 
   struct
 

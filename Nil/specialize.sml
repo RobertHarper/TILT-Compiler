@@ -12,11 +12,9 @@
        requires two calls and can lead to unnecessary constructor code.
 *)	
 
-functor Specialize(structure Nil : NIL
-		   structure NilUtil : NILUTIL
-		   structure Ppnil : PPNIL
-		 sharing Ppnil.Nil = NilUtil.Nil = Nil) 
-     :> SPECIALIZE where Nil = Nil  = 
+functor Specialize(structure NilUtil : NILUTIL
+		   structure Ppnil : PPNIL)
+     :> SPECIALIZE =
 struct
 
 	open Util Nil NilUtil Listops

@@ -1,23 +1,14 @@
 (*$import NIL PRIMUTIL PRIM ILUTIL ALPHA NILSUBST PPNIL NILUTIL *)
 (* -------------------------------------------------------- *)
-functor NilUtilFn(structure ArgNil : NIL
-		  structure PrimUtil : PRIMUTIL
-		  structure ArgPrim : PRIM
+functor NilUtilFn(structure PrimUtil : PRIMUTIL
 		  structure IlUtil : ILUTIL
 		  structure Alpha : ALPHA
 		  structure Subst : NILSUBST
-		  structure PpNil : PPNIL
-		  sharing ArgNil = Alpha.Nil = PpNil.Nil
-		  and ArgPrim = PrimUtil.Prim = ArgNil.Prim
-		  and type ArgNil.exp = Subst.exp
-		  and type ArgNil.con = Subst.con
-		  and type ArgNil.kind = Subst.kind) 
-  :> NILUTIL where Nil = ArgNil 
-	     and type alpha_context = Alpha.alpha_context =
+		  structure PpNil : PPNIL)
+
+  :> NILUTIL where type alpha_context = Alpha.alpha_context =
 struct
 
-  structure Nil = ArgNil
-  structure Prim = ArgPrim
   open Nil Util 
 
   val debug = ref false

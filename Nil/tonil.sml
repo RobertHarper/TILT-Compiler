@@ -5,9 +5,7 @@
    Also note that all term-level (but not type-level) 
         record fields must be sorted by their labels. *)
 
-functor Tonil(structure Il : IL
-	      structure Nil : NIL
-              structure Ilutil : ILUTIL
+functor Tonil(structure Ilutil : ILUTIL
               structure Nilutil : NILUTIL
 	      structure NilError : NILERROR
               structure Ilcontext : ILCONTEXT
@@ -16,26 +14,17 @@ functor Tonil(structure Il : IL
 	      structure Normalize : NORMALIZE
               structure Nilstatic : NILSTATIC
               structure Nilprimutil : PRIMUTIL
+	         where type exp = Nil.exp
+                   and type con = Nil.con
               structure Ppnil : PPNIL
               structure Ppil : PPIL
 	      structure Subst : NILSUBST
-               sharing Ilutil.Il = Ppil.Il = Ilcontext.Il = IlStatic.Il = Il
-	       sharing Nilutil.Nil = Nilcontext.Nil = Ppnil.Nil = 
-		   Nilstatic.Nil = NilError.Nil = Normalize.Nil = Nil
-               sharing Nil.Prim = Nilprimutil.Prim = Il.Prim
 	       sharing type Nilstatic.context = Nilcontext.context = Normalize.context
-	       sharing type Nilprimutil.exp = Nilutil.Nil.exp
-                   and type Nilprimutil.con = Nilutil.Nil.con
-	       sharing type Subst.con = Nil.con
-		   and type Subst.exp = Nil.exp
-		   and type Subst.kind = Nil.kind
 		   and type Subst.subst = Nilcontext.subst)
-              :> TONIL where Il = Il 
-                        and Nil = Nil =
+              :> TONIL =
 struct
 
-   structure Il = Il
-   structure Nil = Nil
+
    structure VarSet = Name.VarSet
 
    open Nil Listops
@@ -405,11 +394,11 @@ struct
 	  |  SOME x => x)
 
    fun derefTyvar tyvar =
-       (case (Il.Tyvar.tyvar_deref tyvar) of
+       (case (Tyvar.tyvar_deref tyvar) of
 	    NONE => error "(derefTyvar)  tyvar unset"
           | SOME x => x)
 
-   fun derefOvar ovar = derefTyvar (Il.Tyvar.ocon_deref ovar)
+   fun derefOvar ovar = derefTyvar (Tyvar.ocon_deref ovar)
 
    (* selectFromKind.  Given a record kind and a list lbls of labels,
          produce the selected kind fields and remove all singeltons.

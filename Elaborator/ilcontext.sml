@@ -1,8 +1,6 @@
 (*$import IL ILCONTEXT Util Listops Name PPIL *)
-functor IlContext(structure Il : IL
-		  structure Ppil : PPIL
-		  sharing Ppil.Il = Il) 
-    :> ILCONTEXT where Il = Il   =
+functor IlContext(structure Ppil : PPIL)
+    :> ILCONTEXT =
 struct
 
     structure Il = Il

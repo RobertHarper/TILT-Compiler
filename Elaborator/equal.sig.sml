@@ -1,9 +1,7 @@
-(*$import IL *)
+(*$import Il *)
 (* Equality compiler *)
 signature EQUAL = 
   sig
-
-    structure Il : IL
 
     val debug : bool ref
 	

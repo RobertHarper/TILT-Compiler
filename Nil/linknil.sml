@@ -42,47 +42,29 @@ structure Linknil :> LINKNIL  =
 	     bnds_made_precise := true;
 	     closure_print_free := false)
 
-    structure Il = LinkIl.Il
-    structure Stats = Stats
-    structure Name = Name
-    structure LinkIl = LinkIl
-    structure Nil = Nil(structure ArgAnnotation = Annotation
-			structure ArgPrim = LinkIl.Il.Prim)      
 
-    structure PpNil = Ppnil(structure ArgNil = Nil
-			    structure Prim = LinkIl.Il.Prim
-			    structure Ppprim = LinkIl.Ppprim)
+    structure PpNil = Ppnil(structure Ppprim = LinkIl.Ppprim)
+    structure Alpha = Alpha()
 
-    structure Alpha = Alpha(structure ArgNil = Nil)
-
-    structure NilPrimUtilParam = NilPrimUtilParam(structure Nil= Nil)
-	
-    structure NilPrimUtil = PrimUtil(structure Prim = LinkIl.Il.Prim
-				     structure Ppprim = LinkIl.Ppprim
+    structure NilPrimUtil = PrimUtil(structure Ppprim = LinkIl.Ppprim
 				     structure PrimUtilParam = NilPrimUtilParam)
 
-    structure NilSubst = NilSubstFn(structure Nil = Nil
-				    structure PpNil = PpNil)
+    structure NilSubst = NilSubstFn(structure PpNil = PpNil)
 
-    structure NilUtil = NilUtilFn(structure ArgNil = Nil
-				  structure IlUtil = LinkIl.IlUtil
-				  structure ArgPrim = LinkIl.Il.Prim
+    structure NilUtil = NilUtilFn(structure IlUtil = LinkIl.IlUtil
 				  structure PrimUtil = NilPrimUtil
 				  structure Alpha = Alpha
 				  structure Subst = NilSubst
 				  structure PpNil = PpNil)
 
-    structure NilError = NilErrorFn(structure ArgNil = Nil
-				    structure PpNil = PpNil)
+    structure NilError = NilErrorFn(structure PpNil = PpNil)
 
     structure NilContext = NilContextFn(structure NilUtil = NilUtil
-					structure ArgNil = Nil
 					structure PpNil = PpNil
 					structure PrimUtil = NilPrimUtil
 					structure Subst = NilSubst)
 
     structure Normalize = NormalizeFn(val number_flatten = number_flatten
-				      structure Nil = Nil
 				      structure NilUtil = NilUtil
 				      structure PrimUtil = NilPrimUtil
 				      structure NilContext = NilContext
@@ -91,8 +73,6 @@ structure Linknil :> LINKNIL  =
 
 
     structure NilStatic = NilStaticFn(structure Annotation = Annotation
-				      structure Prim = LinkIl.Il.Prim
-				      structure ArgNil = Nil
 				      structure PrimUtil = NilPrimUtil
 				      structure NilUtil = NilUtil
 				      structure NilContext = NilContext
@@ -104,8 +84,7 @@ structure Linknil :> LINKNIL  =
 
     val nilstatic_exp_valid = NilStatic.exp_valid
 
-    structure Tonil = Tonil(structure Il = LinkIl.Il
-			    structure Nilstatic = NilStatic
+    structure Tonil = Tonil(structure Nilstatic = NilStatic
 			    structure NilError = NilError
 			    structure Nilprimutil = NilPrimUtil
 			    structure Ilutil = LinkIl.IlUtil
@@ -116,11 +95,9 @@ structure Linknil :> LINKNIL  =
 			    structure Normalize = Normalize
 			    structure Ppnil = PpNil
 			    structure Ppil = LinkIl.Ppil
-			    structure Nil = Nil
 			    structure Subst = NilSubst)
 
-    structure Optimize = Optimize(structure Nil = Nil
-				  structure Subst = NilSubst			
+    structure Optimize = Optimize(structure Subst = NilSubst			
 				  structure NilUtil = NilUtil
 				  structure NilContext = NilContext
 				  structure Normalize = Normalize
@@ -128,7 +105,6 @@ structure Linknil :> LINKNIL  =
 				  structure Ppnil = PpNil)
 (*
     structure Vararg = Vararg(val number_flatten = number_flatten
-			      structure Nil = Nil
 			      structure Subst = NilSubst			
 			      structure NilUtil = NilUtil
 			      structure NilContext = NilContext
@@ -136,32 +112,27 @@ structure Linknil :> LINKNIL  =
 			      structure NilStatic = NilStatic
 			      structure Ppnil = PpNil)
 *)
-    structure Specialize = Specialize(structure Nil = Nil
-				    structure NilUtil = NilUtil
-				    structure Ppnil = PpNil)
+    structure Specialize = Specialize(structure NilUtil = NilUtil
+				      structure Ppnil = PpNil)
 
-    structure Linearize = Linearize(structure Nil = Nil
-				    structure NilUtil = NilUtil
+    structure Linearize = Linearize(structure NilUtil = NilUtil
 				    structure Ppnil = PpNil)
 
 (*
-    structure BetaReduce = BetaReduce(structure Prim = LinkIl.Il.Prim
-				      structure Nil = Nil
+    structure BetaReduce = BetaReduce(structure Prim = Prim
 				      structure NilUtil = NilUtil
 				      structure Ppnil = PpNil
 				      structure IlUtil = LinkIl.IlUtil
 				      structure Subst = NilSubst)
 
-    structure Cleanup = Cleanup(structure Prim = LinkIl.Il.Prim
-				structure Nil = Nil
+    structure Cleanup = Cleanup(structure Prim = Prim
 				structure NilUtil = NilUtil
 				structure Ppnil = PpNil
 				structure IlUtil = LinkIl.IlUtil
 				structure Subst = NilSubst)
 *)
 
-    structure ToClosure = ToClosure(structure Nil = Nil
-				    structure NilContext = NilContext
+    structure ToClosure = ToClosure(structure NilContext = NilContext
 				    structure Normalize = Normalize
 				    structure NilStatic = NilStatic
 				    structure Ppnil = PpNil
@@ -210,7 +181,7 @@ structure Linknil :> LINKNIL  =
 	    
     fun pcompile' debug (filename,(ctxt,sbnd_entries)) =
 	let
-	    open Nil LinkIl.Il LinkIl.IlContext Name
+	    open Nil Il LinkIl.IlContext Name
 	    val D = NilContext.empty
 
 	    val nilmod = (Stats.timer("Phase-splitting",Tonil.phasesplit)) (ctxt,sbnd_entries)
@@ -221,7 +192,7 @@ structure Linknil :> LINKNIL  =
 
     fun compile' debug (filename,(ctxt,sbnd_entries)) =
 	let
-	    open Nil LinkIl.Il LinkIl.IlContext Name
+	    open Nil LinkIl.IlContext Name
 	    val D = NilContext.empty()
 
 	    val _ = if (!show_hil)
@@ -376,4 +347,4 @@ structure Linknil :> LINKNIL  =
 		     end
 end
 
-fun doit() = Linknil.compile_prelude(false, "test");
+

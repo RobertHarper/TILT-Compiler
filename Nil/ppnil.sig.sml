@@ -1,8 +1,7 @@
-(*$import NIL Formatter *)
+(*$import Nil Formatter *)
 (* Pretty-printing routines for the NIL *)
 signature PPNIL =
   sig
-    structure Nil : NIL
 
     val elide_prim : bool ref (* hide the type arguments to primitives *)
     val elide_bnd  : bool ref (* hide the type/kind at bindings *)

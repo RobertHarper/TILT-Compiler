@@ -1,9 +1,7 @@
-(*$import RTL *)
+(*$import Rtl *)
+
 signature RTLTOASM =
 sig
-
-   structure Rtl : RTL
-
    val msgs        : bool ref
    val debug       : bool ref
    val knowns      : bool ref

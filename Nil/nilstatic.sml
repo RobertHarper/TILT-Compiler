@@ -1,7 +1,8 @@
 (*$import ANNOTATION PRIMUTIL NIL PPNIL ALPHA NILUTIL NILCONTEXT NILERROR NORMALIZE NILSUBST Stats NILSTATIC *)
 functor NilStaticFn(structure Annotation : ANNOTATION
 		    structure PrimUtil : PRIMUTIL
-		    structure ArgNil : NIL
+			 where type con = Nil.con
+		         where type exp = Nil.exp
 		    structure PpNil : PPNIL
 		    structure Alpha : ALPHA
 		    structure NilUtil : NILUTIL 
@@ -9,24 +10,15 @@ functor NilStaticFn(structure Annotation : ANNOTATION
 		    structure NilError : NILERROR 
 		    structure Normalize : NORMALIZE
 		    structure Subst : NILSUBST
-		         sharing NilUtil.Nil = NilContext.Nil = Alpha.Nil 
-			       = PpNil.Nil = NilError.Nil = ArgNil
-			 and Annotation = ArgNil.Annotation
-			 and ArgNil.Prim = PrimUtil.Prim
-			 and type NilUtil.alpha_context = Alpha.alpha_context
-			 and type PrimUtil.con = Subst.con = Normalize.con = ArgNil.con 
-		         and type PrimUtil.exp = Subst.exp = Normalize.exp = ArgNil.exp
-			 and type Subst.kind = Normalize.kind = ArgNil.kind
-			 and type Subst.bnd = ArgNil.bnd
+			 sharing type NilUtil.alpha_context = Alpha.alpha_context
 			 and type Subst.subst = NilContext.subst = Normalize.subst
 			 and type Normalize.context = NilContext.context) 
     :> NILSTATIC 
-        where Nil = ArgNil 
-	and type context = NilContext.context = 
+	where type context = NilContext.context = 
 struct	
   
   structure Annotation = Annotation
-  structure Nil = ArgNil
+
   open Nil 
   open Prim
 

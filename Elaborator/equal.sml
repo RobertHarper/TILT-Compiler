@@ -1,15 +1,12 @@
-(*$import IL ILSTATIC ILUTIL PPIL ILCONTEXT EQUAL *)
+(*$import Il ILSTATIC ILUTIL PPIL ILCONTEXT EQUAL *)
 (* Equality compiler *)
-functor Equal(structure Il : IL
-		 structure IlStatic : ILSTATIC
-		 structure IlUtil : ILUTIL
-		 structure IlContext : ILCONTEXT 
-		 structure Ppil : PPIL 
-		 sharing IlContext.Il = IlUtil.Il = IlStatic.Il = Ppil.Il = Il)
-    :> EQUAL where Il = Il =
+functor Equal(structure IlStatic : ILSTATIC
+	      structure IlUtil : ILUTIL
+	      structure IlContext : ILCONTEXT 
+	      structure Ppil : PPIL)
+    :> EQUAL =
 struct
 
-    structure Il = Il
     open Il IlStatic IlUtil Ppil 
     open Util Listops Name IlContext Tyvar
 

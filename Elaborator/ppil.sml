@@ -1,12 +1,9 @@
 (*$import IL PPPRIM FORMATTER Bool PPIL *)
 (* Il pretty-printer. *)
-functor Ppil(structure Il : IL
-	     structure Ppprim : PPPRIM
-	     sharing Il.Prim = Ppprim.Prim)
-	:> PPIL where Il = Il =
+functor Ppil(structure Ppprim : PPPRIM)
+	:> PPIL =
 struct
 
-    structure Il = Il
     structure Formatter = Formatter
     datatype display = VAR_ONLY | VALUE_ONLY | VAR_VALUE
     val convar_display = ref VALUE_ONLY
@@ -372,13 +369,12 @@ struct
 						   pp_path p, String ", ",
 						   pp_list (pp_sdec seen) sdecs ("[",",","]",true),
 						   String ")"]
-       | SIGNAT_INLINE_STRUCTURE {self,code,imp_sig,abs_sig} =>
+       | SIGNAT_INLINE_STRUCTURE {self,code,abs_sig} =>
 	     HOVbox[(case self of
 			 SOME p => Hbox[String "SIGS_INLINE_NORM(",
 					pp_path p, String ")"]
 		       | NONE => String "SIGS_INLINE"),
 		    String "abs_sig = ", pp_list (pp_sdec seen) abs_sig ("[",",","]",true), Break,
-		    String "imp_sig = ", pp_list (pp_sdec seen) imp_sig ("[",",","]",true), Break,
 		    String "code = ", pp_list (pp_sbnd seen) code ("[",",","]",true)]
        | SIGNAT_FUNCTOR (v,s1,s2,a) => HOVbox0 1 8 1 
 	                                        [String "SIGF(",

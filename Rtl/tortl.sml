@@ -21,21 +21,16 @@
 *)
    
 
-functor Tortl(structure Rtl : RTL
-	      structure Pprtl : PPRTL
+functor Tortl(structure Pprtl : PPRTL
 	      structure TortlBase : TORTL_BASE 
 	      structure TortlSum : TORTL_SUM
 	      structure TortlVararg : TORTL_VARARG
 	      structure Rtltags : RTLTAGS 
-	      structure Nil : NIL
 	      structure NilUtil : NILUTIL
 	      structure Ppnil : PPNIL
-	      sharing Ppnil.Nil = NilUtil.Nil = TortlBase.Nil = Nil
 	      sharing Pprtl.Rtltags = Rtltags
-              sharing TortlSum.TortlBase = TortlVararg.TortlBase = TortlBase
-	      sharing Rtl = Pprtl.Rtl = TortlBase.Rtl)
-    :> TORTL where Rtl = Rtl 
-             where Nil = Nil =
+              sharing TortlSum.TortlBase = TortlVararg.TortlBase = TortlBase)
+    :> TORTL =
 struct
 
 val do_constant_records = ref true

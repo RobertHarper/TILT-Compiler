@@ -11,7 +11,6 @@ functor Toalpha(val do_tailcalls : bool ref
 (*		sharing Machineutils.Machine.Rtl = ArgTracetable.Machine.Rtl = Bblock.Machine.Rtl = DM.DA.Machine.Rtl = Decalpha.Machine.Rtl = Pprtl.Rtl *)
 		sharing Machineutils.Machine = ArgTracetable.Machine = Bblock.Machine = DM.DA.Machine = Decalpha.Machine)
   :> TOASM where Machine = Decalpha.Machine
-           where Rtl = Pprtl.Rtl
 	   where Bblock = Bblock
 	   where Tracetable = ArgTracetable
 = 
@@ -20,7 +19,6 @@ struct
    structure Bblock = Bblock
    structure Decalpha = Decalpha
    structure Machineutils = Machineutils
-   structure Rtl = Pprtl.Rtl
    structure Tracetable = ArgTracetable
    structure W = TilWord32
    val i2w = W.fromInt

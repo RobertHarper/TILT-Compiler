@@ -6,16 +6,12 @@
 
 
 functor TortlVararg(val number_flatten : int
-		    structure Rtl : RTL
 		    structure Pprtl : PPRTL
 		    structure TortlBase : TORTL_BASE 
 		    structure Rtltags : RTLTAGS 
-		    structure Nil : NIL
 		    structure NilUtil : NILUTIL
 		    structure Ppnil : PPNIL
-		    sharing Ppnil.Nil = NilUtil.Nil = TortlBase.Nil = Nil
-		    sharing Pprtl.Rtltags = Rtltags
-		    sharing Rtl = Pprtl.Rtl = TortlBase.Rtl)
+		    sharing Pprtl.Rtltags = Rtltags)
     :> TORTL_VARARG where TortlBase = TortlBase
 =
 struct

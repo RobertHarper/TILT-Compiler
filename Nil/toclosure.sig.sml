@@ -1,15 +1,15 @@
-(*$import NIL *)
+(*$import Nil *)
+
 signature TOCLOSURE = 
     sig
-	structure Nil : NIL
-
-val do_close_path : bool ref
-val do_single_venv : bool ref
 
 	val debug : bool ref
 	val debug_full : bool ref
 
-val closure_print_free : bool ref
+	val do_close_path : bool ref
+	val do_single_venv : bool ref
+	val closure_print_free : bool ref
+
 (*
 	val liftCode : bool ref
 	val close_exp : Nil.exp -> Nil.exp

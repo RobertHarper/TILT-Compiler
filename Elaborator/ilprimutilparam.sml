@@ -1,14 +1,10 @@
-(*$import IL PRIMUTILPARAM *)
-functor IlPrimUtilParam(structure Il : IL)
+(*$import IL PRIMUTILPARAM Il *)
+functor IlPrimUtilParam()
     :> PRIMUTILPARAM where type con = Il.con 
                      where type exp = Il.exp
-		     where type intsize = Il.Prim.intsize
-		     where type floatsize = Il.Prim.floatsize
-		     where type ('con,'exp) value = ('con,'exp) Il.Prim.value
     =
     struct
 
-(*	open IlUtil  *)
 	open Il
 	open Util
 	open Prim

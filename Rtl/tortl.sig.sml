@@ -1,9 +1,7 @@
-(*$import RTL NIL *)
+(*$import Rtl Nil  *)
+
 signature TORTL =
 sig
-   structure Rtl : RTL
-   structure Nil : NIL
-
    val diag : bool ref
    val debug : bool ref
    val debug_full_when : int ref

@@ -9,19 +9,14 @@
    App_e(Closure,...), and App_e(Code,...).
 *)
 
-functor ToClosure(structure Nil : NIL
-		  structure NilStatic : NILSTATIC
+functor ToClosure(structure NilStatic : NILSTATIC
 		  structure Normalize : NORMALIZE
 		  structure NilContext : NILCONTEXT
 		  structure NilUtil : NILUTIL
 		  structure Ppnil : PPNIL
 		  structure Subst : NILSUBST
-		  sharing NilUtil.Nil = Ppnil.Nil = NilStatic.Nil = NilContext.Nil = Normalize.Nil = Nil
-		      and type NilContext.context = NilStatic.context = Normalize.context
-			 and type Subst.con = Nil.con
-		         and type Subst.exp = Nil.exp
-			 and type Subst.kind = Nil.kind)
-    :> TOCLOSURE where Nil = Nil =
+		      sharing type NilContext.context = NilStatic.context = Normalize.context)
+    :> TOCLOSURE =
 struct
 
 

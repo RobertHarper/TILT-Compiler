@@ -44,8 +44,7 @@ OLD   4 bytes to indiate return address position in frame
      Then comes the "word" data.  This variable-sized data comes in the order of all
      the stack slots first and then all the register.
 *)
-functor Tracetable(val little_endian    : bool 
-		   structure Rtl: RTL)
+functor Tracetable(val little_endian    : bool)
   : TRACETABLE = 
   struct
 

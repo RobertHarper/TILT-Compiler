@@ -21,16 +21,12 @@
 (* xtagsum_dynamic record case is fragile *)
 
 
-functor TortlSum(structure Rtl : RTL
-	      structure Pprtl : PPRTL
-	      structure TortlBase : TORTL_BASE 
-	      structure Rtltags : RTLTAGS 
-	      structure Nil : NIL
-	      structure NilUtil : NILUTIL
-	      structure Ppnil : PPNIL
-	      sharing Ppnil.Nil = NilUtil.Nil = TortlBase.Nil = Nil
-	      sharing Pprtl.Rtltags = Rtltags
-	      sharing Rtl = Pprtl.Rtl = TortlBase.Rtl)
+functor TortlSum(structure Pprtl : PPRTL
+		 structure TortlBase : TORTL_BASE 
+		 structure Rtltags : RTLTAGS 
+		 structure NilUtil : NILUTIL
+		 structure Ppnil : PPNIL
+		 sharing Pprtl.Rtltags = Rtltags)
     :> TORTL_SUM where TortlBase = TortlBase
 =
 struct

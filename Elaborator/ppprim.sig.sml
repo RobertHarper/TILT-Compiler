@@ -1,8 +1,7 @@
-(*$import PRIM Formatter *)
+(*$import PRIM Formatter Prim *)
 (* Pretty-printing routines for the primitives *)
 signature PPPRIM =
   sig
-    structure Prim : PRIM
 
     val elide : bool ref  (* if true, elides some type arguments and uses infix *)
 

@@ -1,20 +1,17 @@
-(*$import IL ILCONTEXT PRIMUTIL PPIL ILUTIL Util Listops ILSTATIC *)
+(*$import Il ILCONTEXT PRIMUTIL PPIL ILUTIL Util Listops ILSTATIC *)
 (* Static semantics *)
-functor IlStatic(structure Il : IL
-		 structure IlContext : ILCONTEXT
+functor IlStatic(structure IlContext : ILCONTEXT
 		 structure PrimUtil : PRIMUTIL
+		     where type con = Il.con
+		     where type exp = Il.exp
 		 structure Ppil : PPIL
-		 structure IlUtil : ILUTIL
-		 sharing Ppil.Il = IlUtil.Il = IlContext.Il = Il
-		 sharing PrimUtil.Prim = Il.Prim
-		 sharing type PrimUtil.con = Il.con
-		 sharing type PrimUtil.exp = Il.exp)
-  :> ILSTATIC where Il = Il =
+		 structure IlUtil : ILUTIL)
+  :> ILSTATIC =
   struct
 
 
     open Util Listops
-    structure Il = Il
+
     structure PrimUtil = PrimUtil
     open Il Ppil IlUtil 
     open IlContext 

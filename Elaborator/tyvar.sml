@@ -1,8 +1,7 @@
 (*$import TYVAR Listops Name Util List *)
 
 (* Type variables parameterized over types *)
-functor Tyvar()
-  :> TYVAR =
+structure Tyvar :> TYVAR =
   struct
 
     open Listops Name Util

@@ -1,12 +1,9 @@
 (*$import NIL PPNIL NILERROR *)
-functor NilErrorFn(structure ArgNil : NIL
-		   structure PpNil : PPNIL
-		   sharing ArgNil = PpNil.Nil) :> NILERROR where Nil = ArgNil = 
+functor NilErrorFn(structure PpNil : PPNIL) :> NILERROR =
   struct
     val printl = Util.printl
     val lprintl = Util.lprintl
 
-    structure Nil = ArgNil
 
     fun c_all pred fc = 
       let

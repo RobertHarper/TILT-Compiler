@@ -1,19 +1,15 @@
 (*$import RTL PPRTL RTLTAGS NIL NILCONTEXT NILSTATIC NILUTIL PPNIL TORTLBASE Listops Stats Bool NORMALIZE *)
 
-functor TortlBase(structure Rtl : RTL
-		  structure Pprtl : PPRTL 
+functor TortlBase(structure Pprtl : PPRTL 
 		  structure Rtltags : RTLTAGS 
-		  structure Nil : NIL
 		  structure NilContext : NILCONTEXT
 		  structure Normalize : NORMALIZE
 		  structure NilStatic : NILSTATIC
 		  structure NilUtil : NILUTIL
 		  structure Ppnil : PPNIL
-		  sharing Ppnil.Nil = NilUtil.Nil = NilContext.Nil = NilStatic.Nil = Normalize.Nil = Nil
 		  sharing Pprtl.Rtltags = Rtltags
-		  sharing Pprtl.Rtl = Rtltags.Rtl = Rtl
 		  sharing type NilStatic.context = NilContext.context = Normalize.context)
-    :> TORTL_BASE where Rtl = Rtl where Nil = Nil
+    :> TORTL_BASE 
    =
 struct
 

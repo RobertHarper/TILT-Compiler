@@ -1,11 +1,10 @@
-(*$import ILCONTEXT ILUTIL PPIL Blaster NameBlast Word8 BinIO ILCONTEXTEQ Bool *)
+(*$import Il ILCONTEXT ILUTIL PPIL Blaster NameBlast Word8 BinIO ILCONTEXTEQ Bool *)
 (* Equality of contexts *)
 
 functor IlContextEq (structure IlContext : ILCONTEXT
 		     structure IlUtil : ILUTIL
-		     structure Ppil : PPIL
-		     sharing Ppil.Il = IlUtil.Il = IlContext.Il) 
-    :> ILCONTEXTEQ where Il = IlContext.Il =
+		     structure Ppil : PPIL)
+    :> ILCONTEXTEQ =
     struct
 
 	val debug = ref false

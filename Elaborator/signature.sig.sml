@@ -1,11 +1,9 @@
-(*$import IL *)
+(*$import Il *)
 
 signature SIGNATURE = 
 sig
     val debug : bool ref
     val debug_full : bool ref
-
-    structure Il : IL
 
     type var = Il.var
     type mod = Il.mod

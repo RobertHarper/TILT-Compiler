@@ -6,9 +6,9 @@ sig
   structure TortlBase : TORTL_BASE
   type state = TortlBase.state
   type var = Name.var
-  type con = TortlBase.Nil.con
-  type kind = TortlBase.Nil.kind
-  type regi = TortlBase.Rtl.regi
+  type con =  Nil.con
+  type kind = Nil.kind
+  type regi = Rtl.regi
   type loc_or_val = TortlBase.loc_or_val
   type var_loc = TortlBase.var_loc
 

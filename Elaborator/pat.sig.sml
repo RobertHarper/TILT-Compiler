@@ -1,9 +1,8 @@
-(*$import IL Ast *)
+(*$import Il Ast *)
 (* Pattern compiler.  
    Handles pattern bindings, case statements, and function declarations. *)
 signature PAT = 
   sig
-    structure Il : IL
 
     val debug : bool ref
     val do_result_type : bool ref

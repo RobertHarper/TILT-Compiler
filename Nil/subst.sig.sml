@@ -1,10 +1,10 @@
 (*$import Name *)
 signature NILSUBST = 
   sig
-    type exp
-    type con
-    type kind
-    type bnd
+    type exp = Nil.exp
+    type con = Nil.con
+    type kind = Nil.kind
+    type bnd = Nil.bnd
 
     type var = Name.var
 

@@ -2,20 +2,19 @@
 
 signature LINKIL = 
   sig
-      structure Il : IL
-      structure Ppprim : PPPRIM where Prim = Il.Prim
-      structure Ppil : PPIL where Il = Il
-      structure IlUtil : ILUTIL where Il = Il
-      structure IlContext : ILCONTEXT  where Il = Il
-      structure IlContextEq : ILCONTEXTEQ  where Il = Il
-      structure IlStatic : ILSTATIC   where Il = Il
-      structure Basis : BASIS where Il = Il
+      structure Ppprim : PPPRIM
+      structure Ppil : PPIL
+      structure IlUtil : ILUTIL
+      structure IlContext : ILCONTEXT
+      structure IlContextEq : ILCONTEXTEQ
+      structure IlStatic : ILSTATIC
+      structure Basis : BASIS
 
       type sbnd = Il.sbnd
       type context_entry = Il.context_entry
       type context = Il.context
-      type module = (context * (sbnd option * context_entry) list)
       type filepos = SourceMap.charpos -> string * int * int
+      type module = Il.module
 
       val plus_context : context list -> context
       val elab_specs : context * filepos * Ast.spec list -> context option
@@ -27,7 +26,7 @@ signature LINKIL =
       val compiles : string list -> module list option
       val elaborate : context * string -> (sbnd option * context_entry) list option
 
-      val test : string ->  module option
+      val test : string -> module option
 
 
 (*      val setdepth : int -> unit (* printing depth *) *)

@@ -5,36 +5,23 @@ struct
 
     val show_rtl = ref false
     val error = fn x => Util.error "Linkrtl." x
-    fun zip s ([],[]) = []
-      | zip s (x::xs,y::ys) = (x,y)::zip s (xs,ys)
-      | zip s _ = error "s"
 
-    fun in_imm_range x =  TilWord32.ult(x,0w255)
-    fun in_ea_disp_range x = x >= ~32768 andalso x<32768
+    structure Rtltags = Rtltags()
 
-    structure Nil = Linknil.Nil
-    structure Rtl = Rtl(val in_imm_range = in_imm_range
-			val in_ea_disp_range = in_ea_disp_range)
-
-    structure Rtltags = Rtltags(structure Rtl = Rtl)
-
-    structure Pprtl = Pprtl(structure Rtl = Rtl
-			    structure Rtltags = Rtltags)
+    structure Pprtl = Pprtl(structure Rtltags = Rtltags)
     
-    structure TortlBase = TortlBase(structure Nil = Linknil.Nil
+    structure TortlBase = TortlBase(
 			    structure NilContext = Linknil.NilContext
 			    structure NilStatic = Linknil.NilStatic
 			    structure Normalize = Linknil.Normalize
-			    structure Rtl = Rtl
 			    structure Pprtl = Pprtl
 			    structure Rtltags = Rtltags
 			    structure NilUtil = Linknil.NilUtil
 			    structure Ppnil = Linknil.PpNil)
 
-    structure TortlSum = TortlSum(structure Nil = Linknil.Nil
+    structure TortlSum = TortlSum(
 			    structure NilContext = Linknil.NilContext
 			    structure NilStatic = Linknil.NilStatic
-			    structure Rtl = Rtl
 			    structure Pprtl = Pprtl
 			    structure TortlBase = TortlBase
 			    structure Rtltags = Rtltags
@@ -42,20 +29,17 @@ struct
 			    structure Ppnil = Linknil.PpNil)
 
     structure TortlVararg = TortlVararg(val number_flatten = 6
-					structure Nil = Linknil.Nil
 					structure NilContext = Linknil.NilContext
 					structure NilStatic = Linknil.NilStatic
-					structure Rtl = Rtl
 					structure Pprtl = Pprtl
 					structure TortlBase = TortlBase
 					structure Rtltags = Rtltags
 					structure NilUtil = Linknil.NilUtil
 					structure Ppnil = Linknil.PpNil)
 
-    structure Tortl = Tortl(structure Nil = Linknil.Nil
+    structure Tortl = Tortl(
 			    structure NilContext = Linknil.NilContext
 			    structure NilStatic = Linknil.NilStatic
-			    structure Rtl = Rtl
 			    structure Pprtl = Pprtl
 			    structure TortlBase = TortlBase
 			    structure TortlSum = TortlSum
@@ -65,11 +49,9 @@ struct
 			    structure Ppnil = Linknil.PpNil)
 
 (*
-    structure Rtlopt = MakeRtlopt(structure Rtl = Rtl
-				  structure Pprtl = Pprtl)
+    structure Rtlopt = MakeRtlopt(structure Pprtl = Pprtl)
 
-    structure Registerset = MakeRegisterSet(structure Rtl = Rtl
-					    structure Pprtl = Pprtl)
+    structure Registerset = MakeRegisterSet(structure Pprtl = Pprtl)
 
     structure Heap = MakeHeap(structure Rtl = Rtl
 			      structure Registerset = Registerset
@@ -111,9 +93,9 @@ struct
     val compile' = Stats.timer("Translation to RTL",compile')
 
     fun metacompiles debug filenames = 
-	let val nilmodules : Linknil.Nil.module list = 
+	let val nilmodules : Nil.module list = 
 	    if debug then Linknil.tests filenames else Linknil.compiles filenames 
-	    val filenames_with_nilmodules = zip "metacompiles.zip" (filenames, nilmodules)
+	    val filenames_with_nilmodules = Listops.zip filenames nilmodules
 		handle _ => error "metacompiles"
 	in  map (fn (name,nmod) => compile'(debug,name,nmod)) filenames_with_nilmodules
 	end
@@ -122,7 +104,7 @@ struct
     fun compile filename = hd(metacompiles false [filename])
     fun tests filenames = metacompiles true filenames
     fun test filename = hd(metacompiles true [filename])
-    fun nil_to_rtl (nilmod : Linknil.Nil.module, unitname: string) : Rtl.module = compile'(false,unitname,nilmod)
+    fun nil_to_rtl (nilmod : Nil.module, unitname: string) : Rtl.module = compile'(false,unitname,nilmod)
 
     val cached_prelude = ref (NONE : Rtl.module option)
     fun compile_prelude (use_cache,filename) = 

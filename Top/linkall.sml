@@ -23,7 +23,7 @@ struct
 	     ([arg],ALPHA) => [(if debug then Linkalpha.test else Linkalpha.compile) arg]
 	   | (_,ALPHA) => (if debug then error "no test" else Linkalpha.compiles) args
 	   | (_,PPC) => error "no PPC") (* Linkppc.comp_file arg *)
-    val cached_prelude = ref (NONE : (string * Linkrtl.Rtl.local_label) option)
+    val cached_prelude = ref (NONE : (string * Rtl.local_label) option)
     fun specific_reparse_prelude arg = 
 	let val (littleEndian,compile_prelude) = 
 	    (case (!cur_platform) of

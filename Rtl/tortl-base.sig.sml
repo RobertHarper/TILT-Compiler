@@ -1,4 +1,4 @@
-(*$import RTL NIL *)
+(*$import Rtl Nil *)
 signature TORTL_BASE = 
 sig
 
@@ -7,8 +7,6 @@ sig
     val do_gcmerge : bool ref
     val do_single_crecord : bool ref
 
-    structure Rtl : RTL
-    structure Nil : NIL
     type exp = Nil.exp
     type con = Nil.con
     type kind = Nil.kind

@@ -1,7 +1,5 @@
-functor MakeRegisterSet(structure Rtl : RTL
-			structure Pprtl : PPRTL 
-			sharing type Rtl.instr = Pprtl.Rtl.instr) 
-	: REGISTERSET = 
+functor MakeRegisterSet(structure Pprtl : PPRTL)
+	:> REGISTERSET = 
   struct
 
       val error = fn s => Util.error "rtlregister.sml" s

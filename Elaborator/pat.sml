@@ -1,16 +1,14 @@
-(*$import IL ILSTATIC PPIL ILUTIL AstHelp DATATYPE ILCONTEXT ERROR PAT Stats *)
+(*$import Il ILSTATIC PPIL ILUTIL AstHelp DATATYPE ILCONTEXT ERROR PAT Stats *)
 
 (* xxx should coalesce constants *)
 
-functor Pat(structure Il : IL
-	    structure IlStatic : ILSTATIC
+functor Pat(structure IlStatic : ILSTATIC
 	    structure IlUtil : ILUTIL
 	    structure Ppil : PPIL
 	    structure Datatype : DATATYPE
 	    structure IlContext : ILCONTEXT
-	    structure Error : ERROR
-	    sharing Datatype.Il = Error.Il = IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il)
-   :> PAT where Il = Il =
+	    structure Error : ERROR)
+   :> PAT =
   struct
 
       val do_result_type = ref true

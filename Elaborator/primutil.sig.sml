@@ -1,7 +1,7 @@
 (*$import PRIM *)
 signature PRIMUTIL =
     sig
-	structure Prim : PRIM
+
 	type con
 	type exp (* this corresponds to the exp of some intermediate language *)
 	type value = (con,exp) Prim.value

@@ -9,7 +9,6 @@ structure AlphaLink
 
   (* -- structures --------------------------------------------------------- *)
 
-  structure Rtl = Linkrtl.Rtl
 
   (* -- translation functions (adapted from linkalpha.sml) ----------------- *)
 

@@ -1,7 +1,9 @@
 (*$import RTL TilWord32 Name *)
 
-functor Rtl (val in_imm_range : TilWord32.word -> bool
-	     val in_ea_disp_range : int -> bool) :> RTL =
+fun in_imm_range x =  TilWord32.ult(x,0w255)
+fun in_ea_disp_range x = x >= ~32768 andalso x<32768
+
+structure Rtl :> RTL = 
 struct
 
 

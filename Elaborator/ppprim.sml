@@ -1,10 +1,8 @@
-(*$import PPPRIM PRIM Util Formatter *)
+(*$import PPPRIM PRIM Util Formatter Prim *)
 (* Primitives pretty-printer. *)
-functor Ppprim(structure ArgPrim : PRIM)
-	:> PPPRIM where Prim = ArgPrim =
+functor Ppprim()
+	:> PPPRIM =
   struct
-
-    structure Prim = ArgPrim
 
     open Prim Formatter Util
 

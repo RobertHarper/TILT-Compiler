@@ -1,10 +1,8 @@
-(*$import ERROR IL ILUTIL *)
+(*$import ERROR ILUTIL Il *)
 (* Stateful module holding the error state of the elaboration process *)
 
-functor Error(structure Il : IL
-	      structure IlUtil : ILUTIL
-	      sharing IlUtil.Il = Il)
-   :> ERROR where Il = Il = 
+functor Error(structure IlUtil : ILUTIL)
+   :> ERROR =
 struct
 
     datatype ErrorLevel = NoError | Warn | Error

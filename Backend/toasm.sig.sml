@@ -7,7 +7,6 @@ sig
    structure Machine : MACHINE
    structure Bblock : BBLOCK
    structure Tracetable : TRACETABLE
-   structure Rtl : RTL
 
 
    val translateIReg         : Rtl.regi -> Machine.register

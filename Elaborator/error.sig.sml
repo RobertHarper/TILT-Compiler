@@ -1,9 +1,8 @@
-(*$import Ast SourceMap IL *)
+(*$import Ast SourceMap IL Il *)
 
 signature ERROR = 
   sig
 
-    structure Il : IL
     datatype ErrorLevel = Error | NoError | Warn
     type region = Ast.srcpos * Ast.srcpos
 

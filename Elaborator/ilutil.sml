@@ -1,22 +1,19 @@
 (*$import IL PPIL ILCONTEXT PRIMUTIL ILUTIL ListMergeSort *)
 (* Il Utility *)
-functor IlUtil(structure Il : IL
-	       structure Ppil : PPIL
+functor IlUtil(structure Ppil : PPIL
 	       structure IlContext : ILCONTEXT
 	       structure PrimUtil : PRIMUTIL
-               sharing Ppil.Il = IlContext.Il = Il
-	       sharing PrimUtil.Prim = Il.Prim
-	       sharing type PrimUtil.con = Il.con
-	       sharing type PrimUtil.exp = Il.exp)
+	       where type con = Il.con
+	       where type exp = Il.exp)
 
-  :> ILUTIL where Il = Il = 
+  :> ILUTIL =
   struct
 
     open Il IlContext Ppil 
     open Util Listops Name 
     open Prim Tyvar
 
-    type tyvar = (context,con) Il.Tyvar.tyvar
+    type tyvar = (context,con) Tyvar.tyvar
     exception BUG
     exception UNIMP
     val debug = ref false
@@ -886,7 +883,7 @@ functor IlUtil(structure Il : IL
       fun con_constrain  (argcon, 
 			  orig_con_handler,
 			  param as {constrain : bool, 
-				    stamp = stampopt : Il.Tyvar.stamp option,
+				    stamp = stampopt : Tyvar.stamp option,
 				    eq_constrain : bool},
 			  constrain_ctxts : context list) = 
 	  let 

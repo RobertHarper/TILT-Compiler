@@ -1,9 +1,7 @@
-(*$import PRIM ANNOTATION Sequence *)
+(*$import Prim PRIM ANNOTATION Sequence *)
 
 signature NIL =
 sig
-  structure Prim : PRIM
-  structure Annotation : ANNOTATION
 
   type var = Name.var
   type label = Name.label

@@ -1,19 +1,13 @@
 (*$import PRIM PPPRIM PRIMUTILPARAM Real64 PRIMUTIL *)
-functor PrimUtil(structure Prim : PRIM
-		 structure Ppprim : PPPRIM
-		 structure PrimUtilParam : PRIMUTILPARAM
-		 sharing Ppprim.Prim = Prim
-		 sharing type PrimUtilParam.value = Prim.value
-		 sharing type PrimUtilParam.intsize = Prim.intsize
-		 sharing type PrimUtilParam.floatsize = Prim.floatsize)
-    :> PRIMUTIL where Prim = Prim 
-                where type con = PrimUtilParam.con
+functor PrimUtil(structure Ppprim : PPPRIM
+		 structure PrimUtilParam : PRIMUTILPARAM)
+    :> PRIMUTIL where type con = PrimUtilParam.con
 		where type exp = PrimUtilParam.exp
 		=
 
 struct
 
-    structure Prim = Prim
+
     open Util  
     open PrimUtilParam Prim
     type con = con

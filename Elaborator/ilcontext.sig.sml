@@ -1,8 +1,7 @@
-(*$import IL *)
+(*$import IL Il *)
 signature ILCONTEXT =
     sig
 
-	structure Il : IL
 	type context = Il.context
 	type exp = Il.exp
 	type con = Il.con

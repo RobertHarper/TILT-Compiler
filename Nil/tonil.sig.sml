@@ -1,8 +1,6 @@
-(*$import IL NILCONTEXT *)
+(*$import Il Nil *)
 signature TONIL =
 sig
-    structure Il : IL
-    structure Nil : NIL
 
     val debug : bool ref
     val full_debug : bool ref

@@ -8,10 +8,9 @@
 
 (* XXX function calls in GC compress *)
 
-functor MakeRtlopt(structure Rtl : RTL
-		   structure Pprtl : PPRTL
-		   sharing Pprtl.Rtl = Rtl)
-  : RTLOPT    = 
+functor MakeRtlopt(structure Pprtl : PPRTL)
+
+  :> RTLOPT    = 
   struct
     open Rtl
     open Pprtl

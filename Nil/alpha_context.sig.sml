@@ -1,10 +1,9 @@
-(*$import NIL *)
+(*$import Nil Name *)
+
 signature ALPHA = 
   sig
 
-    structure Nil : NIL
-
-    type var = Nil.var
+    type var = Name.var
     
     type alpha_context
 

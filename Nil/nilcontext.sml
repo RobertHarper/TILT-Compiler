@@ -1,18 +1,11 @@
 (*$import NIL PPNIL NILUTIL NILSUBST Stats NILCONTEXT PRIMUTIL Option *)
-functor NilContextFn(structure ArgNil : NIL
-		      structure PpNil : PPNIL
-		      structure NilUtil : NILUTIL
-		      structure PrimUtil : PRIMUTIL
-		      structure Subst : NILSUBST
-		      sharing PpNil.Nil = NilUtil.Nil = ArgNil
-		        and ArgNil.Prim = PrimUtil.Prim
-		        and type Subst.con = PrimUtil.con = ArgNil.con
-		        and type Subst.exp = PrimUtil.exp = ArgNil.exp
-			and type Subst.kind = ArgNil.kind) 
-   :> NILCONTEXT where Nil = ArgNil 
-		 where type 'a subst = 'a Subst.subst = 
+functor NilContextFn(structure PpNil : PPNIL
+		     structure NilUtil : NILUTIL
+		     structure PrimUtil : PRIMUTIL
+		     structure Subst : NILSUBST)
+   :> NILCONTEXT where type 'a subst = 'a Subst.subst = 
  struct
-   structure Nil = ArgNil
+
 
    open Nil 
    open Prim

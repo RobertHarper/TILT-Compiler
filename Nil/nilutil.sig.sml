@@ -1,7 +1,6 @@
 (*$import NIL *)
 signature NILUTIL =
   sig
-    structure Nil : NIL
 
     (* if flag is true, will look inside kinds *)
     val freeExpConVarInExp : bool * Nil.exp -> Nil.var list * Nil.var list (* free term and type level vars *)
@@ -86,9 +85,9 @@ signature NILUTIL =
     val strip_var : Nil.con -> Nil.var option
     val strip_exntag : Nil.con -> Nil.con option
     val strip_recursive : Nil.con -> (bool * (Nil.var,Nil.con) Sequence.sequence) option
-    val strip_boxfloat : Nil.con -> Nil.Prim.floatsize option
-    val strip_float : Nil.con -> Nil.Prim.floatsize option
-    val strip_int : Nil.con -> Nil.Prim.intsize option
+    val strip_boxfloat : Nil.con -> Prim.floatsize option
+    val strip_float : Nil.con -> Prim.floatsize option
+    val strip_int : Nil.con -> Prim.intsize option
     val strip_sum : Nil.con -> (Nil.w32 * Nil.w32 * Nil.w32 option * Nil.con) option
     val strip_arrow : Nil.con -> 
       (Nil.openness*Nil.effect*(Nil.var*Nil.kind) list*Nil.con list*Nil.w32*Nil.con) option

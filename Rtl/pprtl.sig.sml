@@ -3,9 +3,7 @@
 signature PPRTL =
 sig
 
-   structure Rtl : RTL
    structure Rtltags : RTLTAGS
-   sharing Rtltags.Rtl = Rtl
 
    val regi2s : Rtl.regi -> string
    val regf2s : Rtl.regf -> string

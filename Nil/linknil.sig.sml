@@ -1,8 +1,7 @@
-(*$import IL NIL NILUTIL NILCONTEXT NILSTATIC PPNIL LinkIl TONIL TOCLOSURE NORMALIZE *)
+(*$import Il Nil NILUTIL NILCONTEXT NILSTATIC PPNIL TONIL TOCLOSURE NORMALIZE *)
 
 signature LINKNIL = 
 sig
-    structure Nil : NIL
     structure Tonil : TONIL
     structure NilUtil : NILUTIL
     structure NilContext : NILCONTEXT
@@ -10,15 +9,14 @@ sig
     structure Normalize : NORMALIZE
     structure PpNil : PPNIL
     structure ToClosure : TOCLOSURE
-    sharing NilUtil.Nil = NilContext.Nil = NilStatic.Nil = PpNil.Nil = Nil = Normalize.Nil = ToClosure.Nil
     sharing type NilContext.context = NilStatic.context = Normalize.context
 
-    val phasesplit : LinkIl.module -> Nil.module
+    val phasesplit : Il.module -> Nil.module
     val compile_prelude : bool * string -> Nil.module
     val compile : string -> Nil.module
     val compiles : string list -> Nil.module list
     val test : string -> Nil.module
-    val il_to_nil : string * LinkIl.module -> Nil.module
+    val il_to_nil : string * Il.module -> Nil.module
     val tests :  string list -> Nil.module list
 
     val do_opt : bool ref

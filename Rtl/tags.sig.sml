@@ -1,7 +1,6 @@
 (*$import RTL TilWord32 *)
 signature RTLTAGS =
 sig
-   structure Rtl : RTL
 
    (* the 3-bit type field *)
 

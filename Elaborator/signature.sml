@@ -1,15 +1,13 @@
-(*$import IL ILSTATIC ILUTIL PPIL ILCONTEXT ERROR SIGNATURE Bool *)
+(*$import Il ILSTATIC ILUTIL PPIL ILCONTEXT ERROR SIGNATURE Bool *)
 
 (* Need to improve where_structure to use SIGNAT_OF *)
 
-functor Signature(structure Il : IL
-		 structure IlStatic : ILSTATIC
-		 structure IlUtil : ILUTIL
-		 structure Ppil : PPIL
-		 structure IlContext : ILCONTEXT
-		 structure Error : ERROR
-		 sharing Error.Il = IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il = Il)
-    :> SIGNATURE where Il = Il =
+functor Signature(structure IlStatic : ILSTATIC
+		  structure IlUtil : ILUTIL
+		  structure Ppil : PPIL
+		  structure IlContext : ILCONTEXT
+		  structure Error : ERROR)
+    :> SIGNATURE =
 
   struct
 

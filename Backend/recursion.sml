@@ -1,11 +1,10 @@
 (*$import PPRTL GRAPH PRINTUTILS RECURSION *)
 functor Recursion(structure Pprtl : PPRTL
-		  structure Graph : DIRECTEDGRAPH where type node = Pprtl.Rtl.var
+		  structure Graph : DIRECTEDGRAPH where type node = Rtl.var
 		  structure Printutils : PRINTUTILS)
-    :> RECURSION where Rtl = Pprtl.Rtl =
+    :> RECURSION =
 struct
 
-  structure Rtl = Pprtl.Rtl
   open Printutils
 
   val error = fn s => Util.error "recursion.sml" s

@@ -1,13 +1,11 @@
 (*$import IL ILSTATIC ILUTIL ILCONTEXT Name PPIL Ast GraphUtil ListMergeSort AstHelp DATATYPE *)
 
 (* Datatype compiler and destructures of datatype signatures. *)
-functor Datatype(structure Il : IL
-		 structure IlStatic : ILSTATIC
+functor Datatype(structure IlStatic : ILSTATIC
 		 structure IlUtil : ILUTIL
 		 structure Ppil : PPIL
-		 structure IlContext : ILCONTEXT
-		 sharing IlContext.Il = IlUtil.Il = IlStatic.Il = Ppil.Il = Il)
-    :> DATATYPE where Il = Il =
+		 structure IlContext : ILCONTEXT)
+    :> DATATYPE =
   struct
 
     structure IlContext = IlContext
@@ -977,10 +975,10 @@ functor Datatype(structure Il : IL
 				     path : Ast.path,
 				     polyinst : (Il.context * Il.sdecs -> 
 						 Il.sbnd list * Il.sdecs * Il.con list)) 
-     : {instantiated_type : IlContext.Il.con,
-	instantiated_sumtype : IlContext.Il.con,
-	arms : {name : IlContext.Il.label, arg_type : IlContext.Il.con option} list,
-	expose_exp : IlContext.Il.exp} =
+     : {instantiated_type : Il.con,
+	instantiated_sumtype : Il.con,
+	arms : {name : Il.label, arg_type : Il.con option} list,
+	expose_exp : Il.exp} =
 
    let 
 

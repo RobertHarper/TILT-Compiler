@@ -1,8 +1,6 @@
-(*$import Util Name Listops IL *)
-(* The Il datatypes. *)
-functor Il(structure Prim : PRIM
-	   structure Tyvar : TYVAR)
-  :> IL where Prim = Prim where Tyvar = Tyvar = 
+(*$import Util Name Listops IL Prim Tyvar *)
+
+structure Il :> IL =
   struct
 
     open Util Listops Name
@@ -151,5 +149,7 @@ functor Il(structure Prim : PRIM
     type bnds  = bnd list
     type sdecs = sdec list
     type sbnds = sbnd list
+
+    type module = context * (sbnd option * context_entry) list
 
   end

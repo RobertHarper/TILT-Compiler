@@ -1,9 +1,7 @@
-(*$import IL Ast *)
+(*$import IL Ast Il *)
 (* Datatype compiler and destructurer of compiled modules/signatures. *)
 signature DATATYPE = 
   sig
-    structure Il : IL
-
     val debug : bool ref
 
     val exn_lookup : Il.context -> Ast.path -> 

@@ -1,7 +1,6 @@
-(*$import NIL *)
+(*$import Nil *)
 signature NILSTATIC = 
   sig
-    structure Nil : NIL
 
     type context 
     val debug : bool ref

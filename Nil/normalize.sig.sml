@@ -2,7 +2,6 @@
 
 signature NORMALIZE = 
   sig
-      structure Nil : NIL
 
     type kind = Nil.kind
     type con = Nil.con

@@ -1,8 +1,7 @@
-(*$import RTL *)
+(*$import Rtl *)
 
 signature RECURSION =
 sig
-  structure Rtl : RTL
 
   val debug: bool ref
 

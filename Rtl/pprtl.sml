@@ -1,10 +1,8 @@
 (*$import RTL RTLTAGS Formatter PPRTL TextIO *)
-functor Pprtl(structure Rtl : RTL
-	      structure Rtltags : RTLTAGS
-	      sharing Rtltags.Rtl = Rtl) :> PPRTL where Rtl = Rtl = 
+functor Pprtl(structure Rtltags : RTLTAGS)
+	      :> PPRTL =
 struct
 
-  structure Rtl = Rtl
   structure Rtltags = Rtltags
 
   open Rtl Formatter

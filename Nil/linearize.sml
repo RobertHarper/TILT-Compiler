@@ -1,9 +1,8 @@
-(*$import LINEARIZE NIL NILUTIL PPNIL *)
-functor Linearize(structure Nil : NIL
-		  structure NilUtil : NILUTIL
-		  structure Ppnil : PPNIL
-		  sharing NilUtil.Nil = Ppnil.Nil = Nil) 
-    :> LINEARIZE where Nil = Nil = 
+(*$import LINEARIZE Nil NILUTIL PPNIL *)
+
+functor Linearize(structure NilUtil : NILUTIL
+		  structure Ppnil : PPNIL)
+    :> LINEARIZE =
 struct
 
     val error = fn s => Util.error "linearize.sml" s

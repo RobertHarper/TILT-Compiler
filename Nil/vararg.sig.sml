@@ -1,7 +1,7 @@
 signature VARARG = 
   sig
 
-      structure Nil : NIL
+
       val optimize : Nil.module -> Nil.module
 
 (*

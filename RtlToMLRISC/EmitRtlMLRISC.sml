@@ -25,6 +25,8 @@ functor EmitRtlMLRISC(
 	  structure RegisterSpillMap:	 REGISTER_SPILL_MAP
 	  structure RegisterTraceMap:	 REGISTER_TRACE_MAP
 					   where type var = Name.var
+					   where type rep = Rtl.rep
+
 	  structure SpillReload:	 SPILL_RELOAD
 	  structure StackFrame:		 STACK_FRAME
 	  structure TraceTable:		 TRACETABLE
@@ -69,8 +71,6 @@ functor EmitRtlMLRISC(
 		       SpillReload.fexp
 	      and type MLTreeExtra.MLTree.stm =
 		       CallConventionBasis.stm
-	      and type RegisterTraceMap.rep =
-		       TraceTable.Machine.Rtl.rep
 	      and type StackFrame.frame =
 		       ExternalConvention.frame
 	      and type TraceTable.Machine.stacklocation =
@@ -78,15 +78,14 @@ functor EmitRtlMLRISC(
 	      and type TraceTable.trace =
 		       RegisterTraceMap.trace
 	) :> EMIT_RTL
-	       where type local_label = TraceTable.Machine.Rtl.local_label
-		 and type module      = TraceTable.Machine.Rtl.module
+	       where type local_label = Rtl.local_label
+		 and type module      = Rtl.module
 	  = struct
 
   (* -- structures --------------------------------------------------------- *)
 
   structure IntSet	= DenseIntSet
   structure RegisterMap = DenseRegisterMap
-  structure Rtl		= TraceTable.Machine.Rtl
 
   structure Machine = TraceTable.Machine
   structure MLTree  = MLTreeExtra.MLTree

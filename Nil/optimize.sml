@@ -6,17 +6,14 @@
 	Recognize certain patterns of Sumsw and convert to Intsw
 *)	
 
-functor Optimize(structure Nil : NIL
-		 structure NilContext : NILCONTEXT
+functor Optimize(structure NilContext : NILCONTEXT
 		 structure Normalize : NORMALIZE
 		 structure NilStatic : NILSTATIC
 		 structure NilUtil : NILUTIL
 		 structure Subst : NILSUBST
 		 structure Ppnil : PPNIL
-		 sharing Ppnil.Nil = NilUtil.Nil = NilContext.Nil = NilStatic.Nil = Normalize.Nil = Nil 
-		 sharing type NilContext.context = NilStatic.context = Normalize.context
-		 sharing type Subst.con = Nil.con) 
-    :> OPTIMIZE where Nil = Nil = 
+		 sharing type NilContext.context = NilStatic.context = Normalize.context)
+    :> OPTIMIZE =
 struct
 
 	open Util Nil NilUtil NilContext Listops

@@ -9,9 +9,9 @@ functor RtlRegisterTraceMap(
 	  structure Cells:	CELLS
 	  structure TraceTable: TRACETABLE
 	) :> REGISTER_TRACE_MAP
-	       where type var		= TraceTable.Machine.Rtl.var
+	       where type var		= Rtl.var
 		 and type id		= DenseRegisterMap.id
-		 and type rep		= TraceTable.Machine.Rtl.rep
+		 and type rep		= Rtl.rep
 		 and type trace		= TraceTable.trace
 		 and type stacklocation = TraceTable.Machine.stacklocation
 		 and type idSet		= DenseIntSet.set
@@ -21,7 +21,6 @@ functor RtlRegisterTraceMap(
 
   structure IntSet	= DenseIntSet
   structure RegisterMap = DenseRegisterMap
-  structure Rtl		= TraceTable.Machine.Rtl
 
   (* -- types -------------------------------------------------------------- *)
 

@@ -1,18 +1,14 @@
-(*$import Ast IL ILCONTEXT ILSTATIC PPIL ILUTIL DATATYPE TOIL BASIS Stats *)
+(*$import Ast Il ILCONTEXT ILSTATIC PPIL ILUTIL DATATYPE TOIL BASIS Stats *)
 (* Forms the initial basis for elaboration *)
-functor Basis(structure Il : IL
-	      structure IlContext : ILCONTEXT
+functor Basis(structure IlContext : ILCONTEXT
 	      structure IlStatic : ILSTATIC
 	      structure Ppil : PPIL
 	      structure IlUtil : ILUTIL
 	      structure Datatype : DATATYPE
-	      structure Toil : TOIL
-	      sharing IlContext.Il = Ppil.Il = IlUtil.Il = IlStatic.Il =
-		      Datatype.Il = Toil.Il = Il) 
-   :> BASIS where Il = Il =
+	      structure Toil : TOIL)
+   :> BASIS =
   struct
 
-    structure Il = Il
     structure Datatype = Datatype
     open Il IlUtil Datatype Ppil
     open Util Name Prim Tyvar

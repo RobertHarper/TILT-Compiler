@@ -1,10 +1,7 @@
 (*$import NIL PRIMUTILPARAM Int32 *)
-functor NilPrimUtilParam(structure Nil : NIL)
+structure NilPrimUtilParam
     :> PRIMUTILPARAM where type con = Nil.con 
-		       and type exp = Nil.exp 
-		       and type intsize = Nil.Prim.intsize
-		       and type floatsize = Nil.Prim.floatsize 
-		       and type ('con,'exp) value = ('con,'exp) Nil.Prim.value =
+		       and type exp = Nil.exp =
     struct
 
 	open Nil

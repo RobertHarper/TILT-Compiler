@@ -1,9 +1,7 @@
-(*$import IL Formatter *)
+(*$import Il Formatter *)
 (* Pretty-printing routines for the internal language. *)
 signature PPIL =
   sig
-
-    structure Il : IL
 
     (* type variables can be displayed in different ways *)
     datatype display = VAR_ONLY | VALUE_ONLY | VAR_VALUE

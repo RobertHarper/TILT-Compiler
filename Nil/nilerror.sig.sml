@@ -1,7 +1,6 @@
 (*$import NIL *)
 signature NILERROR = 
   sig
-    structure Nil : NIL
 
     (*c_all pred fc list
      *       => true if forall(x in list), pred x => true

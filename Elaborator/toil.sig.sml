@@ -1,8 +1,7 @@
-(*$import IL Ast *)
+(*$import Il Ast *)
 (* The translation from AST to IL. *)
 signature TOIL = 
   sig
-    structure Il : IL
 
     val debug : bool ref
     val debug_coerce : bool ref

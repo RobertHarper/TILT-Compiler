@@ -1,8 +1,7 @@
-(*$import IL *)
+(*$import IL Il *)
 (* Static Semantics of the IL. *)
 signature ILSTATIC = 
   sig
-    structure Il : IL
 
     val trace : bool ref
     val debug : bool ref

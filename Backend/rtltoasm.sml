@@ -23,13 +23,11 @@ functor Rtltoasm (val commentHeader : string
 
 		  sharing Printutils.Tracetable
 		    = Procalloc.Tracetable 
-		    = Toasm.Tracetable 
+		    = Toasm.Tracetable)
 
-		  sharing Recursion.Rtl = Toasm.Rtl)
-		     :> RTLTOASM  where Rtl = Recursion.Rtl =
+		     :> RTLTOASM  =
 struct
 
-   structure Rtl = Recursion.Rtl
 
    open Callconv Printutils Machineutils Rtl
    open Machine

@@ -1,13 +1,10 @@
 (*$import ANNOTATION PRIM NIL Sequence *)
-functor Nil(structure ArgAnnotation : ANNOTATION
-	    structure ArgPrim : PRIM)
-	   :> NIL where Prim = ArgPrim 
-	          where Annotation = ArgAnnotation =
+
+structure Nil :> NIL =
 struct	
 
   open Util Name Listops
-  structure Annotation = ArgAnnotation
-  structure Prim = ArgPrim
+
   val error = fn s => error "nil.sml" s
 
   type var = Name.var

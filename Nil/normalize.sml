@@ -1,25 +1,19 @@
 (*$import NIL PPNIL NILUTIL NILCONTEXT NILSUBST NORMALIZE PRIMUTIL *)
 functor NormalizeFn(val number_flatten : int
-		    structure Nil : NIL
 		    structure PpNil : PPNIL
 		    structure NilUtil : NILUTIL 
 		    structure PrimUtil : PRIMUTIL 
+			where type con = Nil.con
+			where type exp = Nil.exp
 		    structure NilContext : NILCONTEXT
 		    structure Subst : NILSUBST
-			 sharing PrimUtil.Prim = Nil.Prim
-		         sharing NilUtil.Nil = PpNil.Nil = NilContext.Nil = Nil
-			 and type Subst.con = Nil.con = PrimUtil.con
-		         and type Subst.exp = Nil.exp = PrimUtil.exp
-			 and type Subst.kind = Nil.kind
-			 and type Subst.bnd = Nil.bnd
-			 and type Subst.subst = NilContext.subst) 
+			where type 'a subst = 'a NilContext.subst) 
     :> NORMALIZE 
-  where Nil = Nil
-  and type context = NilContext.context 
+  where type context = NilContext.context 
   and type 'a subst = 'a Subst.subst = 
 struct	
 
-  structure Nil = Nil
+
   open Nil 
   open Prim
 

@@ -775,7 +775,7 @@ struct
                        print " are:\n   ";
                        app (fn s => (print s; print " ")) import_tr;
                        print "\n";
-                       StringSet.addList (set, import_tr)
+                       StringSet.add(StringSet.addList (set, import_tr), next)
                      end)
                  (StringSet.empty)
                  units
@@ -785,7 +785,7 @@ struct
       in
 	  (case (linkopt,exeopt) of
 	       (NONE,NONE) => ()
-	     | (NONE, SOME out) => (print "manager calling linker with: ";
+	     | (NONE, SOME out) => (print "Manager calling linker with: ";
 				    app (fn s => (print s; print " ")) base_args;
 				    print "\nand with uo_result = ";
 				    print tmp_uo; print "\n";

@@ -1,10 +1,8 @@
-(*$import Fixity TYVAR Name PRIM *)
+(*$import Fixity Name Prim Tyvar *)
+
 (* The datatypes for the internal language. *)
 signature IL =
   sig
-
-    structure Prim : PRIM
-    structure Tyvar : TYVAR
 
     type tag = Name.tag
     type var = Name.var
@@ -150,5 +148,7 @@ signature IL =
     type bnds  = bnd list
     type sdecs = sdec list
     type sbnds = sbnd list
+
+    type module = context * (sbnd option * context_entry) list
 
 end

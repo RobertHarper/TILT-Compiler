@@ -2,60 +2,43 @@
 
 structure LinkIl :> LINKIL  = 
     struct
-	structure Tyvar = Tyvar()
-	structure Prim = Prim()
-	structure Il = Il(structure Prim = Prim
-			  structure Tyvar = Tyvar)
-	structure Ppprim = Ppprim(structure ArgPrim = Prim);
-	structure Ppil = Ppil(structure Il = Il
-			      structure Ppprim = Ppprim)
-			      
-	structure IlContext = IlContext(structure Il = Il
-					structure Ppil = Ppil)
-	structure Formatter = Formatter
-	structure AstHelp = AstHelp
-	structure IlPrimUtilParam = IlPrimUtilParam(structure Il = Il);
-	structure IlPrimUtil = PrimUtil(structure Prim = Prim
-					structure Ppprim = Ppprim
+	structure Ppprim = Ppprim()
+	structure Ppil = Ppil(structure Ppprim = Ppprim)
+	structure IlContext = IlContext(structure Ppil = Ppil)
+
+	structure IlPrimUtilParam = IlPrimUtilParam()
+	structure IlPrimUtil = PrimUtil(structure Ppprim = Ppprim
 					structure PrimUtilParam = IlPrimUtilParam)
-	structure IlUtil = IlUtil(structure Il = Il
-				  structure Ppil = Ppil
+	structure IlUtil = IlUtil(structure Ppil = Ppil
 				  structure IlContext = IlContext
 				  structure PrimUtil = IlPrimUtil)
 
-	structure IlStatic = IlStatic(structure Il = Il
-				      structure IlContext = IlContext
+	structure IlStatic = IlStatic(structure IlContext = IlContext
 				      structure PrimUtil = IlPrimUtil
 				      structure Ppil = Ppil
 				      structure IlUtil = IlUtil)
 
-	structure Error = Error(structure Il = Il
-				structure IlUtil = IlUtil)
+	structure Error = Error(structure IlUtil = IlUtil)
 
-        structure Datatype = Datatype(structure Il = Il
-				      structure IlStatic = IlStatic
+        structure Datatype = Datatype(structure IlStatic = IlStatic
 				      structure IlUtil = IlUtil
 				      structure Ppil = Ppil
 				      structure IlContext = IlContext)
 
-	structure Signature = Signature(structure Il = Il
-					structure IlStatic = IlStatic
+	structure Signature = Signature(structure IlStatic = IlStatic
 					structure IlUtil = IlUtil
 					structure Ppil = Ppil
 					structure IlContext = IlContext
 					structure Error = Error)
 
-	structure Equal = Equal(structure Il = Il
-				structure IlStatic = IlStatic
+	structure Equal = Equal(structure IlStatic = IlStatic
 				structure IlUtil = IlUtil
 				structure IlContext = IlContext
 				structure Ppil = Ppil)
 	    
-	structure InfixParse = InfixParse(structure Il = Il
-					  structure Ppil = Ppil)
+	structure InfixParse = InfixParse(structure Ppil = Ppil)
 
-	structure Pat = Pat(structure Il = Il
-			    structure IlStatic = IlStatic
+	structure Pat = Pat(structure IlStatic = IlStatic
 			    structure IlUtil = IlUtil
 			    structure Ppil = Ppil
 			    structure Datatype = Datatype
@@ -63,8 +46,7 @@ structure LinkIl :> LINKIL  =
 			    structure Error = Error)
 
 
-	structure Toil = Toil(structure Il = Il
-			      structure IlStatic = IlStatic
+	structure Toil = Toil(structure IlStatic = IlStatic
 			      structure IlUtil = IlUtil
 			      structure Ppil = Ppil
 			      structure IlContext = IlContext
@@ -75,16 +57,14 @@ structure LinkIl :> LINKIL  =
 			      structure Error = Error
 			      structure Signature = Signature)
 
-	structure Basis = Basis(structure Il = Il		
-				structure IlContext = IlContext
+	structure Basis = Basis(structure IlContext = IlContext
 				structure IlStatic = IlStatic
 				structure Ppil = Ppil
 				structure IlUtil = IlUtil
 				structure Datatype = Datatype      
 				structure Toil = Toil)
 (*
-	structure IlEval = IlEval(structure Il = Il
-				  structure IlContext = IlContext
+	structure IlEval = IlEval(structure IlContext = IlContext
 				  structure PrimUtil = IlPrimUtil
 				  structure IlStatic = IlStatic
 				  structure IlUtil = IlUtil
@@ -92,7 +72,6 @@ structure LinkIl :> LINKIL  =
 *)	    
 	open Il IlUtil Ppil IlStatic Formatter
 	    
-	structure Il = Il
         type module = (Il.context * (Il.sbnd option * Il.context_entry) list)
 (*
 	val _ = Compiler.Control.Print.printDepth := 15;

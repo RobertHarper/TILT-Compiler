@@ -1,10 +1,8 @@
-(*$import NIL Listops ALPHA TopLevel Option *)
+(*$import Nil Listops ALPHA TopLevel Option *)
 
-functor Alpha(structure ArgNil : NIL) 
-    :> ALPHA where Nil = ArgNil =
+functor Alpha()
+    :> ALPHA =
   struct
-
-    structure Nil = ArgNil
 
     structure VarMap = Name.VarMap
 

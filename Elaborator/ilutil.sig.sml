@@ -1,8 +1,7 @@
-(*$import IL *)
+(*$import IL Il *)
 (* Utility routines for the internal language. *)
 signature ILUTIL =
   sig
-    structure Il : IL
 
     val debug : bool ref
     exception FAILURE of string
@@ -19,7 +18,7 @@ signature ILUTIL =
     type context = Il.context
     type tag = Il.tag
     type decs = Il.decs
-    type tyvar = (context,con) Il.Tyvar.tyvar
+    type tyvar = (context,con) Tyvar.tyvar
 
     val fresh_con : context -> con
     val fresh_named_con : context * string -> con
@@ -50,8 +49,8 @@ signature ILUTIL =
     val make_catch : exp * con * exp * con * exp -> exp
     val make_ifthenelse : exp * exp * exp * con -> exp
     val make_seq : (exp * con) list -> exp * con
-    val prim_etaexpand : (Il.Prim.prim * con list) -> exp
-    val ilprim_etaexpand : (Il.Prim.ilprim * con list) -> exp
+    val prim_etaexpand : (Prim.prim * con list) -> exp
+    val ilprim_etaexpand : (Prim.ilprim * con list) -> exp
     val beta_reduce_mod : mod * mod -> mod option
     val beta_reduce : exp * exp -> exp option
 
@@ -176,7 +175,7 @@ signature ILUTIL =
        con_occurs: given a con and a tyvar, returns whether tyvar occurs in con *)
     val con_constrain  : con * (con -> con option) *
 	                    {constrain : bool, 
-			     stamp : Il.Tyvar.stamp option,
+			     stamp : Tyvar.stamp option,
 			     eq_constrain : bool} * context list -> unit
     val con_occurs      : con * tyvar -> bool
 
@@ -248,7 +247,7 @@ signature ILUTIL =
     val remove_modvar_sdec : Il.sdec * var * Il.sdecs -> Il.sdec
     val add_modvar_type : con * mod * Il.sdecs -> con
     val add_modvar_sig : signat * mod * Il.sdecs -> signat
-    val rebind_free_type_var : Il.Tyvar.stamp * con * context * var -> 
+    val rebind_free_type_var : Tyvar.stamp * con * context * var -> 
 	                          (tyvar * label * bool) list
     val sig_mod_handler : signat * (mod -> mod option) -> signat
 

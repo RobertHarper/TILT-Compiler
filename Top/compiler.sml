@@ -4,9 +4,9 @@ structure Til : COMPILER =
 
 	val use_mlrisc = ref false
 
-	type sbnd = LinkIl.Il.sbnd
-	and context_entry = LinkIl.Il.context_entry
-	and context = LinkIl.Il.context
+	type sbnd = Il.sbnd
+	type context_entry = Il.context_entry
+	type context = Il.context
 
 	val error = fn x => Util.error "Compiler" x
 	val as_path = "as"
