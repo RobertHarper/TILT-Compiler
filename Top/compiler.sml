@@ -240,11 +240,11 @@ struct
 
     fun writeIface (pctxt : precontext, ctxt : context,
 		    iface : file, ue : file, i : pinterface) : bool =
-	let val write = not (oldIfaceOk (ctxt, iface, i))
+	let val _ = writeUe (ue, pctxt, ctxt, LinkIl.parameters i)
+	    val write = not (oldIfaceOk (ctxt, iface, i))
 	    val _ = if write then
 			(elab_msg "  Writing interface\n";
-			 FileCache.write_iface (iface, i);
-			 writeUe (ue, pctxt, ctxt, LinkIl.parameters i))
+			 FileCache.write_iface (iface, i))
 		    else ()
 	in  write
 	end
