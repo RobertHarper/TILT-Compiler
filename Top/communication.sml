@@ -97,8 +97,10 @@ struct
 		val _ = Blaster.resetIn is
 	    in	readMessages (is,acc)
 	    end
-    val blastInMessages : B.instream -> message list =
-	fn is => readMessages (is,nil)
+    fun blastInMessages (is : B.instream) : message list =
+	(readMessages (is,nil)
+	 handle B.BadMagicNumber =>
+	     raise Compiler.Reject "master and slave are incompatible")
 
     val Com = F.String ","
 
