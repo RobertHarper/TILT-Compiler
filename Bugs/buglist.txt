@@ -121,3 +121,4 @@
 0121 [open]	nonexhaustive binding failure in optimize1
 0122 [open]	overflow in compiler
 0123 [open]	possible nontermination
+0124 [open]	flexible records
