@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel Ppnil List Sequence Listops Int ORD_KEY SplayMapFn  HOIST Nil NilUtil ListPair Stats Name Util TraceInfo NilDefs *)
+(*$import Ppnil List Sequence Listops Int ORD_KEY SplayMapFn  HOIST Nil NilUtil ListPair Stats Name Util TraceInfo NilDefs *)
 
 (* Assumptions:
 
@@ -156,8 +156,8 @@ struct
      because we're now doing parts of multiple arms before picking the
      "correct" arm rather than just doing the work of the correct arm.
      (This is also potientially a problem with hoisting code out of
-     functions.  However, since most functions get at least once and
-     often multiple times, on average it is a win to hoist
+     functions.  However, since most functions get called at least once
+     and often multiple times, on average it is a win to hoist
      computations out of functions.)
 
      The simplest heuristic would be to never hoist code out of the
@@ -211,16 +211,11 @@ struct
            hoistmap      = Mapping from binding site numbers to 
                            term-level bindings that we want to hoist to here.
                            NB: Bindings are kept in reversed order!
-                           Each level also contains a sorted list of
+                           Each level also contains a bool indicating whether
+			   the binding is valuable and a sorted list of
                            level numbers corresponding to the
                            free variables in these bindings.
 
-           choistmap     = Mapping from binding site numbers to 
-                           type-level bindings that we want to hoist to here.
-                           NB: Bindings are kept in reversed order!
-                           Each level also contains a sorted list of
-                           level numbers corresponding to the
-                           free variables in these bindings.
      ************************************************************************)
 
     local
@@ -258,23 +253,8 @@ struct
 		Ppnil.pp_bnds top_bnds;
 		print "\n"
 	    end
-
-(*        fun pp_choistmap (choistmap: (conbnd list * levels) IntMap.map) =
-	    let
-		fun printLevel (level, (cbnds, _)) =
-		    (print "level "; print (Int.toString level);
-		     print " cbnds: ";
-		     print (Int.toString (List.length cbnds));
-		     print "\n";
-		     Ppnil.pp_conbnds cbnds;
-		     print "\n")
-	    in
-		IntMap.appi printLevel choistmap
- 	    end
-*)
     in
 	type hoistmap = (bnd list * levels * bool) IntMap.map
-(*        type choistmap = (conbnd list * levels) IntMap.map*)
 	datatype env = ENV of {currentlevel : level, 
 			       econtext : econtext,
 			       levelmap : level VarMap.map,
@@ -356,21 +336,8 @@ struct
 				      (newbnds, newlevels, newvaluable))
 		    end
 
-(*		fun cfolder (level, (bnds,levels), accum_map) =
-		    let val (newbnds, newlevels) = 
-                          (case IntMap.find (accum_map, level)
-			       of NONE => (bnds,levels)
-                                | SOME (bnds',levels') => 
-				   (bnds @ bnds',
-				    mergeLevels (levels,levels')))
-		    in
-			IntMap.insert(accum_map, level, (newbnds, newlevels))
-		    end
-*)
 		val hoistmap =
 		    IntMap.foldli folder hoistmap1 hoistmap2
-(*		val choistmap =
-		    IntMap.foldli cfolder choistmap1 choistmap2*)
 	    in
 		STATE{hoistmap = hoistmap}
 	    end
@@ -401,6 +368,7 @@ struct
 		    lastfnlevel = lastfnlevel}
 	    end
 
+        (* Bind a series of variables with given eff's *)
         fun bindsEff (env, [], []) = env
           | bindsEff (env, v::vs, eff::effs) =
 	    bindsEff (bindEff(env, v, eff), vs, effs)
@@ -411,8 +379,6 @@ struct
 	    let
 		val hoistmap' = 
 		    IntMap.insert(hoistmap, levnum, ([], emptyLevels, true))
-(*		val choistmap' = 
-		    IntMap.insert(choistmap, levnum, ([], emptyLevels))*)
 	    in
 		STATE{hoistmap = hoistmap'}
 	    end
@@ -447,6 +413,7 @@ struct
         fun deepestLevel [] = toplevel 
           | deepestLevel (level::_) = level
 
+        (* Separates out the actual target hoisting level and the other free variable levels *)
         fun splitLevels [] = (toplevel, [])
           | splitLevels (level::rest) = (level, rest)
 
@@ -461,10 +428,12 @@ struct
 		levelmap = VarMap.insert(levelmap, v, level),
 		lastfnlevel = lastfnlevel}
 
+        (* Bind a series of variables at the same level *)
 	fun bindsLevel(env, [], level) = env
           | bindsLevel(env, v::vs, level) = 
 	    bindsLevel(bindLevel(env, v, level), vs, level)
 
+        (* Add a cbnd to the lowest possible hoisting level *)
 	fun hoistCbnd(STATE{hoistmap}, cbndlevels, cbnd) =
 	    let
 		val (hoistlevel, levels) = splitLevels cbndlevels
@@ -485,6 +454,7 @@ struct
 		STATE{hoistmap = hoistmap}
 	    end
 
+        (* Add a bnd to the lowest possible hoisting level *)
 	fun hoistBnd(STATE{hoistmap}, bndlevels, bnd, bnds_valuable)=
 	    let
 		val (hoistlevel, levels) = splitLevels bndlevels
@@ -506,6 +476,10 @@ struct
 		STATE{hoistmap = hoistmap'}
 	    end
 
+        (* Extract constructor bindings at a specific hoisting level for final inclusion in the output code.
+	 * Returns those bindings, the levels of free variables at the given binding level, and a state with the extracted
+	 * bindings removed.
+	 *)
         fun extractCbnds (STATE{hoistmap}, levnum) = 
 	    let
 		val (bnds, levels) = 
@@ -534,27 +508,26 @@ struct
 
 		val hoistmap = 
 		  IntMap.insert(hoistmap, levnum, ([], emptyLevels,true))
+		  (* Empty out the level we've extracted *)
 		val state = STATE{hoistmap = hoistmap}
 	    in
 	      (cbnds, levels, state)
 	    end
 
+        (* Extract bindings at a specific hoisting level for final inclusion in the output code.
+	 * Returns those bindings, the levels of free variables at the given binding level, and a state with the extracted
+	 * bindings removed.
+	 *)
         fun extractBnds (STATE{hoistmap}, level) = 
 	    let
-(*		val (cbnds, clevels) = 
-		    (case IntMap.find(choistmap, level) of
-			 NONE => ([], emptyLevels)
-		       | SOME (rev_choists, clevels) => 
-			     (rev rev_choists, clevels))*)
 		val (bnds, levels, bnds_valuable) = 
 		    (case IntMap.find(hoistmap, level) of
 			 NONE => ([], emptyLevels, true)
 		       | SOME (rev_hoists, levels, bnds_valuable) => 
 			     (rev rev_hoists, levels, bnds_valuable))
-(*		val choistmap' = 
-		    IntMap.insert(choistmap, level, ([], emptyLevels))*)
 		val hoistmap = 
 		    IntMap.insert(hoistmap, level, ([], emptyLevels, true))
+		    (* Empty out the level we've extracted *)
 		val state = STATE{hoistmap = hoistmap}
 	    in
 		(bnds, levels, state, bnds_valuable)
@@ -571,6 +544,10 @@ struct
 	    else
 		levels
 
+	(* Called on constructors that are directly enclosed by variable binders.
+	 * Extracts bindings that have been assigned to be hoisted to be just under the corresponding binder and wraps
+	 * them around con with a Let. The levels returned are those of free variables at this binding site.
+	 *)
 	fun limitCon (limitlevel, con, env, state, levels) =
 	    let
 		val currentlevel = currentLevel env
@@ -593,6 +570,11 @@ struct
 		(con', state', levels'')
 	    end
 
+	(* Called on expressions that are directly enclosed by variable binders.
+	 * Extracts bindings that have been assigned to be hoisted to be just under the corresponding binder and wraps
+	 * them around exp with a Let. The levels returned are those of free variables at this binding site, and the bool
+	 * indicates whether all binds so wrapped are valuable.
+	 *)
 	fun limitExp (limitlevel : level, exp : exp, exp_valuable : bool, 
 		      env : env, state : state, levels : level list)
 	       : exp * state * level list * bool =
@@ -641,6 +623,9 @@ struct
 
     (************************************************************************
      
+     General translation functions, with Let_e's/Let_c's being removed and
+     their bindings added to state, and then hoisted in translating
+     constructors/expressions that bind variables.
 
      val rcon  : con      * env * state -> con      * state * levels
      val rcons : con list * env * state -> con list * state * levels
@@ -684,6 +669,7 @@ struct
 	      let
 		  val (c, state, new_levels) = 
 		      rcon_limited varlevel (c, env, state)
+		      (* Translate constructor such that binds hoisted to just below this binder are included *)
 		  val env = bindLevel(env, v, varlevel)
 		  val env = bindEff(env, v, con2eff c)
 	      in
@@ -852,6 +838,7 @@ struct
 	  loop (cons, [], state, [])
       end
 
+  (* Translation for constructors just below a binder, such that appropriate bindings are hoisted *)
   and rcons_limited levnum (cons, env, state) = 
       let 
 	  fun loop ([], rev_accum, state, levelslist) = 
@@ -867,6 +854,7 @@ struct
 	  loop (cons, [], state, [])
       end
 
+  (* Translation for a constructor just below a binder, such that appropriate bindings are hoisted *)
   and rcon_limited levnum (con, env, state) = 
       let
 	  val (con, state, levels') = rcon (con, env, state)
@@ -1099,6 +1087,7 @@ struct
 	  (Coerce_e (coercion,cargs,exp),state,levels,eff,valuable)
       end
 
+  (* Translation for an expression just under a binder, such that bindings hoisted to this level are included *)
   and rexp_limited levnum (exp, env, state) = 
       let
 	  val (exp, state, levels, eff, valuable) = rexp (exp, env, state)
@@ -1135,6 +1124,8 @@ struct
 
   and rexps (exps, state, env) = rexps' (NONE, exps, state, env)
 
+  (* Translation for expressions such that bindings hoisted to this level are included.
+   * Used in translating switches. *)
   and rexps_limited limit (exps, state, env) = 
       rexps' (SOME limit, exps, state, env)
 
@@ -1446,6 +1437,7 @@ struct
 	   state, levels)
       end
 
+  (* Translates kinds of var/kind pairs and binds levels for the variables *)
   and rtFormals (tFormals, env, state, arglevel) = 
       let
 	  fun loop ([], rev_accum, env, state, levelslist) =
@@ -1462,6 +1454,7 @@ struct
 	  loop(tFormals, [], env, state, [])
       end
 
+  (* Translates cons of var/con pairs and binds levels/eff's for the variables *)
   and reFormals (eFormals, env, state, arglevel) = 
       let
 	  fun loop ([], rev_accum, env, state, levelslist) =
@@ -1484,6 +1477,7 @@ struct
 	  loop(eFormals, [], env, state, [])
       end
 
+  (* Version of the above for using with arrow constructors, taking optional named term parameters into account *)
   and reFormals_arrow (eFormals, env, state, arglevel) = 
       let
 	  fun loop ([], rev_accum, env, state, levelslist) =
