@@ -73,7 +73,16 @@ struct
 			 a24*w + a21*wx + a22*wy + a23*wz,
 			 a34*w + a31*wx + a32*wy + a33*wz,
 			 a44*w + a41*wx + a42*wy + a43*wz)
-			
+
+	fun applyV3((a11, a12, a13, a14,
+						 a21, a22, a23, a24,
+						 a31, a32, a33, a34,
+						 a41, a42, a43, a44):m4, (x, y, z):v3) =
+			(a14 + a11*x + a12*y + a13*z,
+			 a24 + a21*x + a22*y + a23*z,
+			 a34 + a31*x + a32*y + a33*z,
+			 a44 + a41*x + a42*y + a43*z)
+
   fun combine((a11, a12, a13, a14,
 						   a21, a22, a23, a24,
 						   a31, a32, a33, a34,
@@ -175,7 +184,12 @@ struct
 					 a41,         a42,         a43,         a44        )
 			end
 					
-	fun invert _ = raise notdone
+	fun invert ((a11, a12, a13, a14,
+							a21, a22, a23, a24,
+							a31, a32, a33, a34,
+							a41, a42, a43, a44):m4) = raise notdone
+	
+
 
 	fun m4toString (a11, a12, a13, a14,
 									a21, a22, a23, a24,
@@ -193,7 +207,21 @@ struct
 			end
 				
 	 
-  fun v4toString _ = raise notdone
-  fun v3toString _ = raise notdone
+  fun v4toString (wx,wy,wz,w) =
+	let
+			val $ = Real.toString
+			val s = ", "
+	in
+			"<" ^ $wx ^ s ^ $wy ^ s ^ $wz ^ s ^ $w ^ ">"
+	end
+
+
+  fun v3toString (x,y,z) =
+	let
+			val $ = Real.toString
+			val s = ", "
+	in	
+			"<" ^ $x ^ s ^ $y ^ s ^ $z ^ ">"
+	end
 
 end

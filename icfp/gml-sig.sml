@@ -10,6 +10,6 @@ sig
     | Real of real
     | String of string
     | Fun of exp list
-    | Array of exp vector
+    | Array of exp list
 
 end

@@ -18,17 +18,19 @@ struct
   infixr 1 ||
       
   fun resvd x = 
-      case Envmap.find (Eval.T.opers, String.extract
-			(x,1,NONE)) of NONE => true 
-		                        | _ => false
+      case Envmap.find (Eval.T.opers, x) of 
+	  NONE => false
+	  | _  => true
+
+  fun stl x = String.extract (x, 1, NONE)
 
   fun lit x = (anyWord suchthat (curry2 op= x))
       
   val oper = (anyWord suchthat resvd) wth Oper
 
   val binder = ((anyWord suchthat (fn x => CharVector.sub(x, 0) = #"/")) 
-		suchthat (not o resvd))
-                wth (fn x => Binder (String.extract (x,1,NONE)))
+		suchthat (fn x => not (resvd (stl x))))
+                wth (fn x => Binder (stl x))
 
 (* val operator = [ "addi", "addf", "acos", "asin", "clampf", "cos",
 	"divi", "divf", "eqi", "equif", "floor", "frac", "lessi",
@@ -45,7 +47,7 @@ struct
   val literal = anyWord wth Var
       
   fun array () = (lit "[" >> repeat ($exp) << lit "]") 
-      wth (Array o Vector.fromList)
+      wth Array
       
   and function () = (lit "{" >> repeat ($exp) << lit "}") wth Fun
       

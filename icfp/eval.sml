@@ -6,7 +6,7 @@ struct
     exception Eval of string
 
     type m4 = Matrix.m4
-    type v3 = Matrix.v3
+   type v3 = Matrix.v3
 
     type color = v3
         
@@ -14,10 +14,10 @@ struct
         Sunlight of v3 * color
       | Pointlight of v3 * color
       | Spotlight of { pos : v3,
-                      dir : v3,
-                      color : color,
-                      cutoff : real, (* half of the cone in degrees *)
-                      att : real }
+                       dir : v3,
+                       color : color,
+                       cutoff : real, (* half of the cone in degrees *)
+                       att : real }
         
     datatype value =
         Int of int
@@ -29,7 +29,6 @@ struct
       | Closure of closure
       | Object of obj 
       | Light of light
-      | MLfun of (env * stack) -> (env * stack)
         
     and obj = 
         Sphere of m4 * closure
@@ -59,7 +58,10 @@ struct
     val opers = 
 	foldl (fn ((oo,dd), m) => Envmap.insert (m, oo, dd)) Envmap.empty
 
-[ ("addi", u),
+[ 
+  ("apply", u),
+  ("if", u),
+  ("addi", u),
   ("addf", u),
   ("acos", u),
   ("asin", u),
@@ -115,7 +117,15 @@ end
 
     infix ++ ??
     fun G ++ (var, v) = Envmap.insert (G, var, v)
-    fun G ?? var = Envmap.find (G, var)
+    fun G ?? var = case Envmap.find (G, var) of
+	NONE => 
+	    let
+		val _ = print "environment:\n"
+		val _ = Envmap.appi (fn (a, _) => print (a^"\n"))
+	    in
+		raise Eval ("error looking up '" ^ var ^ "'")
+	    end
+      | SOME v => v
 
     val empty_context = Envmap.empty
 
@@ -130,14 +140,22 @@ end
 	      | step (G, v :: s, (Gml.Binder var) :: c) =
 		step (G ++ (var, v), s, c)
 	      | step (G, s, (Gml.Oper p) :: c ) = 
-		step (case T.opers ?? p of
-			  NONE => raise Eval ("??? unknown operator: " ^ p)
-			| SOME f => (G, f s, c)) 
-		     handle Match => 
-			 raise Eval ("inappropriate stack for " ^ p ^
-				     "(caught Match)")
+		step ((G, (T.opers ?? p) s, c)
+		      handle Match => 
+			  raise Eval ("inappropriate stack for " ^ p ^
+				      "(caught Match)"))
+              | step (G, s, (Gml.Var v) :: c) = step (G, (G ?? v) :: s, c)
+	      | step (G, s, (Gml.Fun f) :: c) = 
+		step (G, (Closure (G, f)) :: s, c)
+	      | step (G, s, (Gml.Array a) :: c) =
+		let val (_, out) = step (G, nil, a)
+		(* might be missing a rev here XXX *)
+		in step (G, (Array (Vector.fromList out)) :: s, c)
+		end
+	      | step (G, s, nil) = (G, s)
+	      | step _ = raise Eval ("Eval error")
 	in
-            step (empty_context, nil, rev el)
+            #2 (step (empty_context, nil, el))
 	end
         
 end

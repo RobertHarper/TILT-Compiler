@@ -2,6 +2,8 @@
 signature EVAL =
 sig
 
+    exception Eval of string
+
     type m4 = Matrix.m4
     type v3 = Matrix.v3
 
@@ -26,7 +28,6 @@ sig
       | Closure of closure
       | Object of obj 
       | Light of light
-      | MLfun of (env * stack) -> (env * stack)
         
     and obj = 
         Sphere of m4 * closure
