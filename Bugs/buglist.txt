@@ -123,3 +123,4 @@
 0123 [open]	possible nontermination
 0124 [open]	flexible records
 0125 [open]	BUG in get_record
+0126 [open]	parsing identifiers incorrectly
