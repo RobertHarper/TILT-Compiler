@@ -822,7 +822,8 @@ struct
 		fun folder ((l,v), vm) =
 		      case Context_Lookup(c',l) of
 			   SOME(PATH (v',_),_) => VM.add(v,v',vm)
-			 | NONE => (print "label not found in c'\n"; 
+			 | NONE => (print "label "; Ppil.pp_label l;
+				    print " not found in c'\n"; 
 				    raise NOT_EQUAL)
 	    in (foldr folder vm lvlist, map #2 lvlist)
 	    end
@@ -849,14 +850,18 @@ struct
 	    let val _ = if length sdecs <> length sdecs' then raise NOT_EQUAL else ()
 	    in foldr (fn (SDEC(l,dec), vm) => case sdecs_lookup(sdecs',l)
 		                                of SOME dec' => add_dec(dec,dec',vm)
-					         | NONE => raise NOT_EQUAL) vm sdecs
+					         | NONE => (print "XXX label mismatch ";
+							    Ppil.pp_label l; print "\n";
+							    raise NOT_EQUAL)) vm sdecs
 	    end
 
 	fun extend_vm_sbnds(sbnds,sbnds',vm) : vm =
 	    let val _ = if length sbnds <> length sbnds' then raise NOT_EQUAL else ()
 	    in foldr (fn (SBND(l,bnd), vm) => case sbnds_lookup(sbnds',l)
 		                                of SOME bnd' => add_bnd(bnd,bnd',vm)
-					         | NONE => raise NOT_EQUAL) vm sbnds
+					         | NONE => (print "XXX label mismatch ";
+							    Ppil.pp_label l; print "\n";
+							    raise NOT_EQUAL)) vm sbnds
 	    end
 
 
@@ -997,11 +1002,14 @@ struct
 
 	and eq_sdecs'(vm,sdecs,sdecs') =
 	    let	val vm = extend_vm_sdecs(sdecs,sdecs',vm)
-	    in Listops.andfold 
-		(fn (SDEC(l,dec)) =>
-			case sdecs_lookup(sdecs',l)
-			  of SOME dec' => eq_dec(vm,dec,dec')
-			   | NONE => false) sdecs
+		val res = Listops.andfold 
+		    (fn (SDEC(l,dec)) =>
+		     case sdecs_lookup(sdecs',l) of
+			 SOME dec' => eq_dec(vm,dec,dec')
+		       | NONE => (print "XXX eq_sdecs' returning false due to ";
+				  Ppil.pp_label l; print "\n";
+				  false)) sdecs
+	    in  res
 	    end	    
 
 	and eq_sdecs arg = wrap "eq_sdecs" eq_sdecs' arg
@@ -1018,7 +1026,7 @@ struct
 	and eq_sbnds arg = wrap "eq_sbnds" eq_sbnds' arg
 
 	and eq_dec(vm,dec,dec') =
-	    case (dec, dec')
+	    let val res = case (dec, dec')
 	      of (DEC_EXP(v,con,exp,inline),DEC_EXP(v',con',exp',inline')) => 
 		  VM.eq_var(vm,v,v') andalso eq_con(vm,con,con')  andalso 
 		  eq_expopt(vm,exp,exp') andalso inline=inline'
@@ -1028,7 +1036,13 @@ struct
 		  VM.eq_var(vm,v,v') andalso eq_kind(vm,kind,kind') andalso
 		  eq_conopt(vm,conopt,conopt') andalso inline=inline'
 	       | _ => false
- 
+		val _ = if res then () 
+		    else (print "XXX eq_dec false - \ndec = ";
+			  Ppil.pp_dec dec;
+			  print "\ndec' = ";
+			  Ppil.pp_dec dec'; print "\n")
+	    in res
+	    end
 	and eq_bnd(vm,bnd,bnd') =
 	    case (bnd, bnd')
 	      of (BND_EXP(v,exp),BND_EXP(v',exp')) => 

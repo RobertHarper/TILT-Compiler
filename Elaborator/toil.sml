@@ -1389,7 +1389,7 @@ val _ = print "plet0\n"
 			   let 
 			       val str = foldl (fn (s,acc) => acc ^ (Symbol.name s))
 				            "openlbl" path
-                               val l = to_open(fresh_internal_label str)
+                               val l = to_open(internal_label str)
 			       val v = fresh_named_var "openvar"
 			       val s = (case mod2path m of
 					    NONE => s

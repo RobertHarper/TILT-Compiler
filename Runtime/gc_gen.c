@@ -563,10 +563,10 @@ void gc_gen(Thread_t *curThread, int isMajor)
 
   /* More debugging and stat-gathering procedure */
   measure_semantic_garbage_after();    
-#ifdef PARANOID
-  paranoid_check_stack(curThread,nursery);
-  paranoid_check_heap(nursery,old_fromheap); 
-#endif
+  if (paranoid) {
+    paranoid_check_stack(curThread,nursery);
+    paranoid_check_heap(nursery,old_fromheap); 
+  }
   /* stop timer */
   stop_timer(&sysThread->gctime); 
 

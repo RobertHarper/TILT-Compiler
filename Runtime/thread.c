@@ -380,7 +380,8 @@ void work(SysThread_t *sth)
       int request = th->request;
       value_t stack_top = th->stackchain->stacks[0]->top;
       if ((request >= 0) && (request + sth->alloc >= sth->limit)) {
-	printf("Proc %d: cannot resume user thread %d (%d); calling GC\n");
+	printf("Proc %d: cannot resume user thread %d; calling GC\n",
+	       sth->processor, th->tid);
 	gc(th); /* this call will not return if real gc */
 	if (!(request + sth->alloc < sth->limit))
 	  printf("request = %d  alloc = %d  limit = %d\n",

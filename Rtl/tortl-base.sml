@@ -860,6 +860,7 @@ struct
    the first n fields which are already in integer registers,
    and the rest of the fields, which are values *)
 
+(* XXXX fix this function: the test for const-ness throughout and the use of refs is dangerous *)
 
   fun make_record_core (const, state, reps, vl : term list, labopt) = 
     let 
@@ -971,19 +972,23 @@ struct
 	   scantags(offset+4,vl))
 
       val offset = 0
-      val offset = scantags(offset,tagwords);
+      val offset = scantags(offset,tagwords)
       val (result,templabelopt) = 
 	  if const
 	      then let val label = (case labopt of
 					SOME lab => lab
 				      | NONE => fresh_data_label "record")
-		       val _ = if (!is_mutable) then add_mutable label else ()
 		   in  (add_data(DLABEL label);
 			(VALUE(LABEL label), SOME label))
 		   end
 	  else (LOCATION (REGISTER (false,I dest)), NONE)
-
       val offset = scan_vals (offset, reps, vl)
+
+      (* The test for is_mutable and call to add_mutable must FOLLOW scan_vals *)
+      val _ = (case (const andalso !is_mutable, templabelopt) of
+		   (true, SOME label) => add_mutable label
+		 | (true, NONE) => error "impossible control flow"
+		 | _ => ())
       val _ = if const
 		  then ()
 	      else (add(heapptr(),4 * length tagwords,dest);

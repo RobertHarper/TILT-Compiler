@@ -334,8 +334,7 @@ structure Machine =
     | msInstr_base (TAILCALL label) = ("\tTAILCALL\t" ^ (msLabel label))
     | msInstr_base (BR label) = (tab ^ "br" ^ tab ^
 				           (msReg Rzero) ^ comma ^ (msLabel label))
-    | msInstr_base (ILABEL label) = (".globl " ^ (msLabel label) ^ "\n" ^
-				     (msLabel label) ^ ":")
+    | msInstr_base (ILABEL label) = (msLabel label) ^ ":"
     | msInstr_base (ICOMMENT str) = (tab ^ "# " ^ str)
     | msInstr_base (Core.JSR(link, Raddr, hint, _)) =
                                 (tab ^ "jsr" ^ tab 

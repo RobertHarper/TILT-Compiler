@@ -286,9 +286,20 @@ structure Manager :> MANAGER =
        let val r = get_context unit
 (*	   val _ = if (!cache_context>0) then r := SOME(2,ctxt) else () *)
 	   val uifile = base2ui (get_base unit)
-       in  forget_stat uifile;
-           writeContextRaw(uifile,ctxt)
-       end
+	   val same = 
+	       (exists uifile) andalso
+	       let val _ = print "XXXX reading old uifile\n"
+		   val old_ctxt = readContextRaw uifile
+		   val _ = print "XXXX done old uifile\n"
+	       in  Elaborator.IlContextEq.eq_context(old_ctxt,ctxt)
+	       end handle _ => (print "Warning: Ill-formed uifile?\n"; false)
+        in  if same
+		then chat ("  [" ^ uifile ^ " remains unchanged]\n")
+	    else (forget_stat uifile;
+		  chat ("  [writing " ^ uifile);
+		  writeContextRaw(uifile,ctxt);
+		  chat "]\n")
+        end
 
 
   fun getContext imports = 
@@ -318,11 +329,11 @@ structure Manager :> MANAGER =
       end
 
   fun elab_nonconstrained(unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
-      case Elaborator.elab_dec(pre_ctxt, fp, dec)
-	of SOME(new_ctxt, sbnd_entries) => 
-	    let val _ =      (chat ("  [writing " ^ uiFile);
-			      writeContext (unit, new_ctxt);
-			      chat "]\n")
+      case Elaborator.elab_dec(pre_ctxt, fp, dec) of
+	   SOME(new_ctxt, sbnd_entries) => 
+	    let val _ = (chat ("  [writing " ^ uiFile);
+			 writeContext (unit, new_ctxt);
+			 chat "]\n")
 	    in (new_ctxt,sbnd_entries)
 	    end
          | NONE => error("File " ^ sourcefile ^ " failed to elaborate.")

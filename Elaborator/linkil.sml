@@ -138,7 +138,6 @@ structure LinkIl :> LINKIL  =
 
 	structure IlContextEq = IlContextEq
 
-	val eq_context = IlContextEq.eq_context
 	val cached_initial_context = ref (NONE : context option)
 	fun initial_context() = 
 	  (case (!cached_initial_context) of
