@@ -28,15 +28,15 @@ DESCRIPTION
 
 	Bomb	TILT failed while compiling the test code
 	Reject	TILT rejected the test code as invalid
-	Exit s	compiled code exitted with standard output s
+	Exit s	compiled code exitted with output s
 	Suicide	compiled code died because of an uncaught signal
 
-	Runtest executes programs with stdin connected to /dev/null
-	and stdout and stderr connected to one end of a pipe.  TILT
-	must exit with status 0 when it accepts a program and with
-	status 10 when it rejects a program.  Any other behavior is
-	considered a Bomb.  TILT's standard output and the exit status
-	of a test's executable are ignored.
+	Runtest executes programs with stdin connected to /dev/null and
+	stdout and stderr connected to one end of a pipe.  TILT must
+	exit with status 0 when it accepts a program and with status 10
+	when it rejects a program.  Any other behavior is considered a
+	Bomb.  TILT's output and the exit status of a test's executable
+	are ignored.
 
 	Runtest purges compiler-generated files before each test and
 	after each successful test.

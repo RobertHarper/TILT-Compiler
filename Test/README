@@ -22,7 +22,7 @@ The result file is a text file.  The first line must be one of the strings
 
 In the case of Exit, subsequent lines contain the output (stdout and
 stderr) expected from the test code.  (The test code's exit status is
-ignored.  See harness.sml for more information.)
+ignored.  See runtest.sml for more information.)
 
 The mapfile is a TILT manager mapfile.  The harness will use TILT to build
 it.  If the expected result is not Reject, then the mapfile must define
