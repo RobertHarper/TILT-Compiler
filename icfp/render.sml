@@ -63,9 +63,7 @@ structure Render : RENDER =
 
     (* Diffuse intensity and Specular intensity *)
     fun castShadow (hit, scene, incident, N, n) light : v3 * v3 = 
-	let val hit = add(hit, scale(1e~5, incident)) 
-	    val (Lj, Ldist) = Light.toLight (hit, light)  
-(*	    val _ = (print "castShadow: offset hit = "; printV3 hit; print "    Lj = "; printV3 Lj; print "\n") *)
+	let val (Lj, Ldist) = Light.toLight (hit, light)  
 	    val intersects = getIntersects hit Lj scene
 	    val shadowed = (case intersects of
 				[] => false
@@ -107,15 +105,16 @@ structure Render : RENDER =
 	in  if (null intersects)
 		then black
 	    else let val (t, name, {u,v,face,N,hit,dist}) = hd intersects
+		     val incident = negate dir
+		     val hit = add(hit, scale(1e~5, incident)) 
 		     (* Surface properties *)
 		     val (C : Base.color, kd, ks, n) = apply(t,face,u,v)
 		     (* Direct contribution of light sources *)
-		     val (diffuses, speculars) = ListPair.unzip (map (castShadow (hit,scene,negate dir,N,n)) lights)
+		     val (diffuses, speculars) = ListPair.unzip (map (castShadow (hit,scene,incident,N,n)) lights)
 		     val diffuse = foldl add black diffuses
 		     val finalDiffuse = mult(scale(kd, diffuse),C)
 		     val specular = foldl add black speculars 
 		     (* Recursive reflection *)
-		     val incident = negate dir
 		     val S = reverseHalfway (incident, N)
 		     val Is = cast(apply, Ia, hit, S, scene, lights, depth - 1)
 		     (* Combine terms *)
