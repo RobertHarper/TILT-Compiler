@@ -34,4 +34,7 @@ signature NAME =
     val label2string : label -> string
     val tag2string   : tag  -> string
 
+    (* Hash tables *)
+    val mk_var_hash_table : (int * exn) -> (var, 'val) HashTable.hash_table
+
   end

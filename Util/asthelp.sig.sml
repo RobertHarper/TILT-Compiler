@@ -2,8 +2,6 @@
 signature ASTHELP = 
   sig
 
-    structure Formatter : FORMATTER
-
     (* Some pretty-printing routines for AST *)
     val pp_tyvar' : Ast.tyvar -> Formatter.format
     val pp_sym'   : Symbol.symbol -> Formatter.format

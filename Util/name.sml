@@ -1,11 +1,10 @@
-functor Name(structure Util : UTIL)
-  : NAME = 
+structure Name : NAME =
   struct
 
     structure Util = Util
     open Util
 
-    val error = error "Name.sml"
+    val error = fn s => error "Name.sml" s
 
     datatype var   = GVAR of int * string
     datatype label = GLABEL of int * string * bool
@@ -70,19 +69,26 @@ functor Name(structure Util : UTIL)
       | namespace2int Symbol.TYVspace = 7
       | namespace2int Symbol.FIXspace = 8
 
-    fun var2string (GVAR(i,s)) = (s ^ "_" ^ (makestring i))
+    fun var2string (GVAR(i,s)) = (s ^ "_" ^ (Int.toString i))
     fun label2string l =
       let
 	fun help false s = s
 	  | help true s = "*" ^ s
       in (case l of
-	    (GLABEL (i,s,f)) => help f (s ^ "__" ^ (makestring i))
-	  | (GBAR (sym,f)) => help f (Symbol.name sym ^ "_" ^ (makestring 
+	    (GLABEL (i,s,f)) => help f (s ^ "__" ^ (Int.toString i))
+	  | (GBAR (sym,f)) => help f (Symbol.name sym ^ "_" ^ (Int.toString 
 							       (namespace2int (Symbol.nameSpace sym)))))
       end
-    fun loc2string (GLOC i) = ("LOC_" ^ (makestring i))
-    fun tag2string (GTAG (i,s)) = ("NAME_" ^ s ^ "_" ^ (makestring i))
+    fun loc2string (GLOC i) = ("LOC_" ^ (Int.toString i))
+    fun tag2string (GTAG (i,s)) = ("NAME_" ^ s ^ "_" ^ (Int.toString i))
 
 
-
+    fun mk_var_hash_table (size,notfound_exn) = 
+	let
+	    val b : word = 0wx3141592
+	    fun hash (GVAR(i,_)) = 
+		Word31.>>(Word31.*(Word31.fromInt i,b),0wx12)
+	    fun eqKey (GVAR(i,_),GVAR(j,_)) = i=j
+	in HashTable.mkTable (hash,eqKey) (size,notfound_exn)
+	end
   end

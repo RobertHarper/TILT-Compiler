@@ -57,8 +57,8 @@ These may may be changed by the user.
       val  print_fmt:             format -> unit
 
       type fmtstream
-      val  open_fmt:              outstream -> fmtstream
-      val  close_fmt:             fmtstream -> outstream
+      val  open_fmt:              TextIO.outstream -> fmtstream
+      val  close_fmt:             fmtstream -> TextIO.outstream
       val  output_fmt:            (fmtstream * format) -> unit
       val  file_open_fmt:         string -> ( (unit -> unit) * fmtstream )
       val  with_open_fmt:         string -> (fmtstream -> 'a) -> 'a

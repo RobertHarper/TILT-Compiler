@@ -4,7 +4,7 @@
    Pittsburgh, PA 15213
    cokasaki@cs.cmu.edu *)
 
-functor GraphUtil () : GRAPHUTIL =
+structure GraphUtil : GRAPHUTIL =
   (* see                                                                *)
   (*   "Lazy Depth-First Search and Linear Graph Algorithms in Haskell" *)
   (*   King and Launchbury                                              *)

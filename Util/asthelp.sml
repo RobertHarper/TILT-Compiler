@@ -1,19 +1,17 @@
 (* Helper routines on the EL syntax tree AST *)
-functor AstHelp(structure Util : UTIL
-		structure Formatter : FORMATTER)
-  : ASTHELP = 
+structure AstHelp : ASTHELP = 
   struct
 
     structure Formatter = Formatter
 
-    open Ast Util Formatter
+    open Ast Util Listops Formatter
 
-    val error = error "asthelp.sml"
+    val error = fn s => error "asthelp.sml" s
 
     val true_path = [Symbol.varSymbol "true"]
     val false_path = [Symbol.varSymbol "false"]
     val nil_path = [Symbol.varSymbol "nil"]
-    val cons_path = [Symbol.fixSymbol "::"]
+    val cons_path = [Symbol.varSymbol "::"]  (* NOT fixSymbol evn though it's infix *)
     val true_exp = Ast.VarExp true_path
     val false_exp = Ast.VarExp false_path
     val true_pat = Ast.VarPat(true_path)
@@ -253,11 +251,16 @@ functor AstHelp(structure Util : UTIL
 	end
 
       fun free_tyvar_ty (ty : Ast.ty, bound_tyvars) : symbol list = 
-	let val tyvars = ref ([] : Ast.tyvar list)
-	  fun do_tyvar tyvar = (tyvars := tyvar :: (!tyvars); Ast.VarTy tyvar)
-	  val _ = f_ty (fn s => s, [],
-			do_tyvar, bound_tyvars,
-			fn v => Ast.VarExp v,[]) ty
+	let 
+	    val tyvars = ref ([] : Ast.tyvar list)
+	    fun eq(a : Ast.tyvar, b) = a = b
+	    fun do_tyvar tyvar = (if member_eq(eq,tyvar,!tyvars)
+				      then () 
+				  else tyvars := tyvar :: (!tyvars); 
+				  Ast.VarTy tyvar)
+	    val _ = f_ty (fn s => s, [],
+			  do_tyvar, bound_tyvars,
+			  fn v => Ast.VarExp v,[]) ty
 	in map tyvar_strip (!tyvars)
 	end
 
@@ -351,7 +354,7 @@ functor AstHelp(structure Util : UTIL
       end
 
     fun help' doer = doer
-    fun help pp obj = (wrapper pp std_out obj; ())
+    fun help pp obj = (wrapper pp TextIO.stdOut obj; ())
 
     val pp_tyvar'  = help' pp_tyvar
     val pp_sym'    = help' pp_sym

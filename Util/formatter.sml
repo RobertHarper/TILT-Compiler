@@ -4,6 +4,7 @@
     (2) changed definition of Spmod
     (3) in print'p, whenever there is a bailout, an Spmod(mw) is
         added in addition to the newline
+    (4) modified various calls to print'p to prepend the initial space with Spmod(0,0)
 *)
 
 (*
@@ -13,7 +14,7 @@
   with the formatting and printing routines.}
 %************************************************************************
 *)
-functor Formatter(): FORMATTER =
+structure Formatter : FORMATTER =
    struct
 
 fun fold f l b = foldr f b l
@@ -57,7 +58,7 @@ The {\tt Spmod} function is used when {\tt Bailout} is active.
 		val depth = DepthString d
 		       val q = n div (!Pagewidth)
 		       val r = n mod (!Pagewidth)
-		       val tab = "+" ^ makestring q
+		       val tab = "+" ^ (Int.toString q)
 		       val sp = Spaces(r + (5 - size tab))
 		   in depth ^ tab ^ sp
 		   end
@@ -69,7 +70,7 @@ The {\tt Spmod} function is used when {\tt Bailout} is active.
 		   let
 		       val q = n div (!Pagewidth)
 		       val r = n mod (!Pagewidth)
-		       val tab = "+" ^ makestring q
+		       val tab = "+" ^ (Int.toString q)
 		       val sp = Spaces(r + (5 - size tab))
 		   in depth ^ tab ^ sp
 		   end
@@ -724,6 +725,7 @@ and print'p(dep,mw,id,bl,is,ss,mo,  Str(n,s),res) = (n,s::res)
                        else ppv(dep,mw,id,id,blanks,indent,skip,0,0,l,res)
  | print'p(dep,mw,id,bl,is,ss,mo, Deep(f),res) = print'p(dep+1,mw,id,bl,is,ss,mo,f,res)
 
+    
 
 (*
 %{\bf Improvements:}
@@ -742,11 +744,11 @@ Finally we have {\ml print\_fmt} and {\ml makestring\_fmt}
       fun makestring_fmt fm =
 (*          implode *)
 	(foldl (op ^) "")
-	      (rev(snd(print'p(1,!Pagewidth,0,!Blanks,!Indent,!Skip,Hori,fm,nil))))
+	      (Spmod(0,0) :: (rev(snd(print'p(1,!Pagewidth,0,!Blanks,!Indent,!Skip,Hori,fm,nil)))))
 
       fun print_fmt fm = 
           fold (fn (s : string,_) => print s)
-                (snd(print'p(1,!Pagewidth,0,!Blanks,!Indent,!Skip,Hori,fm,nil)))
+                (Spmod(0,0) :: (snd(print'p(1,!Pagewidth,0,!Blanks,!Indent,!Skip,Hori,fm,nil))))
                 ()
 
 (*
@@ -756,15 +758,15 @@ packaged-up {\tt outstream}s.
 The functions {\tt file\_open\_fmt} and {\tt with\_open\_fmt} endeavor to
 make the use of {\tt fmtstreams} on files more convenient.
 *)
-      datatype fmtstream = Formatstream of outstream
+      datatype fmtstream = Formatstream of TextIO.outstream
 
       fun open_fmt outs = Formatstream(outs)
 
       fun close_fmt (Formatstream outs) = outs
 
       fun output_fmt(Formatstream outs,fm) = 
-          fold (fn (s,_) => output(outs, s))
-               (snd(print'p(1,!Pagewidth,0,!Blanks,!Indent,!Skip,Hori,fm,nil)))
+          fold (fn (s,_) => TextIO.output(outs, s))
+               (Spmod(0,0) :: (snd(print'p(1,!Pagewidth,0,!Blanks,!Indent,!Skip,Hori,fm,nil))))
                ()
 
       (*
@@ -786,8 +788,8 @@ make the use of {\tt fmtstreams} on files more convenient.
        *)
       
       fun file_open_fmt filename =
-         let val fmt_stream = open_fmt(open_out filename)
-             val close_func = fn () => ( close_out(close_fmt(fmt_stream)) )
+         let val fmt_stream = open_fmt(TextIO.openOut filename)
+             val close_func = fn () => ( TextIO.closeOut(close_fmt(fmt_stream)) )
           in (close_func, fmt_stream) end
       
       fun with_open_fmt filename func =
