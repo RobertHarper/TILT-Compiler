@@ -47,7 +47,5 @@ sig
 
    val dumpDatalist : Machine.Rtl.data list -> unit
 
-   val reset_times : unit -> unit
-   val print_times : unit -> unit
 
 end

@@ -14,22 +14,9 @@ struct
    open Machineutils Machineutils.Machine Bblock
 
    val show_labels = ref true
+   val debug = ref false
 
-   val dump_proc_times = ("  dumpProc",ref 0.0,ref 0.0)
-   val times = [dump_proc_times]
 
-   fun reset_times () =
-      app (fn (_,a,b) => (a := 0.0; b := 0.0)) times
-
-   fun print_times () =
-      app (fn (name,a,b) =>
-	       (print name;
-		print "\t";
-		print (Real.toString (!a));
-		print " +/-";
-		print (Real.toString (!b));
-		print "\n")) times
-    
    val error = fn s => Util.error "printutils.sml" s
 
    val output_stream = ref NONE : TextIO.outstream option ref
@@ -91,7 +78,7 @@ struct
 
        
    fun openOutput outfilename =
-       (print "about to open_out "; print outfilename; print "\n";
+       (if (!debug) then (print "about to open_out "; print outfilename; print "\n") else ();
 	output_stream := SOME (TextIO.openOut outfilename))
 
    fun closeOutput () = 

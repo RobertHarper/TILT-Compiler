@@ -25,8 +25,6 @@ sig
 
    val debug : bool ref
 
-   val reset_times : unit -> unit
-   val print_times : unit -> unit
 
    val color : Ifgraph.graph * Trackstorage.info * 
 	       MU.Machine.stacklocation MU.Regmap.map *

@@ -1,4 +1,10 @@
-structure Linkalpha =
+signature LINKALPHA =
+sig
+    val compile : string -> string list
+    val test : string -> string list
+end
+
+structure Linkalpha : LINKALPHA =
 struct
     val error = fn s => Util.error "linkalpha.sml" s
 
@@ -166,14 +172,18 @@ in
       val _ = Rtltoalpha.allocateModule rtlmod
       val (Rtl.MODULE{main=nl,...}) = rtlmod
       val nls = [nl]
-    in 
-	Rtltoalpha.dumpEntryTables nls;
-	Printutils.closeOutput();
-	files @ [xs]
+      val _ = Rtltoalpha.dumpEntryTables nls
+      val _ = Printutils.closeOutput()
+      val res = files @ [xs]
+      val _ = print "Generation of assembly files complete\n"
+    in res
     end
 
-  fun comp_file str = ((* Linkrtl.Tortl.hasFullConditionalBranch := false; *)
-		       comp (str,Linkrtl.test str))
+  fun compile' debug  str = ((* Linkrtl.Tortl.hasFullConditionalBranch := false; *)
+			     comp (str,(if debug then Linkrtl.test else Linkrtl.compile) str))
+
+  val compile = compile' false
+  val test = compile' false
  end (* open *)
 end;
 

@@ -89,8 +89,6 @@ struct
    fun rewrite_time f =       Stats.timer("rewrite prog",f)
 
 
-   fun reset_times () = Stats.reset_stats()
-   fun print_times () = Stats.print_stats()
 
    val Rdiscard = Rat
 
@@ -1284,7 +1282,7 @@ struct
        val _ = msg "\tbuilding interference graph\n"
        val igraph = buildGraph(getSignature,name,block_map,
 			       args,res,callee_saved)
-       val _ = Ifgraph.print_stats igraph
+       val _ = if (!msgs) then Ifgraph.print_stats igraph else ()
        val _ = msg "\tcoloring interference graph\n"
        val mapping = color(igraph,storage_info, stack_resident, getBias)
 

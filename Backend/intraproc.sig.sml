@@ -11,8 +11,6 @@ sig
   
    val debug : bool ref
    val msgs : bool ref
-   val reset_times : unit -> unit
-   val print_times : unit -> unit
 
    val allocateProc : {getSignature  : Machine.loclabel -> Machine.procsig,
 		       name          : Machine.loclabel,

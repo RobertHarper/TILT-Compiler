@@ -388,17 +388,19 @@ functor Tracetable(val little_endian    : bool
 	[Rtl.COMMENT "gcinfo",DLABEL(ML_EXTERN_LABEL (name^"_GCTABLE_BEGIN_VAL"))]
     fun MakeTable (calllist) = foldr (op @) nil (map do_callinfo calllist) 
     fun MakeTableTrailer name = 
-	(print ("\nTraceability Table Summary: \n");
-	 print ("  Count_unset_reg: " ^ (Int.toString (!Count_unset_reg)) ^ "\n");
-	 print ("  Count_unset_stack: " ^ (Int.toString (!Count_unset_stack)) ^ "\n");
-	 print ("  Count_no: " ^ (Int.toString (!Count_no)) ^ "\n");
-	 print ("  Count_yes: " ^ (Int.toString (!Count_yes)) ^ "\n");
-	 print ("  Count_stack: " ^ (Int.toString (!Count_stack)) ^ "\n");
-	 print ("  Count_stack_rec: " ^ (Int.toString (!Count_stack_rec)) ^ "\n");
-	 print ("  Count_callee: " ^ (Int.toString (!Count_callee)) ^ "\n");
-	 print ("  Count_global: " ^ (Int.toString (!Count_global)) ^ "\n");
-	 print ("  Count_global_rec: " ^ (Int.toString (!Count_global_rec)) ^ "\n");
-	 print "\n";
+	(if !ShowDebug
+	     then (print ("\nTraceability Table Summary: \n");
+		   print ("  Count_unset_reg: " ^ (Int.toString (!Count_unset_reg)) ^ "\n");
+		   print ("  Count_unset_stack: " ^ (Int.toString (!Count_unset_stack)) ^ "\n");
+		   print ("  Count_no: " ^ (Int.toString (!Count_no)) ^ "\n");
+		   print ("  Count_yes: " ^ (Int.toString (!Count_yes)) ^ "\n");
+		   print ("  Count_stack: " ^ (Int.toString (!Count_stack)) ^ "\n");
+		   print ("  Count_stack_rec: " ^ (Int.toString (!Count_stack_rec)) ^ "\n");
+		   print ("  Count_callee: " ^ (Int.toString (!Count_callee)) ^ "\n");
+		   print ("  Count_global: " ^ (Int.toString (!Count_global)) ^ "\n");
+		   print ("  Count_global_rec: " ^ (Int.toString (!Count_global_rec)) ^ "\n");
+		   print "\n")
+	 else ();
 	 [Rtl.COMMENT "endgcinfo with filler for alignment",
 	  DLABEL(ML_EXTERN_LABEL (name^"_GCTABLE_END_VAL")),
 	  INT32 wzero])

@@ -27,9 +27,6 @@ struct
    fun select_colors_time f = Stats.timer("select colors",f)
 
 
-   fun reset_times () = Stats.reset_stats()
-   fun print_times () = Stats.print_stats()
-
    (* returns a mapping from all pseudo-registers used in a procedure
       to their locations at run-time.   This mapping excludes
       physical registers.*)

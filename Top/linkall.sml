@@ -1,13 +1,20 @@
-structure Linkall = 
+signature LINKALL = 
+sig
+    val compile : string -> string (* input filename -> executable filename *)
+    val test : string -> string (* input filename -> executable filename *)
+end
+
+structure Linkall : LINKALL = 
 struct
 
     val error = fn s => Util.error "linkall.sml" s
+    val debug = ref false
 
     datatype platform = ALPHA | PPC
     val cur_platform = ref ALPHA
     fun specific_comp_file arg = 
 	(case (!cur_platform) of
-	     ALPHA => Linkalpha.comp_file arg
+	     ALPHA => Linkalpha.compile arg
 	   | PPC => error "no PPC") (* Linkppc.comp_file arg *)
 (*
     fun specific_reparse_prelude arg = 
@@ -72,9 +79,11 @@ struct
 	    fun link (infile,asm_files,opt) =
 		let 
 		    val outname = infile ^ ".exe"
+(*
 		    val _ = (print "Done creating assemblies:";
 			     app (fn f => (print f; print " ")) asm_files; 
 			     print "\n")
+*)
 		    val current_dir = OS.FileSys.getDir()
 		    val _ = ((OS.FileSys.chDir (!runtime_dir)) handle exn => 
 			     (print "bad Runtime directory.\n"; raise exn))
@@ -87,10 +96,15 @@ struct
 				      then "hprof=1"
 				    else "")
 				      ^ out)
-                    val _ = print ("Executing: " ^ makecom ^ "\n")
-		    val _ = OS.Process.system makecom
+                    val _ = if (!debug)
+				then print ("Executing: " ^ makecom ^ "\n")
+			    else ()
+		    val _ = (Stats.timer("Linking",OS.Process.system)) makecom
 		    val _ = OS.FileSys.chDir current_dir;
-		    val _ = print ("Done creating final executable: " ^ outname ^ "\n");
+		    val _ = print "Linking complete\n"
+		    val _ = if (!debug)
+				then print ("Done creating final executable: " ^ outname ^ "\n")
+			    else ()
 		in
 		    outname
 		end
@@ -110,6 +124,14 @@ struct
       val comp_file     = wrapper "total" comp_file
       val comp_file_opt = wrapper "total" comp_file_opt
       val assemble_file = wrapper "toasm" assemble_file
+
+      fun compile' debug filename = let val _ = Stats.reset_stats()
+					val res = comp_file filename
+					val _ = Stats.print_stats()
+				    in  res
+				    end
+      val test = compile' true
+      val compile = compile' false
 
 (*      val reparse_prelude = specific_reparse_prelude *)
     end

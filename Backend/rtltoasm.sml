@@ -48,14 +48,16 @@ struct
 	   val recursive_components =
 	       map (map Toasm.translateLocalLabel) rtl_scc
 	       
-	   val _ = print ("***** There are " ^ (Int.toString (length procs)) 
-	       ^ " procedures  and  ")
-	   val _ = print ((Int.toString (length recursive_components))
-			  ^ " recursive components with the largest being " ^
-			  (Int.toString (foldr Int.max 0
-					   (map length recursive_components))) ^
-			  "\n")
-
+	   val _ = if (!debug)
+		       then (print "***** There are ";
+			     print (Int.toString (length procs));
+			     print " procedures  and  ";
+			     print (Int.toString (length recursive_components));
+			     print " recursive components with the largest being ";
+			     print (Int.toString (foldr Int.max 0
+						  (map length recursive_components)));
+			     print "\n")
+		   else ()
 	   fun memberLabel [] _ = false
 	     | memberLabel (l::rest) l' =
 	       (eqLLabs l l') orelse (memberLabel rest l')
@@ -342,8 +344,7 @@ struct
        val _ = dumpDatalist (Tracetable.MakeTableHeader main');
 
        val _ = initSigs procs;
-       val _ = Printutils.reset_times();
-       val _ = Procalloc.reset_times();
+
        val _ = app emitString textStart;
        val _ = emitString ("\t.globl "^main'^"_CODE_END_VAL\n");
        val _ = emitString ("\t.globl "^main'^"_CODE_BEGIN_VAL\n");
@@ -375,9 +376,7 @@ struct
 
        dumpDatalist (Tracetable.MakeMutableTable (main', 
 						  mutable_objects));
-       print "Done compiling.\n";
-       Procalloc.print_times();
-       Printutils.print_times();
+
        ()
      end (* allocateProg *)
        handle e => (Printutils.closeOutput (); raise e)
