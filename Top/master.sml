@@ -477,12 +477,13 @@ struct
 	let 
 	    fun enableReady child =
 		let val imports = get_import_direct child (* no need to check transitively *)
-		    fun hasInterface unit = (case get_status unit
-					       of PROCEEDING _ => true
-						| PENDING' _ => true
-						| WORKING' _ => true
-						| DONE _ => true
-						| _ => false)
+		    fun hasInterface unit =
+		        unit = parent orelse (case get_status unit
+					        of PROCEEDING _ => true
+					 	 | PENDING' _ => true
+						 | WORKING' _ => true
+						 | DONE _ => true
+						 | _ => false)
 		    val ready = Listops.andfold hasInterface imports
 		in  ready andalso 
 		    (case get_status child
@@ -550,14 +551,15 @@ struct
 	    val _ = if Update.interfaceUptodate status
 			then enableChildren unit
 		    else ()
-	in
-	    if null plan then
-		ignore (markDone unit)
-	    else
-		if sendToSlave plan then
-		    markPending (unit, plan)
+	    val _ =
+		if null plan then
+		    ignore (markDone unit)
 		else
-		    markPending' (unit, plan)
+		    if sendToSlave plan then
+			markPending (unit, plan)
+		    else
+			markPending' (unit, plan)
+	in  ()
 	end
     
     (* waiting, pending, working, proceeding, pending', working' - ready and done not included *)
