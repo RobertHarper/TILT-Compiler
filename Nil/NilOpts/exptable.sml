@@ -420,9 +420,11 @@ struct
 	  | (_ , Mu_c _) =>  LESS
 
           | ( AllArrow_c {openness = op1, effect = eff1, isDependent = i1,
-			  tFormals = vklist1, eFormals = vclist1, fFormals = f1, body = con1},
+			  tFormals = vklist1, eFormals = vclist1, fFormals = f1,
+			  body_type = con1},
 	      AllArrow_c {openness = op2, effect = eff2, isDependent = i2,
-			  tFormals = vklist2, eFormals = vclist2, fFormals = f2, body = con2}) =>
+			  tFormals = vklist2, eFormals = vclist2, fFormals = f2,
+			  body_type = con2}) =>
 	       (case (cmp_orders [cmp_bool (i1,i2),
 				  cmp_openness(op1,op2),
 				  cmp_effect (eff1, eff2),
