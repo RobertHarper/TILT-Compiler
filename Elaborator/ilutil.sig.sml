@@ -1,9 +1,8 @@
-(*$import Name Symbol Prim Tyvar IL Il *)
 (* Utility routines for the internal language. *)
 signature ILUTIL =
   sig
 
-    val installHelpers : {lookup : Il.context * Il.label -> (Il.path * Il.phrase_class) option
+    val installHelpers : {Context_Lookup_Labels : Il.context * Il.label list -> (Il.path * Il.phrase_class) option
 			  } -> unit
 
     val debug : bool ref
@@ -26,7 +25,7 @@ signature ILUTIL =
     type phrase_class = Il.phrase_class
     type tyvar = (context,con,exp) Tyvar.tyvar
 
-	
+
     val fresh_con : context -> con
     val fresh_named_con : context * string -> con
 
@@ -35,7 +34,7 @@ signature ILUTIL =
 
     (* coercions: paths to/from exp/mods/cons *)
     val join_path_labels : path * label list -> path
-    val path2mod : path -> mod 
+    val path2mod : path -> mod
     val path2con : path -> con
     val path2exp : path -> exp
     val mod2path : mod -> path option
@@ -72,7 +71,13 @@ signature ILUTIL =
     val lab_bool : label
     val lab_true : label
     val lab_false : label
+
     val con_bool : context -> con
+    val true_exp : context -> exp
+    val false_exp : context -> exp
+    val string_eq : context -> exp
+    val vector_eq : context -> mod * signat
+
     val con_eqfun : context -> con -> con
     val con_tuple : con list -> con                 (* the type of tuple values *)
     val con_tuple_inject : con list -> con          (* makes a tuple of types   *)
@@ -81,8 +86,6 @@ signature ILUTIL =
     val generate_tuple_label  : int -> label
     val generate_tuple_labels : int -> label list (* generate labels 1..n *)
     val generate_tuple_symbol : int -> Symbol.symbol
-    val true_exp : context -> exp
-    val false_exp : context -> exp
 
 
     (* special labels *)
@@ -96,31 +99,25 @@ signature ILUTIL =
     val functor_arg_lab : label
 
     val canonical_tyvar_label : bool (*is_eq*) -> int -> label
-	
+
     (* special values *)
     val con_unit : con
     val con_string : con
     val unit_exp : exp
-    val fail_tag : Name.tag
-    val bind_tag : Name.tag
-    val match_tag : Name.tag
-    val fail_exp : exp
-    val bind_exp : exp
-    val match_exp : exp
-    val failexn_exp : exp
-    val bindexn_exp : exp
-    val matchexn_exp : exp
+    val internal_match_tag : Name.tag	(* Not user's Match *)
+    val bind_exn : context -> exp
+    val match_exn : context -> exp
 
     (* Sort labels into canonical order *)
-    val sort_labelpair : (label * 'a) list -> (label * 'a) list 
-    val sort_label : label list -> label list 
+    val sort_labelpair : (label * 'a) list -> (label * 'a) list
+    val sort_label : label list -> label list
     val label_issorted : label list -> bool
 
     (* derefences a constructor variable if possible *)
     val con_deref : con -> con
 
     (*  ConApply: takes a type and a list of types
-                  if the first type is a CON_FUN, performs a substitution (beta reduction). 
+                  if the first type is a CON_FUN, performs a substitution (beta reduction).
 		  If the flag is true, then the reduction occurs if each argument is a variable
 		  or is used at most once in the function body.  This prevents code explosion. *)
     val ConApply  : bool * con * con list -> con
@@ -143,7 +140,7 @@ signature ILUTIL =
     val subst_add_expvar : subst * var * exp -> subst
     val subst_add_convar : subst * var * con -> subst
     val subst_add_modvar : subst * var * mod -> subst
-    val subst_add_sigvar : subst * var * var -> subst
+    val subst_add_sigvar : subst * var * signat -> subst
     val subst_add_exppath : subst * path * exp -> subst
     val subst_add_conpath : subst * path * con -> subst
     val subst_add_modpath : subst * path * mod -> subst
@@ -152,7 +149,11 @@ signature ILUTIL =
     val con_subst : con * subst -> con
     val mod_subst : mod * subst -> mod
     val sig_subst : signat * subst -> signat
-    val pc_subst : phrase_class * subst -> phrase_class
+    val sdecs_subst : Il.sdecs * subst -> Il.sdecs
+    val sbnds_subst : Il.sbnds * subst -> Il.sbnds
+    val entry_subst : Il.context_entry * subst -> Il.context_entry
+    val entries_subst : Il.entries * subst -> Il.entries
+    val decresult_subst : Il.decresult * subst -> Il.decresult
 
     val con_subst' : con * subst -> int * con  (* int indicates number of substitutions performed *)
     val sig_subst' : signat * subst -> int * signat
@@ -162,8 +163,12 @@ signature ILUTIL =
     val mod_free : mod -> Name.VarSet.set
     val con_free : con -> Name.VarSet.set
     val sig_free : signat -> Name.VarSet.set
+    val sdec_free : sdec -> Name.VarSet.set
     val sbnd_free : sbnd -> Name.VarSet.set
+    val sdecs_free : Il.sdecs -> Name.VarSet.set
+    val ovld_free : Il.ovld -> Name.VarSet.set
     val entry_free : Il.context_entry -> Name.VarSet.set
+    val entries_free : Il.entries -> Name.VarSet.set
 
     val classifier_free : phrase_class -> Name.VarSet.set
     val pc_free         : phrase_class -> Name.VarSet.set
@@ -180,7 +185,7 @@ signature ILUTIL =
     val sig_size : signat -> int
 
 (*
-    (* ----------- Functions related to type inference ----------- 
+    (* ----------- Functions related to type inference -----------
        find_tyvars_flexes : given a con, return a list of all unset tyvars with a flag
                             indicating whether it occurred inside a CON_REF or CON_ARRAY
                             and a list of flexinfo refs
@@ -190,8 +195,8 @@ signature ILUTIL =
 *)
 
     (* ------------ More Miscellaneous/General Substituter ------- *)
-    type handler = (exp -> exp option) * (con -> con option) * 
-	           (mod -> mod option) * (sdec -> sdec option) 
+    type handler = (exp -> exp option) * (con -> con option) *
+	           (mod -> mod option) * (sdec -> sdec option)
 
     val default_exp_handler  : exp -> exp option
     val default_con_handler  : con -> con option
@@ -208,7 +213,7 @@ signature ILUTIL =
 
       (*
         con_subst_conapps : substitute each application
-	remove_modvar_type : given a con, a target mod variable mv, and sdecs, 
+	remove_modvar_type : given a con, a target mod variable mv, and sdecs,
 	                       return the con after:
 	                         subst each tyvar with a lookup of sdecs to the vis type
 			         subst each projection from mv to the corresponding
@@ -226,7 +231,7 @@ signature ILUTIL =
 
     val con_subst_conapps : (con * (con * con list -> con option)) -> con
     val remove_modvar_type : con * var * Il.sdecs -> con
-    val rebind_free_type_var : int * Tyvar.stamp * con * context * var -> 
+    val rebind_free_type_var : int * Tyvar.stamp * con * context * var ->
 	                          (tyvar * label * bool) list
 
     (* Determine whether all overloaded expressions and type metavariables are resolved *)
@@ -244,5 +249,5 @@ signature ILUTIL =
     (* Help creating type/eqtype sigs *)
     val make_typearg_sdecs : context -> (label * bool) list -> Il.sdecs
     val reduce_typearg_sdecs : exp * Name.vpath * Il.sdecs -> Il.sdecs
-	
+
   end;
