@@ -25,12 +25,8 @@ signature ILUTIL =
     type phrase_class = Il.phrase_class
     type tyvar = (context,con,exp) Tyvar.tyvar
 
-
     val fresh_con : context -> con
     val fresh_named_con : context * string -> con
-
-
-
 
     (* coercions: paths to/from exp/mods/cons *)
     val join_path_labels : path * label list -> path
@@ -86,7 +82,6 @@ signature ILUTIL =
     val generate_tuple_label  : int -> label
     val generate_tuple_labels : int -> label list (* generate labels 1..n *)
     val generate_tuple_symbol : int -> Symbol.symbol
-
 
     (* special labels *)
     val mk_lab   : label
@@ -184,16 +179,6 @@ signature ILUTIL =
     val bnd_size : bnd -> int
     val sig_size : signat -> int
 
-(*
-    (* ----------- Functions related to type inference -----------
-       find_tyvars_flexes : given a con, return a list of all unset tyvars with a flag
-                            indicating whether it occurred inside a CON_REF or CON_ARRAY
-                            and a list of flexinfo refs
-			    also performs path compression on chains of CON_TYVARs
-    *)
-    val find_tyvars_flexes : con -> (bool * tyvar) list * Il.flexinfo ref list
-*)
-
     (* ------------ More Miscellaneous/General Substituter ------- *)
     type handler = (exp -> exp option) * (con -> con option) *
 	           (mod -> mod option) * (sdec -> sdec option) *
@@ -211,7 +196,8 @@ signature ILUTIL =
     val mod_handle : handler -> mod -> mod
     val bnd_handle : handler -> bnd -> bnd
     val dec_handle : handler -> dec -> dec
-
+    val decresult_handle : handler -> Il.decresult -> Il.decresult
+    val sdecs_handle : handler -> Il.sdecs -> Il.sdecs
 
       (*
         con_subst_conapps : substitute each application

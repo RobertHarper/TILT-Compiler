@@ -650,6 +650,8 @@ structure IlUtil :> ILUTIL =
 	   fun sig_handle handlers = f_signat (all_handlers handlers)
 	   fun bnd_handle handlers = f_bnd' (all_handlers handlers)
 	   fun dec_handle handlers = f_dec' (all_handlers handlers)
+	   fun decresult_handle handlers = f_decresult (all_handlers handlers)
+	   fun sdecs_handle handlers = f_sdecs (all_handlers handlers)
        end
 
 
