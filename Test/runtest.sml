@@ -2,10 +2,12 @@
 
 (*
 NAME
-	runall, runtest, tilt, tilt-nj, platform
+	regress, runall, runtest, tilt, tilt-nj, platform
 		- regression test harness for the TILT compiler
 
 SYNOPSIS
+	../Bin/regress [all | nj | tilt] [outfile]
+
 	./runall [-fnc]
 
 	./Runtest.$platform.exe [-fncFS] testdir ...
@@ -19,15 +21,11 @@ DESCRIPTION
 	the file README.  With the -f option, runtest will keep going
 	after failure.  The -n option causes runtest to use a version
 	of TILT compiled by SML/NJ.  Runtest purges compiler-generated
-	files before each test and after each successful test.  The -c
-	option prevents this cleanup.  The (mutually exclusive) -F and 
-	-S flags tells runtest the expected outcome of the tests, so 
-	that it can generate an appropriate warning if a test unexepectedly 
-	fails or succeeds.  If the -F flag is specified, then any 
-	test that succeeds will generate a message indicating that the 
-        status of the test has changed.  Similary, the -S flag will cause
-	runtest to generate warnings on any failures.  These flags
-	are mostly useful for the runall script.
+	files before and after each test.  The -c option prevents this
+	cleanup.  The mutually exclusive -F (should fail) and -S
+	(should succeed) options tell runtest the expected outcome of
+	the tests, so that it can generate an appropriate warning if a
+	test unexepectedly fails or succeeds.
 
 	A test comprises some SML code and an expected result.
 	Runtest uses TILT to compile the test code then runs the
@@ -49,6 +47,17 @@ DESCRIPTION
 
 	Runall runs the tests listed in testlist.txt.
 
+	Regress is a one-step tool to compile the compilers, compile
+	the regression harness, and run the regression tests.  The
+	first option determines what version(s) of TILT to test:
+
+	nj	TILT compiled by SML/NJ (default)
+	tilt	TILT compiled by TILT
+	all	both versions
+
+	The second option the file to store output.  The default is
+	RegressionResults.`date`.txt.
+	
 	Tilt and tilt-nj are the TILT executables used by runtest.
 
 	Platform sets the environment variable $platform which is used
@@ -57,7 +66,7 @@ DESCRIPTION
 EXAMPLES
 	In order to use the harness, you must build command-line
 	versions of TILT and compile the test harness.  The glorious
-	details are:
+	details (which are handled by ../Bin/regress) are:
 
 	1. Check out the sources.
 	2. Compile the runtime with gmake runtime inside ml96/Runtime.
