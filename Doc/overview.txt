@@ -1,16 +1,69 @@
-====
-TILT
-====
+================
+How to get TILT?
+================
 
+The TILT compiler source is maintained via cvs.  To get a local copy
+of TILT, the CVS root variable should be set to
+"/afs/cs.cmu.edu/project/fox-1/research/cvsroot".  TILT can then be
+checked out with "cvs checkout ml96".  This will create a directory
+named "ml96" in the current directory.  The TILT source proper lies in
+11 directores: Util, Parser, Elaborator, Nil, Rtl, Backend, Alpha,
+Sparc, Top, Runtime, and Self.
 
-The TILT compiler source is maintained via cvs.
-The CVS root variable should be set to 
-"/afs/cs.cmu.edu/project/fox-1/research/cvsroot".
-TILT can then be checked out with "cvs checkout ml96".
-This will create a directory named "ml96" in
-the current directory.  The TILT source proper lies 
-in 10 directores: Util, Parser, Elaborator, Nil, Rtl, 
-Backend, Alpha, Sparc, Top, Runtime.
+==========
+Using TILT
+==========
+
+(1) To use TILT, start SML/NJ (with CM) in the directory "ml96".
+	Then, build TILT with "CM.make()".
+(2) At this point, TILT can be used to compile SML source files.
+	The primary method of use is "Manager.make" which takes
+	the name of a mapfile.  See TILT make on what a mapfile
+	is and how to set up sources for use with a mapfile.
+
+=========
+TILT make
+=========
+The TILT make system has 2 components: mapfiles and import lists.
+
+Mapfiles are analagous to UNIX makefiles and SML/NJ's .cm files.
+Mapfiles do not need to have any particular suffix.  Examples of
+mapfiles can be seen in the Self directory.  Mapfiles map logical
+module names to filenames.  For example, the following line in a
+mapfile would indicate that the logical module name "FooBar" is to be
+associated with the file "Baz/foobar.sml".  Note that the extension
+.sml is omitted.
+
+FooBar	Bar/foobar
+
+The second feature is a specialized comment placed as the first line
+of a file.  For example, the following first line of a file indicates
+that the file depends on the modules "FooBar" and "Goo"
+
+(*$import FooBar Goo *)
+
+So, suppose there is a subdirectory in ml96 called twelf.
+To get twelf to compile with TILT, the first thing needed is
+to create a mapfile in the twelf subdirectory called "mapfile-twelf".
+Then, each of the files in the twelf subdirectory must be listed
+in the mapfile along with its assigned logical name.
+Then, the proper dependencies among the modules will need to be
+inserted by adding import lines to each source file.  
+The basis can be included in mapfile-twelf with the following line:
+
+#include ../Self/mapfile-basis
+
+Each source file that uses a basis structure will require the logical
+name of the file containing the module.  Most logical names are the
+same as the name of the structure declared in the file.  Examples 
+include "List" and "TextIO".  The logical name "TopLevel" corresponds
+to the module containing term and types bound at the top level like
+"print" and "map".
+
+It is unlikely that the dependencies will have been correctly set up when
+TILT is first run.  Error messages that result because of this will be
+of the "unbound variable" sort.  For example, if the Posix structure is unbound, 
+then include Posix in the import list.
 
 ===============================
 Description of TILT directories
@@ -77,10 +130,6 @@ with the system assembler and loader, and a compilation manager.
 The Runtime directory contains the source for the runtime.
 This is composed of a collection of C source files, Sparc and Alpha
 assembly files, and a makefile.
-
-==========
-Using TILT
-==========
 
 ============
 File listing 
