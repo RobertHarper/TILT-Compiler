@@ -193,7 +193,8 @@ structure InfixParse
 	fun self arg = parse_pat(table,is_nonconst_constr,arg)
 	fun self_one arg = (case (parse_pat(table,is_nonconst_constr,[arg])) of
 				[p] => p
-			      | pats => (print "parse_pat on subcall yielded multiple patterns";
+			      | pats => (print "parse_pat on subcall yielded multiple patterns\n";
+					 print "Constructor possibly mispelled/not in scope?\n";
 					 app (fn p => (AstHelp.pp_pat p; print "\n")) pats;
 					 error "parse_pat on subcall yielded multiple patterns"))
 	val _ = debugdo (fn () => (print "entered parse_pat\n"))
@@ -220,6 +221,7 @@ structure InfixParse
 		 in case (self pats') of
 		     [p] => p
 		   | pats => (print "parse_pat on subcall yielded multiple patterns:\n";
+			      print "Constructor possibly mispelled/not in scope?\n";
 			      app (fn p => (AstHelp.pp_pat p; print "\n")) pats;
 			      error "parse_pat of flatapppat on subcall yielded multiple patterns")
 		 end
