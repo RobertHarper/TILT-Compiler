@@ -1035,8 +1035,14 @@ char* getcwd_size(int size)
     assert(0);
   }
   if (getcwd(cwd, size) == NULL) {
+    int e = errno;
     free(cwd);
-    return getcwd_size(size * 2);
+    if (e == ERANGE) {
+      return getcwd_size(size * 2);
+    } else {
+      printf("POSIX function getcwd returned with errno = %d\n", e);
+      assert(0);
+    }
   } else return cwd;
 }
 
