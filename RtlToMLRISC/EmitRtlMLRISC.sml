@@ -2200,7 +2200,8 @@ functor EmitRtlMLRISC(
 	    emitMLTree trailer
 	  end
 
-    fun resetTables() = Label'.reset()
+    fun resetTables() = (Label'.reset();
+			 Label.reset())
 
     fun emit(Rtl.MODULE{main		  = main,
 			procs		  = procedures,
