@@ -1,8 +1,8 @@
-(*$import Util Listops Name Tyvar Prim Ast Symbol String TilWord64 Array Int List Stats AstHelp Il IlStatic IlUtil Ppil IlContext Pat InfixParse Datatype Equal Error Signature TVClose TOIL *)
-
 (* todo : LetExp and CaseExp: valuability computation too conservative
           optimize coercion functors to recognize when they are entirely unnecessary
           optimize coercion functions of polymorphic values to be identity by normalizing type argument positions
+
+   See CVS revision 1.130 for PvalDec and PletExp.
 *)
 
 (* The translation from EL to IL *)
@@ -26,7 +26,6 @@ structure Toil
 
     type tyvar = (context,con,exp) Tyvar.tyvar
     type ocon = (context,con,exp) Tyvar.ocon
-    type decresult = (sbnd option * context_entry) list
     type filepos = Ast.srcpos -> string * int * int
 
     fun dummy_exp' arg = let val (e,c) = Error.dummy_exp arg
@@ -34,28 +33,23 @@ structure Toil
 			end
 
     (*  --------- Elaboration state contains: -------------------------
-        overload table, eq table, flex tables, 
+        overload table, eq table, flex tables,
 	source position stack, error state
         -------------------------------------------------------------- *)
 
-    local 
+    local
       val tyvar_table = ref([] : tyvar list)
       val overload_table = ref ([] : (region * ocon) list list)
       val eq_table = ref ([] : (region * tyvar) list)
       val flex_table = ref ([] : (label * flexinfo ref * con * exp Util.oneshot) list)
-      val unit_name = ref (NONE : string option)
     in
 	fun reset_eq() = eq_table := []
-	fun reset_elaboration (fp, unitNameOpt) = (Error.reset fp;
-						   reset_eq();
-						   tyvar_table := [];
-						   overload_table := [[]];
-						   flex_table := [];
-						   unit_name := unitNameOpt)
-	fun get_unit_name () = (case !unit_name
-				  of NONE => error "unit name unavailable - get_unit_name"
-				   | SOME unitName => unitName)
-
+	fun reset_elaboration fp =
+	    (Error.reset fp;
+	     reset_eq();
+	     tyvar_table := [];
+	     overload_table := [[]];
+	     flex_table := [])
 	fun get_tyvar_table () = !tyvar_table
 	fun add_tyvar_table tv = (tyvar_table := tv :: (!tyvar_table))
 
@@ -100,13 +94,13 @@ structure Toil
 	    val eshot = oneshot()
 	    fun mk_constraint (con,exp) =
 		let
-		    fun check(tyvar,is_hard) = 
+		    fun check(tyvar,is_hard) =
 			let val c' = CON_TYVAR tyvar
 			    val match = (if is_hard then eq_con else soft_eq_con)
 				(context,con,c')
 			in  match
 			end
-		    fun thunk() = 
+		    fun thunk() =
 			(case (oneshot_deref eshot) of
 			     SOME _ => ()
 			   | NONE => oneshot_set(eshot,exp))
@@ -121,77 +115,88 @@ structure Toil
 	end
 
     (* -------------------- special constant overloading -------------------- *)
-    (* We overload when a literal fits in more than one type provided
-     * by Basis.  (Some types can't occur in user programs.)
-     *)
+    (*
+	Special constant overloading.  See also pat.sml:/conLiteral.
+    *)
     local
-	fun make_overload' (context, f : 'a -> con, g : 'a -> exp, domain : 'a list, default : int) =
+	fun make_overload' (context, f : 'a -> con, g : 'a -> exp,
+			    domain : 'a list, default : int) : exp * con * bool =
 	    let val cons_exps = map (fn a => (f a, g a)) domain
 	    in  make_overload (context, cons_exps, default)
 	    end
 
-	open TilWord64
+	structure W = TilWord64
 
-	val uint8_max = fromHexString "FF"
-	val uint32_max = fromHexString "FFFFFFFF"
-	val int32_min = fromDecimalString "~2147483648"
-	val int32_max = fromDecimalString "2147483647"
+	fun in_range_int (low : W.word, high : W.word) (lit : W.word) : bool =
+	    W.slte (low, lit) andalso W.sgte (high, lit)
+	fun in_range_uint (high : W.word) (lit : W.word) : bool =
+	    W.ulte (lit, high)
 
-	fun in_range_int (lit, low, high) = slte (low, lit) andalso sgte (high, lit)
-	fun in_range_uint (lit, high) = ulte (lit, high)
-	    
-	fun in_range_int32 lit = in_range_int (lit, int32_min, int32_max)
-	fun in_range_uint8 lit = in_range_uint (lit, uint8_max)
-	fun in_range_uint32 lit = in_range_uint (lit, uint32_max)
+	val is_int32 : W.word -> bool =
+	    in_range_int (W.fromDecimalString "~2147483648",
+			  W.fromDecimalString "2147483647")
 
-	fun check (p, s) lit = if p lit then ()
-			       else (error_region(); print s; print " constant too large\n")
-	val check_int = check (in_range_int32, "integer")
-	val check_uint = check (in_range_uint32, "word")
-	val check_float = check (fn _ => true, "floating point") (* XXX: punting for now *)
+	val is_uint8 : W.word -> bool =
+	    in_range_uint (W.fromHexString "FF")
+
+	val is_uint32 : W.word -> bool =
+	    in_range_uint (W.fromHexString "FFFFFFFF")
+
+	val is_float64 : string -> bool =
+	    fn _ => true	(* XXX *)
+
+	fun check (p : 'a -> bool, what : string) (lit : 'a) : unit =
+	    if p lit then ()
+	    else (error_region(); print what; print " constant too large\n")
+
+	val check_int : W.word -> unit = check (is_int32, "integer")
+	val check_uint : W.word -> unit = check (is_uint32, "word")
+	val check_float : string -> unit = check (is_float64, "floating point")
     in
-	fun make_int_overload (context, lit) = (check_int lit;
-						(SCON(int(W32,lit)), CON_INT W32, true))
+	fun make_int_overload (context, lit : W.word) : exp * con * bool =
+	    (check_int lit; (SCON(int(W32,lit)), CON_INT W32, true))
 
-	fun make_float_overload (context, s) = (check_float s;
-						(SCON(float(F64,s)), CON_FLOAT F64, true))
-	    
-	fun make_uint_overload (context, lit) =
+	fun make_float_overload (context, s : string) : exp * con * bool =
+	    (check_float s; (SCON(float(F64,s)), CON_FLOAT F64, true))
+
+	fun make_uint_overload (context, lit : W.word) : exp * con * bool =
 	    let val _ = check_uint lit
 	    in
-		if in_range_uint8 lit then
-		    make_overload' (context, CON_UINT, fn size => SCON(uint(size,lit)), [W32, W8], 0)
+		if is_uint8 lit then
+		    make_overload' (context, CON_UINT,
+				    fn size => SCON(uint(size,lit)),
+				    [W32, W8], 0)
 		else
 		    (SCON(uint(W32,lit)), CON_UINT W32, true)
 	    end
 
-	fun make_string_overload (context, s) =
+	fun make_string_overload (context, s : string) : exp * con * bool =
 	    (SCON(vector (CON_UINT W8,
 			  Array.fromList
-			  (map (fn c => SCON(uint(W8,fromInt (ord c))))
+			  (map (fn c => SCON(uint(W8,W.fromInt (ord c))))
 			   (explode s)))), con_string, true)
 
-	fun make_char_overload (context, s) =
+	fun make_char_overload (context, s : string) : exp * con * bool =
 	    (SCON(uint(W8,
 		       (case (explode s) of
-			    [c] => fromInt (ord c)
-			  | _ => parse_error "Ast.CharExp carries non-charcter string"))),
-	     CON_UINT W8, true) 
+			    [c] => W.fromInt (ord c)
+			  | _ => parse_error "Ast.CharExp carries string with size different from one"))),
+	     CON_UINT W8, true)
     end
-	
+
     (* ----------------- overload_resolver ----------------------- *)
     fun overload_help (warn,force) (region,ocon) : unit =
 	let val _ = push_region region
 	    val f = if force then ocon_constrain_default else ocon_constrain
-	    val _ = 
+	    val _ =
 		(case f ocon
 		   of 0 =>
 		       (error_region();
 			print "overloaded type: none of the constraints are satisfied\n")
 		    | 1 => ()
 		    | n =>
-		       if warn then 
-			   (error_region(); 
+		       if warn then
+			   (error_region();
 			    print "overloaded type: more than one constraint is satisfied\n")
 		       else ())
 	    val _ = pop_region()
@@ -215,7 +220,7 @@ structure Toil
     fun resolve_all_overloads () = resolve_overloads' (overload_table_empty())
 
      (* ----------------- Helper Functions ----------------------- *)
-    fun is_non_const context (syms : Symbol.symbol list) = 
+    fun is_non_const context (syms : Symbol.symbol list) =
 	(length syms = 1 andalso Symbol.eq(hd syms,Symbol.varSymbol "ref")) orelse
 	(Datatype.is_nonconst_constr context syms) orelse
 	(case Datatype.exn_lookup context syms of
@@ -223,28 +228,28 @@ structure Toil
 	   | SOME {stamp,carried_type=NONE} => false
 	   | SOME {stamp,carried_type=SOME _} => true)
 
-    fun parse_pats context pats = 
+    fun parse_pats context pats =
 	(case InfixParse.parse_pat(Context_Fixity context,is_non_const context, pats) of
 	     SOME result => result
 	   | NONE => (error_region();
 		      print "cannot parse pattern\n";
-		      error "cannot parse pattern\n"))
+		      [Ast.StringPat "dummypat"]))
     fun parse_pat context pat = (case parse_pats context [pat] of
 				     [pat] => pat
 				   | _ => error "parse_pat getting back more than 1 pat")
 
 
 
-    fun reduce_to_remove (context, c, sbnds) = 
-	let 
-	    val boundModVars = (List.mapPartial 
+    fun reduce_to_remove (context, c, sbnds) =
+	let
+	    val boundModVars = (List.mapPartial
 				(fn (SBND(_,BND_MOD(v,_,_))) => SOME v
 			          | _ => NONE) sbnds)
-	    val boundConVars = (List.mapPartial 
+	    val boundConVars = (List.mapPartial
 				(fn (SBND(_,BND_CON(v,_))) => SOME v
 			          | _ => NONE) sbnds)
 	    fun loop con =
-		let 
+		let
 		    val occurVars = Name.VarSet.listItems(con_free con)
 		    val escVars = Listops.list_inter_eq(eq_var,boundModVars,occurVars)
 		in
@@ -267,10 +272,10 @@ structure Toil
 	   else loop c
 	end
 
-     fun sbnd_ctxt_list2modsig (sbnd_ctxt_list : (sbnd option * context_entry) list) 
-	 : (mod * signat) = 
-	 let fun loop (acc1,acc2) arg = 
-	     (case arg of 
+     fun sbnd_ctxt_list2modsig (sbnd_ctxt_list : (sbnd option * context_entry) list)
+	 : (mod * signat) =
+	 let fun loop (acc1,acc2) arg =
+	     (case arg of
 		  [] => (acc1,acc2)
 		| ((NONE,_)::rest) => loop (acc1,acc2) rest
 		| ((SOME sbnd,CONTEXT_SDEC sdec)::rest) => loop (sbnd::acc1,sdec::acc2) rest
@@ -280,17 +285,17 @@ structure Toil
 	 end
 
 
-     and add_context_sbnd_ctxts 
+     and add_context_sbnd_ctxts
 	 (context : context,
-	  sbnd_ctxt : (sbnd option * context_entry) list) : sbnd list * context = 
-	 let 
+	  sbnd_ctxt : (sbnd option * context_entry) list) : sbnd list * context =
+	 let
 	     val sbnds = List.mapPartial #1 sbnd_ctxt
 	     val ces = map #2 sbnd_ctxt
 	     val ctxt = add_context_entries(context,ces)
 	 in  (sbnds,ctxt)
 	 end
 
-     (* -- translate and package a list of objects using an object translator 
+     (* -- translate and package a list of objects using an object translator
            inputs  : a translator that takes objects to a list of
 	               (optional) bindings and context-entries
 		     the bool in the binding pair indicates whether
@@ -300,12 +305,12 @@ structure Toil
            outputs : a list of (optional) bindings and context-entries
      *)
      and packagedecs (xobj : context * 'a -> (sbnd option * context_entry) list)
-         (context, sequential) (objs : 'a list) : (sbnd option * context_entry) list = 
-         let 
+         (context, sequential) (objs : 'a list) : (sbnd option * context_entry) list =
+         let
              fun loop context [] = []
                | loop context [obj] = xobj(context,obj)
                | loop context (obj::rest) =
-                 let 
+                 let
                      val sbnd_ctxt_list = xobj(context,obj)
                      val context' = if sequential
 					then #2(add_context_sbnd_ctxts(context,sbnd_ctxt_list))
@@ -315,18 +320,18 @@ structure Toil
                  end
              val sbnd_ctxt_list = loop context objs
              fun maxmap_folder((NONE,_),map) = map
-               | maxmap_folder((SOME(SBND(l,_)),_),map) = 
+               | maxmap_folder((SOME(SBND(l,_)),_),map) =
                  (case Name.LabelMap.find(map,l) of
                      SOME r => (r := 1 + (!r);
                                 map)
                    | NONE => Name.LabelMap.insert(map,l,ref 1))
-             val maxmap = foldl maxmap_folder Name.LabelMap.empty sbnd_ctxt_list 
+             val maxmap = foldl maxmap_folder Name.LabelMap.empty sbnd_ctxt_list
              fun uniquify [] = []
-               | uniquify (sbnd_ctxt::rest) = 
+               | uniquify (sbnd_ctxt::rest) =
                  (case sbnd_ctxt of
                       (NONE,ce) => (NONE,ce) :: (uniquify rest)
                     | (SOME(sbnd as (SBND(l,bnd))),
-                       ce as (CONTEXT_SDEC(SDEC(_,dec)))) => 
+                       ce as (CONTEXT_SDEC(SDEC(_,dec)))) =>
                           (case (Name.LabelMap.find(maxmap,l)) of
                               NONE => elab_error "maxmap must have entry at this point"
                             | SOME r =>
@@ -338,28 +343,27 @@ structure Toil
                                         else (* rename case *)
                                             let val s = Name.label2name l
 						val l' = Name.fresh_internal_label s
-						val l' = Name.to_nonexport l'
-                                            in (SOME (SBND(l',bnd)), 
+                                            in (SOME (SBND(l',bnd)),
                                                 CONTEXT_SDEC(SDEC(l',dec)))
                                                 :: (uniquify rest)
                                             end))
                     | (SOME _, _) => elab_error "packagedec: got sbnd without CONTEXT_SDEC")
-         in uniquify sbnd_ctxt_list 
+         in uniquify sbnd_ctxt_list
          end
 
 
 
-    (* --------------------------------------------------------- 
+    (* ---------------------------------------------------------
       ------------------ EXPRESSIONS --------------------------
       --------------------------------------------------------- *)
-    (* ----- Polymorphic (sdec) Instantiation ------------------------ 
+    (* ----- Polymorphic (sdec) Instantiation ------------------------
        given a list of sdecs, return a triple consisting of
       (1) sbnds with the fresh types or already available types
       (2) the same sdecs except replace each opaque type with a fresh type
-      (3) a list of the the fresh or already present types 
+      (3) a list of the the fresh or already present types
       ---------------------------------------------------------------- *)
      exception NoEqExp
-     fun polyinst_opt (ctxt,sdecs) : (sbnds * sdecs * con list) option  = 
+     fun polyinst_opt (ctxt,sdecs) : (sbnds * sdecs * con list) option  =
        (let
 	   val _ = debugdo (fn () =>
 			    (print "polyinst called with sdecs = "; pp_sdecs sdecs; print "\n"))
@@ -367,8 +371,8 @@ structure Toil
 	       (case sdecs of
 		    [] => ([],[],[])
 		  | ((sdec1 as SDEC(l1,DEC_CON(v1,k1,copt,_))) :: (sdec2 as SDEC(l2,DEC_EXP(v2,c2,_,_))) :: rest) =>
-			let 
-			    val (con,eq_con,e2) = 
+			let
+			    val (con,eq_con,e2) =
 				(case copt of
 				     NONE => let val tyvar = fresh_named_tyvar (ctxt,"eq_tyvar")
 						 val _ = add_eq_entry tyvar
@@ -422,8 +426,8 @@ structure Toil
     and polyinst arg = valOf(polyinst_opt arg)
 
     (* ---------- Polymorphic function Instantiation ------------------ *)
-    and polyfun_inst (context, module : mod, s : signat) : exp * con = 
-       let 
+    and polyfun_inst (context, module : mod, s : signat) : exp * con =
+       let
 	 val _ = debugdo (fn () => (print "polyfun_inst called with module:\n";
 				     pp_mod module; print "\nand sig = \n";
 				     pp_signat s; print "\n\n"))
@@ -433,11 +437,11 @@ structure Toil
 				    pp_con c; print "\n"))
        in (e,c)
        end
-    and polyfun_inst' (context, module : mod, s : signat) : exp * con = 
-       (case s of 
-	  (SIGNAT_FUNCTOR(v,SIGNAT_STRUCTURE arg_sdecs, 
+    and polyfun_inst' (context, module : mod, s : signat) : exp * con =
+       (case s of
+	  (SIGNAT_FUNCTOR(v,SIGNAT_STRUCTURE arg_sdecs,
 			  SIGNAT_STRUCTURE [SDEC(_,DEC_EXP(resv,resc,eopt,inline))],_)) =>
-	  let 
+	  let
 (*
 	    val _ = (print "polyfun_inst' got module of:\n";
 		     Ppil.pp_mod module;
@@ -445,7 +449,7 @@ structure Toil
 		     Ppil.pp_signat s;
 		     print "\n\n")
 *)
-	    local 
+	    local
 		fun dotype l v = let val tv = fresh_tyvar context
 				     val c = CON_TYVAR tv
 				 in (tv,(SBND(l,BND_CON(v,c)),
@@ -453,7 +457,7 @@ structure Toil
 				 end
 		fun help ([] : sdecs) = []
 		  | help (SDEC(l1,DEC_CON(v1,_,_,_)) :: SDEC(l2,DEC_EXP(v2,c2,_,_)) :: rest) =
-		    let 
+		    let
 			val (tyvar,(sbnd1,sdec1)) = dotype l1 v1
 			val _ = tyvar_use_equal tyvar
 			val _ = add_eq_entry tyvar
@@ -469,12 +473,12 @@ structure Toil
 		  | help sdec = (pp_sdecs sdec;
 				 elab_error "unexpected sig to arg struct of polymorphic fun")
 		val temp = help arg_sdecs
-	    in 
+	    in
 	      val (signat_poly_sbnds, signat_poly_sdecs) = Listops.unzip temp
 	      val mod_poly = MOD_STRUCTURE signat_poly_sbnds
 	      val signat_poly = SIGNAT_STRUCTURE signat_poly_sdecs
 	    end
-	    val new_rescon : con = 
+	    val new_rescon : con =
 		remove_modvar_type(resc,v,signat_poly_sdecs)
 		handle e => (print "remove_modvar failed: called from polyfun_inst";
 			     print "target con: "; pp_con resc; print "\n";
@@ -503,15 +507,15 @@ structure Toil
 
 
      and xrecordexp (context : context, sorted, sym_expr_list) : (exp * con * bool) =
-	 let fun doer((sym,expr),(acc,va_acc)) = 
+	 let fun doer((sym,expr),(acc,va_acc)) =
 	     let val label = symbol_label sym
 		 val (exp,con,va) = xexp(context,expr)
 	     in ((label,(label,exp),(label,con))::acc,va andalso va_acc)
 	     end
-	     val (label_rbnd_rdec,va) = foldr doer ([],true) sym_expr_list 
+	     val (label_rbnd_rdec,va) = foldr doer ([],true) sym_expr_list
 	     val sorted = sorted orelse (label_issorted (map #1 label_rbnd_rdec))
 	 in
-	     if sorted 
+	     if sorted
 		 then (RECORD(map #2 label_rbnd_rdec), CON_RECORD(map #3 label_rbnd_rdec),va)
 	     else
 		 let
@@ -527,14 +531,14 @@ structure Toil
 
      and xpath (context : context, path : Ast.path, do_coerce) : (exp * con * bool) =
 	 let
-	     fun unbound() = 
-		 let val _ = (error_region(); 
+	     fun unbound() =
+		 let val _ = (error_region();
 			      print "unbound variable or constructor: ";
 			      AstHelp.pp_path path;
 			      print "\n")
 		 in dummy_exp'(context,"unbound_var")
 		 end
-	     fun eqcase iseq = 
+	     fun eqcase iseq =
 		 let val tyvar = fresh_named_tyvar (context,"teq")
 		     val _ = tyvar_use_equal tyvar
 		     val _ = add_eq_entry tyvar
@@ -598,9 +602,10 @@ structure Toil
 		      (case (Context_Lookup_Labels(context,labs)) of
 			   SOME(_,PHRASE_CLASS_EXP (_,c,SOME e,true)) => (e,coerce c,Exp_IsValuable(context,e))
 			 | SOME(_,PHRASE_CLASS_EXP (e,c,_,_)) => (e,coerce c,true)
-			 | SOME(_,PHRASE_CLASS_MOD (m, _, s)) =>
+			 | SOME(_,PHRASE_CLASS_EXT (v,_,c)) => (VAR v,coerce c,true)
+			 | SOME(_,PHRASE_CLASS_MOD (m, _, s, _)) =>
 			       (case s of
-				    SIGNAT_FUNCTOR _ => 
+				    SIGNAT_FUNCTOR _ =>
 					let val (e,c) = polyfun_inst (context,m,s)
 					in  (e,coerce c,true)
 					end
@@ -612,7 +617,7 @@ structure Toil
 						else unbound()
 					      | dosdec (SDEC(l,DEC_MOD(_,_,s))) =
 						    if (eq_label(l,mk_lab))
-							then 
+							then
 							    let val mk_mod = MOD_PROJECT(m,mk_lab)
 								val (e,c) = polyfun_inst(context,mk_mod,s)
 							    in  (e,coerce c,true)
@@ -628,7 +633,7 @@ structure Toil
 			 | SOME (_, PHRASE_CLASS_SIG _) => unbound()
 			 | NONE => if (length path = 1 andalso (Symbol.eq(hd path,Symbol.varSymbol "=")))
 				       then eqcase true
-				   else if (length path = 1 andalso 
+				   else if (length path = 1 andalso
 					    (Symbol.eq(hd path,Symbol.varSymbol "<>")))
 					    then eqcase false
 					else unbound()))
@@ -650,15 +655,15 @@ structure Toil
        | (Ast.TupleExp exps) => xrecordexp(context,length exps < 10,
 					   mapcount (fn(n,a) => (generate_tuple_symbol (n+1),a)) exps)
        | (Ast.RecordExp sym_exps) => xrecordexp(context,false, sym_exps)
-       | Ast.ListExp args => 
+       | Ast.ListExp args =>
 	     let fun loop [] = AstHelp.nil_exp
 		   | loop (a::b) = Ast.AppExp{function=AstHelp.cons_exp,
 					      argument=Ast.TupleExp[a,loop b]}
 	     in xexp(context,loop args)
 	     end
-       | Ast.SelectorExp s => 
+       | Ast.SelectorExp s =>
      (* for the record, i'd like to say that this construct is a pain in the butt - Perry *)
-	     let 
+	     let
 		 val label = symbol_label s
 		 val stamp = new_stamp()
 		 val fieldcon = fresh_con context
@@ -671,100 +676,23 @@ structure Toil
 	     in (exp,rescon,true)
 	     end
        | Ast.VarExp path => xpath (context, path, true)
-       | Ast.LetExp {dec,expr} => 
+       | Ast.LetExp {dec,expr} =>
 	     let val sbnd_ctxt_list = xdec true (context, dec)
 		 val (sbnds,context') = add_context_sbnd_ctxts(context,sbnd_ctxt_list)
 		 val (e,c,va) = xexp(context',expr)
 		 val c = reduce_to_remove(context',c,sbnds)
 		 val bnds = map (fn (SBND(_,bnd)) => bnd) sbnds
-	     in  (LET(bnds,e),c,false) 
+	     in  (LET(bnds,e),c,false)
 	     end
-       (*  We compile plet's away as follows:
 
-	plet val a = e1
-	     val b = e2
-        in   e3
-	end
 
-	---> extra primitives needed: Spawn and Yield
-             We assume there are no user interrups; otherwise we must make sure the SetWaitState and Spawns
-	     are atomic
-
-	let val ra = ref NONE
-            val rb = ref NONE
-            fun ta() = ra := SOME e1 
-            fun tb() = rb := SOME e2
-            val _ = Ccall(Spawn ta)
-            val _ = Ccall(Spawn,tb)
-            val _ = Ccall(Yield,())
-            val SOME a = !ra
-            val SOME b = !rb
-        in  e3
-        end
-
-	*)
-       | Ast.PletExp {dec,expr} => 
-	     let fun traverse (Ast.ValDec (vblist,_)) = 
-		     let fun dovb (Ast.Vb{pat,exp}) = (pat,exp)
-			   | dovb (Ast.MarkVb(vb,_)) = dovb vb
-		     in  map dovb vblist
-		     end
-		   | traverse (Ast.MarkDec(dec,_)) = traverse dec
-		   | traverse (Ast.SeqDec decs) = flatten(map traverse decs)
-		   | traverse _ = error "bad declaration type in plet"
-
-		 (* helpers *)
-		 fun intexp n = Ast.IntExp(TilWord64.fromInt n)
-		 fun call(f,args) = Ast.CcallExp(f,args)
-		 fun callbind(sym,f,args) = Ast.ValDec([Ast.Vb{pat=Ast.VarPat[sym],exp=call(f,args)}],ref[])
-		 fun app(f,arg) = Ast.AppExp{function=f,argument=arg}
-		 fun appbind(sym,f,arg) = Ast.ValDec([Ast.Vb{pat=Ast.VarPat[sym],exp=app(f,arg)}],ref[])
-		 fun sym str = Symbol.varSymbol str
-		 fun var sym = Ast.VarExp[sym]
-		 fun varsym str = var(sym str)
-		 val tuple = Ast.TupleExp
-		 val empty = tuple[]
-		 val ref_expr = varsym "ref"
-		 val deref_expr = varsym "!"
-		 val set_expr = varsym ":="
-
-		 (* symbols and expressions *)
-		 val pats_exps = traverse dec
-		 val count = length pats_exps
-		 val fresh_str = Int.toString(var2int(fresh_var()))
-		 val refs = map0count (fn n => sym ("r" ^ fresh_str ^ "*" ^ (Int.toString n))) count
-		 val thunks = map0count (fn n => sym ("t" ^ fresh_str ^ "*" ^ (Int.toString n))) count
-		 val discard = sym "_"
-
-		 (* decs *)
-		 val ref_decs = map (fn refsym => appbind(refsym,ref_expr,varsym "NONE")) refs
-		 fun thunker (thunk,ref_sym,(_,exp)) = 
-		     let val body = app(set_expr,tuple[var ref_sym, app(varsym "SOME",exp)])
-		     in  Ast.FunDec([Ast.Fb[Ast.Clause{pats=[{item=Ast.VarPat[thunk],fixity=NONE,region=(0,0)},
-							     {item=Ast.TuplePat[],fixity=NONE,region=(0,0)}],
-						       resultty=NONE,exp=body}]],
-				     ref [])
-		     end
-		 val thunk_decs = map3 thunker (thunks,refs,pats_exps)
-		 val spawn_decs = map (fn sym => callbind(discard,varsym "Spawn",
-							 [var sym])) thunks
-		 val yield_dec = callbind(discard,varsym "Yield",[empty])
-		 val result_decs = 
-		     map2 (fn ((pat,_),slot) => 
-			   Ast.ValDec([Ast.Vb{pat=Ast.AppPat{constr=Ast.VarPat[Symbol.varSymbol "SOME"],
-							     argument=pat},
-					      exp=app(deref_expr,var slot)}],ref [])) (pats_exps,refs)
-		 val decs = ref_decs @ thunk_decs @ spawn_decs @ [yield_dec] @ result_decs
-		 val expr = Ast.LetExp {dec=Ast.SeqDec decs,expr=expr}
-	     in  xexp(context,expr)
-	     end
        | Ast.FlatAppExp _ => (case InfixParse.parse_exp(Context_Fixity context, exp) of
 				  SOME exp' => xexp(context,exp')
 				| NONE => (error_region();
 					   print "cannot parse FlatAppExp\n";
 					   dummy_exp'(context,"bad_application")))
 
-       | Ast.CcallExp (function,arguments) => 
+       | Ast.CcallExp (function,arguments) =>
 	     let val (e,con,va) = xexp(context,function)
 		 val arrow =
 		     (case con of
@@ -781,7 +709,7 @@ structure Toil
 					     true,arrow)
 	     in
 		 if (semi_sub_con(context,spec_funcon,con))
-		     then (let val va3 = 
+		     then (let val va3 =
 			       (case oneshot_deref arrow of
 				      NONE => (oneshot_set(arrow,PARTIAL); false)
 				    | SOME PARTIAL => false
@@ -792,22 +720,22 @@ structure Toil
 			   end)
 		 else
 		     (case (con_normalize(context,con)) of
-			 CON_ARROW(param_cons,_,_,_) => 
+			 CON_ARROW(param_cons,_,_,_) =>
 			     (error_region(); print " external application is ill-typed.\n";
-			      print "  Function domain: "; 
+			      print "  Function domain: ";
 			      app (fn c => (pp_con c; print "; ")) param_cons;
-			      print "\n  Argument type: "; 
+			      print "\n  Argument type: ";
 			      app (fn c => (pp_con c; print "; ")) con_args;
 			      print "\n";
 			      dummy_exp'(context,"bad_application"))
-		       | nonarrow => (error_region(); 
+		       | nonarrow => (error_region();
 				      print " operator is not a function.  Has type:\n";
 				      pp_con nonarrow;
 				      print "\n";
 				      dummy_exp'(context,"bad_application")))
 	     end
 
-       | Ast.AppExp {argument,function} => 
+       | Ast.AppExp {argument,function} =>
 	     let val (e1,con1,va1) = (case AstHelp.exp_strip function
 					of Ast.VarExp path => xpath(context,path,false)
 					 | _ => xexp(context,function))
@@ -815,7 +743,7 @@ structure Toil
 		 val arrow = oneshot()
 		 val rescon = fresh_con context
 		 val funcon = CON_ARROW([con2],rescon,false,arrow)
-		 fun constrain (OVEREXP (CON_OVAR ocon,_,_)) = 
+		 fun constrain (OVEREXP (CON_OVAR ocon,_,_)) =
 			   (overload_help (false,false) (peek_region(),ocon); ())
 		   | constrain _ = ()
 	     in  if (semi_sub_con(context,funcon,con1))
@@ -826,13 +754,13 @@ structure Toil
 			       val _ = constrain e1
 			       val _ = constrain e2
 			       val exp = APP(e1,e2)
-			   in  (exp_try_reduce (context,exp), 
+			   in  (exp_try_reduce (context,exp),
 				con_deref rescon,
 				va1 andalso va2 andalso va3)
 			   end)
 		 else
 		     (case (con_normalize(context,con1)) of
-			 CON_ARROW([param_con],rescon,_,_) => 
+			 CON_ARROW([param_con],rescon,_,_) =>
 			     (error_region(); print " application is ill-typed.\n";
 			      print "  Function domain: "; pp_con param_con;
 			      print "\n  Argument type: "; pp_con con2;
@@ -840,23 +768,23 @@ structure Toil
 			      print "\n  Expanded argument type: "; pp_con (con_normalize(context,con2));
 			      print "\n";
 			      dummy_exp'(context,"bad_application"))
-		       | nonarrow => (error_region(); 
+		       | nonarrow => (error_region();
 				      print " operator is not a function. Has type:\n";
 				      pp_con nonarrow;
 				      print "\n";
 				      dummy_exp'(context,"bad_application")))
 	     end
-       | Ast.AndalsoExp (e1,e2) => 
+       | Ast.AndalsoExp (e1,e2) =>
 	     xexp(context,Ast.IfExp{test=e1,thenCase=e2,elseCase=AstHelp.false_exp})
-       | Ast.OrelseExp (e1,e2) => 
+       | Ast.OrelseExp (e1,e2) =>
 	     xexp(context,Ast.IfExp{test=e1,thenCase=AstHelp.true_exp,elseCase=e2})
-       | Ast.IfExp {test,thenCase,elseCase} => 
+       | Ast.IfExp {test,thenCase,elseCase} =>
 	     let val pr1 = {pat=true_pat,exp=thenCase}
 		 val pr2 = {pat=false_pat,exp=elseCase}
-	     in xexp(context,Ast.CaseExp {expr=test, 
+	     in xexp(context,Ast.CaseExp {expr=test,
 					  rules=[Ast.Rule pr1, Ast.Rule pr2]})
 	     end
-       | Ast.ConstraintExp {expr, constraint} => 
+       | Ast.ConstraintExp {expr, constraint} =>
 	     let val (exp,con,va) = xexp(context,expr)
 		 val con' = xty(context,constraint)
 	     in if sub_con(context,con,con')
@@ -869,8 +797,8 @@ structure Toil
 			 print "\n";
 			 (SEAL(e,con'),con',va)
 		     end
-	     end		    
-       | Ast.VectorExp expr_list => 
+	     end
+       | Ast.VectorExp expr_list =>
 	     let val c = fresh_con context
 		 val ecv_list = map (fn e => xexp(context,e)) expr_list
 		 val elist = map #1 ecv_list
@@ -883,16 +811,16 @@ structure Toil
 			  andfold (fn (_,_,va) => va) ecv_list)
 		else dummy_exp'(context, "bad_vector")
 	     end
-       | Ast.WhileExp {test,expr} => 
-	     let 
+       | Ast.WhileExp {test,expr} =>
+	     let
 		 val (teste,testc,_) = xexp(context,test)
 		 val (be,bc,_) = xexp(context,expr)
 		 val body_ec = (be,bc)
-	     in  if (eq_con(context,testc,con_bool context)) 
-		     then 
+	     in  if (eq_con(context,testc,con_bool context))
+		     then
 			 let val loop_var = fresh_named_var "loop"
 			     val arg_var = fresh_named_var "loop_arg"
-			     val (then_exp,_) = make_seq[body_ec, 
+			     val (then_exp,_) = make_seq[body_ec,
 							 (APP(VAR loop_var, unit_exp),
 							  con_unit)]
 			     val loop_body = make_ifthenelse context (teste,then_exp,unit_exp,con_unit)
@@ -905,7 +833,7 @@ structure Toil
 		       dummy_exp'(context,"badwhile"))
 	     end
        | Ast.HandleExp {expr,rules} => (* almost same as CaseExp except need to wrap with HANDLE *)
-	     let 
+	     let
 		 val (exp',rescon,va) = xexp(context,expr)
 		 val v = fresh_named_var "handle_exn"
 		 val arms = map (fn (Ast.Rule{pat,exp})=>(parse_pat context pat,exp)) rules
@@ -924,22 +852,22 @@ structure Toil
 			       dummy_exp'(context,"bad_handle"))
 		     end
 	     end
-       | Ast.RaiseExp e => 
+       | Ast.RaiseExp e =>
 	     let val (exp,con,_) = xexp(context,e)
 		 val c = fresh_con context
-	     in if (eq_con(context,con,CON_ANY)) 
+	     in if (eq_con(context,con,CON_ANY))
 		    then (RAISE (c,exp),c,false)
 		else (error_region(); print "raise not given an expression of exn type\n";
 		      dummy_exp'(context,"badraise"))
 	     end
-       | Ast.SeqExp elist => 
+       | Ast.SeqExp elist =>
 	     let val ecvlist = map (fn e => xexp(context,e)) elist
 		 val eclist = map (fn (e,c,v) => (e,c)) ecvlist
 		 val (e,c) = make_seq eclist
 	     in  (e,c,andfold (fn (e,c,v) => v) ecvlist)
 	     end
        | Ast.FnExp [] => parse_error "Ast.FnExp with empty list"
-       | Ast.FnExp rules => 
+       | Ast.FnExp rules =>
 	     let val arms = map (fn (Ast.Rule{pat,exp}) => (parse_pats context [pat],exp)) rules
 		 val {arglist,body} = funCompile{context = context,
 						 rules = arms}
@@ -947,7 +875,7 @@ structure Toil
 		 val (e,c) = foldr help body arglist
 	     in  (e,c,true)
 	     end
-       | Ast.CaseExp {expr,rules} =>  
+       | Ast.CaseExp {expr,rules} =>
 	     let fun getarm (Ast.Rule{pat,exp}) = (parse_pat context pat,exp)
 		 val arms = map getarm rules
 		 val (arge,argc,_) = xexp(context,expr)
@@ -959,15 +887,15 @@ structure Toil
 		 val e = make_let([BND_EXP(v,arge)], bodye)
 	     in (e,c,false)
 	     end
-       | Ast.MarkExp(exp,region) => 
+       | Ast.MarkExp(exp,region) =>
 	     let val _ = push_region region
 		 val res = xexp(context,exp)
 		 val _ = pop_region()
-	     in res 
+	     in res
 	     end)
 
 
-    (* --------------------------------------------------------- 
+    (* ---------------------------------------------------------
       ------------------ DECLARATIONS --------------------------
       --------------------------------------------------------- *)
    and xdatatype (context,datatycs) : (sbnd * sdec) list =
@@ -979,28 +907,28 @@ structure Toil
 
      and xfundec islocal (context : context, dec_list, tyvar_stamp, sdecs1, var_poly, open_lbl) =
 	 let
-	     (* We must discover all the variables to generalize over.  
-	      For the user-level variables, we must also compile in a context 
+	     (* We must discover all the variables to generalize over.
+	      For the user-level variables, we must also compile in a context
               with these user-level variables bound.  As a first
-	      step, we find all the user-level variables in the program. 
-	      At some future point when the syntax includes explicit scoping, 
+	      step, we find all the user-level variables in the program.
+	      At some future point when the syntax includes explicit scoping,
 	      we must include those too *)
-		 
+
 	     val fun_ids = map #1 dec_list
 	     val fun_vars = map #2 dec_list
-		 
+
 	     (* --- create the context with all the fun_ids typed --- *)
-	     val context_fun_ids = 
+	     val context_fun_ids =
 		 let fun help ((l,v,c,_,_),ctxt) = add_context_exp(ctxt,l,v,c)
 		 in  foldl help context dec_list
 		 end
-	     
+
 	     val context'' = add_context_mod(context_fun_ids,open_lbl,var_poly,
 					     SIGNAT_STRUCTURE sdecs1)
-		 
-	     val fbnd_con_list = 
-		 (map (fn (_,var',fun_con,body_con,matches) => 
-			let val {body = (bodye,bodyc), arglist} = 
+
+	     val fbnd_con_list =
+		 (map (fn (_,var',fun_con,body_con,matches) =>
+			let val {body = (bodye,bodyc), arglist} =
 			         funCompile {context = context'',
 					     rules = matches}
 
@@ -1012,9 +940,9 @@ structure Toil
 					  print "function constraint does not match body type\n";
 					  print "Actual type: "; pp_con bodyc; print "\n";
 					  print "Constraint type: "; pp_con body_con; print "\n";
-					  print "Actual reduced type: "; 
+					  print "Actual reduced type: ";
 					  pp_con (con_normalize(context'',bodyc)); print "\n";
-					  print "Constraint reduced type: "; 
+					  print "Constraint reduced type: ";
 					  pp_con (con_normalize(context'',body_con)); print "\n")
 			    val _ = if eq_con(context'',fun_con,func)
 					then ()
@@ -1022,38 +950,38 @@ structure Toil
 					  print "function constraint does not match function type\n";
 					  print "Actual type: "; pp_con func; print "\n";
 					  print "Constraint type: "; pp_con fun_con; print "\n")
-			    local 
+			    local
 				fun help ((v,c),(e,resc)) = make_lambda(v,c,resc,e)
-			    in 
+			    in
 			      val (var1,con1)::tlArglist = arglist
 			      val (bigbodye,bigbodyc) = foldr help (bodye,bodyc) tlArglist
-			    end 
+			    end
 			in (FBND(var',var1,con1,bigbodyc,bigbodye),func)
 			end)
 		 dec_list)
-		 
-		 
+
+
 	     val fbnds = map #1 fbnd_con_list
 	     val fbnd_cons : con list = map #2 fbnd_con_list
 	     (* User symbols cannot have a bang and alphanumeric characters *)
 	     val top_name = foldl (fn (l,s) => (Name.label2name' l) ^ "_" ^ s) "" fun_ids
-	     val top_label = to_nonexport(to_cluster (internal_label top_name))
+	     val top_label = to_cluster (internal_label top_name)
 	     val top_var = fresh_named_var "cluster"
 
 	     (* Note: the phase-splitter will emit much better code if functions
 	      * are elaborated in the way that it expects (at least while do_polyrec
 	      * and elaborator_specific_optmizations are true).  Therefore, please
-	      * don't change this without changing the corresponding cases in 
+	      * don't change this without changing the corresponding cases in
 	      * tonil.  -leaf
 	      *)
 	     val top_exp_con = (FIX(true,PARTIAL,fbnds),
 				case fbnd_cons of
 				    [c] => c
 				  | _ => con_tuple fbnd_cons)
-		 
-	     local 
+
+	     local
 		 val (top_exp,top_con) = top_exp_con
-		 val tyvar_lbls'_useeq = 
+		 val tyvar_lbls'_useeq =
 		     rebind_free_type_var(length sdecs1,
 					  tyvar_stamp,top_con,
 					  context_fun_ids,var_poly)
@@ -1064,35 +992,35 @@ structure Toil
 		 val sdecs = sdecs1 @ sdecs2
 		 val sdecs = reduce_typearg_sdecs (top_exp, (var_poly,[]), sdecs)
 	     end
-	 
-	 
+
+
 	     val temp_exp = (case sdecs of
 				 [] => VAR top_var
 			       | _ => let val s = MOD_APP(MOD_VAR top_var,
 							  MOD_VAR var_poly)
 				      in MODULE_PROJECT(s,them_lab)
 				      end)
-		 
-	     val exp_con_list = 
+
+	     val exp_con_list =
 		 case fbnd_cons of
 		     [c] => [(temp_exp,c)]
-		   | _ => mapcount (fn (i,c) => (RECORD_PROJECT(temp_exp, 
+		   | _ => mapcount (fn (i,c) => (RECORD_PROJECT(temp_exp,
 								generate_tuple_label (i+1),
 								#2 top_exp_con), c))
 			 fbnd_cons
 
 
-	     fun modsig_helper inner_lab (name,id,(exp,con)) = 
+	     fun modsig_helper inner_lab (name,id,(exp,con)) =
 		 let val inner = Name.fresh_named_var ((Name.var2name name) ^ "_inner")
-		     fun poly_case () = 
-			 let 
+		     fun poly_case () =
+			 let
 			     val sig_poly = SIGNAT_STRUCTURE sdecs
 			     val sbnd = SBND(inner_lab, BND_EXP(inner,exp))
 			     val sdec = SDEC(inner_lab, DEC_EXP(inner,con,NONE,false))
 			     val inner_sig = SIGNAT_STRUCTURE [sdec]
 			     val functor_mod = MOD_FUNCTOR(TOTAL,var_poly,sig_poly,
 							   MOD_STRUCTURE[sbnd],inner_sig)
-			     val functor_sig = 
+			     val functor_sig =
 				 SIGNAT_FUNCTOR(var_poly,sig_poly,
 						inner_sig,TOTAL)
 			 in  (SBND(id,BND_MOD(name,true,functor_mod)),
@@ -1104,21 +1032,21 @@ structure Toil
 				 SDEC(id,DEC_EXP(name,con,NONE,false)))
 			| _ => poly_case())
 		 end
-	     
+
 	     val (top_sbnd,top_sdec) = modsig_helper them_lab (top_var,top_label,top_exp_con)
 	     val top_sbnd_entry = (SOME top_sbnd, CONTEXT_SDEC top_sdec)
 	     val sbnds_sdecs = map3 (modsig_helper it_lab) (fun_vars,fun_ids,exp_con_list)
-	     val sbnds_entries = (map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) 
+	     val sbnds_entries = (map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec))
 				  sbnds_sdecs)
 	 in  top_sbnd_entry :: sbnds_entries
 	 end
 
      and xdec islocal (context : context, d : Ast.dec) : (sbnd option * context_entry) list =
        (case d of
-          (* --- The tricky thing about this value declarations is figuring 
+          (* --- The tricky thing about this value declarations is figuring
 	     --- out what type variables need to be generalized.  There are two
              --- sources: those arising explicitly from the program text and those
-             --- arising from the type inference process.  
+             --- arising from the type inference process.
 	     --- (1) Source-level Type Variables:
              ---     In the former case, these explicit type variables must be put into
              ---     the translation context before encountering.  This can be done by
@@ -1133,13 +1061,13 @@ structure Toil
              ---     then generalized.  Unresolved meta-variables can either appear in the type of the
              ---     expression being bound.  These must be generalized.  Meta-variables that are generated
              ---     and appear in the translated expression but not the translated type may be generalized
-             ---     or not.  If it is not generalized however, it MUST be resolved at some point to some      
-             ---     well-formed type. 
+             ---     or not.  If it is not generalized however, it MUST be resolved at some point to some
+             ---     well-formed type.
              --- (3) Note that until pattern matching is done, metavariables that seem to be generalizable
              ---     may not be yet. *)
 	  Ast.ValDec ([],_) => []
 	| Ast.ValDec (vblist,ref tyvars) => (* non-recursive bindings *)
-	    let 
+	    let
 		local
 		  val pe_list = map vb_strip vblist
 		in
@@ -1153,10 +1081,10 @@ structure Toil
 		val tyvar_stamp = new_stamp()
 		val tyvars = map tyvar_strip tyvars
 		local
-		     fun help tyvar = 
+		     fun help tyvar =
 			  let val type_str = Symbol.name tyvar
 			      val type_lab = symbol_label tyvar
-			      val is_eq =  ((size type_str >= 2) andalso 
+			      val is_eq =  ((size type_str >= 2) andalso
 					    (String.substring(type_str,0,2) = "''"))
 			  in  (type_lab,is_eq)
 			  end
@@ -1166,7 +1094,7 @@ structure Toil
 		val lbl_poly = to_open(internal_label ("!varpoly"))
 		val var_poly = fresh_named_var "varpoly"
 		val context' = add_context_mod(context,lbl_poly,var_poly,SIGNAT_STRUCTURE temp_sdecs)
-		val lbl = to_nonexport(internal_label "!bindarg")
+		val lbl = internal_label "!bindarg"
 		val v = fresh_named_var "bindarg"
 		val (e,con,va) = xexp(context',expr)
 		val sbnd_sdec = (SBND(lbl,BND_EXP(v,e)),SDEC(lbl,DEC_EXP(v,con,NONE,false)))
@@ -1176,9 +1104,9 @@ structure Toil
 						  arg = (v,con)})
 		val varsBound = String.concat(map (fn (SBND(l,_),_) => label2name' l) bind_sbnd_sdec)
 		val valbind_string = "valbind" ^ varsBound
-		val lbl_valbind = to_nonexport (internal_label ("!" ^ valbind_string))
+		val lbl_valbind = internal_label ("!" ^ valbind_string)
 		val var_valbind = fresh_named_var valbind_string
-		val sbnd_sdec_list = 
+		val sbnd_sdec_list =
 		    (case bind_sbnd_sdec of
 			 [(SBND(lbl',BND_EXP(v'',VAR v')),_)] =>
 			     if (eq_var(v,v'))
@@ -1192,7 +1120,7 @@ structure Toil
 		end
 		fun refutable_case () =
 		    map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) sbnd_sdec_list
-		and irrefutable_case () = 
+		and irrefutable_case () =
 		    let
 			val tyvar_lbls_useeq = rebind_free_type_var(length tyvars,
 								    tyvar_stamp,con,
@@ -1206,7 +1134,7 @@ structure Toil
 			(case poly_sdecs of
 			     [] => map2 (fn (sbnd,sdec) => (SOME sbnd, CONTEXT_SDEC sdec)) (sbnds,sdecs)
 			   | _ =>
-				 let 
+				 let
 				     val sig_poly = SIGNAT_STRUCTURE poly_sdecs
 				     val labs = map (fn SDEC (l,_) => l) sdecs
 				     val cons = map (fn SDEC(l,DEC_EXP(_,c,_,_)) => c | _ => elab_error "Rule 237") sdecs
@@ -1214,7 +1142,7 @@ structure Toil
 					 let val modapp = MOD_APP(MOD_VAR var_valbind,MOD_VAR var_poly)
 					     val inner_var = fresh_named_var "inner_valbind"
 					     val outer_var = fresh_named_var "outer_valbind"
-						 
+
 					     val temp_mod = MOD_STRUCTURE[SBND(it_lab,
 									       BND_EXP(inner_var,
 										       MODULE_PROJECT(modapp,l)))]
@@ -1246,34 +1174,34 @@ structure Toil
 	       else refutable_case()
 	    end
         (* recursive value dec: i.e. functions *)
-	| Ast.ValrecDec (rvblist,ref tyvars) => 
+	| Ast.ValrecDec (rvblist,ref tyvars) =>
 	    let val tyvar_stamp = new_stamp()
 		val tyvars = map tyvar_strip tyvars
-		local fun help tyvar = 
+		local fun help tyvar =
 		    let val type_str = Symbol.name tyvar
 			val type_lab = symbol_label tyvar
-			val is_eq =  ((size type_str >= 2) andalso 
+			val is_eq =  ((size type_str >= 2) andalso
 				      (String.substring(type_str,0,2) = "''"))
 		    in  (type_lab,is_eq)
 		    end
 		    val temp = map help tyvars
 		in  val sdecs1 = make_typearg_sdecs context temp
 		end
-	 
+
 		val var_poly = fresh_named_var "var_poly"
 		val open_lbl = to_open(internal_label "!opened")
 		val context' = add_context_mod(context,open_lbl,var_poly,SIGNAT_STRUCTURE sdecs1)
 
 		fun rvb_help {var:Ast.symbol, fixity: (Ast.symbol * 'a) option,
-			      exp:Ast.exp, resultty: Ast.ty option} = 
-		let 
+			      exp:Ast.exp, resultty: Ast.ty option} =
+		let
 		    val body_con = fresh_named_con (context',"body_con")
 		    val fun_con = (case resultty of
 				       NONE => fresh_named_con (context',"fun_con")
 				     | SOME ty => xty(context',ty))
-		    fun help (Ast.Rule{pat,exp}) = 
+		    fun help (Ast.Rule{pat,exp}) =
 			(case pat of
-			     Ast.ConstraintPat{constraint=ty,pattern} =>  
+			     Ast.ConstraintPat{constraint=ty,pattern} =>
 				 let val given_res_con = xty(context',ty)
 				 in  if (eq_con(context',given_res_con,body_con))
 					 then ()
@@ -1283,8 +1211,8 @@ structure Toil
 					 (parse_pats context' [pattern],exp)
 				 end
 			   | _ => (parse_pats context' [pat],exp))
-		    val matches = 
-			(case exp of 
+		    val matches =
+			(case exp of
 			     Ast.FnExp rules => map help rules
 			   | _ => parse_error "val rec requires an fn expression")
 		    val fun_lab = symbol_label var
@@ -1297,118 +1225,52 @@ structure Toil
 	    in  xfundec islocal (context,dec_list,tyvar_stamp,sdecs1,var_poly,open_lbl)
 	    end
 
-	(* We compile away parallel bindings like this:
-
-	     pval p1 = e1
-	     and  p2 = e2
-
-	     ---> extra primitives needed: Spawn and Yield
-                  We assume there are no user interrupts.
-	          Otherwise we must make sure the SetWaitState and Spawns are atomic.
-
-	    val r1 = ref NONE
-            val r2 = ref NONE
-            fun t1() = r1 := SOME e1 
-            fun t1() = r2 := SOME e2
-            val _ = Ccall(Spawn t1)
-            val _ = Ccall(Spawn,t2)
-            val _ = Ccall(Yield,())
-            val SOME pa = !r1
-            val SOME pb = !r2	     
-	 *)
-	| Ast.PvalDec (vblist,ref tyvars) => (* parallel bindings *)
-	    let
-		 (* helpers *)
-		fun intexp n = Ast.IntExp(TilWord64.fromInt n)
-		fun call(f,args) = Ast.CcallExp(f,args)
-		fun callbind(sym,f,args) = Ast.ValDec([Ast.Vb{pat=Ast.VarPat[sym],exp=call(f,args)}],ref[])
-		fun app(f,arg) = Ast.AppExp{function=f,argument=arg}
-		fun appbind(sym,f,arg) = Ast.ValDec([Ast.Vb{pat=Ast.VarPat[sym],exp=app(f,arg)}],ref[])
-		fun sym str = Symbol.varSymbol str
-		fun var sym = Ast.VarExp[sym]
-		fun varsym str = var(sym str)
-		val tuple = Ast.TupleExp
-		val empty = tuple[]
-		val ref_expr = varsym "ref"
-		val deref_expr = varsym "!"
-		val set_expr = varsym ":="
-		    
-		(* symbols and expressions *)
-		val pats_exps = map vb_strip vblist
-		val count = length pats_exps
-		val fresh_str = Int.toString(var2int(fresh_var()))
-		val refs = map0count (fn n => sym ("*result" ^ (Int.toString n))) count
-		val thunks = map0count (fn n => sym ("*thunk" ^ (Int.toString n))) count
-		val discard = sym "_"
-		    
-		(* decs *)
-		val ref_decs = map (fn refsym => appbind(refsym,ref_expr,varsym "NONE")) refs
-		fun thunker (thunk,ref_sym,(_,exp)) = 
-		    let val body = app(set_expr,tuple[var ref_sym, app(varsym "SOME",exp)])
-		    in  Ast.FunDec([Ast.Fb[Ast.Clause{pats=[{item=Ast.VarPat[thunk],fixity=NONE,region=(0,0)},
-							    {item=Ast.TuplePat[],fixity=NONE,region=(0,0)}],
-						      resultty=NONE,exp=body}]],
-				   ref [])
-		    end
-		val thunk_decs = map3 thunker (thunks,refs,pats_exps)
-		val spawn_decs = map (fn sym => callbind(discard,varsym "Spawn",
-							 [var sym])) thunks
-		val yield_dec = callbind(discard,varsym "Yield",[empty])
-		val result_decs = 
-		    map2 (fn ((pat,_),slot) => 
-			  Ast.ValDec([Ast.Vb{pat=Ast.AppPat{constr=Ast.VarPat[Symbol.varSymbol "SOME"],
-							    argument=pat},
-					     exp=app(deref_expr,var slot)}],ref [])) (pats_exps,refs)
-		val decs = ref_decs @ thunk_decs @ spawn_decs @ [yield_dec] @ result_decs
-	    in  xdec islocal (context, Ast.SeqDec decs)
-	    end
-
-	| Ast.FunDec (fblist,ref tyvars) => 
+	| Ast.FunDec (fblist,ref tyvars) =>
 	    let val tyvar_stamp = new_stamp()
 		val tyvars = map tyvar_strip tyvars
-		local fun help tyvar = 
+		local fun help tyvar =
 		    let val type_str = Symbol.name tyvar
 			val type_lab = symbol_label tyvar
-			val is_eq =  ((size type_str >= 2) andalso 
+			val is_eq =  ((size type_str >= 2) andalso
 				      (String.substring(type_str,0,2) = "''"))
 		    in  (type_lab,is_eq)
 		    end
 		    val temp = map help tyvars
 		in  val sdecs1 = make_typearg_sdecs context temp
 		end
-	 
+
 		val var_poly = fresh_named_var "var_poly"
 		val open_lbl = to_open(internal_label "!opened")
 		val context' = add_context_mod(context,open_lbl,var_poly,SIGNAT_STRUCTURE sdecs1)
 
 		fun fb_help clause_list =
-		    let 
+		    let
 			val fun_con = fresh_named_con (context',"fun_con")
 			val body_con = fresh_named_con (context',"body_con")
-			fun help (Ast.Clause{pats, resultty, exp}, nameopt) = 
-			    let val _ = 
+			fun help (Ast.Clause{pats, resultty, exp}, nameopt) =
+			    let val _ =
 				(case resultty of
-				     SOME ty => if (eq_con(context',xty(context',ty),body_con)) 
+				     SOME ty => if (eq_con(context',xty(context',ty),body_con))
 						    then ()
 						else (error_region();
 						      print "conflicting result type constraints\n")
 				   | NONE => ())
-				val (name, (p, e)) = 
+				val (name, (p, e)) =
 				    (case pats of
 					 {item=Ast.VarPat[s],fixity=NONE,...}::rest =>
-					     (symbol_label s, 
+					     (symbol_label s,
 					      (parse_pats context' (map #item rest),exp))
-				       | _ => 
+				       | _ =>
 					 (case (parse_pats context' (map #item pats)) of
-					      (Ast.VarPat[s])::rest => 
+					      (Ast.VarPat[s])::rest =>
 						  (symbol_label s, (rest, exp))
-					    | (Ast.AppPat{constr = Ast.VarPat[s], argument}::rest) => 
+					    | (Ast.AppPat{constr = Ast.VarPat[s], argument}::rest) =>
 						  (symbol_label s, (argument::rest,exp))
 					    | _ => error "illegal pattern for function declaraion"))
-				val _ = 
+				val _ =
 				    (case nameopt of
 					 NONE => ()
-				       | SOME curName => 
+				       | SOME curName =>
 					     if eq_label(name,curName)
 						 then ()
 					     else (error_region();
@@ -1431,14 +1293,14 @@ structure Toil
 		val lab = symbol_label sym
 		val con = xty(context,ty)
 		val con = con_normalize(context,con)
-	    in  [(NONE, CONTEXT_SDEC(SDEC(lab,DEC_EXP(var,con,NONE,false))))]
+	    in  [(NONE, CONTEXT_EXTERN(lab,var,lab,con))]
 	    end
 	| Ast.SeqDec decs => packagedecs (xdec islocal) (context, true) decs
-	| Ast.OpenDec pathlist => 
-	      let fun help (i,path) = 
+	| Ast.OpenDec pathlist =>
+	      let fun help (i,path) =
 		  (case (Context_Lookup_Labels(context,map symbol_label path)) of
-		       SOME(_,PHRASE_CLASS_MOD(m,b,s)) => 
-			   let 
+		       SOME(_,PHRASE_CLASS_MOD(m,b,s,_)) =>
+			   let
 			       val str = foldl (fn (s,acc) => acc ^ (Symbol.name s))
 				            "openlbl" path
                                val l = to_open(internal_label str)
@@ -1446,7 +1308,7 @@ structure Toil
 			       val s = (case mod2path m of
 					    NONE => s
 					  | SOME p => SIGNAT_OF p)
-			   in  SOME(SOME (SBND(l,BND_MOD(v,false,m))), 
+			   in  SOME(SOME (SBND(l,BND_MOD(v,false,m))),
 				    CONTEXT_SDEC(SDEC(l,DEC_MOD(v,false,s))))
 			   end
 		     | _ => (error_region(); print "unbound structure: ";
@@ -1456,7 +1318,7 @@ structure Toil
 	      end
 	| Ast.TypeDec tblist =>		(* XXX *)
 	      let val typeresult = xtybind(context,tblist)
-		  fun make_eq_bnddec(l,c,k) = 
+		  fun make_eq_bnddec(l,c,k) =
 		      let
 			  datatype tvdec = EQ of sdec * Name.vpath * sdec
 			                 | NOEQ of sdec
@@ -1496,7 +1358,7 @@ structure Toil
 		      in
 			  case xeq(ctxt', c')
 			    of NONE => []
-			     | SOME (eq_exp, _) => 
+			     | SOME (eq_exp, _) =>
 				let
 				    val _ = debugdo(fn() =>
 						    (print "type dec equality : ";
@@ -1506,7 +1368,7 @@ structure Toil
 				    val v1 = fresh_var()
 				    val (bnd,dec) =
 					if null tvs then
-					    (BND_EXP(v1, eq_exp), 
+					    (BND_EXP(v1, eq_exp),
 					     DEC_EXP(v1, eq_con, NONE, false))
 					else
 					    let
@@ -1533,7 +1395,7 @@ structure Toil
 									   inner_innersig)
 						val innersig = SIGNAT_FUNCTOR(vp,sigpoly',
 									      inner_innersig,TOTAL)
-					    in  
+					    in
 						(BND_MOD(v1,true,innermod),
 						 DEC_MOD(v1,true,innersig))
 					    end
@@ -1546,11 +1408,11 @@ structure Toil
 		  val eqresult = List.concat(map mapper typeresult)
 	      in  typeresult @ eqresult
 	      end
-	| Ast.DatatypeDec {datatycs,withtycs=[]} => 
+	| Ast.DatatypeDec {datatycs,withtycs=[]} =>
 	      let val sbnd_sdecs = xdatatype(context,datatycs)
-	      in  map (fn (sb,sd) => (SOME sb, CONTEXT_SDEC sd)) sbnd_sdecs 
+	      in  map (fn (sb,sd) => (SOME sb, CONTEXT_SDEC sd)) sbnd_sdecs
 	      end
-	| Ast.DatatypeDec {datatycs,withtycs} => 
+	| Ast.DatatypeDec {datatycs,withtycs} =>
 	      let val (dt,wt) = (case InfixParse.parse_datbind(datatycs,withtycs) of
 				     SOME result => result
 				   | NONE => (error_region();
@@ -1560,11 +1422,11 @@ structure Toil
 				       Ast.TypeDec wt]
 	      in  xdec islocal (context,dec)
 	      end
-	| Ast.StrDec strblist => xstrbinds islocal (context,strblist) 
- 	| Ast.FctDec fctblist => xfctbind(context,fctblist) 
+	| Ast.StrDec strblist => xstrbinds islocal (context,strblist)
+ 	| Ast.FctDec fctblist => xfctbind(context,fctblist)
 
 	| Ast.ExceptionDec [] => parse_error "ExceptionDec []"
-	| Ast.ExceptionDec [Ast.MarkEb (eb,r)] => 
+	| Ast.ExceptionDec [Ast.MarkEb (eb,r)] =>
 	      let val _ = push_region r
 		  val res = xdec islocal (context, Ast.ExceptionDec [eb])
 		  val _ = pop_region()
@@ -1582,7 +1444,7 @@ structure Toil
 		  val con = (case etype of
 			       NONE => con_unit
 			     | SOME ty => xty(context,ty))
-		  val (mk_exp,mk_con) = 
+		  val (mk_exp,mk_con) =
 		      (case etype of
 			   NONE => (EXN_INJECT(exn_str,VAR var,unit_exp), CON_ANY)
 			 | SOME ty => (#1 (make_total_lambda(v,con,CON_ANY,
@@ -1596,9 +1458,9 @@ structure Toil
 		in [(SOME(SBND(id_bar,BND_MOD(exnmodvar,false,inner_mod))),
 		     CONTEXT_SDEC(SDEC(id_bar,DEC_MOD(exnmodvar,false,inner_sig))))]
 		end
-	| Ast.ExceptionDec [Ast.EbDef {exn: Symbol.symbol, edef: Ast.path}] => 
+	| Ast.ExceptionDec [Ast.EbDef {exn: Symbol.symbol, edef: Ast.path}] =>
 	      (case (Context_Lookup_Labels(context,map symbol_label edef)) of
-		   SOME(_,PHRASE_CLASS_MOD(m,_,s)) => 
+		   SOME(_,PHRASE_CLASS_MOD(m,_,s,_)) =>
 		       let val id_bar = symbol_label exn
 			   val path_mk_exp = MODULE_PROJECT(m,mk_lab)
 			   val path_stamp_exp = MODULE_PROJECT(m,stamp_lab)
@@ -1620,8 +1482,8 @@ structure Toil
 	| Ast.ExceptionDec eblist => xdec islocal (context,Ast.SeqDec(map (fn eb => Ast.ExceptionDec [eb]) eblist))
 
         (* Rule 244 *)
-	| Ast.LocalDec (dec1,dec2) => 
-	      let 
+	| Ast.LocalDec (dec1,dec2) =>
+	      let
 		  val sbnd_ctxt_list1 = xdec true (context,dec1)
 		  val (_,context') = add_context_sbnd_ctxts(context,sbnd_ctxt_list1)
 		  val sbnd_ctxt_list2 = xdec false (context',dec2)
@@ -1632,9 +1494,9 @@ structure Toil
 					   SOME _ =>subst_add_modpath(subst, self2, m)
 					 | _ => subst)
 		      in  genSubstFromMod (subst, self2, m)
-		      end		 
-		    | genSubstFromSbnd (subst, _, _) = subst     
-		  and genSubstFromMod (subst, self, MOD_STRUCTURE sbnds) = 
+		      end
+		    | genSubstFromSbnd (subst, _, _) = subst
+		  and genSubstFromMod (subst, self, MOD_STRUCTURE sbnds) =
 		      let fun folder (sbnd, subst) = genSubstFromSbnd(subst, self, sbnd)
 		      in  foldl folder subst sbnds
 		      end
@@ -1649,7 +1511,7 @@ structure Toil
 		    | getDecFromSbndCtxt _ = NONE
 		  val localVars = map getVarFromDec (List.mapPartial getDecFromSbndCtxt sbnd_ctxt_list1)
 		  val localVars = Name.VarSet.addList(Name.VarSet.empty,localVars)
-		  fun reduceSbndCtxt (sbndOpt, CONTEXT_SDEC(SDEC(l,dec))) = 
+		  fun reduceSbndCtxt (sbndOpt, CONTEXT_SDEC(SDEC(l,dec))) =
 		      (sbndOpt,CONTEXT_SDEC(SDEC(l,
 		        (case dec of
 			     DEC_EXP(v,c,eOpt,b) => DEC_EXP(v, con_subst(c,subst), eOpt, b)
@@ -1661,26 +1523,9 @@ structure Toil
 		  val sbnd_ctxt_list1 = map reduceSbndCtxt sbnd_ctxt_list1
 		  val sbnd_ctxt_list2 = map reduceSbndCtxt sbnd_ctxt_list2
 
-		  fun addCtxtEntryFree (CONTEXT_SDEC(SDEC(_, dec)), set) = 
-		      (case dec of
-			   DEC_EXP(_,c,eOpt,_) => let val set = Name.VarSet.union(set, con_free c)
-						  in  (case eOpt of
-							   NONE => set
-							 | SOME e => Name.VarSet.union(set, exp_free e))
-						  end
-			 | DEC_CON(_,_,NONE, _) => set
-			 | DEC_CON(_,_,SOME c, _) => Name.VarSet.union(set, con_free c)
-			 | DEC_MOD(_,_,s) => Name.VarSet.union(set, sig_free s))
-		    | addCtxtEntryFree (_, set) = set
-
-		  val ctxtFrees = foldl addCtxtEntryFree Name.VarSet.empty 
-		                  (map #2 (sbnd_ctxt_list1 @ sbnd_ctxt_list2))
-
-		  fun renameSbndCtxt (SOME (SBND(l,bnd)),ctxtEntry as CONTEXT_SDEC(SDEC(_,dec))) =
+		  fun renameSbndCtxt (SOME (SBND(l,bnd)),CONTEXT_SDEC(SDEC(_,dec))) =
 		      let val v = getVarFromDec dec
-			  val hide = not(Name.VarSet.member(ctxtFrees, v))
-			  val lbl = internal_label ("local_" ^ (get_unit_name()) ^ "_" ^ (Name.label2name' l))
-			  val lbl = if hide then to_nonexport lbl else lbl
+			  val lbl = internal_label ("local_" ^ (Name.label2name' l))
 		      in  (SOME (SBND(lbl,bnd)), CONTEXT_SDEC(SDEC(lbl,dec)))
 		      end
 		    | renameSbndCtxt arg = arg
@@ -1693,7 +1538,7 @@ structure Toil
 
         (* Must augment translation context with fixity information *)
 	| Ast.FixDec {fixity,ops} => let (* given symbol is in FixSymbol space *)
-				       fun helper sym = 
+				       fun helper sym =
 					   let val sym' = Symbol.varSymbol(Symbol.name sym)
 					       val lab = symbol_label sym'
 					   in (NONE, CONTEXT_FIXITY (lab, fixity))
@@ -1703,17 +1548,17 @@ structure Toil
 
 	(* These cases are unhandled *)
 	| Ast.SigDec [] => []
-	| Ast.SigDec (sigb::rest) => 
+	| Ast.SigDec (sigb::rest) =>
 	      let val ctxt : context_entry = xsigb(context,sigb)
 		  (* CONTEXT_SIGNATs do not need to be selfified *)
 		  val context' = add_context_entries(context,[ctxt])
 		  val sbnd_ctxt_rest = xdec islocal (context',Ast.SigDec rest)
 	      in (NONE,ctxt)::sbnd_ctxt_rest
 	      end
-	| Ast.AbstypeDec {abstycs,withtycs,body} => 
+	| Ast.AbstypeDec {abstycs,withtycs,body} =>
 	      let val ldec = Ast.DatatypeDec{datatycs = abstycs, withtycs = withtycs}
 		  fun get_dec(Ast.MarkDb(db,_)) = get_dec db
-		    | get_dec(Ast.Db{tyc,tyvars,...}) = 
+		    | get_dec(Ast.Db{tyc,tyvars,...}) =
 		      let val ty = Ast.ConTy([tyc],map Ast.VarTy tyvars)
 		      in Ast.TypeDec[Ast.Tb{tyc=tyc,tyvars=tyvars,def=ty}]
 		      end
@@ -1747,13 +1592,13 @@ structure Toil
 				      in res
 				      end)
 
-	    
-    (* --------------------------------------------------------- 
+
+    (* ---------------------------------------------------------
       ------------------ TYPE EXPRESSIONS----------------------
       --------------------------------------------------------- *)
-    and xty (context, ty) : con = 
+    and xty (context, ty) : con =
       (case ty of
-	 Ast.VarTy tyvar => 
+	 Ast.VarTy tyvar =>
 	     let val sym = AstHelp.tyvar_strip tyvar
 	     in (case (IlStatic.Context_Lookup_Labels(context,[symbol_label sym])) of
 		     SOME(p,PHRASE_CLASS_CON (_,_,SOME inline_con,true)) => inline_con
@@ -1762,13 +1607,13 @@ structure Toil
 			   AstHelp.pp_sym sym; print "\n";
 			   Error.dummy_type(context,"unbound_varty")))
 	     end
-       | Ast.MarkTy (ty,r) => 
+       | Ast.MarkTy (ty,r) =>
 	     let val _ = push_region r
 		 val res = xty(context,ty)
 		 val _ = pop_region()
 	     in res
 	     end
-       | Ast.TupleTy(tys) => 
+       | Ast.TupleTy(tys) =>
 	     let fun loop _ [] = []
 		   | loop n (a::rest) = (generate_tuple_symbol n,a)::(loop (n+1) rest)
 	     in xty(context, Ast.RecordTy(loop 1 tys))
@@ -1778,19 +1623,19 @@ structure Toil
 					  fun doer (lab,ty) = (lab,xty(context,ty))
 				      in CON_RECORD(map doer sorted_lab_ty_list)
 				      end
-       | Ast.ConTy (syms,ty_list) => 
+       | Ast.ConTy (syms,ty_list) =>
 	     let val con_list = map (fn t => xty(context,t)) ty_list
 	     in  (case (Context_Lookup_Labels(context, map symbol_label syms)) of
 		      SOME(path,PHRASE_CLASS_CON(_,k,copt,inline)) =>
-			let val con = 
+			let val con =
 			    (case (copt,inline) of
 			       (SOME c,true) => c
 			     | _ => path2con path)
 			in
 			  (case (con_list,k) of
 			      ([],KIND) => con
-			    | (_,KIND_ARROW(n, KIND)) => 
-				  if (n = length con_list) 
+			    | (_,KIND_ARROW(n, KIND)) =>
+				  if (n = length con_list)
 				      then ConApply(true,con,con_list)
 				  else (error_region();
 					tab_region();
@@ -1802,11 +1647,11 @@ structure Toil
 					print (Int.toString (length con_list));
 					print "\n";
 					Error.dummy_type(context,"badarity_type"))
-			     | _ => (pp_kind k; print "\nand c = "; 
+			     | _ => (pp_kind k; print "\nand c = ";
 				     pp_con con;
 				     elab_error "external_label mapped to type with unexpected kind"))
 			end
-		    | _ => 
+		    | _ =>
 		      if (length syms = 1 andalso
 			     Symbol.eq(hd syms, Symbol.tycSymbol "-->"))
 		      then let fun split _ [] = error "need at least result type"
@@ -1823,19 +1668,19 @@ structure Toil
 				Error.dummy_type(context,"unbound_conty")))
 	     end)
 
-				  
-    (* --------------------------------------------------------- 
+
+    (* ---------------------------------------------------------
       ------------------ TYPE DEFINITIONS ---------------------
       --------------------------------------------------------- *)
     and xtybind (context : context, tblist : Ast.tb list) : (sbnd option * context_entry) list =
-       let 
-	 fun doer tb = 
-	   let 
+       let
+	 fun doer tb =
+	   let
 	     val (tyc,tyvars,def) = tb_strip tb
 	     val tyvars = map tyvar_strip tyvars
 	     val vars = map (fn s => gen_var_from_symbol s) tyvars
 	     val tyvars_bar = map (fn s => symbol_label s) tyvars
-	     val context' = (foldl (fn ((v,tv),c) => 
+	     val context' = (foldl (fn ((v,tv),c) =>
 				    add_context_con(c,tv,v,KIND,NONE))
 			     context (zip vars tyvars_bar))
 	     val con' = xty(context',def)
@@ -1850,28 +1695,28 @@ structure Toil
 	   end
        in map doer tblist
        end
-     
-    (* --------------------------------------------------------- 
+
+    (* ---------------------------------------------------------
       ------------------ TYPE DESCRIPTIONS ---------------------
       --------------------------------------------------------- *)
-   and xtypedesc (context : context, sym_tyvar_tyopt_list, is_eq) : sdecs = 
-       let 
+   and xtypedesc (context : context, sym_tyvar_tyopt_list, is_eq) : sdecs =
+       let
 	   fun loop [] = []
 	     | loop ((sym,tyvars : Ast.tyvar list, tyopt)::rest) =
-		   let 
+		   let
 		       val type_label = symbol_label sym
 		       val type_var = gen_var_from_symbol sym
 		       val eq_label = to_eq type_label
 		       val eq_var = fresh_named_var (label2string eq_label)
-		       val kind = 
+		       val kind =
 			   (case tyvars of
 				[] => KIND
 			      | _ => KIND_ARROW(length tyvars,KIND))
 		       fun doty ty =
-			   let 
+			   let
 			       val vars = map (fn _ => fresh_var()) tyvars
 			       val tyvars_bar = map (fn s => symbol_label (tyvar_strip s)) tyvars
-			       val context' = (foldl (fn ((v,tv),c) => 
+			       val context' = (foldl (fn ((v,tv),c) =>
 						      add_context_con(c,tv,v,KIND,NONE))
 					       context (zip vars tyvars_bar))
 			       val con' = xty(context',ty)
@@ -1881,13 +1726,13 @@ structure Toil
 			   end
 		       val conopt = mapopt doty tyopt
 		       val type_sdec = SDEC(type_label, DEC_CON(type_var,kind,conopt,false))
-		       val eq_dec = 
+		       val eq_dec =
 			   (case tyvars of
 				[] => DEC_EXP(eq_var,con_eqfun context (CON_VAR type_var),NONE,false)
-			      | _ => 
+			      | _ =>
 				let val vpoly = fresh_named_var "vpoly"
 				    val lbls = Listops.map0count (canonical_tyvar_label true) (length tyvars)
-				    fun mapper l = 
+				    fun mapper l =
 					let val eql = to_eq l
 					    val v = fresh_var()
 					    val sdec1 = SDEC(l,DEC_CON(v,KIND, NONE,false))
@@ -1899,14 +1744,14 @@ structure Toil
 				    val sdecs = List.concat (map mapper lbls)
 				    val sigpoly = SIGNAT_STRUCTURE sdecs
 				    val args = map (fn l => CON_MODULE_PROJECT(MOD_VAR vpoly,l)) lbls
-				    val eq_con = con_eqfun context(CON_APP(CON_VAR type_var, 
+				    val eq_con = con_eqfun context(CON_APP(CON_VAR type_var,
 									   args))
 				    val innersig = SIGNAT_STRUCTURE [SDEC(it_lab,
 									  DEC_EXP(fresh_var(),
 										  eq_con,NONE,false))]
 				in  DEC_MOD(eq_var,true,SIGNAT_FUNCTOR(vpoly,sigpoly,innersig,TOTAL))
 				end)
-					    
+
 		       val eq_sdec = SDEC(eq_label, eq_dec)
 		   in if (is_eq) then type_sdec :: eq_sdec:: (loop rest)
 		      else type_sdec :: (loop rest)
@@ -1914,7 +1759,7 @@ structure Toil
        in loop sym_tyvar_tyopt_list
        end
 
-    (* --------------------------------------------------------- 
+    (* ---------------------------------------------------------
       ------------ Signature bindings and expressions ----------
       --------------------------------------------------------- *)
      and xsigexp(context,sigexp) : signat =
@@ -1922,7 +1767,7 @@ structure Toil
 	  Ast.VarSig s => (case (IlStatic.Context_Lookup_Labels(context,[symbol_label s])) of
 			       SOME(_,PHRASE_CLASS_SIG (v,s)) => SIGNAT_VAR v
 			     | _ => (error_region();
-				     print "unbound signature: "; 
+				     print "unbound signature: ";
 				     AstHelp.pp_sym s;
 				     print "\n";
 				     SIGNAT_STRUCTURE []))
@@ -1930,16 +1775,16 @@ structure Toil
 	| Ast.MarkSig (s,r) => let val _ = push_region r
 				   val res = xsigexp(context,s)
 				   val _ = pop_region()
-			       in res 
+			       in res
 			       end
 	| Ast.AugSig (s, []) => xsigexp(context,s)
-	| Ast.AugSig (s, ((Ast.WhStruct (syms1,syms2))::rest)) => 
+	| Ast.AugSig (s, ((Ast.WhStruct (syms1,syms2))::rest)) =>
 	      let val (_,m2,s2) = xstrexp(context,Ast.VarStr syms2, Ast.NoSig)
 		  val s = xsigexp(context,Ast.AugSig(s,rest))
 		  val s2_is_struct = (case reduce_signat context s2 of
 					  SIGNAT_STRUCTURE _ => true
 					| _ => false)
-		  val sdecs_opt = 
+		  val sdecs_opt =
 		      (case reduce_signat context s of
 			   SIGNAT_STRUCTURE sdecs => SOME sdecs
 			 | _ => NONE)
@@ -1961,13 +1806,13 @@ structure Toil
 	      in  (case reduce_signat context s of
 		       SIGNAT_STRUCTURE sdecs =>
 			   (case (Sdecs_Lookup ctxt' (MOD_VAR mjunk,sdecs,map symbol_label syms)) of
-				SOME(labels,PHRASE_CLASS_CON(_,k,_,_)) => 
-				    let val sym_vars = map (fn tv => 
+				SOME(labels,PHRASE_CLASS_CON(_,k,_,_)) =>
+				    let val sym_vars = map (fn tv =>
 							    let val sym = AstHelp.tyvar_strip tv
 							    in  (sym, gen_var_from_symbol sym)
 							    end) tyvars
-					fun folder ((sym,var),context) = 
-					    add_context_sdec(context,SDEC(symbol_label sym, 
+					fun folder ((sym,var),context) =
+					    add_context_sdec(context,SDEC(symbol_label sym,
 									  DEC_CON(var,
 									      KIND, NONE,false)))
 					val context = foldl folder context sym_vars
@@ -1986,43 +1831,43 @@ structure Toil
 	      end)
 
 
-     and xsigb(context,Ast.MarkSigb(sigb,r)) : context_entry = 
+     and xsigb(context,Ast.MarkSigb(sigb,r)) : context_entry =
 	 let val _ = push_region r
 	     val res = xsigb(context,sigb)
 	     val _ = pop_region()
 	 in res
 	 end
-       | xsigb(context,Ast.Sigb{name,def}) = 
+       | xsigb(context,Ast.Sigb{name,def}) =
 	 let val v = gen_var_from_symbol name
 	 in CONTEXT_SIGNAT(symbol_label name,v,
 			   xsigexp(context,def))
 
 	 end
 
-    (* --------------------------------------------------------- 
+    (* ---------------------------------------------------------
       ------------------ SIGNATURE SPECIFICTIONS --------------
       --------------------------------------------------------- *)
-     and xspec(orig_ctxt, specs : Ast.spec list) : sdecs = 
-       let 
+     and xspec(orig_ctxt, specs : Ast.spec list) : sdecs =
+       let
 	 datatype sdecs_tag = ADDITIONAL of sdecs | ALL_NEW of sdecs
 	 fun xspec1 context prev_sdecs spec : sdecs_tag =
 	     case spec of
 		 (Ast.ValSpec vtlist) => (* Rules 257 - 258 *)
-	       let 
-		 fun doer (sym,ty) = 
+	       let
+		 fun doer (sym,ty) =
 		   (case (free_tyvar_ty(ty,fn _ => false)) of
-			[] => SDEC(symbol_label sym, 
+			[] => SDEC(symbol_label sym,
 				   DEC_EXP(gen_var_from_symbol sym,xty(context,ty),NONE,false))
-		    | ftv_sym => 
-			let 
+		    | ftv_sym =>
+			let
 			    val varpoly = fresh_named_var "var_poly"
-			    fun help (n,tv_sym) = 
+			    fun help (n,tv_sym) =
 				let val type_lab = symbol_label tv_sym
 				    val eq_lab = to_eq type_lab
 				    val type_var = fresh_var()
 				    val eq_var = fresh_var()
 				    val type_str = Symbol.name tv_sym
-				    val is_eq =  ((size type_str >= 2) andalso 
+				    val is_eq =  ((size type_str >= 2) andalso
 						  (String.substring(type_str,0,2) = "''"))
 				    val eq_con = con_eqfun context (CON_VAR type_var)
 				    val type_sdec = SDEC(type_lab,DEC_CON(type_var,KIND,
@@ -2046,8 +1891,8 @@ structure Toil
 	       in ADDITIONAL(map doer vtlist )
 	       end
 	   | (Ast.StrSpec (sym_sigexp_path_list)) =>
-	       let 
-		   fun doer(sym,sigexp, _) = 
+	       let
+		   fun doer(sym,sigexp, _) =
 		       let val s = xsigexp(context,sigexp)
 		       in SDEC(symbol_label sym,DEC_MOD(fresh_var(),false,s))
 		       end
@@ -2058,9 +1903,9 @@ structure Toil
 		  SIGNAT_STRUCTURE sdecs => ADDITIONAL sdecs
 		| _ => elab_error "xsigexp compiled to non-structure signature")
 	   | (Ast.FctSpec sym_fsigexp_list) =>
-		  let 
-		    fun doer (funid,fsig) = 
-		      let 
+		  let
+		    fun doer (funid,fsig) =
+		      let
 			val var = fresh_var()
 			fun help (Ast.VarFsig _) = parse_error "Ast.VarFsig encountered"
 			  | help (Ast.MarkFsig (fs,r)) = let val _ = push_region r
@@ -2068,10 +1913,10 @@ structure Toil
 							     val _ = pop_region ()
 							 in res
 							 end
-			  | help (Ast.FsigFsig {param,def=sigexp'}) = 
+			  | help (Ast.FsigFsig {param,def=sigexp'}) =
 			     let (* this is a derived form *)
 			       val strid = functor_arg_lab
-			       val sym_sigexp_path_list = 
+			       val sym_sigexp_path_list =
 				   (map (fn (SOME s,se) => (s,se,NONE)
 				          | (NONE, _) => elab_error "functor arg unnamed")
 				    param)
@@ -2087,15 +1932,15 @@ structure Toil
 		  end
 	   | (Ast.TycSpec (typdesc_list,is_eq)) => ADDITIONAL(xtypedesc(context,typdesc_list,is_eq))
 	   | (Ast.ExceSpec exlist) => (* Rules 260 - 261 *)
-		      let fun doer (sym,tyopt) = 
-			let val (mk_con,stamp_con) = 
+		      let fun doer (sym,tyopt) =
+			let val (mk_con,stamp_con) =
 			  (case tyopt of
 			     NONE => (CON_ANY, CON_TAG con_unit)
 			   | (SOME ty) => let val con = xty(context,ty)
 					  in (CON_ARROW([con],CON_ANY,false,oneshot_init TOTAL),
 					      CON_TAG con)
 					  end)
-			    val inner_sig = 
+			    val inner_sig =
 			      SIGNAT_STRUCTURE([SDEC(stamp_lab,
 						    DEC_EXP(fresh_var(),stamp_con,NONE,false)),
 					       SDEC(mk_lab,
@@ -2132,7 +1977,7 @@ structure Toil
 						error "cannot parse datspec"))
 		    val dspec = Ast.DataSpec{datatycs=dt,withtycs=[]}
 		    fun strip tb = let val (s,tvs,ty) = AstHelp.tb_strip tb
-				   in  (s,tvs,SOME ty) 
+				   in  (s,tvs,SOME ty)
 				   end
 		    val wspec = Ast.TycSpec (map strip wt,false)
 		in  loop ctxt prev_sdecs (dspec::wspec::specrest)
@@ -2143,7 +1988,7 @@ structure Toil
 		      let val ctxt' = add_context_sdecs(ctxt,sdecs')
 		      in loop ctxt' (prev_sdecs @ sdecs') specrest
 		      end
-		| ALL_NEW sdecs' => 
+		| ALL_NEW sdecs' =>
 		      let val ctxt' = foldl (fn (sdec,ctxt) =>
 					    add_context_sdec(ctxt, sdec)) orig_ctxt sdecs'
 		      in loop ctxt' sdecs' specrest
@@ -2152,16 +1997,16 @@ structure Toil
        end
 
 
-    (* --------------------------------------------------------- 
+    (* ---------------------------------------------------------
       ------------------ FUNCTOR BINDINDS ---------------------
       --------------------------------------------------------- *)
      and xfctbind (context : context, fctbs : Ast.fctb list) : (sbnd option * context_entry) list =
-	 let 
-	     fun help (context,(name,def)) : (sbnd option * context_entry) list = 
+	 let
+	     fun help (context,(name,def)) : (sbnd option * context_entry) list =
 		 (case def of
-		      (Ast.VarFct (path,Ast.NoSig)) => 
+		      (Ast.VarFct (path,Ast.NoSig)) =>
 			  (case (Context_Lookup_Labels(context,map symbol_label path)) of
-			       SOME(path,PHRASE_CLASS_MOD(m,_,s as (SIGNAT_FUNCTOR _))) => 
+			       SOME(path,PHRASE_CLASS_MOD(m,_,s as (SIGNAT_FUNCTOR _),_)) =>
 				   let val l = symbol_label name
 				       val v = fresh_named_var "functor_var"
 				   in [(SOME(SBND(l,BND_MOD(v,false,m))),
@@ -2173,7 +2018,7 @@ structure Toil
 				    print "\n"; []))
 		    | (Ast.VarFct (path,_)) => parse_error "functor signatures not handled"
 		    | (Ast.BaseFct {params=[(argnameopt,sigexp)],body,constraint}) =>
-			  let 
+			  let
 			      val arglabel = (case argnameopt of
 						  NONE => to_open(internal_label "FunctorArg")
 						| SOME s => symbol_label s)
@@ -2201,12 +2046,12 @@ structure Toil
 	 in  packagedecs help (context,true) (map fctb_strip fctbs)
 	 end
 
-    (* --------------------------------------------------------- 
+    (* ---------------------------------------------------------
       ------------------ STRUCTURE EXPRESSION -----------------
       --------------------------------------------------------- *)
 
-     and xstrexp (context : context, strb : Ast.strexp,  Ast.Opaque sigexp) 
-	 : (decresult * mod * signat) = 
+     and xstrexp (context : context, strb : Ast.strexp,  Ast.Opaque sigexp)
+	 : (decresult * mod * signat) =
 	 let val sig_target = xsigexp(context,sigexp)
 	     val (sbnd_ce_list,module,sig_actual) = xstrexp(context,strb,Ast.NoSig)
 	     val (_,context) = add_context_sbnd_ctxts(context,sbnd_ce_list)
@@ -2216,7 +2061,7 @@ structure Toil
 		  in  (sbnd_ce_list, mod_result, sig_target)
 		  end
 	 end
-      | xstrexp (context, strb, Ast.Transparent sigexp) = 
+      | xstrexp (context, strb, Ast.Transparent sigexp) =
 	let val (sbnd_ce_list,module,signat) = xstrexp(context,strb,Ast.NoSig)
 	    val (_,context') = add_context_sbnd_ctxts(context,sbnd_ce_list)
 	    val sig' = xsigexp(context,sigexp)
@@ -2227,9 +2072,9 @@ structure Toil
 
      | xstrexp (context, strb, Ast.NoSig) =
 	(case strb of
-	     Ast.VarStr path => 
+	     Ast.VarStr path =>
 		 (case Context_Lookup_Labels(context,map symbol_label path) of
-		      SOME (_,PHRASE_CLASS_MOD(m,_,s)) =>
+		      SOME (_,PHRASE_CLASS_MOD(m,_,s,_)) =>
 			  (case reduce_signat context s of
 			       (SIGNAT_STRUCTURE _) => ([],m,s)
 			     | _ => (error_region();
@@ -2247,7 +2092,7 @@ structure Toil
 		 xstrexp(context, Ast.AppStr(f,[(se,flag)]), Ast.NoSig)
 	   | Ast.AppStr (funpath,[(strexp as (Ast.VarStr [var]),_)]) =>
 		 (case (Context_Lookup_Labels(context,map symbol_label funpath)) of
-		      SOME(_,PHRASE_CLASS_MOD(m,_,SIGNAT_FUNCTOR(var1,sig1,sig2,_))) => 
+		      SOME(_,PHRASE_CLASS_MOD(m,_,SIGNAT_FUNCTOR(var1,sig1,sig2,_),_)) =>
 			  let
 			      (* Compiling an ML path should lead to a HIL path with no bindings *)
 			      fun sig_elim_open (context, signat) =
@@ -2272,7 +2117,7 @@ structure Toil
 				  in  signat'
 				  end
 			      val ([],argmod,signat) = xstrexp(context,strexp,Ast.NoSig)
-			      val argpath = 
+			      val argpath =
 				  (case (mod2path argmod) of
 				       SOME p => p
 				     | _ => elab_error "xstrexp: functor argument became non-variable")
@@ -2310,7 +2155,7 @@ structure Toil
 	   | Ast.AppStr (_,_) => (error_region();
 				  print "higher order functors not supported\n";
 				  ([],MOD_STRUCTURE[],SIGNAT_STRUCTURE []))
-	   | Ast.LetStr (dec,strexp) => (* rule 254 *) 
+	   | Ast.LetStr (dec,strexp) => (* rule 254 *)
 		 let val var1 = fresh_var()
 		     val var2 = fresh_var()
 		     val lbl1 = to_open(internal_label "LetStr1")
@@ -2326,8 +2171,8 @@ structure Toil
 
 		 in (sbnd_ce_list,final_mod, final_sig)
 		 end
-	   | Ast.BaseStr dec => 
-		 let 
+	   | Ast.BaseStr dec =>
+		 let
 		     val sbnd_ctxt_list = xdec false (context,dec)
 		     val sbnds = List.mapPartial #1 sbnd_ctxt_list
 		     val sdecs = List.mapPartial (fn (_,CONTEXT_SDEC sdec) => SOME sdec
@@ -2340,16 +2185,16 @@ structure Toil
 					   val _ = pop_region()
 				       in res
 				       end)
-	     
-	     
 
-    (* --------------------------------------------------------- 
+
+
+    (* ---------------------------------------------------------
       ------------------ STRUCTURE BINDINGS --------------------
       --------------------------------------------------------- *)
-     and xstrbinds (islocal : bool) (context : context, strbs : Ast.strb list) 
+     and xstrbinds (islocal : bool) (context : context, strbs : Ast.strb list)
 	 : (sbnd option * context_entry) list =
        let val strbs = map strb_strip strbs
-	   fun help (n,(strexp,constraint)) = 
+	   fun help (n,(strexp,constraint)) =
 	       let val v = fresh_named_var "strbindvar"
 		   val l = symbol_label n
 		   val (sbnd_ce_list,m,s) = resolve_overloads (fn () => xstrexp(context,strexp,constraint))
@@ -2361,13 +2206,12 @@ structure Toil
        end
 
 
-    and xeq' (ctxt : context, bool : (con * exp * exp) option, argcon : con)
+    and xeq' (ctxt : context, bool : (con * exp * exp * (con -> con)) option, argcon : con)
 	: (exp * con) option =
-	let 
-	    fun vector_eq ctxt = 
-		let val (e,vc,_) = xexp(ctxt,Ast.VarExp[Symbol.strSymbol "TiltVectorEq",
-							Symbol.varSymbol "vector_eq"])
-		in  (e,vc)
+	let
+	    fun vector_eq ctxt =
+		let val (m,s) = IlUtil.vector_eq ctxt
+		in  polyfun_inst(ctxt,m,s)
 		end
 	in  Equal.compile{polyinst_opt = polyinst_opt,
 			  vector_eq = vector_eq,
@@ -2375,69 +2219,20 @@ structure Toil
 			  context = ctxt,
 			  con = argcon}
 	end
-	
+
     and xeq (ctxt : context, argcon : con) : (exp * con) option = xeq' (ctxt, NONE, argcon)
 
 
-    fun xdecspec (base_ctxt, decresult, specs) = 
-	let open Ast
-	    val codeSbndsCtxtents = decresult
-	    val (_,interfaceCtxt) = add_context_sbnd_ctxts (base_ctxt, codeSbndsCtxtents)
-	    fun valSpecFolder ((sym,ty), (acc,interCtxt)) = 
-		let val pat = ConstraintPat{pattern = VarPat [sym], 
-					    constraint = ty}
-		    val dec = ValDec([Vb{pat = pat,
-					 exp = VarExp [sym]}],
-				     ref [])
-		    val _ = TVClose.closeDec dec
-		    val decResult = xdec false (interCtxt, dec)
-		    val (_,interCtxt) = add_context_sbnd_ctxts(interCtxt, decResult)
-		in  (decResult::acc, interCtxt)
-		end
-	    fun strSpecFolder ((sym, sigExp, pathOpt), (acc,interCtxt)) = 
-		let val sigTarget = xsigexp(interCtxt, sigExp)
-		    val (_, modOriginal, sigOriginal) = xstrexp(interCtxt, VarStr [sym], NoSig)
-		    val (modCoerced,SOME sigUnsealed) =
-			Signature.xcoerce_seal'(interCtxt, modOriginal, sigOriginal, sigTarget)
-		    val lab = Name.symbol_label sym
-		    val varCoerced = Name.fresh_named_var ("coerced" ^ (Symbol.name sym))
-		    val sbnd = SBND(lab, BND_MOD(varCoerced, false, modCoerced))
-		    val sdec = SDEC(lab, DEC_MOD(varCoerced, false, sigTarget))
-		    val sdec' = SDEC(lab, DEC_MOD(varCoerced, false, sigUnsealed))
-		    val decResult = [(SOME sbnd, CONTEXT_SDEC sdec)]
-		    val interCtxt = add_context_sdec (interCtxt, sdec')
-		in  (decResult::acc, interCtxt)
-		end
-	    fun folder (spec, acc) = 
-		(case spec of
-		     MarkSpec(spec,r) => folder(spec,acc)
-		   | StrSpec ls => foldl strSpecFolder acc ls
-		   | ValSpec ls => foldl valSpecFolder acc ls
-		   | TycSpec _ => error "elab_dec_constrainted: type spec not implemented"
-		   | _ => error "elab_dec_constrained: unhandled spec type")
-	    val (interSbndCtxtentListList : decresult list, _) = foldl folder ([],interfaceCtxt) specs
-	    val interSbndCtxtents = Listops.flatten (rev interSbndCtxtentListList)
-	    fun shadowSbndOpt NONE = NONE
-	      | shadowSbndOpt (SOME(SBND(l,sbnd))) = SOME(SBND(to_nonexport l, sbnd))
-	    fun shadowCtxtent(CONTEXT_SDEC(SDEC(l,sdec))) = CONTEXT_SDEC(SDEC(to_nonexport l, sdec))
-	      | shadowCtxtent(CONTEXT_SIGNAT(l,v,s)) = CONTEXT_SIGNAT(to_nonexport l,v,s)
-	      | shadowCtxtent(CONTEXT_FIXITY(l,f)) = CONTEXT_FIXITY(to_nonexport l,f)
-	      | shadowCtxtent(CONTEXT_OVEREXP(l,celist)) = CONTEXT_OVEREXP(to_nonexport l,celist)
-	    fun shadowSbndCtxtent(sbnd,ctxtent) = (shadowSbndOpt sbnd, shadowCtxtent ctxtent)
-	    val sbndCtxtents = (map shadowSbndCtxtent codeSbndsCtxtents) @ interSbndCtxtents
-	in  sbndCtxtents
-	end
-
     (* ------------ Exported interface to resolve overloading ------------ *)
-    fun overload_wrap ctxt unitNameOpt fp xobj arg = 
-      let 
-	fun flex_help (l,ref(FLEXINFO(stamp,false,rdecs)),fieldc,eshot) = 
+    fun overload_wrap ctxt fp xobj arg =
+      let
+	fun flex_help (l,ref(FLEXINFO(stamp,false,rdecs)),fieldc,eshot) =
 	    (error_region();
 	     print "Unresolved flex record with label: ";
 	     pp_label l; print "\nrdecs are:";
 	     pp_con (CON_RECORD rdecs); print "\nfieldc is:";
 	     pp_con fieldc; print "\n")
-	  | flex_help (l,ref(FLEXINFO(_,true,rdecs)),fieldc,eshot) = 
+	  | flex_help (l,ref(FLEXINFO(_,true,rdecs)),fieldc,eshot) =
 	    let val v = fresh_named_var "flex_eta_var"
 		val recc = CON_RECORD rdecs
 		val body = RECORD_PROJECT(VAR v,l,recc)
@@ -2472,7 +2267,7 @@ structure Toil
 			     in ()
 			     end)
 	    end
-	fun tyvar_help tv = 
+	fun tyvar_help tv =
 	    (case (Tyvar.tyvar_deref tv) of
 		 SOME _ => ()
 	       | NONE => (Error.warn_region_with "top-level unresolved tyvar -- setting to unit: ";
@@ -2480,21 +2275,21 @@ structure Toil
 			  Stats.counter "toil.unresolved_tyvar" ();
 			  ignore(IlStatic.eq_con (ctxt, CON_TYVAR tv, con_unit))))
 
-	val _ = reset_elaboration (fp, unitNameOpt)
+	val _ = reset_elaboration fp
 	val _ = push_region(0,1000000)
 	val res = xobj arg
         val tyvar_table = get_tyvar_table()
 	val flex_table = get_flex_table()
 	val eq_table = get_eq_table()
 	val _ = resolve_all_overloads()
-	val _ = app flex_help flex_table 
+	val _ = app flex_help flex_table
         val _ = app tyvar_help tyvar_table
 	val _ = app eq_help eq_table
 	val result = (case (get_error()) of
 			  NoError => SOME res
 			| Warn => SOME res
 			| Error => NONE)
-	val _ = reset_elaboration (Error.nofilepos, NONE)
+	val _ = reset_elaboration Error.nofilepos
       in result
       end
 
@@ -2502,16 +2297,8 @@ structure Toil
     val expcompile = xexp
     val typecompile = xty
 
-    val xdec = fn (unitName, ctxt,fp,dec) => overload_wrap ctxt  (SOME unitName) fp (xdec false) (ctxt,dec)
-    val xdecspec = fn (unitName, ctxt,fp,dec,fp2,spec) => 
-	(case xdec (unitName,ctxt,fp,dec) of
-	     NONE => NONE
-	   | SOME decresult => overload_wrap ctxt  (SOME unitName) fp2 xdecspec (ctxt,decresult,spec))
-    val xexp = fn (ctxt,fp,exp) => overload_wrap ctxt  NONE fp xexp (ctxt,exp)
-    val xstrexp = fn (ctxt,fp,strexp,sigc) => overload_wrap ctxt  NONE fp xstrexp (ctxt,strexp,sigc)
-    val xspec = fn (unitName,ctxt,fp,specs) => overload_wrap ctxt  (SOME unitName) fp xspec (ctxt,specs)
-    val xsigexp = fn (ctxt,fp,se) => overload_wrap ctxt  NONE fp xsigexp (ctxt,se)
-    val xty = fn (ctxt,fp,ty) => overload_wrap ctxt  NONE fp xty (ctxt,ty)
-    val xtybind = fn (ctxt,fp,tyb) => overload_wrap ctxt  NONE fp xtybind (ctxt,tyb)
-
+    val xdec = fn (ctxt,fp,dec) => (TVClose.closeDec dec;
+				    overload_wrap ctxt fp (xdec false) (ctxt,dec))
+    val xspecs = fn (ctxt,fp,specs) => overload_wrap ctxt fp xspec (ctxt,specs)
+    val seal = fn (ctxt,fp,ma,sa,st) => overload_wrap ctxt fp Signature.xcoerce_seal (ctxt,ma,sa,st)
   end
