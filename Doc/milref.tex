@@ -2,6 +2,7 @@
 \usepackage{code}
 \usepackage{latexsym}
 \usepackage{fullpage}
+\usepackage{supertab}
 \include{lambda}
 \title{MIL Reference Guide (Working Draft)}
 \author{Chris Stone}
@@ -14,14 +15,15 @@
 \newcommand{\translate}[1]{\langle{#1}\rangle}
 \newcommand{\describe}[7]{
   \subsubsection{#1}
-  \begin{tabular}{p{0.8truein}p{5truein}}
+  \begin{supertabular}{p{0.8truein}p{5truein}}
   Description&#2\\
-  Greek&$#3$\\
-  Datatype&\textcd{#4}\\
+  Greek&\rightskip=0pt plus5em $ #3 $\\
+  Datatype&\rightskip=0pt plus5em\textcd{#4}\\
   PP&\textcd{#5}\\
   Note&#6\\
   Rules&#7\\
-\end{tabular}}
+\end{supertabular}
+\filbreak}
   
 
 \newcommand{\irule}[2]
@@ -34,6 +36,8 @@
           \end{array}}
   \]}
 \newcommand{\allarrowmil}[6]{\forall(#1).(#2;#3)\to^{#4,#5}#6}
+
+%\tableofcontents
 
 \section{Kinds ($\kind$)} 
 
@@ -54,7 +58,6 @@
    \equivkind{\context}{\kind'}{\kind''}}
   {\equivkind{\context}{\kind}{\kind''}}
 
-
 \irule
   {\equivkind{\context}{\kind}{\kind'}}
   {\subkind{\context}{\kind}{\kind}}
@@ -70,8 +73,8 @@
 \describe{Type kind}
   {Kind of constructors which are the types of values}
   {\ktype}
-  {Type\_k($\translate{\mathit{phase}}$)}
-  {TYPE\_C \mbox{or} TYPE\_R}
+  {Type\_k}
+  {TYPE}
   {}
   {\[\frac
       {\validcontext{\context}}
@@ -80,38 +83,37 @@
 
 \describe{Singleton kind}
   {Kind of constructors equivalent to a given constructor}
-  {\ksingleton{\ktype}{\constructor}}
-  {Singleton\_k($\translate{\mathit{phase}}$,$\translate{\ktype}$,$\translate{\constructor}$)}
-  {SINGLE\_KC($\translate{\ktype}$,$\translate{\constructor}$) \mbox{\ or \ }
-   SINGLE\_KR($\translate{\ktype}$,$\translate{\constructor}$)}
+  {\ksingleton{\constructor}}
+  {Singleton\_k($\translate{\constructor}$)}
+  {SINGLE\_K($\translate{\constructor}$)}
   {For concision, the compiler's code actually allows singletons at
    all kinds.  (These are definable in terms of singletons at kinds
    $\ktype$.)}
   {\[
      \frac
        {\validconstructor{\context}{\constructor}{\ktype}}
-       {\validkind{\context}{\ksingleton{\ktype}{\constructor}}}
+       {\validkind{\context}{\ksingleton{\constructor}}}
    \]
    \[
    \frac
     {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
-    {\equivkind{\context}{\ksingleton{\ktype}{\constructor}}
-       {\ksingleton{\ktype}{\constructor'}}}
+    {\equivkind{\context}{\ksingleton{\constructor}}
+       {\ksingleton{\constructor'}}}
    \]
    \[
    \frac
-    {\validkind{\context}{\ksingleton{\ktype}{\constructor}}}
-    {\subkind{\context}{\ksingleton{\ktype}{\constructor}}{\ktype}}
+    {\validkind{\context}{\ksingleton{\constructor}}}
+    {\subkind{\context}{\ksingleton{\constructor}}{\ktype}}
    \qquad
    \frac
     {\validconstructor{\context}{\constructor}
-          {\ksingleton{\ktype}{\constructor'}}}
+          {\ksingleton{\constructor'}}}
     {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
    \qquad
    \frac
     {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
     {\validconstructor{\context}{\constructor}
-          {\ksingleton{\ktype}{\constructor'}}}
+          {\ksingleton{\constructor'}}}
    \]}
 
 \describe{Record Kind}
@@ -120,13 +122,13 @@
    $\ktype$).}
   {\krecord{\fieldlabel_i{\triangleright}\cvar_i{:}\kappa_i
             \super{i}{1..n}}}
-  {Record\_k [(($\translate{\fieldlabel_i}$,$\translate{\cvar_i}$),$\translate{\kappa_i}$)$\super{i}{1..n}$]}
+  {Record\_k Seq[(($\translate{\fieldlabel_i}$,$\translate{\cvar_i}$),$\translate{\kappa_i}$)$\super{i}{1..n}$]}
   {REC\_K\{$\translate{\fieldlabel_i}$>$\translate{\cvar_i}$:$\translate{\kappa_i}$
            $\super{i}{1..n}$\}} 
   {The kinds of the fields can have dependencies.  So for example,
    \[\krecord{\fieldlabel_1{\triangleright}{\alpha}{:}{\ktype},
               \fieldlabel_2{\triangleright}{\beta}{:}
-                  {\ksingleton{\ktype}{\alpha}}}\]
+                  {\ksingleton{\alpha}}}\]
    is the kind classifying a record containing two constructors
    of kind $\ktype$ where the second is constrained to be equivalent
    to the first.}
@@ -162,7 +164,7 @@
     constructors (as distinguished from the type of a term-level function,
     which would be classified by kind $\ktype$.)}
    {\kpimil{a}{\cvar_i{:}\kind_i\super{i}{1..n}}{\kind}\quad
-    \mbox{\ where\ } a\in\{\mathcd{open},\mathcd{code},\mathcd{closure}\}}
+    \mbox{\ where\ } a\in\{\mathcd{Open},\mathcd{Code},\mathcd{Closure}\}}
    {Arrow\_k ($\translate{c}$, 
         [($\translate{\cvar_i}$,$\translate{\kind_i}$)$\super{i}{1..n}$],
         $\translate{\kind}$)}
@@ -216,6 +218,10 @@
 
 \subsection{Detailed Descriptions}
 
+
+\newcommand{\cmilint}[1]{\mathsf{Int}_{#1}}
+\newcommand{\cmilfloat}[1]{\mathsf{Float}_{#1}}
+
 \describe{Integer}
   {Type of integers}
   {\mathsf{Int}_b\quad\mbox{\ where\ } b\in\{8,16,32\}}
@@ -248,10 +254,9 @@
     {\validcontext{\context}}
     {\validconstructor{\context}{\cexn}{\ktype}}}
 
-\newcommand{\cexntag}[1]{\mathsf{ExnTag}[#1]}
 \describe{Exception Tag}
   {Type of exception tag values}
-  {\cexntag{\constructor}}
+  {\ctag{\constructor}}
   {Prim\_c(Exntag\_c, [$\translate{\constructor}$])}
   {EXNTAG($\translate{\constructor}$)}
   {These are the internal tags used to distinguish exception packets.
@@ -261,12 +266,12 @@
    are created.}
   {\[\frac
     {\validconstructor{\context}{\constructor}{\ktype}}
-    {\validconstructor{\context}{\mathsf{ExnTag}[\constructor]}{\ktype}}
+    {\validconstructor{\context}{\ctag{\constructor}}{\ktype}}
    \qquad
    \frac
     {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
-    {\equivconstructor{\context}{\mathsf{ExnTag}[\constructor]}
-         {\mathsf{ExnTag}[\constructor']}
+    {\equivconstructor{\context}{\ctag{\constructor}}
+         {\ctag{\constructor'}}
          {\ktype}}
   \]}   
 
@@ -309,18 +314,18 @@
 
 \describe{References}
   {Type of reference values}
-  {\mathsf{Ref}[\constructor]}
+  {\cref{\constructor}}
   {Prim\_c(Ref\_c, [$\translate{\constructor}$])}
   {REF($\translate{\constructor}$)}
   {}
   {\[\frac
     {\validconstructor{\context}{\constructor}{\ktype}}
-    {\validconstructor{\context}{\mathsf{Ref}[\constructor]}{\ktype}}
+    {\validconstructor{\context}{\cref{\constructor}}{\ktype}}
    \qquad
    \frac
     {\equivconstructor{\context}{\constructor}{\constructor'}{\ktype}}
-    {\equivconstructor{\context}{\mathsf{Ref}[\constructor']}
-         {\mathsf{Ref}[\constructor]}
+    {\equivconstructor{\context}{\cref{\constructor'}}
+         {\cref{\constructor}}
          {\ktype}}
   \]}
 
@@ -837,14 +842,17 @@
   {Term-level constants}
   {n_b, u_b, f_b,
    \mathsf{vector}[\constructor][\expression_i\super{i}{1..n}],
-   \mathsf{array}[\constructor][\expression_i\super{i}{1..n}]}
+   \mathsf{array}[\constructor][\expression_i\super{i}{1..n}],
+   \mathsf{tag}[\constructor](t)}
   {Const\_e(int($\translate{b}$,$\translate{n}$)),\
    Const\_e(uint($\translate{b}$,$\translate{u}$)),\
    Const\_e(float($\translate{b}$,$\translate{f}$)),\
    Const\_e(vector($\translate{\constructor}$,[$\translate{\expression_i}\super{i}{1..n}$])),\ 
-   Const\_e(array($\translate{\constructor}$,[$\translate{\expression_i}\super{i}{1..n}$]))}
+   Const\_e(array($\translate{\constructor}$,[$\translate{\expression_i}\super{i}{1..n}$])),\
+   Const\_e(tag($\translate{t}$,$\translate{\constructor}$))}
   {$\translate{n}$, $\translate{u}$, $\translate{s}$, EmptyVectorValue 
-   \mbox{or}\ VectorValue \mbox{or}\ "\ldots", ArrayValue}
+   \mbox{or}\ VectorValue \mbox{or}\ "\ldots", ArrayValue,
+   tag($\translate{t}$,$\translate{\constructor}$)}
   {The constructors annotating vectors and arrays are there for the
    length zero case, where they cannot be inferred.  In HIL there are
    different types for signed and unsigned integers; at the MIL level,
@@ -875,6 +883,11 @@
         {\validexpression{\context}
             {\mathsf{array}[\constructor][\expression_i\super{i}{1..n}]}
             {\mathsf{Array}[\constructor]}}
+   \]
+   \[
+   \frac{\validcontext{\context}\qquad
+         \context(t) = \ctag{\constructor}}
+        {\validexpression{\context}{t}{\ctag{\constructor}}}
    \]
   }
 
@@ -1089,7 +1102,7 @@
  {\irule
    {\validconstructor{\context}{\constructor}{\ktype}}
    {\validexpression{\context}{\enewtag{\constructor}}
-        {\mathsf{ExnTag}[\constructor]}}}
+        {\ctag{\constructor}}}}
 
 
 \newcommand{\etag}[2]{\mathsf{tag}\,(#1,#2)}
@@ -1130,7 +1143,7 @@
    {\validexpression{\context}{\expression}{\cexn}\\
     \forall i\in 1..n:\quad\cases{
        \validexpression{\context}{\expression_i}
-           {\cexntag{\constructor'_i}}\cr
+           {\ctag{\constructor'_i}}\cr
        \validexpression{\context,\evar{:}\constructor'_i}
             {\expression_i}{\constructor'}}}
    {\validexpression{\context}
@@ -1325,5 +1338,364 @@
          \mathsf{BoxFloat}_{64}\to\expression_1, 
          \mathsf{default}\to\expression_2}
      {\ctype}}}
+
+
+\newcommand{\ttt}{\mathit{tt}}
+\describe{trap barriers}
+  {Trap barrier primitives}
+  {\mathsf{soft\_vtrap}(\ttt),
+   \mathsf{soft\_ztrap}(\ttt),
+   \mathsf{hard\_vtrap}(\ttt),
+   \mathsf{hard\_ztrap}(\ttt)\quad
+     \mbox{\ where\ } \ttt\in\{\mathcd{int\_tt},\mathcd{real\_tt},
+                               \mathcd{both\_tt}\}}
+  {Prim\_e(PrimOp(soft\_vtrap($\translate{\ttt}$)),[],[]),\
+   Prim\_e(PrimOp(soft\_ztrap($\translate{\ttt}$)),[],[]),\
+   Prim\_e(PrimOp(hard\_vtrap($\translate{\ttt}$)),[],[]),\
+   Prim\_e(PrimOp(hard\_ztrap($\translate{\ttt}$)),[],[])}
+  {SOFT\_VTRAP, SOFT\_ZTRAP, HARD\_VTRAP, HARD\_ZTRAP}
+  { }
+  { }
+  {\[
+   \frac{\validcontext{\context}}
+        {\validexpression{\context}{\mathsf{soft\_vtrap}(\ttt)}{\cunit}}
+   \qquad
+   \frac{\validcontext{\context}}
+        {\validexpression{\context}{\mathsf{soft\_ztrap}(\ttt)}{\cunit}}
+   \]
+   \[
+   \frac{\validcontext{\context}}
+        {\validexpression{\context}{\mathsf{hard\_vtrap}(\ttt)}{\cunit}}
+   \qquad
+   \frac{\validcontext{\context}}
+        {\validexpression{\context}{\mathsf{hard\_ztrap}(\ttt)}{\cunit}}
+   \qquad
+   \] }
+
+\describe{reference operations}
+  {Primitives for references}
+  {\mathsf{mk\_ref}[\constructor](\expression),\
+   \mathsf{deref}[\constructor](\expression),\
+   \mathsf{eq\_ref}[\constructor](\expression_1,\expression_2),\
+   \mathsf{setref}[\constructor](\expression_1,\expression_2)}
+  {Prim\_e(PrimOp(mk\_ref), [$\translate{\constructor}$], 
+       [$\translate{\expression}$]),
+   Prim\_e(PrimOp(deref), [$\translate{\constructor}$], 
+       [$\translate{\expression}$]),
+   Prim\_e(PrimOp(eq\_ref), [$\translate{\constructor}$], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+   Prim\_e(PrimOp(setref), [$\translate{\constructor}$], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$])}
+  {}
+  {Tortl details (3/31/98):
+   The $\constructor$ argument for the $\mathsf{mk\_ref}$, $\mathsf{deref}$,
+   and $\mathsf{setref}$ primitives is not used if its whnf is
+   not a path at compile-time.  The $\constructor$ argument for
+   $\mathsf{eq\_ref}$ is never needed at run-time. }
+  {\[
+   \frac{\validexpression{\context}{\expression}{\constructor}}
+        {\validexpression{\context}
+             {\mathsf{mk\_ref}[\constructor](\expression)}
+             {\cref{\constructor}}}
+   \qquad
+   \frac{\validexpression{\context}{\expression}{\cref{\constructor}}}
+        {\validexpression{\context}
+             {\mathsf{deref}[\constructor](\expression)}
+             {\constructor}}
+   \]
+   \[
+   \frac{\validexpression{\context}{\expression_1}{\cref{\constructor}}
+         \qquad
+         \validexpression{\context}{\expression_2}{\constructor}}
+        {\validexpression{\context}
+             {\mathsf{setref}[\constructor](\expression_1,\expression_2)}
+             {\cunit}}
+   \]
+   \[
+   \frac{\validexpression{\context}{\expression_1}{\cref{\constructor}}
+         \qquad
+         \validexpression{\context}{\expression_2}{\cref{\constructor}}}
+        {\validexpression{\context}
+             {\mathsf{eq\_ref}[\constructor](\expression_1,\expression_2)}
+             {\csummil{2}{}}}
+   \]}
+   
+\describe{numeric conversions}
+   {Primitives for numeric conversion}
+   {\mathsf{float2int}(\expression),\ \mathsf{int2float}(\expression),\
+    \mathsf{int2uint}_{b_1,b_2}(\expression),\ 
+    \mathsf{uint2int}_{b_1,b_2}(\expression),\ 
+    \mathsf{int2int}_{b_1,b_2}(\expression),$ $
+    \mathsf{uint2uint}_{b_1,b_2}(\expression),\ 
+    \mathsf{uinta2uinta}_{b_1,b_2}(\expression),\ 
+    \mathsf{uintv2uintv}_{b_1,b_2}(\expression)}
+   {Prim\_e(PrimOp(float2int), [], [$\translate{\expression}$]),
+    Prim\_e(PrimOp(int2float), [], [$\translate{\expression}$]),
+    Prim\_e(PrimOp(int2uint ($\translate{b_1}$,$\translate{b_2}$), [],
+                   [$\translate{\expression}$])),
+    Prim\_e(PrimOp(uint2int ($\translate{b_1}$,$\translate{b_2}$), [],
+                   [$\translate{\expression}$])),
+    Prim\_e(PrimOp(int2int ($\translate{b_1}$,$\translate{b_2}$), [],
+                   [$\translate{\expression}$])),
+    Prim\_e(PrimOp(uint2uint ($\translate{b_1}$,$\translate{b_2}$), [],
+                   [$\translate{\expression}$])),
+    Prim\_e(PrimOp(uinta2uinta ($\translate{b_1}$,$\translate{b_2}$), [],
+                   [$\translate{\expression}$])),
+    Prim\_e(PrimOp(uintv2uintv ($\translate{b_1}$,$\translate{b_2}$), [],
+                   [$\translate{\expression}$]))}
+   {}
+   {Since signed and unsigned integers are not distinguished at the
+    MIL level, the typing rules for $\mathsf{int2uint}$, $\mathsf{uint2uint}$, and
+    $\mathsf{uint2int}$ are exactly the same as the rule for $\mathsf{int2int}$.}
+   {\[
+     \frac{\validexpression{\context}{\expression}{\cmilfloat{64}}}
+          {\validexpression{\context}{\mathsf{float2int}(\expression)}
+               {\cmilint{32}}}
+     \qquad
+     \frac{\validexpression{\context}{\expression}{\cmilint{32}}}
+          {\validexpression{\context}{\mathsf{int2float}(\expression)}
+               {\cmilfloat{64}}}
+    \]
+    \[
+     \frac{\validexpression{\context}{\expression}{\cmilint{b_1}}}
+          {\validexpression{\context}
+             {\mathsf{int2int}_{b_1,b_2}(\expression)}
+             {\cmilint{b_2}}}
+    \]
+    \[
+     \frac{\validexpression{\context}{\expression}{\carray{\cmilint{b_1}}}}
+          {\validexpression{\context}
+             {\mathsf{uinta2uinta}_{b_1,b_2}(\expression)}
+             {\carray{\cmilint{b_2}}}}
+    \]
+    \[
+     \frac{\validexpression{\context}{\expression}{\cvector{\cmilint{b_1}}}}
+          {\validexpression{\context}
+             {\mathsf{uintv2uintv}_{b_1,b_2}(\expression)}
+             {\cvector{\cmilint{b_2}}}}
+    \]
+   }
+
+\describe{floating-point primitives}
+  {Primitives for floating-point operations}
+  {\mathsf{neg\_float}_b(\expression),\
+   \mathsf{abs\_float}_b(\expression),\
+   \mathsf{plus\_float}_b(\expression_1,\expression_2),\
+   \mathsf{minus\_float}_b(\expression_1,\expression_2),\
+   \mathsf{mul\_float}_b(\expression_1,\expression_2),$ $
+   \mathsf{div\_float}_b(\expression_1,\expression_2),\
+   \mathsf{less\_float}_b(\expression_1,\expression_2),\
+   \mathsf{greater\_float}_b(\expression_1,\expression_2),\
+   \mathsf{lesseq\_float}_b(\expression_1,\expression_2),$ $
+   \mathsf{greatereq\_float}_b(\expression_1,\expression_2),\
+   \mathsf{eq\_float}_b(\expression_1,\expression_2),\
+   \mathsf{neq\_float}_b(\expression_1,\expression_2)\
+    \mbox{ where\ $b\in\{32,64\}$}}
+  {Prim\_e(PrimOp(neg\_float $\translate{b}$), [], 
+           [$\translate{\expression}$]),
+   Prim\_e(PrimOp(abs\_float $\translate{b}$), [], 
+           [$\translate{\expression}$]),
+   Prim\_e(PrimOp(plus\_float $\translate{b}$), [], 
+           [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+   Prim\_e(PrimOp(minus\_float $\translate{b}$), [], 
+           [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+   Prim\_e(PrimOp(mul\_float $\translate{b}$), [], 
+           [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+   Prim\_e(PrimOp(less\_float $\translate{b}$), [], 
+           [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+   Prim\_e(PrimOp(greater\_float $\translate{b}$), [], 
+           [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+   Prim\_e(PrimOp(lesseq\_float $\translate{b}$), [], 
+           [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+   Prim\_e(PrimOp(greatereq\_float $\translate{b}$), [], 
+           [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+   Prim\_e(PrimOp(eq\_float $\translate{b}$), [], 
+           [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+   Prim\_e(PrimOp(neq\_float $\translate{b}$), [], 
+           [$\translate{\expression_1}$,$\translate{\expression_2}$])}
+  {}
+  {We give the typing rules for representative primitives only}
+  {\[
+   \frac{\validexpression{\context}{\expression}{\cmilfloat{b}}}
+        {\validexpression{\context}{\mathsf{neg\_float}_b(\expression)}
+               {\cmilfloat{b}}}
+   \qquad
+   \frac{\validexpression{\context}{\expression}{\cmilfloat{b}}}
+        {\validexpression{\context}{\mathsf{abs\_float}_b(\expression)}
+               {\cmilfloat{b}}}
+   \]
+   \[
+   \frac{\validexpression{\context}{\expression_1}{\cmilfloat{b}}
+         \qquad
+         \validexpression{\context}{\expression_2}{\cmilfloat{b}}}
+        {\validexpression{\context}
+            {\mathsf{plus\_float}_b(\expression_1,\expression_2)}
+            {\cmilfloat{b}}}
+   \]
+   \[
+   \frac{\validexpression{\context}{\expression_1}{\cmilfloat{b}}
+         \qquad
+         \validexpression{\context}{\expression_2}{\cmilfloat{b}}}
+        {\validexpression{\context}
+            {\mathsf{less\_float}_b(\expression_1,\expression_2)}
+            {\csummil{2}{}}}
+   \]}
+
+\describe{Integer Primitives}
+   {Primitives for integer operations}
+   {\mathsf{neg\_int}_b(\expression),\
+    \mathsf{abs\_int}_b(\expression),\
+    \mathsf{plus\_int}_b(\expression_1,\expression_2),\
+    \mathsf{minus\_int}_b(\expression_1,\expression_2),\
+    \mathsf{mul\_int}_b(\expression_1,\expression_2),$ $
+    \mathsf{div\_int}_b(\expression_1,\expression_2),\
+    \mathsf{mod\_int}_b(\expression_1,\expression_2),\
+    \mathsf{quot\_int}_b(\expression_1,\expression_2),\
+    \mathsf{rem\_int}_b(\expression_1,\expression_2),$ $
+    \mathsf{plus\_uint}_b(\expression_1,\expression_2),\
+    \mathsf{minus\_uint}_b(\expression_1,\expression_2),\
+    \mathsf{div\_uint}_b(\expression_1,\expression_2),\
+    \mathsf{mod\_uint}_b(\expression_1,\expression_2),$ $
+    \mathsf{less\_int}_b(\expression_1,\expression_2),\
+    \mathsf{greater\_int}_b(\expression_1,\expression_2),\
+    \mathsf{lesseq\_int}_b(\expression_1,\expression_2),\
+    \mathsf{greatereq\_int}_b(\expression_1,\expression_2),$ $
+    \mathsf{less\_uint}_b(\expression_1,\expression_2),\
+    \mathsf{greater\_uint}_b(\expression_1,\expression_2),\
+    \mathsf{lesseq\_uint}_b(\expression_1,\expression_2),\
+    \mathsf{greatereq\_uint}_b(\expression_1,\expression_2),$ $
+    \mathsf{eq\_int}_b(\expression_1,\expression_2),\
+    \mathsf{neq\_int}_b(\expression_1,\expression_2),\ 
+    \mathsf{not\_int}_b(\expression),\
+    \mathsf{and\_int}_b(\expression_1,\expression_2),\ 
+    \mathsf{or\_int}_b(\expression_1,\expression_2),$ $ 
+    \mathsf{xor\_int}_b(\expression_1,\expression_2),\ 
+    \mathsf{lshift\_int}_b(\expression_1,\expression_2),\ 
+    \mathsf{rshift\_int}_b(\expression_1,\expression_2),\ 
+    \mathsf{rshift\_uint}_b(\expression_1,\expression_2),$ $ 
+     \mbox{where $b\in\{8,16,32\}$}}
+   {Prim\_e(PrimOp~(neg\_int $\translate{b}$), [], 
+       [$\translate{\expression}$]),
+    Prim\_e(PrimOp~(abs\_int $\translate{b}$), [], 
+       [$\translate{\expression}$]),
+    Prim\_e(PrimOp~(plus\_int $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(minus\_int $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(mul\_int $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(div\_int $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(mod\_int $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(quot\_int $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(rem\_int $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(plus\_uint $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(minus\_uint $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(mul\_uint $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(div\_uint $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(mod\_uint $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(less\_int $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(greater\_int $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(lesseq\_int $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(greatereq\_int $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(less\_uint $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(greater\_uint $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(lesseq\_uint $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(greatereq\_uint $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(eq\_int $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+    Prim\_e(PrimOp~(neq\_int $\translate{b}$), [], 
+       [$\translate{\expression_1}$,$\translate{\expression_2}$]),
+   }
+   { }
+   {We show only representative typing rules.  Note that although the
+    MIL language does not distinguish in between signed and unsigned
+    integer types, there are primitives which interpret the bit
+    patterns as signed or unsigned and behave appropriately.  (In 
+    particular, unsigned arithmetic operations do not raise exceptions.)}
+  {\[
+   \frac{\validexpression{\context}{\expression}{\cmilint{b}}}
+        {\validexpression{\context}{\mathsf{neg\_int}_b(\expression)}
+               {\cmilfloat{b}}}
+   \qquad
+   \frac{\validexpression{\context}{\expression}{\cmilint{b}}}
+        {\validexpression{\context}{\mathsf{abs\_int}_b(\expression)}
+               {\cmilfloat{b}}}
+   \]
+   \[
+   \frac{\validexpression{\context}{\expression_1}{\cmilint{b}}
+         \quad
+         \validexpression{\context}{\expression_2}{\cmilint{b}}}
+        {\validexpression{\context}
+            {\mathsf{plus\_int}_b(\expression_1,\expression_2)}
+            {\cmilint{b}}}
+   \qquad
+   \frac{\validexpression{\context}{\expression_1}{\cmilint{b}}
+         \quad
+         \validexpression{\context}{\expression_2}{\cmilint{b}}}
+        {\validexpression{\context}
+            {\mathsf{plus\_uint}_b(\expression_1,\expression_2)}
+            {\cmilint{b}}}
+   \]
+   \[
+   \frac{\validexpression{\context}{\expression_1}{\cmilint{b}}
+         \quad
+         \validexpression{\context}{\expression_2}{\cmilint{b}}}
+        {\validexpression{\context}
+            {\mathsf{less\_int}_b(\expression_1,\expression_2)}
+            {\csummil{2}{}}}
+   \qquad
+   \frac{\validexpression{\context}{\expression_1}{\cmilint{b}}
+         \quad
+         \validexpression{\context}{\expression_2}{\cmilint{b}}}
+        {\validexpression{\context}
+            {\mathsf{less\_uint}_b(\expression_1,\expression_2)}
+            {\csummil{2}{}}}
+   \]
+   \[
+   \frac{\validexpression{\context}{\expression}{\cmilint{b}}}
+        {\validexpression{\context}
+            {\mathsf{not\_int}_b(\expression)}
+            {\cmilint{b}}}
+   \qquad
+   \frac{\validexpression{\context}{\expression_1}{\cmilint{b}}
+         \quad
+         \validexpression{\context}{\expression_2}{\cmilint{b}}}
+        {\validexpression{\context}
+            {\mathsf{and\_int}_b(\expression_1,\expression_2)}
+            {\cmilint{b}}}
+   \]
+   \[
+   \frac{\validexpression{\context}{\expression_1}{\cmilint{b}}
+         \quad
+         \validexpression{\context}{\expression_2}{\cmilint{32}}}
+        {\validexpression{\context}
+            {\mathsf{rshift\_int}_b(\expression_1,\expression_2)}
+            {\cmilint{b}}}
+   \qquad
+   \frac{\validexpression{\context}{\expression_1}{\cmilint{b}}
+         \quad
+         \validexpression{\context}{\expression_2}{\cmilint{32}}}
+        {\validexpression{\context}
+            {\mathsf{rshift\_uint}_b(\expression_1,\expression_2)}
+            {\cmilint{b}}}
+   \]
+   }
 
 \end{document}
