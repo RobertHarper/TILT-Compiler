@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel NAME Util Symbol Int Word31 SplaySetFn SplayMapFn Char String Stats ORD_KEY HashTable *)
+(*$import Prelude TopLevel NAME Util Symbol Int Word SplaySetFn SplayMapFn Char String Stats ORD_KEY HashTable *)
 
 structure Name :> NAME =
   struct
@@ -161,7 +161,7 @@ structure Name :> NAME =
     fun mk_var_hash_table (size,notfound_exn) = 
 	let
 	    val b : word = 0wx3141592
-	    fun hash (i : var) = Word31.>>(Word31.*(Word31.fromInt i,b),0wx12)
+	    fun hash (i : var) = Word.>>(Word.*(Word.fromInt i,b),0wx12)
 	    val eqKey = eq_var
 	in HashTable.mkTable (hash,eqKey) (size,notfound_exn)
 	end
