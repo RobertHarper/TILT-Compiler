@@ -160,15 +160,18 @@ Creating a misc collection release
 
   as root on each machine.
 
-* Announce the new release to the newsgroup cmu.cs.unix.forum.
-  Announcing alpha releases isn't so important since most machines
-  ignore them.
-
 * To test TILT out of /usr/local you need to clear TILT_LIBDIR and use
   the /usr/local/bin/tilt driver.  Eg:
 
 	% unset TILT_LIBDIR
 	% /usr/local/bin/tilt -v
+
+* Announce the new release to the newsgroup cmu.cs.unix.forum.
+  Announcing alpha releases isn't so important since most machines
+  ignore them.
+
+* Trim the quota on the misc collection volumes to minimize wasted
+  free space.  Use jeeves as above.
 
 Creating a /usr/contributed release
 -----------------------------------
