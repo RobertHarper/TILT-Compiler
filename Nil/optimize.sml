@@ -291,7 +291,9 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 	  fun lookup_proj(state,v,labs) = 
 	      let fun loop e [] = SOME e
 		    | loop (Prim_e(NilPrimOp(record labs),_,elist)) (l::rest) = 
-		         loop (valOf(assoc_eq(Name.eq_label,l,zip labs elist))) rest
+		         let val SOME e = assoc_eq(Name.eq_label,l,zip labs elist)
+			 in  loop e rest
+			 end
 		    | loop (Var_e v) labs = lookup_proj(state,v,labs)
 		    | loop _ _ = NONE
 	      in  (case lookup_alias(state,v) of
@@ -302,7 +304,15 @@ val Normalize_reduceToSumtype = Stats.timer("optimize_typeof", Normalize.reduceT
 	  fun lookup_cproj(state,v,labs) = 
 	      let fun loop c [] = SOME c
 		    | loop (Crecord_c lclist) (l::rest) =
-		         loop (valOf(assoc_eq(Name.eq_label,l,lclist))) rest
+		         let val _ = (case assoc_eq(Name.eq_label,l,lclist) of
+					  NONE => (print "lookup_cproj could not find ";
+						   Ppnil.pp_label l; print "  among ";
+						   app (fn (l,_) => (Ppnil.pp_label l; print "  ")) lclist;
+						   print "\n")
+					| _ => ())
+			     val SOME c = assoc_eq(Name.eq_label,l,lclist)
+			 in  loop c rest
+			 end
 		    | loop (Var_c v) labs = lookup_cproj(state,v,labs)
 		    | loop _ _ = NONE
 	      in  (case lookup_alias(state,v) of

@@ -51,7 +51,8 @@ fun parse (source as {sourceStream,errConsumer,interactive,
                     err = err,
                     brack_stack = ref (nil: int ref list)}
 
-      val doprompt = ref true
+(*      val doprompt = ref true *)
+      val doprompt = ref false
       val prompt = ref (!Control.primaryPrompt)
 
       fun inputc_sourceStream _ = TextIO.input(sourceStream)
@@ -69,8 +70,11 @@ fun parse (source as {sourceStream,errConsumer,interactive,
                doprompt := false)
          else ();
          let val s = inputc_sourceStream k
-          in doprompt := ((String.sub(s,size s - 1) = #"\n")
+          in 
+(*
+	      doprompt := ((String.sub(s,size s - 1) = #"\n")
                           handle _ => false);
+*)
              s
          end)
 
@@ -118,9 +122,12 @@ end (* structure FrontEnd *)
 
 (*
  * $Log$
-# Revision 1.8  98/04/06  21:19:40  pscheng
-# update: Typeof_c, dependent arrow/record types
+# Revision 1.9  99/02/17  20:31:05  pscheng
+# *** empty log message ***
 # 
+# Revision 1.8  1998/04/06  21:19:40  pscheng
+# update: Typeof_c, dependent arrow/record types
+#
 # Revision 1.7  1998/02/15  22:43:26  pscheng
 # bootstrapping changes
 #

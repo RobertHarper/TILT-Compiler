@@ -13,25 +13,19 @@ structure NameBlast :> NAMEBLAST =
 	
     fun blastOutVar os v =
 	let val (n,str) = deconstruct_var v
-	in  (blastOutInt os n;
-	     if (!useOldBlast)
-		 then blastOutString os str
-	     else blastOutString os "")
+	in  blastOutInt os n
 	end
 
     fun blastInVar is = 
 	let val n = blastInInt is
 	    val _ = update_var_counter n
-	    val str = blastInString is
-	in  construct_var(n, str)
+	in  construct_var(n, "")
 	end
     
     fun blastOutTag os t =
 	let val (n,str) = deconstruct_tag t
 	in  (blastOutInt os n;
-	     if (!useOldBlast)
-		 then blastOutString os str
-	     else blastOutString os "")
+	     blastOutString os str)
 	end
 
 

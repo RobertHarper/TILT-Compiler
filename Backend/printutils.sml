@@ -3,18 +3,17 @@ functor Printutils(val commentHeader : string
 		   structure Machineutils : MACHINEUTILS
                    structure Tracetable : TRACETABLE
 		   structure Bblock : BBLOCK
-		   sharing Tracetable = Bblock.Tracetable
-		   sharing Machineutils.Machine = Bblock.Machine)
+		   sharing Tracetable = Bblock.Tracetable)
 		      :> PRINTUTILS where Bblock = Bblock
-                                    where Machine = Machineutils.Machine
+                                    where Machine = Bblock.Machine
 				    where Tracetable = Tracetable =
 struct
    structure Bblock = Bblock
-   structure Machine = Machineutils.Machine
+   structure Machine = Bblock.Machine
    structure Machineutils = Machineutils
    structure Tracetable = Tracetable
 
-   open Machineutils Machineutils.Machine Bblock
+   open Machineutils Machine Bblock
    open Core
 
    val show_labels = ref true

@@ -1,14 +1,15 @@
 (*$import MACHINEUTILS BBLOCK Int32 Util Listops TRACETABLE List *)
-functor Bblock(structure Machineutils : MACHINEUTILS
+functor Bblock(structure Machine : MACHINE
+	       structure Machineutils : MACHINEUTILS
 	       structure Tracetable : TRACETABLE)
     :> BBLOCK where Tracetable = Tracetable
-              where Machine = Machineutils.Machine =
+              where Machine = Machine =
 struct
+   structure Machine = Machine
    structure Machineutils = Machineutils
-   structure Machine = Machineutils.Machine
    structure Tracetable = Tracetable
 
-   open Machineutils Machineutils.Machine Core
+   open Machineutils Machine Core
    (* Annotations on an instruction *)
    datatype 'a annotated = NO_ANN of 'a
                          | LIVE of Regset.set * 'a
@@ -38,7 +39,7 @@ struct
        in sum(rest,s)
        end
 
-   val defUse = Machineutils.Machine.defUse
+   val defUse = Machine.defUse
 
    fun live (LIVE (s,_)) = s
      | live (NO_ANN _) = Regset.empty

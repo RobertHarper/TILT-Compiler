@@ -239,7 +239,8 @@ structure NilContextPre
 	 let
 	   val entry = {eqn = NONE,
 			kind = kind,
-			std_kind = immediate std_kind,
+(*			std_kind = immediate std_kind, *)
+			std_kind = delay std_kind,
 			index = counter}
 	 in
 	   {conmap = conmap, 
@@ -257,7 +258,7 @@ structure NilContextPre
 	       fun folder (((label,var),kind),D) = 
 		 let
 		   val std_kind = kind_standardize(D,kind)
-		   val D = insert_std_kind(D,var,kind,selfify(Var_c var,std_kind))
+		   val D = insert_std_kind(D,var,kind,fn() => selfify(Var_c var,std_kind))
 		 in
 		   (((label,var),std_kind),D)
 		 end
@@ -270,7 +271,7 @@ structure NilContextPre
 	       fun folder ((var,kind),D) = 
 		 let
 		   val std_kind = kind_standardize(D,kind)
-		   val D = insert_std_kind(D,var,kind,selfify (Var_c var,std_kind))
+		   val D = insert_std_kind(D,var,kind,fn() => selfify (Var_c var,std_kind))
 		 in
 		   ((var,std_kind),D)
 		 end

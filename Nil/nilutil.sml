@@ -205,6 +205,17 @@ struct
 	   Arrow_k (openness,args,selfify(App_c (con,actuals),return))
 	 end)
 end
+
+(*
+  val selfify = fn (arg as (c,k)) =>
+      let val _ = (print "Selfifying with "; Ppnil.pp_con c; print " the following\n";
+		   Ppnil.pp_kind k; print "\n")
+	  val k = selfify arg
+	  val _ = (print "Selfified to "; Ppnil.pp_kind k; print "\n")
+      in  k
+      end
+*)
+
   val selfify = subtimer ("Selfify",selfify)
 
   fun singletonize (kind as SingleType_k(_),con) = kind

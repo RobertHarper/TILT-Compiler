@@ -9,11 +9,11 @@ signature REGMAP = DICT
 
     exception NotFound
 
-    val mkDict : unit -> '1a dict
+    val mkDict : unit -> 'a dict
     (* Create a new dict
      *)
 
-    val insert : '1a dict * Key.ord_key * '1a -> '1a dict
+    val insert : 'a dict * Key.ord_key * 'a -> 'a dict
     (* Insert an item.  
      *)
 
@@ -24,7 +24,7 @@ signature REGMAP = DICT
     val peek : 'a dict * Key.ord_key -> 'a option
     (* Look for an item, return NONE if the item doesn't exist *)
 
-    val remove : '1a dict * Key.ord_key -> '1a dict * '1a
+    val remove : 'a dict * Key.ord_key -> 'a dict * 'a
     (* Remove an item, returning new dictionary and value removed.
      * Raise NotFound if not found
      *)

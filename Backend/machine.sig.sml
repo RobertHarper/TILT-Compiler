@@ -9,9 +9,13 @@ signature MACHINE =
     type data = Core.data
     type assign = Core.assign
 
+    type specific_instruction
+    datatype instruction = 
+      BASE     of Core.base_instruction
+    | SPECIFIC of specific_instruction
+
+
     val sloc2int  : stacklocation -> int (* return offset if stacklocation concrete *)
-    val isInt     : register -> bool
-    val isFloat   : register -> bool
     val isPhysical : register -> bool
 
     val freshCodeLabel : unit -> label
@@ -36,48 +40,7 @@ signature MACHINE =
     val Fat2    : register   (* Second floating-point temporary *)
 
 
-    datatype call_type = DIRECT of label * register option
-                       | INDIRECT of register
-    datatype rtl_instruction =
-      CALL of 
-      {calltype : Rtl.calltype,          (* is this a C call? *)
-       func: call_type,                  (* label or temp containing addr. *)
-       args : register list,             (* integer, floating temps *)
-       results : register list,          (* integer, floating temps *)
-       argregs : register list option,   (* actual registers *)
-       resregs : register list option,   (*   "         "    *)
-       destroys: register list option}   (*   "         "    *)
-    | JMP of register * label list
-    | RETURN of {results: register list}        (* formals *)
-    | SAVE_CS of label
-    | HANDLER_ENTRY
 
-
-    datatype base_instruction = 
-      MOVI    of register * register
-    | MOVF    of register * register
-    | PUSH    of register * stacklocation
-    | POP     of register * stacklocation
-    | PUSH_RET of stacklocation option  (* may not be fully realized during register allocation *)
-    | POP_RET  of stacklocation option
-    | RTL     of rtl_instruction
-    | TAILCALL of label
-    | BR      of label
-    | BSR     of label * register option * {regs_modified : register list, regs_destroyed : register list,
-					    args : register list}
-                       (* if register is SOME ?, then ? is the reg where we want to put retadd *)
-    | JSR     of bool * register * int * label list (* link, dest, hint, labels *)
-    | RET     of bool * int (* link, hint *)
-    | GC_CALLSITE of label
-    | ILABEL  of label
-    | ICOMMENT of string
-    | LADDR of register * label         (* dest, label *)
-
-    type specific_instruction
-
-    datatype instruction = 
-      BASE     of base_instruction
-    | SPECIFIC of specific_instruction
 
     val msReg           : register -> string
     val msLabel         : label -> string
@@ -131,19 +94,6 @@ signature MACHINE =
 	               understand what the second component is for.
 	 - allocated: whether or not the procedure has been allocated
    *)
-
-   datatype procsig = 
-     PROCSIG of {arg_ra_pos : (assign list) option,
-		 res_ra_pos : assign list option,
-		 allocated  : bool,
-		 regs_destroyed  : register list ref,
-		 regs_modified  : register list ref,
-		 blocklabels: label list,
-                 framesize  : int option,
-		 ra_offset : int option,
-		 callee_saved: register list,
-		 args   : register list,  (* formals *)
-		 res    : register list}  (* formals *)
 
    val special_iregs : register list 
    val special_fregs : register list 

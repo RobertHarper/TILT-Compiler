@@ -3,7 +3,6 @@
 structure Stats :> STATS =
    struct
 
-
        val error = fn s => Util.error "stats.sml" s
        type time = Time.time
        type time_entry = (int * real * bool * {gc : time, sys: time, usr: time, real : time})  ref
@@ -55,23 +54,28 @@ structure Stats :> STATS =
 		TIME_ENTRY res => res
 	      | _ => error "find_time_entry: did not find a TIME_ENTRY"
 	end
+
       fun find_counter_entry s = 
 	let fun maker () = COUNTER_ENTRY(ref 0)
         in  case (find_entry maker s) of
 		COUNTER_ENTRY res => res
-	      | _ => error "find_time_entry: did not find a COUNTER_ENTRY"
+	      | _ => error "find_counter_entry: did not find a COUNTER_ENTRY"
         end
       fun find_int_entry s = 
 	let fun maker () = INT_ENTRY(ref 0)
         in  case (find_entry maker s) of
 		INT_ENTRY res => res
-	      | _ => error "find_time_entry: did not find a INT_ENTRY"
+	      | _ => error "find_int_entry: did not find a INT_ENTRY"
         end
       fun find_bool_entry maker s = 
          case (find_entry maker s) of
 		BOOL_ENTRY res => res
 	      | _ => error "find_bool_entry: did not find a BOOL_ENTRY"
 
+      fun fetch_timer_max name = 
+	  let val (_,max,_,_) = !(find_time_entry name false)
+	  in max
+	  end
 
       val int = find_int_entry
       fun bool str = find_bool_entry 

@@ -26,9 +26,6 @@ toasm.sig.sml
 
 bblock.sml
 labelgraph.sml
-labelmap.sml
-regmap.sml
-regset.sml
 ifgraph.sml
 tracetable.sml
 printutils.sml

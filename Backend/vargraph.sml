@@ -1,8 +1,10 @@
 (*$import Name Graph Word32 HashTableFn Util *)
+
 (* Directed graphs whose vertices are variables.   Useful for
    representing dependency information such as call graphs.*)
 
-functor Vargraph () :> DIRECTEDGRAPH where type node = Name.var =
+structure Vargraph 
+    :> DIRECTEDGRAPH where type node = Name.var =
 struct
      structure HashKey =
        struct

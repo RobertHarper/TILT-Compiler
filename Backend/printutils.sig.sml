@@ -1,4 +1,5 @@
 (*$import BBLOCK TRACETABLE MACHINE MACHINEUTILS Array *)
+
 signature PRINTUTILS =
 sig
    structure Bblock : BBLOCK
@@ -29,12 +30,12 @@ sig
    val show_labels : bool ref
 
    val dumpBlocks : bool -> Machine.label -> 
-                            Machine.procsig -> 
+                            Core.procsig -> 
 			    Bblock.bblock Core.Labelmap.map -> 
 			    Machine.label list -> unit
 
    val dumpProc : Machine.label *
-                 Machine.procsig *
+                  Core.procsig *
                  Bblock.bblock Core.Labelmap.map * 
 	         Machine.label list *
 		 bool -> unit

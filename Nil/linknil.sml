@@ -1,13 +1,8 @@
 (*$import LinkIl Annotation Nil NilUtil NilContext Ppnil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil Hoist Reify NilStatic Inline Flatten Reduce PpnilHtml *)
 
 
-structure Linknil (* :> LINKNIL  *) =
+structure Linknil :> LINKNIL  =
   struct
-    val typecheck_before_opt = ref false
-    val typecheck_after_opt = ref false
-    val typecheck_after_cc = ref false
-
-
     val do_cleanup = ref false
     val do_opt = ref false
     val do_one_optimize = ref true
@@ -23,7 +18,6 @@ structure Linknil (* :> LINKNIL  *) =
     val do_inline = Stats.tt ("doInline")
 
     val show_size = ref false
-    val show_hil = ref false
     val show_phasesplit = Stats.ff("showPhaseSplit")
     val show_renamed = Stats.ff("showRenaming1")
     val show_opt = ref false
@@ -42,10 +36,10 @@ structure Linknil (* :> LINKNIL  *) =
     val show_inline = Stats.ff("showInline")
     val show_html = Stats.tt("showHTML")
 
-(*    val type_check_before_opt = Stats.ff("TypecheckBeforeOpt")
-    val type_check_after_opt = Stats.ff("TypecheckAfterOpt")
-    val type_check_after_cc = Stats.ff("TypecheckAfterCC")
-*)
+    val typecheck_before_opt = Stats.ff("TypecheckBeforeOpt")
+    val typecheck_after_opt = Stats.ff("TypecheckAfterOpt")
+    val typecheck_after_cc = Stats.ff("TypecheckAfterCC")
+
     val number_flatten = 6
     val _ = Stats.int("number_flatten") := number_flatten
     val error = fn s => Util.error "linknil.sml" s
@@ -110,8 +104,6 @@ structure Linknil (* :> LINKNIL  *) =
 
 *)
 
-     val phasesplit = Stats.timer("Phase-splitting",Tonil.phasesplit)
-
 
     fun pass (showphase,phasename,phase,filename,nilmod) = 
 	let val _ = print "\n\n=======================================\n"
@@ -145,46 +137,29 @@ structure Linknil (* :> LINKNIL  *) =
     fun check (doit,showphase,phasename,phase,filename,nilmod) = 
       transform (doit,showphase,phasename,(fn nilmod => (phase nilmod;nilmod)),filename,nilmod)
 
-    fun pcompile' debug (filename,(ctxt,sbnd_entries)) =
-	let
-	    open Nil Il LinkIl.IlContext Name
-	    val D = NilContext.empty
 
-	in  pass(show_phasesplit,
-		 "Phase-split", Tonil.phasesplit,
-		 filename, (ctxt,sbnd_entries))
-	end
+    exception Stop of Nil.module
 
-    fun phasesplit' debug (filename,(ctxt,sbnd_entries)) = 
-	let
-	    val _ = if (!show_hil)
-			then 
-			    let val sbnds = List.mapPartial #1 sbnd_entries
-			    in  (print "HIL context is\n";
-				 LinkIl.Ppil.pp_context ctxt;
-				 print "\nHIL bounds are\n";
-				 LinkIl.Ppil.pp_sbnds sbnds)
-			    end
-		    else ()
-	    val nilmod = pass(show_phasesplit,
-			       "Phase-split", Tonil.phasesplit,
-			       filename, (ctxt,sbnd_entries))
-	in  nilmod
-	end
-    val phasesplit = phasesplit' false
 
     fun compile' debug (filename,(ctxt,sbnd_entries)) =
 	let
 	    open Nil LinkIl.IlContext Name
 	    val D = NilContext.empty()
 
-	    val nilmod = phasesplit' debug (filename,(ctxt,sbnd_entries))
-(*	      
+	    val nilmod = pass(show_phasesplit,
+			       "Phase-split", 
+			       Stats.timer("Phase-splitting",Tonil.phasesplit),
+			       filename, (ctxt,sbnd_entries))
+	    val _ = if !(Stats.bool("UptoPhasesplit"))
+			then raise (Stop nilmod)
+		    else ()
+
+
 	    val nilmod = check (ref true,ref false,
 				    "Nil_typecheck_post_phase-split",
 				    (Util.curry2 NilStatic.module_valid (NilContext.empty ())) o (NilRename.renameMod),
 				    filename, nilmod)
-*)
+
 	    val nilmod = transform(ref true, show_renamed,
 				 "Renaming1",Linearize.linearize_mod,
 				 filename, nilmod)
@@ -263,24 +238,6 @@ structure Linknil (* :> LINKNIL  *) =
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
 				    filename, nilmod)
 	
-(*
-	    val _ = print "starting beta-reduction\n"	  
-	    val nilmod = (Stats.timer("Beta-reduction",BetaReduce.reduceModule)) nilmod
-	    val _ = transform debug  "Beta-reduction" nilmod
-*)
-
-(*
-	    val nilmod = transform(ref true, show_before_rtl,
-				 "Renaming2",Linearize.linearize_mod,
-				 filename, nilmod)
-*)
-(*
-            val nilmod = transform(do_reify, show_reify,
-                                   "Reification2",
-                                   Reify.reify_mod,
-                                   filename, nilmod)
-*)
-
 	    val nilmod = transform(ref true, show_cc,
 				 "Closure-conversion", 
 				 ToClosure.close_mod,
@@ -292,9 +249,13 @@ structure Linknil (* :> LINKNIL  *) =
 				    Util.curry2 NilStatic.module_valid (NilContext.empty ()),
 				    filename, nilmod)
 
+	    val _ = if !(Stats.bool("UptoClosureConvert"))
+			then raise (Stop nilmod)
+		    else ()
+
 	in  nilmod
 	end
-
+    handle Stop nilmod => nilmod
 
     val il_to_nil = compile' false
 

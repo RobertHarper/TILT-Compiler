@@ -4,16 +4,12 @@ signature LINKNIL =
 sig
     structure Tonil : TONIL
     structure NilUtil : NILUTIL
-
-(*    structure NilStatic : NILSTATIC *)
     structure Normalize : NORMALIZE
     structure NilContext : NILCONTEXT where type context = Normalize.context
 
     structure Ppnil : PPNIL
     structure ToClosure : TOCLOSURE
 
-    (* --- The compilation is split apart for testing just the phase-splitter --- *)
-    val phasesplit : string * Il.module -> Nil.module
     val il_to_nil  : string * Il.module -> Nil.module
 
     val do_opt : bool ref
@@ -25,8 +21,8 @@ sig
     val typecheck_after_cc : bool ref
     val typecheck_before_opt : bool ref
     val typecheck_after_opt : bool ref
-    
-    val show_hil : bool ref
+
+    val show_html : bool ref    
     val show_renamed : bool ref
     val show_one_optimize : bool ref
     val show_two_optimize : bool ref

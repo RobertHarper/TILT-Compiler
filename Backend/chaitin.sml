@@ -52,13 +52,11 @@ functor Chaitin(val commentHeader: string
 		sharing Printutils.Bblock.Machine 
 		      = Printutils.Machine 
 		      = Callconv.Machine 
-		      = Machineutils.Machine 
 
 		sharing Printutils.Tracetable = Printutils.Bblock.Tracetable
 
 		  ) :> PROCALLOC where Bblock = Printutils.Bblock 
-                                 where Tracetable = Printutils.Tracetable 
-				 where Machine = Machineutils.Machine =
+                                 where Tracetable = Printutils.Tracetable =
 struct
 
    open Rtl

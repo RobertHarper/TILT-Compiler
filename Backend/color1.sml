@@ -6,8 +6,7 @@ functor Color1(structure Machine : MACHINE
 	       structure Ifgraph : IFGRAPH
 	       structure Trackstorage : TRACKSTORAGE
 	       structure MU : MACHINEUTILS
-	       structure Printutils : PRINTUTILS
-	       sharing MU.Machine = Machine)
+	       structure Printutils : PRINTUTILS)
 
     :> COLOR where Trackstorage = Trackstorage
              where Ifgraph = Ifgraph =
@@ -15,9 +14,8 @@ functor Color1(structure Machine : MACHINE
 struct
   structure Ifgraph = Ifgraph
   structure Trackstorage = Trackstorage
-  structure MU = MU
 
-  open MU MU.Machine Printutils
+  open MU Machine Printutils
   open Core
 
   val debug = ref false
@@ -64,7 +62,7 @@ struct
         val _ = Regmap.appi (fn (key,_) =>
 			      delete_node key
 			      handle x => 
-				(print ("error deleting stack resident var"^MU.Machine.msReg key);
+				(print ("error deleting stack resident var"^Machine.msReg key);
 				 raise x)) stack_resident
 	          
 

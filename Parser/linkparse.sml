@@ -1,4 +1,4 @@
-(*$import FrontEnd LINKPARSE NamedForm TVClose ErrorMsg *)
+(*$import FrontEnd LINKPARSE NamedForm TVClose ErrorMsg Stats *)
 
 
 structure LinkParse :> LINK_PARSE =
@@ -36,7 +36,13 @@ struct
 	    (TextIO.closeIn ins; (lines,fp,includes,specs))
       | (ins,_,result) => (TextIO.closeIn ins; raise Parse result)
   end
+
+  val parse_impl = Stats.timer("Parsing", parse_impl)
+  val parse_inter = Stats.timer("Parsing", parse_inter)
 end;
+
+
+
 (*
 structure X =
 struct

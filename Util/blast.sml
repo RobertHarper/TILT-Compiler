@@ -9,8 +9,6 @@ signature BLASTER = sig
   type 'a blastin = BinIO.instream -> 'a
   type 'a blastout = BinIO.outstream -> 'a -> unit
 
-  val useOldBlast : bool ref
-
   val blastOutInt : BinIO.outstream -> int -> unit
   val blastInInt : BinIO.instream -> int
   val blastOutWord64 : BinIO.outstream -> TilWord64.word -> unit
@@ -35,7 +33,6 @@ end
 structure Blaster : BLASTER = struct
 
   val error = fn s => Util.error "blast.sml" s
-  val useOldBlast = ref false
 
   type 'a blastin = BinIO.instream -> 'a
   type 'a blastout = BinIO.outstream -> 'a -> unit
@@ -100,12 +97,8 @@ structure Blaster : BLASTER = struct
 	fun blastOutInt'' os i = blastOutWord32 os (Word32.fromInt i)
 	fun blastInInt'' is = Word32.toInt(blastInWord32 is)
 
-	fun blastOutInt os i = if (!useOldBlast)
-				   then blastOutInt' os i
-			       else blastOutInt'' os i
-	fun blastInInt is = if (!useOldBlast)
-				then blastInInt' is
-			    else blastInInt'' is
+	fun blastOutInt os i = blastOutInt'' os i
+	fun blastInInt is = blastInInt'' is
 
 
 	fun blastOutWord64 os i = blastOutString os (TilWord64.toDecimalString i)

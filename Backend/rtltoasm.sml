@@ -8,9 +8,7 @@ functor Rtltoasm (val commentHeader : string
 		  structure Toasm : TOASM
 
 		  sharing Printutils.Machine 
-		      = Machineutils.Machine
 		      = Callconv.Machine
-		      = Procalloc.Machine
 		      = Procalloc.Bblock.Machine
 		      = Toasm.Machine
 (* should not be needed *) = Printutils.Bblock.Machine 
