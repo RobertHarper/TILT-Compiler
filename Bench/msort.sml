@@ -1,3 +1,5 @@
+(*$import Prelude *)
+
 (* Merge sort *)
 fun revappend([],l2) = l2
   | revappend(hd::tl,l2) = revappend(tl,hd::l2)
