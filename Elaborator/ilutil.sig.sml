@@ -62,7 +62,11 @@ signature ILUTIL =
     val make_seq : (exp * con) list -> exp * con
     val prim_etaexpand : (context * Prim.prim * con list) -> exp
     val ilprim_etaexpand : (context * Prim.ilprim * con list) -> exp
+
+    (* some simple local reductions *)
     val exp_reduce : context * exp -> exp option
+    (* just return the original expression if exp_reduce returns NONE *)
+    val exp_try_reduce : context * exp -> exp
 
     val lab_bool : label
     val lab_true : label

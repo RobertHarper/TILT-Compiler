@@ -955,6 +955,10 @@ structure IlUtil :> ILUTIL =
 		 end
 	   | _ => NONE)
 
+    fun exp_try_reduce (arg as (context, e)) : exp =
+	case exp_reduce arg of
+	    SOME ne => ne
+	  | NONE => e
 
     fun ConUnroll con = 
 	(case con of
