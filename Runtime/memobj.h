@@ -11,9 +11,9 @@
 #include <ucontext.h>
 
 #if (defined solaris)
-#define pagesize 8192
+#define TILT_PAGESIZE 8192
 #elif (defined alpha_osf)
-#define pagesize 8192
+#define TILT_PAGESIZE 8192
 #endif
 
 extern int MLStackletSize, CStackletSize;
@@ -106,6 +106,7 @@ int NotInRange(mem_t addr, range_t *range)
 
 typedef struct Heap__t
 {
+  /* Invariant: bottom <= cursor <= top <= writeableTop <= mappedTop */
   int id;                      /* The ID for the heap object. */
   volatile int valid;          /* Indicates whether this heap is in current use. */
   mem_t bottom;                /* The physical and logical bottom of the memory region and heap. */
@@ -137,7 +138,7 @@ INLINE(Heap_TouchPage)
 int Heap_TouchPage(Heap_t *h, mem_t addr) /* Returns 1 if fresh */
 {
   int offset = sizeof(val_t) * (addr - h->bottom);
-  int page = DivideDown(offset, pagesize);
+  int page = DivideDown(offset, TILT_PAGESIZE);
   int word = page >> 5;
   int bit = page & 31;
   int mask = 1 << bit;

@@ -262,14 +262,14 @@ void GCInit_Help(double defaultMinRatio, double defaultMaxRatio,
 
 void GCInit(void)
 {
-  init_int(&minOffRequest, 1 * pagesize);
-  init_int(&maxOffRequest, 8 * pagesize);
-  init_int(&minOnRequest, 1 * pagesize);
-  init_int(&copyPageSize, pagesize / 2);
-  init_int(&copyCheckSize, pagesize / 2);
+  init_int(&minOffRequest, 1 * TILT_PAGESIZE);
+  init_int(&maxOffRequest, 8 * TILT_PAGESIZE);
+  init_int(&minOnRequest, 1 * TILT_PAGESIZE);
+  init_int(&copyPageSize, TILT_PAGESIZE / 2);
+  init_int(&copyCheckSize, TILT_PAGESIZE / 2);
   init_int(&copyChunkSize, 256);
-  minOffRequest = RoundUp(minOffRequest, pagesize);
-  minOnRequest = RoundUp(minOnRequest, pagesize);
+  minOffRequest = RoundUp(minOffRequest, TILT_PAGESIZE);
+  minOnRequest = RoundUp(minOnRequest, TILT_PAGESIZE);
 
   reset_statistic(&minorSurvivalStatistic);
   reset_statistic(&heapSizeStatistic);
@@ -536,7 +536,7 @@ mem_t AllocFromHeap(Heap_t *heap, Thread_t *thread, int bytesToAlloc, Align_t al
 {
   mem_t start, cursor, limit;
   int padBytes = bytesToAlloc + ((align == NoWordAlign) ? 0 : 4);
-  int pagePadBytes = RoundUp(padBytes, pagesize);
+  int pagePadBytes = RoundUp(padBytes, TILT_PAGESIZE);
   GetHeapArea(fromSpace, pagePadBytes, &start, &cursor, &limit);
   if (start == NULL) 
     return NULL;
@@ -623,12 +623,13 @@ int GCSatisfiable(Proc_t *proc, Thread_t *th)
      requestInfo > 0 means that many bytes of allocation is requested 
      requestInfo == 0 is illegal
   */
-  int allocSpaceLeft = (val_t) proc->allocLimit - (val_t) proc->allocCursor;
-  if (th->requestInfo < 0) {
-    return ((val_t)proc->writelistCursor - th->requestInfo <= (val_t)proc->writelistEnd);
+  long requestInfo = th->requestInfo;
+  if (requestInfo < 0) {
+    return ((val_t)proc->writelistCursor - requestInfo <= (val_t)proc->writelistEnd);
   } 
-  else if (th->requestInfo > 0) {
-    return (allocSpaceLeft > minAllocRegion) && (th->requestInfo < allocSpaceLeft);
+  else if (requestInfo > 0) {
+    int allocSpaceLeft = (val_t) proc->allocLimit - (val_t) proc->allocCursor;
+    return (allocSpaceLeft > minAllocRegion) && (requestInfo < allocSpaceLeft);
   }
   else
     assert(0);

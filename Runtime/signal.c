@@ -240,7 +240,7 @@ void memfault_handler(int signum,
   assert(signum == (siginfo->si_signo));
 #endif
 
-  printf("Proc %d:  Memory error at %d with PC = %d\n",proc->procid, badaddr, badpc);
+  printf("Proc %d:  Memory error at %x with PC = %x\n",proc->procid, badaddr, badpc);
   switch (signum)
     {
     case SIGILL:

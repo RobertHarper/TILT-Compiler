@@ -232,7 +232,7 @@ void Thread_Create(Thread_t *th, Thread_t *parent, ptr_t thunk)
   th->tid = FetchAndAdd(&totalThread,1);
   th->parent = parent;
   th->request = StartRequest;
-  th->saveregs[THREADPTR] = (long) th;
+  th->saveregs[THREADPTR] = (unsigned long) th;
   th->saveregs[ALLOCLIMIT] = 0;
   th->globalOffset = 0;
   th->arrayOffset = 0;
@@ -434,6 +434,7 @@ void fillThread(Thread_t *th, int id)
     th->rootVals[i] = NULL;
     th->rootLocs[i] = NULL;
   }
+  th->proc = NULL;
   th->id = id;
   th->tid = -1;
   th->status = -1;
@@ -441,7 +442,7 @@ void fillThread(Thread_t *th, int id)
   th->pinned = 0;
   th->parent = NULL;
   th->request = StartRequest;
-  th->saveregs[THREADPTR] = (long) th;
+  th->saveregs[THREADPTR] = (unsigned long) th;
   th->saveregs[ALLOCLIMIT] = 0;
   th->stack = NULL;
   th->thunk = NULL;
@@ -514,6 +515,7 @@ void thread_init(void)
     int tabSize = 20;
     Proc_t *proc = &(Procs[i]); /* Structures are by-value in C */
     proc->procid = i;
+    proc->userThread = NULL;
     proc->barrierPhase = 0;
 
     proc->allocStart = (mem_t) StartHeapLimit;
@@ -561,7 +563,7 @@ void thread_init(void)
     reset_statistic(&proc->gcOtherStatistic);
     reset_windowQuotient(&proc->utilizationQuotient1,0);
     reset_windowQuotient(&proc->utilizationQuotient2,1);
-    SetCopyRange(&proc->copyRange, proc, NULL, NULL);
+    InitCopyRange(&proc->copyRange, proc, NULL);
     proc->numCopied = proc->numShared = proc->numContention = 0;
     proc->segmentNumber = 0;
     proc->segmentType = 0;
@@ -1061,7 +1063,7 @@ Abort
       assert(0);
     case YieldRequest: {
 #ifdef solaris
-      th->saveregs[16] = (long) th;  /* load_regs_forC on solaris expects thread pointer in %l0 */
+      th->saveregs[16] = (unsigned long) th;  /* load_regs_forC on solaris expects thread pointer in %l0 */
 #endif	
       mapThread(proc,th);
       procChangeState(proc, Mutator, 27);
@@ -1290,7 +1292,7 @@ Thread_t *SpawnRest(ptr_t thunk)
 }
 
 /* This should not be called by the mutator directly.  
-   Rather start_client returns here after swithcing to system thread stack. */
+   Rather start_client returns here after switching to system thread stack. */
 void Finish(void)
 {
   Proc_t *proc = getProc();
