@@ -1,3 +1,11 @@
+(0) type of thunk prematurely made a rigid record
+fun g {a,b} = a + b + 3
+
+fun f thunk = 
+  let val {a, ...} = thunk  
+  in  g thunk
+  end
+
 (1) handle specially datatypes of the form; handle irrefutable case in 
 	patterm matcher
 
