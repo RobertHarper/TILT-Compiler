@@ -12,7 +12,6 @@ struct
     
     structure TortlBase = TortlBase(
 			    structure NilContext = Linknil.NilContext
-			    structure NilStatic = Linknil.NilStatic
 			    structure Normalize = Linknil.Normalize
 			    structure Pprtl = Pprtl
 			    structure Rtltags = Rtltags
@@ -21,7 +20,6 @@ struct
 
     structure TortlSum = TortlSum(
 			    structure NilContext = Linknil.NilContext
-			    structure NilStatic = Linknil.NilStatic
 			    structure Pprtl = Pprtl
 			    structure TortlBase = TortlBase
 			    structure Rtltags = Rtltags
@@ -30,7 +28,6 @@ struct
 
     structure TortlVararg = TortlVararg(val number_flatten = 6
 					structure NilContext = Linknil.NilContext
-					structure NilStatic = Linknil.NilStatic
 					structure Pprtl = Pprtl
 					structure TortlBase = TortlBase
 					structure Rtltags = Rtltags
@@ -39,7 +36,6 @@ struct
 
     structure Tortl = Tortl(
 			    structure NilContext = Linknil.NilContext
-			    structure NilStatic = Linknil.NilStatic
 			    structure Pprtl = Pprtl
 			    structure TortlBase = TortlBase
 			    structure TortlSum = TortlSum

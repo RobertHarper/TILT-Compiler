@@ -159,7 +159,7 @@ structure Stats :> STATS =
 		       print "\n")
 		 else ()
 	     end;
-	     print (Date.toString(Date.fromTimeUniv(Time.now())))
+	     print (Date.toString(Date.fromTimeLocal(Time.now())))
 	 end
 
       fun print_counters() = 

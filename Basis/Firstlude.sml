@@ -78,8 +78,8 @@ extern ml_timeofday : (unit, (int * int)) -->
     fun a before b = a
     fun ignore _ = ()
 
-    fun exnName exn = exnNameRuntime exn
-    fun exnMessage exn = exnMessageRuntime exn
+    fun exnName exn = Ccall(exnNameRuntime,exn)
+    fun exnMessage exn = Ccall(exnMessageRuntime,exn)
 
 	fun rev l = 
 	    let fun revappend([],x) = x

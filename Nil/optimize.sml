@@ -1,4 +1,4 @@
-(*$import Nil NILCONTEXT NILSTATIC NILUTIL NILSUBST PPNIL OPTIMIZE Stats NORMALIZE *)
+(*$import Nil NILCONTEXT NILUTIL NILSUBST PPNIL OPTIMIZE Stats NORMALIZE *)
 (* A one-pass optimizer with the following goals:
 	Convert project_sum to project_sum_record.
 	Eliminate dead code.
@@ -8,18 +8,18 @@
 
 functor Optimize(structure NilContext : NILCONTEXT
 		 structure Normalize : NORMALIZE
-		 structure NilStatic : NILSTATIC
 		 structure NilUtil : NILUTIL
 		 structure Subst : NILSUBST
 		 structure Ppnil : PPNIL
-		 sharing type NilContext.context = NilStatic.context = Normalize.context)
+		 sharing type NilContext.context = Normalize.context)
     :> OPTIMIZE =
 struct
 
 	open Util Nil NilUtil NilContext Listops
  	val error = fn s => Util.error "optimize.sml" s
 
-	val debug = ref false
+	val debug = Stats.bool("Optimize_debug")
+	val _ = debug := false
 	val do_diag = ref false
 	fun diag s = if !do_diag then print s else()
 
@@ -228,6 +228,56 @@ struct
 			       con_depth := (!con_depth) - 1)
 	end
 
+
+
+
+
+
+	fun is_bool state con = 
+	    (case #2(Normalize.reduce_hnf(get_env state, con)) of
+		Prim_c(Sum_c{tagcount=0w2,...},[]) => true
+	      | _ => false)
+
+
+	 fun getexn (Prim_c(Exntag_c, [c])) = SOME c
+	   | getexn _ = NONE
+
+	fun is_sumsw_int state exp = 
+	  (case exp of
+	     (Switch_e(Sumsw_e{sumtype,
+			       bound,
+			       arg=Prim_e(PrimOp(Prim.eq_int is),[],
+					  [Var_e v,Const_e (Prim.int(_,w))]),
+			       arms=[(0w0,zeroexp),
+				     (0w1,oneexp)],
+			       default=NONE})) =>
+	    if (is_bool state sumtype)
+		then
+		    SOME (is,v,TilWord64.toUnsignedHalf w,zeroexp,oneexp)
+	    else NONE
+	  | _ => NONE)
+
+	fun convert_sumsw state sum_sw =
+	    let val exp = Switch_e(Sumsw_e sum_sw)
+	    in  (case is_sumsw_int state exp of
+	         SOME (is,commonv,_,_,_) =>
+		     let fun loop acc (e : exp) =
+			 (case is_sumsw_int state e of
+			      NONE => (acc,e)
+			    | SOME (is,v,w,zeroexp,oneexp) =>
+				  if (Name.eq_var(v,commonv))
+				      then loop ((w,oneexp)::acc) zeroexp
+				  else (acc,e))
+			 val (clauses,base) = loop [] exp
+		     in  if (length clauses > 1)
+			     then Intsw_e{size=is,arg=Var_e commonv,
+					  arms=rev clauses,default=SOME base}
+			 else Sumsw_e sum_sw
+		     end
+	       | _ => Sumsw_e sum_sw)
+	    end	     
+
+
 	(* Currently, all nilprimops are pure but may allocate *)
 	fun is_pure(Prim_e (NilPrimOp np, _, elist)) = Listops.andfold is_pure elist
 	  | is_pure(Var_e _) = true
@@ -293,14 +343,23 @@ struct
 		Prim_c(pc,clist) => Prim_c(pc, map (do_con state) clist)
 	      | Mu_c(recur,vc_seq) => Mu_c(recur,Sequence.map
 					   (fn (v,c) => (v,do_con state c)) vc_seq)
-	      | AllArrow_c(openness,effect,vklist,vclist,numfloats,c) =>
+	      | ExternArrow_c(clist,c) =>
+		    ExternArrow_c(map (do_con state) clist, do_con state c)
+	      | AllArrow_c(openness,effect,vklist,vlistopt,clist,numfloats,c) =>
 			let val (vklist,state) = do_vklist state vklist
+			    val (vlistopt,clist,state) = 
+				case vlistopt of
+				    SOME vars => let val (vclist,state) = do_vclist state (Listops.zip vars clist)
+						 in  (SOME(map #1 vclist), map #2 vclist, state)
+						 end
+				  | NONE => (NONE, map (do_con state) clist, state)
 			in  AllArrow_c(openness,effect,vklist,
-				   map (do_con state) vclist, numfloats, do_con state c)
+				       vlistopt,clist, numfloats, do_con state c)
 			end
 	      | Var_c v => (if (intype state) then use_typevar(state,v) else use_var(state,v); con)
 	      | Crecord_c lclist => Crecord_c(map (fn (l,c) => (l, do_con state c)) lclist)
 	      | Proj_c(c,l) => Proj_c(do_con state c, l)
+	      | Typeof_c e => Typeof_c(do_exp state e)
 	      | Closure_c(c1,c2) => Closure_c(do_con state c1, do_con state c2)
 	      | App_c(c,clist) => App_c(do_con state c, map (do_con state) clist)
 	      | Typecase_c _ => error "typecase not handled"
@@ -335,10 +394,10 @@ struct
 						do_con state' c, do_kind state' k), state)
 					 end)
 
-	fun extract_uncurry(openness,curry_name,uncurry_name,function) = 
-	    let fun separate(Function(effect,recur,vklist,vclist,vflist,e,c)) = 
+	and extract_uncurry(openness,curry_name,uncurry_name,function) = 
+	    let fun separate(Function(effect,recur,vklist,dep,vclist,vflist,e,c)) = 
 		    (e, c, vklist, vclist, vflist,
-		     fn c => fn e => Function(effect,recur,vklist,vclist,vflist,e,c))
+		     fn c => fn e => Function(effect,recur,vklist,dep,vclist,vflist,e,c))
 	        fun is_lambda (Let_e(_,[Fixopen_b vfset],Var_e v)) = 
 		    (case (Sequence.toList vfset) of
 			 [(v',f)] => if (Name.eq_var(v,v'))
@@ -349,8 +408,7 @@ struct
 		fun loop (depth,alias,funcons,curry_call,args,cwrapper_opt,v,function) = 
 		    let val (body,con,vk,vc,vf,wrapper) = separate function
 			val alias = if (depth>1) then (v,true,curry_call)::alias else alias
-			val funcon = AllArrow_c(Open,Partial,vk,map #2 vc,
-						TilWord32.fromInt(length vf),con)
+			val funcon = NilUtil.get_function_type Open function
 			val funcons = if (depth>1) then (v,funcon)::funcons else funcons
 			val curry_call = App_e(Open,curry_call,
 						map (Var_c o #1) vk, 
@@ -375,7 +433,8 @@ struct
 							 map (Var_c o #1) vk,
 							 map (Var_e o #1) vc,
 							 map Var_e vf)
-				fun uwrapper(body,con) = Function(Partial,Arbitrary,vk,vc,vf,body,con)
+				fun uwrapper(body,con) = Function(Partial,Arbitrary,vk,false,
+								  vc,vf,body,con)
 			    in  (depth,uncurry_call,vk,vc,vf,body,con,
 				 alias,funcons,cwrapper_base,uwrapper)
 			    end
@@ -387,19 +446,15 @@ struct
 	    in  loop(1,[],[],Var_e curry_name,([],[],[]),NONE,curry_name,function)
 	    end
 
-	fun do_uncurry(vflist,state) = 
+	and do_uncurry(vflist,state) = 
 	  let fun folder ((v,f),(acc,state)) = 
 	        let (* v' is the name of the uncurried function *)
 		    val v' = Name.fresh_named_var ((Name.var2name v) ^ "_uncurry")
 		    val (depth,uncurry_call,vk,vc,vf,body,con,aliases,funcons,
 			 cwrapper,uwrapper) = extract_uncurry(Open,v,v',f)
 		    val temp = (v,vk,vc,vf,body,con,cwrapper,uwrapper,uncurry_call)
-		    val state =
-			let val Function(effect,recur,vklist,vclist,vflist,e,c) = f
-			    val funcon = AllArrow_c(Open,Partial,vklist,map #2 vclist,
-						    TilWord32.fromInt(length vflist),c)
-			in  add_con(state,v,funcon)
-			end
+		    val state = add_con(state,v,NilUtil.get_function_type Open f)
+
 		    val state = 
 			if (depth>1)
 			    then 
@@ -416,63 +471,6 @@ struct
 	  end
 
 
-	fun reduce (state : state) (pred : con -> 'a option) (con : con) =
-	    Normalize.reduce_until(get_env state, pred, con)
-
-	fun is_bool state con = 
-	    (case reduce state (fn (Prim_c(Sum_c{tagcount=0w2,...},[])) => SOME ()
-	                         | _ => NONE) con of
-		 Normalize.REDUCED _ => true
-	       | Normalize.UNREDUCED _ => false)
-
-	 fun getknownsum (Prim_c(Sum_c {tagcount,totalcount,known=SOME k}, [c])) = 
-	     SOME(TilWord32.toInt tagcount, TilWord32.toInt totalcount, 
-		  TilWord32.toInt k, c)
-	   | getknownsum _ = NONE
-
-	 fun getsum (Prim_c(Sum_c {tagcount,totalcount,known}, [c])) = 
-	     SOME(TilWord32.toInt tagcount, TilWord32.toInt totalcount, 
-		  known, c)
-	   | getsum _ = NONE
-
-	 fun getexn (Prim_c(Exntag_c, [c])) = SOME c
-	   | getexn _ = NONE
-
-	fun is_sumsw_int state exp = 
-	  (case exp of
-	     (Switch_e(Sumsw_e{sumtype,
-			       result_type,
-			       bound,
-			       arg=Prim_e(PrimOp(Prim.eq_int is),[],
-					  [Var_e v,Const_e (Prim.int(_,w))]),
-			       arms=[(0w0,zeroexp),
-				     (0w1,oneexp)],
-			       default=NONE})) =>
-	    if (is_bool state sumtype)
-		then
-		    SOME (result_type,is,v,TilWord64.toUnsignedHalf w,zeroexp,oneexp)
-	    else NONE
-	  | _ => NONE)
-
-	fun convert_sumsw state sum_sw =
-	    let val exp = Switch_e(Sumsw_e sum_sw)
-	    in  (case is_sumsw_int state exp of
-	         SOME (result_type,is,commonv,_,_,_) =>
-		     let fun loop acc (e : exp) =
-			 (case is_sumsw_int state e of
-			      NONE => (acc,e)
-			    | SOME (_,is,v,w,zeroexp,oneexp) =>
-				  if (Name.eq_var(v,commonv))
-				      then loop ((w,oneexp)::acc) zeroexp
-				  else (acc,e))
-			 val (clauses,base) = loop [] exp
-		     in  if (length clauses > 1)
-			     then Intsw_e{size=is,result_type=result_type,arg=Var_e commonv,
-					  arms=rev clauses,default=SOME base}
-			 else Sumsw_e sum_sw
-		     end
-	       | _ => Sumsw_e sum_sw)
-	    end	     
 
 (*
 	and do_exp (state : state) (exp : exp) : exp = 
@@ -511,6 +509,8 @@ struct
 			    val bnds = List.mapPartial (bnd_used state) bnds
 		        in  Let_e(letsort,bnds,e)
 			end
+		| ExternApp_e(f,elist) =>
+			ExternApp_e(do_exp state f, map (do_exp state) elist)
 		| App_e(openness,f,clist,elist,eflist) => 
 		        let fun extract acc (Var_e v) = 
 			         (case (lookup_alias(state,v)) of
@@ -557,32 +557,31 @@ struct
 			end
 
 		| Raise_e(e,c) => Raise_e(do_exp state e, do_type state c)
-		| Handle_e(e,v,handler,c) => 
+		| Handle_e(e,v,handler) => 
 			let val ([(v,_)],state) = do_vclist state [(v,Prim_c(Exn_c,[]))]
-			in  Handle_e(do_exp state e, v, do_exp state handler, do_con state c)
+			in  Handle_e(do_exp state e, v, do_exp state handler)
 			end)
 
 	and do_switch (state : state) (switch : switch) : switch = 
 	    (case switch of
-		 Intsw_e {size,arg,result_type,arms,default} =>
+		 Intsw_e {size,arg,arms,default} =>
 		     let val arg = do_exp state arg
-			 val result_type = do_type state result_type
 			 val arms = map_second (do_exp state) arms
 			 val default = Util.mapopt (do_exp state) default
-		     in  Intsw_e {size=size,arg=arg,result_type=result_type,
+		     in  Intsw_e {size=size,arg=arg,
 				  arms=arms,default=default}
 		     end
-	       | Sumsw_e {sumtype,arg,result_type,bound,arms,default} =>
+	       | Sumsw_e {sumtype,arg,bound,arms,default} =>
 		     let val arg = do_exp state arg
-			 val result_type = do_type state result_type
 			 val sumtype = do_type state sumtype
-			 val (tagcount,totalcount,_,carrier) = 
-			     (case reduce state getsum sumtype of
-				  Normalize.REDUCED quad => quad
-				| Normalize.UNREDUCED _ => error "sumcon of sumsw_e not reducible to sum")
-			 fun make_ssum i = Prim_c(Sum_c{tagcount=TilWord32.fromInt tagcount,
-							totalcount=TilWord32.fromInt totalcount,
-							known=SOME i},[carrier])
+			 val (tagcount,_,carrier) = Normalize.reduceToSumtype(get_env state,sumtype) 
+		 	 val totalcount = TilWord32.uplus(tagcount,TilWord32.fromInt(length carrier))	
+			 fun make_ssum i = Prim_c(Sum_c{tagcount=tagcount,
+							totalcount=totalcount,
+							known=SOME i},
+						        case carrier of
+							  [_] => carrier
+							 | _ => [con_tuple_inject carrier])
 			 fun do_arm(n,body) = 
 			     let val ssumtype = make_ssum n
 				 val (_,state) = do_vclist state[(bound,ssumtype)]
@@ -590,12 +589,11 @@ struct
 			     end
 			 val arms = map do_arm arms
 			 val default = Util.mapopt (do_exp state) default
-		     in  Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,result_type=result_type,
+		     in  Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,
 				  arms=arms,default=default}
 		     end
-	       | Exncase_e {arg,result_type,bound,arms,default} =>
+	       | Exncase_e {arg,bound,arms,default} =>
 		     let val arg = do_exp state arg
-			 val result_type = do_type state result_type
 			 fun do_arm(tag,body) = 
 			     let val tag = do_exp state tag
 				 val tagcon = type_of(state,tag)
@@ -607,17 +605,17 @@ struct
 			     end
 			 val arms = map do_arm arms
 			 val default = Util.mapopt (do_exp state) default
-		     in  Exncase_e {bound=bound,arg=arg,result_type=result_type,
+		     in  Exncase_e {bound=bound,arg=arg,
 				     arms=arms,default=default}
 		     end
 	       | Typecase_e _ => error "typecase not done")
 
-	and do_function (state : state) (Function(effect,recur,vklist,vclist,vlist,e,c)) =
+	and do_function (state : state) (Function(effect,recur,vklist,dep,vclist,vlist,e,c)) =
 		let val (vklist,state) = do_vklist state vklist
 		    val (vclist,state) = do_vclist state vclist
 		    val e = do_exp state e
 		    val c = do_con state c
-		in  Function(effect,recur,vklist,vclist,vlist,e,c)
+		in  Function(effect,recur,vklist,dep,vclist,vlist,e,c)
 		end
 
 	and do_bnds(bnds : bnd list, state : state) : bnd list * state = 
@@ -659,22 +657,11 @@ struct
 	  in	(case bnd of
 		     Exp_b(v,e as Prim_e(NilPrimOp (project_sum k),[sumcon],[Var_e sv])) =>
 		     let val c = type_of(state,e)
-			 fun getrecord (Crecord_c lcons) = SOME(map #2 lcons)
-			   | getrecord _ = NONE
 			 val sv_con = find_con(state,sv)
-			 val fieldcon = 
-			     (case reduce state getknownsum sv_con of
-				  Normalize.REDUCED (tagcount,totalcount,k,carrier) => 
-				      if (totalcount = tagcount + 1) then carrier
-				      else (case (reduce state getrecord carrier) of
-						Normalize.REDUCED clist => List.nth(clist, k-tagcount)
-					      | _ => error "sumcon of project_sum reduced to bad sum")
-				| _ => error "sumcon of project_sum not reducible to sum")
-			 fun getrecord (Prim_c (Record_c labs, reccons)) = SOME(labs,reccons)
-			   | getrecord _ = NONE
-
-		     in  case (reduce state getrecord fieldcon) of
-			   Normalize.REDUCED(labs,reccons) => exp_b_proj(v,c,sumcon,k,labs,reccons,sv)
+			 val (tagcount,SOME k,clist) = Normalize.reduceToSumtype(get_env state,sv_con)
+			 val fieldcon = List.nth(clist, TilWord32.toInt(TilWord32.uminus(k,tagcount)))
+		     in  case #2(Normalize.reduce_hnf(get_env state, fieldcon)) of
+			   Prim_c (Record_c (labs,_), reccons) => exp_b_proj(v,c,sumcon,k,labs,reccons,sv)
 			 | _ => exp_b(v,c,e)
 		     end
 		   (* anormalizes the components of a record *)
@@ -785,8 +772,8 @@ struct
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
 						   add_kind(state,v,k))
 
-	fun do_export(ExportValue(l,e,c),state) = (ExportValue(l,do_exp state e,do_con state c), state)
-	  | do_export(ExportType(l,c,k),state)  = (ExportType(l,do_con state c,do_kind state k), state)
+	fun do_export(ExportValue(l,e),state) = (ExportValue(l,do_exp state e), state)
+	  | do_export(ExportType(l,c),state)  = (ExportType(l,do_con state c), state)
 
 	fun optimize(MODULE{imports, exports, bnds}) = 
 	  let val _ = reset_debug()

@@ -94,8 +94,7 @@ sig
    val get_shape : state -> con -> kind
    val make_shape : state -> kind -> kind
    val simplify_type : state -> con -> bool * con
-   val reduce_to_sum : string -> state -> con -> TilWord32.word * con list
-   val reduce_to_known_sum : string -> state -> con -> TilWord32.word * TilWord32.word * con list
+   val reduce_to_sum : string -> state -> con -> TilWord32.word * TilWord32.word option * con list
    val con2rep : state -> con -> rep
    val valloc2rep : loc_or_val -> rep
    val type_of : state -> exp -> con

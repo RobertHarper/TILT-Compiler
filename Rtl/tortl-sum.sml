@@ -67,7 +67,10 @@ val debug_bound = ref false
     val w2i = TW32.toInt
     val i2w = TW32.fromInt
 
-
+(*
+val simplify_type = fn state => 
+	Stats.subtimer("tortl_SUM_simplify_type",simplify_type state)
+*)
 
   (* First, we assume that datatypes have already been translated by 
      rearranging the non value-carrying components to the beginning.
@@ -96,7 +99,7 @@ val debug_bound = ref false
 		      varlocs) : loc_or_val * con * state = 
       let
 	  open Prim
-	  val (tagcount,sumtypes) = reduce_to_sum "xsum" orig_state sumcon
+	  val (tagcount,_,sumtypes) = reduce_to_sum "xsum" orig_state sumcon
 
 	  val field_64 = TW64.fromInt(TW32.toInt known)
 	  val field_sub = TW32.uminus(known,tagcount)
@@ -270,7 +273,7 @@ val _ = (print "xtagsum - field_type = \n"; Ppnil.pp_con field_type;
 		  val (vls,state) = 
 		      (case (is_record,hnf,field_type',varlocs) of
 			   (true,_,_,_) => (SOME varlocs, state)
-			 | (_,_,Prim_c(Record_c labs, cons),[vl]) => 
+			 | (_,_,Prim_c(Record_c (labs,_), cons),[vl]) => 
 			       let val vls = decompose vl labs cons
 			       in  (SOME vls, state)
 			       end
@@ -417,8 +420,8 @@ val _ = (print "xtagsum - field_type = \n"; Ppnil.pp_con field_type;
 
   fun xproject_sum_record(state : state, k, field, clist, 
 			  base, econ, copt) : loc_or_val * con * state = 
-	       let val (tagcount, sumtype, summands) = 
-		         reduce_to_known_sum "project_sum_record" state econ
+	       let val (tagcount, SOME sumtype, summands) = 
+		         reduce_to_sum "project_sum_record" state econ
 		   val index = TW32.toInt(TW32.uminus(sumtype, tagcount))
 
 		   val fieldcon = List.nth(summands,index) handle _ => error "list.nth 2"
@@ -430,13 +433,11 @@ val _ = (print "xtagsum - field_type = \n"; Ppnil.pp_con field_type;
 				      error "bad project_sum_record: bad econ field not found")
 			      | loop n (a::rest) = if (Name.eq_label(a,field))
 						       then n else loop (n+1) rest
-			in  (case fieldcon of
-				 (Prim_c(Record_c labels, _)) => loop 0 labels
-			       | _ => (case #2(simplify_type state fieldcon) of
-					   (Prim_c(Record_c labels, _)) => loop 0 labels
-					 | c => (print "bad project_sum_record: not record\n";
-						 Ppnil.pp_con c;
-						 error "bad project_sum_record: not record\n")))
+			in  (case #2(simplify_type state fieldcon) of
+				 (Prim_c(Record_c (labs,_), _)) => loop 0 labs
+			       | c => (print "bad project_sum_record: not record\n";
+				       Ppnil.pp_con c;
+				       error "bad project_sum_record: not record\n"))
 			end
 		   val single_carrier = (length summands) = 1
 		   local
@@ -467,8 +468,8 @@ val _ = (print "xtagsum - field_type = \n"; Ppnil.pp_con field_type;
 		   val v_lv = VAR_LOC(VREGISTER(false, I base))
 		   val v = fresh_named_var "named_project_sumee"
 		   val state = add_reg (state,v,ssumcon,I base)
-		   val (tagcount, sumtype, summand_types) = 
-		         reduce_to_known_sum "project_sum_record" state ssumcon
+		   val (tagcount, SOME sumtype, summand_types) = 
+		         reduce_to_sum "project_sum_record" state ssumcon
 	           val index = TW32.toInt(TW32.uminus(sumtype, tagcount))
 		   val summand_type = (List.nth(summand_types,index)
 				     handle _ => error "bad project_sum: record_con")
@@ -482,7 +483,7 @@ val _ = (print "xtagsum - field_type = \n"; Ppnil.pp_con field_type;
 		           val cons = map#2 lv_cons
 			   val reps = map valloc2rep vallocs
 			   val (lv,state) = make_record(state,NONE,reps,vallocs)
-		       in  (lv, Prim_c(Record_c labels, cons), state)
+		       in  (lv, Prim_c(Record_c (labels,NONE), cons), state)
 		       end
 		   fun nonrecord_case() = 
 		       let 
@@ -512,17 +513,14 @@ val _ = (print "xtagsum - field_type = \n"; Ppnil.pp_con field_type;
 			      | (true,true) => unbox 0
 			      | (false,_) => unbox 4)
 		       end
-	       in  (case summand_type of
-			Prim_c(Record_c labs,cons) => record_case labs cons
-		      | c => 
-			    (case (simplify_type state summand_type) of
-				 (_,Prim_c(Record_c labs,cons)) => record_case labs cons
-			       | (true,_) => nonrecord_case()
-			       | _ => xdynamic_project_sum xcon(state,sumcon,
-								 (tagcount,sumtype),
-								 summand_types,
-								 summand_type,
-								 base)))
+	       in  (case (simplify_type state summand_type) of
+			(_,Prim_c(Record_c (labs,_),cons)) => record_case labs cons
+		      | (true,_) => nonrecord_case()
+		      | _ => xdynamic_project_sum xcon(state,sumcon,
+						       (tagcount,sumtype),
+						       summand_types,
+						       summand_type,
+						       base))
 	       end
 
 

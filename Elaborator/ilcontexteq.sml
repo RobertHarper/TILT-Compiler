@@ -157,7 +157,8 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 	       | CON_ANY => (blastOutChoice os 6)
 	       | CON_REF c => (blastOutChoice os 7; blastOutCon os c)
 	       | CON_TAG c => (blastOutChoice os 8; blastOutCon os c)
-	       | CON_ARROW (cs,c,f,oa) => (blastOutChoice os 9; blastOutList blastOutCon os cs;
+	       | CON_ARROW (cs,c,f,oa) => (blastOutChoice os 9; 
+					   blastOutList blastOutCon os cs;
 					   blastOutCon os c; blastOutBool os f;
 					   blastOutArrow os (case (oneshot_deref oa) of
 								 SOME a => a
@@ -195,19 +196,12 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 	       | 6 => CON_ANY
 	       | 7 => CON_REF (blastInCon is)
 	       | 8 => CON_TAG (blastInCon is)
-	       | 9 => let val _ = tab "  ARROW case\n"
-			  val cs = blastInList blastInCon is
-			  val _ = tab "  ARROW done cs\n"
+	       | 9 => let val cs = blastInList blastInCon is
 			  val c = blastInCon is
-			  val _ = tab " ARROW done c\n"
 			  val f = blastInBool is
-			  val _ = tab "  ARROW done f\n"
 			  val a = oneshot_init (blastInArrow is)
-			  val _ = tab "  ARROW done a\n"
 		      in 
-			  CON_ARROW (cs,c,f,a) (* (blastInList blastInCon is,
-				     blastInCon is, blastInBool is,
-				     oneshot_init (blastInArrow is))) *)
+			  CON_ARROW (cs,c,f,a)
 		      end
 	       | 10 => CON_APP (blastInCon is, blastInCon is)
 	       | 11 => CON_MU (blastInCon is)
@@ -513,12 +507,18 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 	       | ETAILPRIM (p,clist) => (blastOutChoice os 4; blastOutIlPrim os p;
 					 blastOutList blastOutCon os clist)
 	       | VAR v => (blastOutChoice os 5; blastOutVar os v)
-	       | APP (e,elist) => (blastOutChoice os 6; blastOutExp os e; blastOutList blastOutExp os elist)
+	       | APP (e1,e2) => (blastOutChoice os 6; blastOutExp os e1; 
+				 blastOutExp os e2)
+	       | EXTERN_APP (c,e,elist) => (blastOutChoice os 23; 
+					    blastOutCon os c;
+					    blastOutExp os e; 
+					    blastOutList blastOutExp os elist)
 	       | FIX (b,a,fbnds) => (blastOutChoice os 7; blastOutBool os b; blastOutArrow os a;
 				     blastOutList blastOutFbnd os fbnds)
 	       | RECORD lelist => (blastOutChoice os 8; blastOutList (blastOutPair blastOutLabel blastOutExp) os lelist)
 	       | RECORD_PROJECT (e,l,c) => (blastOutChoice os 9; blastOutExp os e; blastOutLabel os l; blastOutCon os c)
-	       | SUM_TAIL (c,e) => (blastOutChoice os 10; blastOutCon os c; blastOutExp os e)
+	       | SUM_TAIL (i,c,e) => (blastOutChoice os 10; blastOutChoice os i;
+				      blastOutCon os c; blastOutExp os e)
 	       | HANDLE (e1,e2) => (blastOutChoice os 11; blastOutExp os e1; blastOutExp os e2)
 	       | RAISE (c,e) => (blastOutChoice os 12; blastOutCon os c; blastOutExp os e)
 	       | LET(bnds,e) => (blastOutChoice os 13; blastOutList blastOutBnd os bnds; blastOutExp os e)
@@ -576,11 +576,14 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 			  val _ = (say (Name.var2string v); say "\n")
 		      in  VAR v
 		      end
-	       | 6 => APP (blastInExp is, blastInList blastInExp is)
+	       | 6 => APP (blastInExp is, blastInExp is)
+	       | 23 => EXTERN_APP (blastInCon is,
+				   blastInExp is, 
+				   blastInList blastInExp is)
 	       | 7 => FIX (blastInBool is, blastInArrow is, blastInList blastInFbnd is)
 	       | 8 => RECORD (blastInList (blastInPair blastInLabel blastInExp) is)
 	       | 9 => RECORD_PROJECT (blastInExp is, blastInLabel is, blastInCon is)
-	       | 10 => SUM_TAIL (blastInCon is, blastInExp is)
+	       | 10 => SUM_TAIL (blastInChoice is, blastInCon is, blastInExp is)
 	       | 11 => HANDLE (blastInExp is, blastInExp is)
 	       | 12 => RAISE (blastInCon is, blastInExp is)
 	       | 13 => LET(blastInList blastInBnd is, blastInExp is)
@@ -631,7 +634,9 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 	    (case m of
 		 MOD_VAR v => (blastOutChoice os 0; blastOutVar os v)
 	       | MOD_STRUCTURE sbnds => (blastOutChoice os 1; blastOutSbnds os sbnds)
-	       | MOD_FUNCTOR (v,s,m) => (blastOutChoice os 2; blastOutVar os v; blastOutSig os s; blastOutMod os m)
+	       | MOD_FUNCTOR (v,s1,m,s2) => (blastOutChoice os 2; blastOutVar os v; 
+					     blastOutSig os s1; blastOutMod os m;
+					     blastOutSig os s2)
 	       | MOD_APP (m1,m2) => (blastOutChoice os 3; blastOutMod os m1; blastOutMod os m2)
 	       | MOD_PROJECT (m,l) => (blastOutChoice os 4; blastOutMod os m; blastOutLabel os l)
 	       | MOD_SEAL (m,s) => (blastOutChoice os 5; blastOutMod os m; blastOutSig os s)
@@ -650,7 +655,7 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 		     case (blastInChoice is) of
 		 0 => MOD_VAR(blastInVar is)
 	       | 1 => MOD_STRUCTURE(blastInSbnds is)
-	       | 2 => MOD_FUNCTOR(blastInVar is, blastInSig is, blastInMod is)
+	       | 2 => MOD_FUNCTOR(blastInVar is, blastInSig is, blastInMod is, blastInSig is)
 	       | 3 => MOD_APP (blastInMod is, blastInMod is)
 	       | 4 => MOD_PROJECT (blastInMod is, blastInLabel is)
 	       | 5 => MOD_SEAL (blastInMod is, blastInSig is)
@@ -896,8 +901,9 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 	fun eq_mod' (vm,MOD_VAR v,MOD_VAR v') = VM.eq_var(vm,v,v')
 	  | eq_mod' (vm,MOD_PROJECT(m1,l1),MOD_PROJECT(m2,l2)) = 
 	    eq_mod(vm,m1,m2) andalso Name.eq_label(l1,l2)
-	  | eq_mod' (vm,MOD_FUNCTOR(v1,s1,m1),MOD_FUNCTOR(v2,s2,m2)) = 
-	    eq_signat (vm,s1,s2) andalso eq_mod(VM.add(v1,v2,vm),m1,m2)
+	  | eq_mod' (vm,MOD_FUNCTOR(v1,s1,m1,s1'),MOD_FUNCTOR(v2,s2,m2,s2')) = 
+	    eq_signat (vm,s1,s2) andalso eq_mod(VM.add(v1,v2,vm),m1,m2) andalso
+	    eq_signat (vm,s1',s2')
 	  | eq_mod' (vm,MOD_STRUCTURE sbnds1,MOD_STRUCTURE sbnds2) = eq_sbnds(vm,sbnds1,sbnds2)
 	  | eq_mod' _ = false
 
@@ -918,7 +924,8 @@ functor IlContextEq (structure IlContext : ILCONTEXT
 	       | (CON_REF con, CON_REF con') => eq_con(vm,con,con')           
 	       | (CON_TAG con, CON_TAG con') => eq_con(vm,con,con')           
 	       | (CON_ARROW(cons,con,b,arrow_oneshot), CON_ARROW(cons',con',b',arrow_oneshot')) =>
-		     eq_cons(vm,cons,cons') andalso eq_con(vm,con,con') andalso b=b'
+		     eq_cons(vm,cons,cons') andalso eq_con(vm,con,con')
+		     andalso b=b' 
 		     andalso eq_arrow_oneshot(vm,arrow_oneshot,arrow_oneshot')
 	       | (CON_APP(con1,con2), CON_APP(con1',con2')) =>
 		     eq_con(vm,con1,con1') andalso eq_con(vm,con2,con2')

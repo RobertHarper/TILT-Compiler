@@ -68,8 +68,7 @@ signature NILSTATIC =
     type con_subst
     val empty_subst : con_subst
     val con_subst : con_subst * Nil.con -> Nil.con
-    val con_reduce_once : context * con_subst -> Nil.con -> bool * con_subst * Nil.con
-    (* alias to Normalize.con_reduce_once *)
+
 
     val con_reduce : context * Nil.con -> Nil.con
     (* con_reduce (context,con) => con'

@@ -27,7 +27,6 @@ struct
 
 	val num_lcon_prim = ref 0
 	val num_lcon_import = ref 0
-	val num_lcon_export = ref 0
 	val num_lcon_conb = ref 0
 	val num_lcon_concb = ref 0
 	val num_lcon_single = ref 0
@@ -36,7 +35,6 @@ struct
 
 	val depth_lcon_prim = ref 0
 	val depth_lcon_import = ref 0
-	val depth_lcon_export = ref 0
 	val depth_lcon_conb = ref 0
 	val depth_lcon_concb = ref 0
         val depth_lcon_single = ref 0
@@ -55,14 +53,12 @@ struct
 				     num_lkind := 0;
 				     num_lcon_prim := 0;
 				     num_lcon_import := 0;
-				     num_lcon_export := 0;
 				     num_lcon_single := 0;
 				     num_lcon_function := 0;
 				     num_lcon_conb := 0;
 				     num_lcon_concb := 0;
 				     num_lkind_single := 0;
 				     depth_lcon_prim := 0;
-				     depth_lcon_export := 0;
 				     depth_lcon_single := 0;
 				     depth_lcon_function := 0;
 				     depth_lcon_conb := 0;
@@ -117,30 +113,28 @@ struct
 
    fun lswitch state switch = 
      (case switch of
-	  Intsw_e {size,arg,result_type,arms,default} =>
-	      let val result_type = lcon state result_type
-		  val arg = lexp state arg
+	  Intsw_e {size,arg,arms,default} =>
+	      let val arg = lexp state arg
 		  val arms = map (fn (w,e) => (w,lexp state e)) arms
 		  val default = Util.mapopt (lexp state) default
-	      in  Intsw_e {size=size,arg=arg,result_type=result_type,arms=arms,default=default}
+	      in  Intsw_e {size=size,arg=arg,arms=arms,default=default}
 	      end
-	| Sumsw_e {sumtype,arg,result_type,bound,arms,default} =>
-	      let val result_type = lcon state result_type
-		  val sumtype = lcon state sumtype
+	| Sumsw_e {sumtype,arg,bound,arms,default} =>
+	      let val sumtype = lcon state sumtype
 		  val arg = lexp state arg
 		  val (state,bound) = add_var(state,bound)
 		  val arms = map (fn (t,e) => (t,lexp state e)) arms
 		  val default = Util.mapopt (lexp state) default
-	      in  Sumsw_e {sumtype=sumtype,arg=arg,result_type=result_type,
+	      in  Sumsw_e {sumtype=sumtype,arg=arg,
 			   bound=bound,arms=arms,default=default}
 	      end
-	| Exncase_e {arg,result_type,bound,arms,default} =>
-	      let val result_type = lcon state result_type
+	| Exncase_e {arg,bound,arms,default} =>
+	      let 
 		  val arg = lexp state arg
 		  val (state,bound) = add_var(state,bound)
 		  val arms = map (fn (e1,e2) => (lexp state e1,lexp state e2)) arms
 		  val default = Util.mapopt (lexp state) default
-	      in  Exncase_e {arg=arg,result_type=result_type,
+	      in  Exncase_e {arg=arg,
 			     bound=bound,arms=arms,default=default}
 	      end
 	| Typecase_e _ => error "typecase not handled")
@@ -187,7 +181,7 @@ struct
 				 end)
        end
 
-   and lfunction state (Function(effect,recur,vklist,vclist,vflist,e,c)) : function =
+   and lfunction state (Function(effect,recur,vklist,dep,vclist,vflist,e,c)) : function =
        let 
 	   val (vklist,state) = lvklist state vklist
 	   val (vclist,state) = lvclist state vclist
@@ -198,7 +192,7 @@ struct
 	   val (vflist,state) = foldl_acc vfolder state vflist
 	   val e = lexp state e
 	   val c = lcon state c
-       in  Function(effect,recur,vklist,vclist,vflist,e,c)
+       in  Function(effect,recur,vklist,dep,vclist,vflist,e,c)
        end
 
 
@@ -217,7 +211,7 @@ struct
 		let fun folder (bnd,s) = lbnd s bnd
 		    val (bnds,state) = foldl_acc folder state bnds
 		    val e = lexp state e
-		in  (lete(bnds, e))
+		in  makeLetE bnds e
 		end
 	  | Prim_e (ap,clist,elist) =>
 		let val _ = inc depth_lcon_prim
@@ -225,6 +219,11 @@ struct
 		    val _ = dec depth_lcon_prim
 		    val elist' = map (lexp state) elist
 		in  Prim_e(ap,clist',elist')
+		end
+	  | ExternApp_e (f,elist) =>
+		let val f = lexp state f
+		    val elist = map (lexp state) elist
+		in  ExternApp_e (f,elist) 
 		end
 	  | App_e (openness,f,clist,elist,flist) =>
 		let val f = lexp state f
@@ -239,12 +238,11 @@ struct
 		in  Raise_e(e,c)
 		end
 	  | Switch_e switch => Switch_e(lswitch state switch)
-	  | Handle_e (e,v,handler,c) => 
+	  | Handle_e (e,v,handler) => 
 		let val e = lexp state e
-		    val c = lcon state c
 		    val (state,v) = add_var(state,v)
 		    val handler = lexp state handler
-		in  Handle_e(e,v,handler,c)
+		in  Handle_e(e,v,handler)
 		end
 	end
 
@@ -281,7 +279,6 @@ struct
        (inc num_lcon;
 	bumper(num_lcon_prim, depth_lcon_prim);
 	bumper(num_lcon_import, depth_lcon_import);
-	bumper(num_lcon_export, depth_lcon_export);
 	bumper(num_lcon_single, depth_lcon_single);
 	bumper(num_lcon_function, depth_lcon_function);
 	bumper(num_lcon_conb, depth_lcon_conb);
@@ -290,10 +287,19 @@ struct
 
 	case arg_con of
 	    Var_c v => (num_var := !num_var + 1; Var_c(find_var(state,v)))
+	  (* dependent records *)
+	  | Prim_c (Record_c(labs,SOME vars),cons) => 
+		let fun folder ((v,c),state) = 
+		    let val c = lcon state c
+			val (state,v) = add_var(state,v)
+		    in  ((v,c),state)
+		    end
+		    val (vc,_) = foldl_acc folder state (Listops.zip vars cons)
+		in  Prim_c(Record_c(labs,SOME (map #1 vc)), map #2 vc)
+		end
 	  | Prim_c (pc,cons) => 
 		let 
 		    val cons = map (lcon state) cons
-		    
 		in  Prim_c(pc,cons)
 		end
 	  | Mu_c (flag,vc_seq) => (* cannot just use lvclist here: 
@@ -306,12 +312,23 @@ struct
 			         (vc_seq,vc_seq')
 		in  Mu_c(flag,vc_seq'')
 		end
-	  | AllArrow_c (openness,effect,vklist,clist,w32,c) =>
+	  | ExternArrow_c (clist,c) =>
 		let 
-		    val (vklist,state) = lvklist state vklist
 		    val clist = map (lcon state) clist
 		    val c = lcon state c
-		in  AllArrow_c (openness,effect,vklist,clist,w32,c)
+		in  ExternArrow_c (clist,c)
+		end
+	  | AllArrow_c (openness,effect,vklist,vlist,clist,w32,c) =>
+		let 
+		    val (vklist,state) = lvklist state vklist
+		    val (vlist,clist,state) = 
+		    case vlist of
+		    SOME vars => let val (vclist,state) = lvclist state (Listops.zip vars clist)
+				 in  (SOME (map #1 vclist), map #2 vclist, state)
+				 end
+		  | NONE => (NONE, map (lcon state) clist, state)
+		    val c = lcon state c
+		in  AllArrow_c (openness,effect,vklist,vlist,clist,w32,c)
 		end
 	  | Let_c (letsort,cbnds,c) =>
 		let 
@@ -326,7 +343,10 @@ struct
 		let fun doer(l,c) = (l, lcon state c)
 		in  Crecord_c (map doer lc_list)
 		end
+
 	  | Proj_c (c,l) => Proj_c(lcon state c, l)
+
+	  | Typeof_c e => Typeof_c(lexp state e)
 
 	  | Closure_c (c1,c2) => Closure_c(lcon state c1, lcon state c2)
 
@@ -421,17 +441,13 @@ struct
 					  end)
 
 
-   fun lexport state (ExportValue(l,e,c)) = 
+   fun lexport state (ExportValue(l,e)) = 
        let val e = lexp state e
-	   val _ = inc depth_lcon_export
-	   val c = lcon state c
-	   val _ = dec depth_lcon_export
-       in  ExportValue(l,e,c)
+       in  ExportValue(l,e)
        end
-     | lexport state (ExportType(l,c,k)) = 
+     | lexport state (ExportType(l,c)) = 
        let val c = lcon state c
-	   val k = lkind state k
-       in  ExportType(l,c, k)
+       in  ExportType(l,c)
        end
 
    fun limport (ImportValue(l,v,c),s) =
@@ -475,8 +491,6 @@ struct
 		    print (Int.toString (!num_lcon_prim)); print "\n";
 		    print "Number of lcon calls from Import: ";
 		    print (Int.toString (!num_lcon_import)); print "\n";
-		    print "Number of lcon calls from Export: ";
-		    print (Int.toString (!num_lcon_export)); print "\n";
 		    print "Number of lcon calls from Singletons: ";
 		    print (Int.toString (!num_lcon_single)); print "\n";
 		    print "Number of lcon calls from Function formals: ";

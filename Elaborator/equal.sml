@@ -20,9 +20,7 @@ struct
 
     exception NoEqExp
 
-    fun app(x,y) = (case (IlUtil.beta_reduce(x,y)) of
-			NONE => APP(x,[y])
-		      | SOME e => e)
+
 
     fun xeq (polyinst_opt : context * sdecs -> 
 			 (sbnd list * sdecs * con list) option,
@@ -68,7 +66,7 @@ struct
 			    val eqexp = self fieldcon
 			    val e1 = RECORD_PROJECT(VAR v1,lbl,con')
 			    val e2 = RECORD_PROJECT(VAR v2,lbl,con')
-			in  app(eqexp,exp_tuple[e1,e2])
+			in  beta_reduce(eqexp,exp_tuple[e1,e2])
 			end
 		    fun folder (rdec,exp) = 
 			let val exp' = help rdec
@@ -102,9 +100,9 @@ struct
 							noncarriers=noncarriers,
 							special = SOME i}
 				     val armbody = if is_carrier
-						       then app(self(List.nth(carriers,i-noncarriers)),
-								exp_tuple[SUM_TAIL(sumc,VAR var'),
-									  SUM_TAIL(sumc,VAR var'')])
+						       then beta_reduce(self(List.nth(carriers,i-noncarriers)),
+								exp_tuple[SUM_TAIL(i,sumc,VAR var'),
+									  SUM_TAIL(i,sumc,VAR var'')])
 						   else true_exp
 				     val arms2 = map0count 
 					 (fn j =>
@@ -140,13 +138,13 @@ struct
 (*	  | CON_VECTOR c => APP(ETAPRIM(equal_table WordVector,[c]),self c) *)
 	  | CON_VECTOR c => 
 		let val (e,vc) = vector_eq ctxt
-		    val ac = CON_ARROW([CON_ARROW([con_tuple[c,c]],con_bool,false,oneshot())],
-				       CON_ARROW([con_tuple[CON_VECTOR c,CON_VECTOR c]],con_bool,false,oneshot()),
+		    val ac = CON_ARROW([con_eqfun c], 
+				       con_eqfun (CON_VECTOR c),
 				       false, oneshot())
 		    val _ = if (eq_con(ctxt,vc,ac))
 				then ()
 			    else (elab_error "Prelude vector_eq is bad")
-		in  app(e,self c) 
+		in  beta_reduce(e,self c) 
 		end
 	  | CON_REF c => ETAPRIM(eq_ref,[c])
 	  | CON_MODULE_PROJECT(m,l) => 
@@ -208,9 +206,7 @@ struct
 	  | CON_TUPLE_PROJECT (j,CON_MU confun) => 
 		let val fix_exp as FIX(_,_,fbnds) = xeq_mu(polyinst_opt,vector_eq) ctxt confun
 		    fun mapper i = let val mu_con = CON_TUPLE_PROJECT(i,CON_MU confun)
-				   in  CON_ARROW([con_tuple[mu_con,mu_con]],
-						 con_bool,false,
-						 oneshot_init PARTIAL)
+				   in  con_eqfun mu_con
 				   end
 		    val fbnd_types = Listops.map0count mapper (length fbnds)
 		in  case fbnd_types of
@@ -260,8 +256,7 @@ struct
 	      end
 	  fun efolder ((evar,cvar,el),ctxt) = 
 	      let 
-		  val con = CON_ARROW([con_tuple[CON_VAR cvar, CON_VAR cvar]],
-				      con_bool,false,oneshot_init PARTIAL)
+		  val con = con_eqfun (CON_VAR cvar)
 		  val dec = DEC_EXP(evar,con)
 	      in add_context_sdec(ctxt,SDEC(el,SelfifyDec ctxt dec))
 	      end
@@ -286,7 +281,7 @@ struct
 		  val e2 = RECORD_PROJECT(VAR var,generate_tuple_label 2,var_con)
 		  val e1' = UNROLL(mu_con,expanded_con,e1)
 		  val e2' = UNROLL(mu_con,expanded_con,e2)
-		  val exp = app(expv',exp_tuple[e1',e2'])
+		  val exp = beta_reduce(expv',exp_tuple[e1',e2'])
 	      in (var,exp)
 	      end
 	  val exps_eq = map3 make_expeq (mu_cons,expanded_cons,exps_v)
@@ -294,11 +289,7 @@ struct
 			    FBND(vareq,vararg,con_tuple[mu_con,mu_con],
 				 con_bool,expeq))
 	      (mu_cons,vars_eq,exps_eq)
-	  val fbnd_types = 
-	      map (fn mu_con => CON_ARROW([con_tuple[mu_con,mu_con]],
-					  con_bool,false,
-					  oneshot_init PARTIAL))
-	      mu_cons
+	  val fbnd_types = map con_eqfun mu_cons
       in FIX(true,TOTAL,fbnds)
       end
 

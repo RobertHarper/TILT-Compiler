@@ -1,4 +1,4 @@
-(*$import MANAGER LINKPARSE LINKIL COMPILER LINKER MAKEDEP OS LinkParse LinkIl List SplayMapFn SplaySetFn Compiler Linker MakeDep *)
+(*$import MANAGER LINKPARSE LINKIL COMPILER LINKER MAKEDEP OS LinkParse LinkIl List SplayMapFn SplaySetFn Compiler Linker MakeDep Specific *)
 
 
 functor Manager (structure Parser: LINK_PARSE
@@ -138,10 +138,10 @@ struct
       end
 
    fun parse_impl_import file = 
-         parse_depend "(*$import" (#2 o Parser.parse_impl) file
+         parse_depend "(*$import" (#3 o Parser.parse_impl) file
 
    fun parse_inter_include file = 
-         parse_depend "(*$include" (#2 o Parser.parse_inter) file
+         parse_depend "(*$include" (#3 o Parser.parse_inter) file
 
 
   fun readContextRaw file = 
@@ -197,6 +197,11 @@ struct
   in  
       fun tick_cache() = let fun apper (UNIT{context=r as (ref(SOME(i,ctxt))),...}) = 
 	                         if (i<=1) then r := NONE else r := SOME(i-1,ctxt)
+			       | apper _ = ()
+  	                 in  StringMap.app apper (!mapping)
+                         end
+      fun flush_cache() = let fun apper (UNIT{context=r as (ref(SOME(i,ctxt))),...}) = 
+	                         r := NONE
 			       | apper _ = ()
   	                 in  StringMap.app apper (!mapping)
                          end
@@ -269,11 +274,11 @@ struct
       let val r = get_context unit
       in  (case !r of
 	       SOME (i,ctxt) => (print "readContext: incache = "; print unit; print "\n";
-		                 r := SOME(!cache_context,ctxt); ctxt)
+		                 r := SOME(Int.min(i+2,!cache_context),ctxt); ctxt)
 	     | NONE => let val uifile = base2ui (get_base unit)
 			   val ctxt = readContextRaw uifile
 			   val _ = if (!cache_context>0) 
-                                   then r:=SOME(!cache_context,ctxt) else ()
+                                   then r:=SOME(2,ctxt) else ()
 		       in  ctxt
 		       end)
       end
@@ -286,13 +291,14 @@ struct
            writeContextRaw(uifile,ctxt)
        end
 
-  fun getContext imports = 
+  fun getContext (lines, imports) = 
       let val _ = tick_cache()
 	  val (ctxt_inline,_,_,ctxt_noninline) = Basis.initial_context()
 	  val _ = (chat "  [Creating context from imports: ";
 	           chat_imports 4 imports;
 	           chat "]\n")
           val ctxts = List.map readContext imports
+	  val _ = if (lines > 1000) then flush_cache() else ()
 	  val _ = chat ("  [Adding contexts now]\n")
 	  val context_basis = addContext (ctxt_inline :: ctxts)
 	  val context = addContext ctxts
@@ -577,18 +583,20 @@ struct
 	  val srcBase = get_base unit
 	  val smlfile = base2sml srcBase
 	  val _ = chat ("  [Parsing " ^ smlfile ^ "]\n")
-	  val (fp, _, dec) = Parser.parse_impl smlfile
-	  val (ctxt_for_elab,ctxt) = getContext imports
+	  val (lines,fp, _, dec) = Parser.parse_impl smlfile
+	  val (ctxt_for_elab,ctxt) = getContext(lines, imports)
 	  val import_bases = map get_base imports
 	  val import_uis = List.map (fn x => (x, Linker.Crc.crc_of_file (x^".ui"))) import_bases
 	  val uiFile = srcBase ^ ".ui"
 	  val intFile = srcBase ^ ".int"
 	  val oFile = srcBase ^ ".o"
 	  val uoFile = srcBase ^ ".uo"
+
+
 	  val (ctxt',sbnds) = 
 	      if exists intFile then 
 		  let val _ = compileINT unit 
-		      val (fp2, _, specs) = Parser.parse_inter intFile
+		      val (_,fp2, _, specs) = Parser.parse_inter intFile
 		      val _ = chat ("  [Elaborating " ^ smlfile ^ " with constraint]\n"  )
 		  in elab_constrained(ctxt_for_elab,smlfile,fp,dec,fp2,specs,Time.zeroTime)
 		  end
@@ -596,6 +604,14 @@ struct
 		   in elab_nonconstrained(unit,ctxt_for_elab,smlfile,fp,dec,uiFile,Time.zeroTime)
 		   end
 
+(*
+	  val _ = if (lines>1000)
+		      then (print "Source has ";
+			    print (Int.toString lines);
+			    print " lines: doing GC\n";
+			    Specific.doGC 4)
+		  else ()
+*)
 
 	  val _ = if (!up_to_elaborate orelse (not make_uo))
 		      then ()
@@ -688,9 +704,9 @@ struct
 
                 val all_includes = getImportTr false unitname
 
-                val (ctxt_for_elab,ctxt) = getContext all_includes
+                val (ctxt_for_elab,ctxt) = getContext(0,all_includes)
 
-	        val (fp, _, specs) = Parser.parse_inter sourcefile
+	        val (_,fp, _, specs) = Parser.parse_inter sourcefile
 
 	      in  (case Elaborator.elab_specs(ctxt_for_elab, fp, specs) of
 		       SOME ctxt' => (chat ("  [writing " ^ uifile);

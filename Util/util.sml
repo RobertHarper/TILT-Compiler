@@ -59,5 +59,16 @@ structure Util : UTIL =
 	loop
       end
 
+   fun memoize thunk = 
+       let val result = ref NONE
+       in  fn() =>
+	   (case !result of
+		NONE => let val res = thunk()
+			    val _ = result := SOME res
+			in  res
+			    end
+	      | SOME res => res)
+       end
+
     val error = real_error
   end

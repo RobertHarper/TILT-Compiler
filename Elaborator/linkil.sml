@@ -1,4 +1,4 @@
-(*$import LINKIL Prim Il Ppprim Ppil IlUtil PrimUtil IlContext IlStatic Toil Pat Datatype Signature Basis Tyvar IlPrimUtilParam IlContextEq Error Equal InfixParse Formatter LinkParse *)
+(*$import LINKIL Prim Il Ppprim Ppil IlUtil PrimUtil IlContext IlStatic Toil Pat Datatype Signature Basis Tyvar IlPrimUtilParam IlContextEq Error Equal InfixParse Formatter LinkParse Specific *)
 
 structure LinkIl :> LINKIL  = 
     struct
@@ -163,7 +163,7 @@ structure LinkIl :> LINKIL  =
 	val xspec = Stats.timer("Elaboration",Toil.xspec)
 
 	fun elaborate (context,filename) : ((sbnd option * context_entry) list) option = 
-	    let val (filepos,imports,astdec) = LinkParse.parse_impl filename
+	    let val (lines,filepos,imports,astdec) = LinkParse.parse_impl filename
 		val _ = print ("Parsing complete: " ^ filename ^ "\n")
 		val res = 
 		    (case (xdec(context,filepos,astdec)) of
@@ -173,6 +173,12 @@ structure LinkIl :> LINKIL  =
 (*			     val sbnd_ctxt_list = List.mapPartial kill_datatype sbnd_ctxt_list *)
 (*			     val sbnds = List.mapPartial #1 sbnd_ctxt_list *)
 (*			     val entries = map #2 sbnd_ctxt_list *)
+			     val _ = if (lines>500)
+					 then (print "Source has ";
+					       print (Int.toString lines);
+					       print " lines: doing GC\n";
+					       Specific.doGC 4)
+				     else ()
 			 in  SOME(sbnd_ctxt_list)
 			 end
 		   | _ => (print ("Elaboration failed: " ^ filename ^ "\n");

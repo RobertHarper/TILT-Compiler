@@ -10,7 +10,7 @@ functor Alpha()
 
     type var = Name.var
     val eq_var  = Name.eq_var
-    val fresh_var = Name.fresh_var
+    fun fresh_var() = Name.fresh_named_var "alpha"
     val foldl_acc = Listops.foldl_acc
 
 

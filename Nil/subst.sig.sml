@@ -46,8 +46,8 @@ signature NILSUBST =
     val substConInBnd : con subst -> bnd -> bnd * con subst
     val substExpInExp : exp subst -> exp -> exp
     val substExpConInExp : (exp subst * con subst) -> exp -> exp
+    val substExpConInCon : (exp subst * con subst) -> con -> con
 
-    val con_subst_compose : (con subst * con subst) -> con subst
     val varConKindSubst : var -> con -> kind -> kind
     val varConConSubst : var -> con -> con -> con
 

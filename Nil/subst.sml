@@ -197,83 +197,113 @@ functor NilSubstFn(structure PpNil : PPNIL)
     fun rebind_list rebind (vars,subst) = 
       Listops.foldl_acc rebind subst vars
 
-    val con_rebind = rebind Var_c
-    val con_rebind_list = rebind_list con_rebind
-    val exp_rebind = rebind Var_e
-    val exp_rebind_list = rebind_list exp_rebind
+    val con_rebind' = rebind Var_c
+    val con_rebind_list' = rebind_list con_rebind'
+    val exp_rebind' = rebind Var_e
+    val exp_rebind_list' = rebind_list exp_rebind'
+
+    type mapping = exp subst * con subst
+    val empty_mapping : mapping = (empty(),empty())
+    fun is_empty_mapping (em,cm) = is_empty em andalso is_empty cm
+    fun con_rebind(v,(em,cm)) = let val (v,cm) = con_rebind'(v,cm)
+				in  (v,(em,cm))
+				end
+    fun con_rebind_list(vars,(em,cm)) = let val (vars,cm) = con_rebind_list'(vars,cm)
+					in  (vars,(em,cm))
+					end
+    fun exp_rebind(v,(em,cm)) = let val (v,em) = exp_rebind'(v,em)
+				in  (v,(em,cm))
+				end
+    fun exp_rebind_list(vars,(em,cm)) = let val (vars,em) = exp_rebind_list'(vars,em)
+					in  (vars,(em,cm))
+					end
+
 
     fun con_var_replace (subst,var) = 
       (case substitute subst var
 	 of SOME (Nil.Var_c var) => (local_subst_count := !local_subst_count + 1; var)
 	  | _ => var)
 
-
-
-    fun substConInTFormals (conmap : con subst) (formals : (var * kind) list) = 
+    fun id x = x
+      
+    fun substConInTFormals (mapping : mapping) (formals : (var * kind) list) = 
       let
-	fun fold_one ((var,kind),conmap) =
+	fun fold_one ((var,kind),mapping : mapping) =
 	  let
-	    val kind = substConInKind' conmap kind
-	    val (var,conmap) = con_rebind (var,conmap)
+	    val kind = substConInKind' mapping kind
+	    val (var,mapping) = con_rebind (var,mapping)
 	  in
-	    ((var,kind),conmap)
+	    ((var,kind),mapping)
 	  end
       in
-	foldl_acc fold_one conmap formals
+	foldl_acc fold_one mapping formals
       end
       
-    and substConInKind' (conmap : con subst) (kind : kind) = 
+    and substConInFormals (mapping : mapping) (formals : (var * con) list) = 
+      let
+	fun fold_one ((var,con),mapping : mapping) =
+	  let
+	    val con = substConInCon' mapping con
+	    val (var,mapping) = exp_rebind (var,mapping)
+	  in
+	    ((var,con),mapping)
+	  end
+      in
+	foldl_acc fold_one mapping formals
+      end
+
+    and substConInKind' (mapping : mapping) (kind : kind) = 
       (case kind of
 	 Type_k => kind
-       | (Singleton_k(con)) => Singleton_k(substConInCon' conmap con)
+       | (Singleton_k(con)) => Singleton_k(substConInCon' mapping con)
        | (Record_k fieldseq) =>
 	   let
-	     fun fold_one (((lbl,var),kind),conmap) = 
+	     fun fold_one (((lbl,var),kind),mapping) = 
 	       let
-		 val kind  = substConInKind' conmap kind
-		 val (var,conmap) = con_rebind (var,conmap)
+		 val kind  = substConInKind' mapping kind
+		 val (var,mapping) = con_rebind (var,mapping)
 	       in
-		 (((lbl, var), kind),conmap)
+		 (((lbl, var), kind),mapping)
 	       end
-	     val (fieldseq,conmap) = Sequence.foldl_acc fold_one conmap fieldseq
+	     val (fieldseq,mapping) = Sequence.foldl_acc fold_one mapping fieldseq
 	   in
 	     Record_k fieldseq
 	   end
 
        | (Arrow_k (openness, args, result)) =>
 	   let
-	     val (args,conmap) = substConInTFormals conmap args
-	     val result = substConInKind' conmap result
+	     val (args,mapping) = substConInTFormals mapping args
+	     val result = substConInKind' mapping result
 	   in
 	     Arrow_k (openness,args, result)
 	   end)
 
-    and substConInConBnd' (conmap : con subst) cbnd =
-	let fun do_confun Con conmap1 (var,formals,body,kind) = 
+    and substConInConBnd' (mapping : mapping) cbnd =
+	let fun do_confun Con mapping1 (var,formals,body,kind) = 
 	       let
-		 val (formals,conmap) = substConInTFormals conmap1 formals
-		 val body = substConInCon' conmap body
-		 val kind = substConInKind' conmap kind
-		 val (var,conmap) = con_rebind (var,conmap1) (*Not conmap!!*)
+		 val (formals,mapping) = substConInTFormals mapping1 formals
+		 val body = substConInCon' mapping body
+		 val kind = substConInKind' mapping kind
+		 val (var,mapping) = con_rebind (var,mapping1) (*Not mapping!!*)
 	       in
-		 (Con (var,formals,body,kind),conmap)
+		 (Con (var,formals,body,kind),mapping)
 	       end
 	in
 	       case cbnd of
 		     Con_cb (var,con) =>
 		   let 
-		     val con = substConInCon' conmap con
-		     val (var,conmap) = con_rebind (var,conmap)
+		     val con = substConInCon' mapping con
+		     val (var,mapping) = con_rebind (var,mapping)
 		     val cbnd = Con_cb (var,con)
 		   in  
-		     (cbnd,conmap)
+		     (cbnd,mapping)
 		   end
-		  | Open_cb body => do_confun Open_cb conmap body
-		  | Code_cb body => do_confun Code_cb conmap body
+		  | Open_cb body => do_confun Open_cb mapping body
+		  | Code_cb body => do_confun Code_cb mapping body
 
 	end
 
-    and substConInCon' (conmap : con subst) (con : con) = 
+    and substConInCon' (mapping : mapping) (con : con) = 
       let
 	fun print_one (v,c) =
 	  (TextIO.print ((Name.var2string v)^"->");
@@ -281,7 +311,7 @@ functor NilSubstFn(structure PpNil : PPNIL)
 	val _ = 
 	  if !debug then
 	    (Util.lprintl "Substituting map :";
-	     VarMap.appi print_one (#subst conmap);
+	     VarMap.appi print_one (#subst (#2 mapping));
 	     Util.lprintl "Into constructor :";
 	     PpNil.pp_con con;
 	     Util.printl "")
@@ -289,223 +319,235 @@ functor NilSubstFn(structure PpNil : PPNIL)
       in
       (case con 
 	 of (Prim_c (pcon,args)) => 
-	   (Prim_c (pcon,map (substConInCon' conmap) args))
+	   (Prim_c (pcon,map (substConInCon' mapping) args))
 	  | (Mu_c (flag,defs)) =>
 	   let
 	     val (vars,cons) = unzip (Sequence.toList defs)
-	     val (vars,conmap) = con_rebind_list (vars,conmap)
-	     val cons = List.map (substConInCon' conmap) cons
+	     val (vars,mapping) = con_rebind_list (vars,mapping)
+	     val cons = List.map (substConInCon' mapping) cons
 	     val defs = Sequence.fromList (zip vars cons)
 	   in
 	     (Mu_c (flag,defs))
 	   end
-	  | (AllArrow_c (openness,effect,tformals,formals,flength,return)) =>
+	  | ExternArrow_c(formals,return) =>
 	   let
-	     val (tformals,conmap) = substConInTFormals conmap tformals
-	     val formals = map (substConInCon' conmap) formals
-	     val return = substConInCon' conmap return
+	     val formals = map (substConInCon' mapping) formals
+	     val return = substConInCon' mapping return
 	   in
-	     AllArrow_c (openness,effect,tformals,formals,flength,return)
+	     ExternArrow_c (formals,return)
 	   end
 
+	  | (AllArrow_c (openness,effect,tformals,vlistopt,clist,flength,return)) =>
+	   let
+	     val (tformals,mapping) = substConInTFormals mapping tformals
+	     val (vlistopt,clist,mapping) = 
+		 case vlistopt of
+		     SOME vars => let val (vclist,state) = substConInFormals mapping (Listops.zip vars clist)
+				  in  (SOME(map #1 vclist), map #2 vclist, state)
+				  end
+		   | _ => (NONE, map (substConInCon' mapping) clist, mapping)
+	     val return = substConInCon' mapping return
+	   in
+	     AllArrow_c (openness,effect,tformals,vlistopt,clist,flength,return)
+	   end
+
+	   | Typeof_c e => Typeof_c(substExpConInExp' mapping e)
+
 	  | (Var_c var) => 
-	   (case substitute conmap var
+	   (case substitute (#2 mapping) var
 	      of SOME con => (local_subst_count := !local_subst_count + 1; con)
 	       | _ => con)
 
 	  | (Let_c (letsort, cbnds, body)) => 
 	   let
-	     fun folder (cbnd,conmap) = substConInConBnd' conmap cbnd
-	     val (cbnds,conmap) = foldl_acc folder conmap cbnds
-	     val body = substConInCon' conmap body
+	     fun folder (cbnd,mapping) = substConInConBnd' mapping cbnd
+	     val (cbnds,mapping) = foldl_acc folder mapping cbnds
+	     val body = substConInCon' mapping body
 	   in
 	     Let_c (letsort, cbnds, body)
 	   end
 	 
 	  | (Closure_c (code,env)) =>
 	   let
-	     val code = substConInCon' conmap code
-	     val env = substConInCon' conmap env
+	     val code = substConInCon' mapping code
+	     val env = substConInCon' mapping env
 	   in
 	     Closure_c(code, env)
 	   end
 	 
 	  | (Crecord_c entries) =>
-	   Crecord_c (map (fn (l,c) => (l,substConInCon' conmap c)) entries)
+	   Crecord_c (map (fn (l,c) => (l,substConInCon' mapping c)) entries)
 	   
 	  | (Proj_c (con,lbl)) =>
 	   let
-	     val con = substConInCon' conmap con
+	     val con = substConInCon' mapping con
 	   in
 	     Proj_c (con, lbl)
 	   end
 	 
 	  | (App_c (cfun,actuals)) =>
 	   let
-	     val cfun = substConInCon' conmap cfun
-	     val actuals = map (substConInCon' conmap) actuals
+	     val cfun = substConInCon' mapping cfun
+	     val actuals = map (substConInCon' mapping) actuals
 	   in
 	     App_c (cfun, actuals)
 	   end
 	 
 	  | Typecase_c {arg, arms, default, kind} => 
 	   let 
-	     val arg = substConInCon' conmap arg
+	     val arg = substConInCon' mapping arg
 	     fun doarm (pcon,args,body) = 
 	       let
-		 val (args,conmap) = substConInTFormals conmap args
-		 val body = substConInCon' conmap body
+		 val (args,mapping) = substConInTFormals mapping args
+		 val body = substConInCon' mapping body
 	       in
 		 (pcon,args,body)
 	       end
 	     val arms = map doarm arms
-	     val default = substConInCon' conmap default
-	     val kind = substConInKind' conmap kind
+	     val default = substConInCon' mapping default
+	     val kind = substConInKind' mapping kind
 	   in  Typecase_c{arg = arg,
 			  arms = arms,
 			  default = default,
 			  kind = kind}
 	   end
-	  | (Annotate_c (TYPECHECKED kind,con)) => substConInCon' conmap con
+	  | (Annotate_c (TYPECHECKED kind,con)) => substConInCon' mapping con
 	  | (Annotate_c (annot as FREE_VARS {con_vars,exp_vars},con)) => 
 	   let
-	     val {test,subst} = conmap
+	     val (em,cm) = mapping
+	     val {test,subst} = cm
 	     val subst = VarMap.filteri (fn (v,c) => Name.VarSet.member (con_vars,v)) subst
 	     val con = 
 	       if (VarMap.numItems subst) = 0 then 
 		 con else
-		 substConInCon' {test=test,subst=subst} con
+		 substConInCon' (em,{test=test,subst=subst}) con
 	   in
 	     Annotate_c (annot, con)
 	   end)
       end
 
-    fun id x = x
-      
-    fun substConInCon conmap = 
-      if is_empty conmap then 
+    and substConInCon mapping = 
+      if is_empty_mapping mapping then 
 	id 
       else
-	substConInCon' conmap
+	substConInCon' mapping
 
-    fun substConInKind conmap = 
-      if is_empty conmap then 
+    and substConInKind mapping = 
+      if is_empty_mapping mapping then 
 	id 
       else
-	substConInKind' conmap
+	substConInKind' mapping
 
-    fun substExpConInExp' (maps as (expmap : exp subst,conmap : con subst))
-      (exp : exp) : exp = 
+    and substExpConInExp' (mapping : mapping) (exp : exp) : exp = 
       (case exp
 	 of Var_e var => 
-	   (case substitute expmap var
+	   (case substitute (#1 mapping) var
 	      of SOME exp => (local_subst_count := !local_subst_count + 1; exp)
 	       | _ => exp)
 	  | Const_e value => 
-	      Const_e (substExpConInValue' maps value)
+	      Const_e (substExpConInValue' mapping value)
 	  | Let_e (letsort,bnds,exp) => 
 	      let
-		val (bnds,maps) = 
-		  substExpConInBnds' maps bnds
-		val exp = substExpConInExp' maps exp
+		val (bnds,mapping) = 
+		  substExpConInBnds' mapping bnds
+		val exp = substExpConInExp' mapping exp
 	      in
 		(Let_e (letsort,bnds,exp))
 	      end
 	  | Prim_e (allprim,cons,exps) => 
 	      let
-		val cons = map (substConInCon conmap) cons
-		val exps = map (substExpConInExp' maps) exps
+		val cons = map (substConInCon mapping) cons
+		val exps = map (substExpConInExp' mapping) exps
 	      in
 		(Prim_e (allprim,cons,exps))
 	   end
-	  | Switch_e switch => Switch_e (substExpConInSwitch' maps switch)
+	  | Switch_e switch => Switch_e (substExpConInSwitch' mapping switch)
 	  | App_e (openness,exp,cons,exps,floats) =>
 	   let
-	     val exp = substExpConInExp' maps exp
-	     val cons = map (substConInCon conmap) cons
-	     val exps = map (substExpConInExp' maps) exps
-	     val floats = map (substExpConInExp' maps) floats
+	     val exp = substExpConInExp' mapping exp
+	     val cons = map (substConInCon mapping) cons
+	     val exps = map (substExpConInExp' mapping) exps
+	     val floats = map (substExpConInExp' mapping) floats
 	   in
 	     App_e (openness,exp,cons,exps,floats)
 	   end
 	  | Raise_e (exp,con) =>
 	   let 
-	     val con = substConInCon conmap con
-	     val exp = substExpConInExp' maps exp
+	     val con = substConInCon mapping con
+	     val exp = substExpConInExp' mapping exp
 	   in
 	     Raise_e (exp,con)
 	   end
-	  | Handle_e (exp,v,handler,con) =>
+	  | Handle_e (exp,bound,handler) =>
 	   let
-	     val exp = substExpConInExp' maps exp
-	     val function = Function(Partial,Arbitrary,[],[(v,Prim_c(Exn_c,[]))],[],handler,con)
-	     val Function(_,_,_,[(v,_)],_,handler,con) = substExpConInFunction' maps function
+	     val exp = substExpConInExp' mapping exp
+	     val (bound,mapping) = exp_rebind(bound,mapping)
+	     val handler = substExpConInExp' mapping handler
 	   in
-	     Handle_e (exp,v,handler,con)
+	     Handle_e (exp,bound,handler)
 	   end)
-    and substExpConInValue' 
-      (maps as (expmap : exp subst,conmap : con subst)) value = 
+    and substExpConInValue' (mapping : mapping) value = 
       (case value of
 	    Prim.int _ => value
 	  | (Prim.uint _)  => value
 	  | (Prim.float _) => value
 	  | Prim.array (con,arr) => 
 	   let
-	     val con = substConInCon conmap con
+	     val con = substConInCon mapping con
 	   in
-	     Array.modify (substExpConInExp' maps) arr;
+	     Array.modify (substExpConInExp' mapping) arr;
 	     Prim.array (con,arr)
 	   end
 	| Prim.vector (con,vec) => 
 	   let
-	     val con = substConInCon conmap con
+	     val con = substConInCon mapping con
 	   in
-	     Array.modify (substExpConInExp' maps) vec;
+	     Array.modify (substExpConInExp' mapping) vec;
 	     Prim.vector (con,vec)
 	   end
 	| Prim.refcell expref =>
 	 let
-	   val exp = substExpConInExp' maps (!expref)
+	   val exp = substExpConInExp' mapping (!expref)
 	 in
 	   expref := exp;
 	   Prim.refcell expref
 	 end
 	| Prim.tag (atag,con) => 
 	 let
-	   val con = substConInCon conmap con
+	   val con = substConInCon mapping con
 	 in
 	   Prim.tag (atag,con)
 	 end)
 
-    and substExpConInBnds' maps bnds =
-      foldl_acc substExpConInBnd' maps bnds
+    and substExpConInBnds' mapping bnds =
+      foldl_acc substExpConInBnd' mapping bnds
 
 
-    and substExpConInBnd' (bnd,maps as (expmap,conmap)) = 
+    and substExpConInBnd' (bnd,mapping : mapping) =
 	let fun do_funs defs =  
 	    let
 		val (vars,functions) = unzip (Sequence.toList defs)
-		val (vars,expmap) = exp_rebind_list (vars,expmap)
+		val (vars,mapping) = exp_rebind_list (vars,mapping)
 		val functions = 
-		    map (substExpConInFunction' (expmap,conmap)) functions
+		    map (substExpConInFunction' mapping) functions
 		val defs = Sequence.fromList (zip vars functions)
-	    in	(defs,(expmap,conmap))
+	    in	(defs,mapping)
 	    end
         in  (case bnd of
 		 Con_b (phase,cb) =>
 		     let
-			 val (cb,conmap) = substConInConBnd' conmap cb
+			 val (cb,mapping) = substConInConBnd' mapping cb
 			 val bnd = (Con_b (phase,cb))
 		     in
-			 (bnd,(expmap,conmap))
+			 (bnd,mapping)
 		     end
 	       | Exp_b (var, exp) =>
 		     let
-			 val exp = substExpConInExp' maps exp
-			 val (var,expmap) = exp_rebind (var,expmap)
+			 val exp = substExpConInExp' mapping exp
+			 val (var,mapping) = exp_rebind (var,mapping)
 			 val bnd = (Exp_b (var,exp))
 		     in
-			 (bnd,(expmap,conmap))
+			 (bnd,mapping)
 		     end
 	       | (Fixopen_b defs) => let val (defs,ecmap) = do_funs defs
 				     in  (Fixopen_b defs, ecmap)
@@ -516,167 +558,150 @@ functor NilSubstFn(structure PpNil : PPNIL)
 	       | Fixclosure_b (flag,defs) => 
 		      let
 			  val (vars,closures) = unzip (Sequence.toList defs)
-			  val (vars,expmap) = exp_rebind_list (vars,expmap)
-			  val closures = map (substExpConInClosure' (expmap,conmap)) closures
+			  val (vars,mapping) = exp_rebind_list (vars,mapping)
+			  val closures = map (substExpConInClosure' mapping) closures
 			  val defs = Sequence.fromList (zip vars closures)
 			  val bnd = Fixclosure_b (flag,defs)
-		      in  (bnd,(expmap,conmap))
+		      in  (bnd,mapping)
 		      end)
 	end
 
-    and substExpConInSwitch'
-      (maps as (expmap : exp subst, conmap : con subst)) switch = 
+    and substExpConInSwitch' (mapping : mapping) switch =
       (case switch
-	 of Intsw_e {size,arg,result_type,arms,default} =>
+	 of Intsw_e {size,arg,arms,default} =>
 	   let
-	     val arg = substExpConInExp' maps arg
-	     val result_type = substConInCon conmap result_type
-	     val arms = map_second (substExpConInExp' maps) arms
-	     val default = mapopt (substExpConInExp' maps) default
+	     val arg = substExpConInExp' mapping arg
+	     val arms = map_second (substExpConInExp' mapping) arms
+	     val default = mapopt (substExpConInExp' mapping) default
 	   in
-	     Intsw_e {size=size,arg=arg,result_type=result_type,
+	     Intsw_e {size=size,arg=arg,
 		      arms=arms,default=default}
 	   end
-	  | Sumsw_e {sumtype,arg,result_type,bound,arms,default} => 
+	  | Sumsw_e {sumtype,arg,bound,arms,default} => 
 	   let
-	     val sumtype = substConInCon conmap sumtype
-	     val result_type = substConInCon conmap result_type
-	     val arg = substExpConInExp' maps arg
-	     val default = mapopt (substExpConInExp' maps) default
-	     val (expmap,conmap) = maps
-	     val (bound,expmap) = exp_rebind(bound,expmap)
-	     val maps = (expmap,conmap) 
-	     val arms = map_second (substExpConInExp' maps) arms
-	   in
-	     Sumsw_e {sumtype=sumtype,arg=arg,result_type=result_type,bound=bound,
-		      arms=arms,default=default}
+	     val sumtype = substConInCon mapping sumtype
+	     val arg = substExpConInExp' mapping arg
+	     val default = mapopt (substExpConInExp' mapping) default
+	     val (bound,mapping) = exp_rebind(bound,mapping)
+	     val arms = map_second (substExpConInExp' mapping) arms
+
+	   in  Sumsw_e {sumtype=sumtype,arg=arg,bound=bound,
+			arms=arms,default=default}
 	   end
-	  | Exncase_e {arg,result_type,bound,arms,default} =>
+	  | Exncase_e {arg,bound,arms,default} =>
 	   let
-	     val arg = substExpConInExp' maps arg
-	     val result_type = substConInCon conmap result_type
-	     val default = mapopt (substExpConInExp' maps) default
-	     val (expmap,conmap) = maps
-	     val (bound,expmap) = exp_rebind(bound,expmap)
-	     val maps = (expmap,conmap) 
-	     val arms = map (fn (e1,e2) => (substExpConInExp' maps e1,
-					    substExpConInExp' maps e2)) arms
-	   in Exncase_e {arg=arg,result_type=result_type,bound=bound,
+	     val arg = substExpConInExp' mapping arg
+	     val default = mapopt (substExpConInExp' mapping) default
+	     val (bound,mapping) = exp_rebind(bound,mapping)
+	     val arms = map (fn (e1,e2) => (substExpConInExp' mapping e1,
+					    substExpConInExp' mapping e2)) arms
+	   in Exncase_e {arg=arg,bound=bound,
 			arms=arms,default=default}
 	   end
 	  | Typecase_e _ => error "typecase not handled")
 
-    and substExpConInFunction' (maps as (expmap : exp subst,conmap : con subst))
-      (Function (effect,recursive,tformals,formals,fformals,body,return)) = 
+    and substExpConInFunction' (mapping : mapping)
+      (Function (effect,recursive,tformals,dep,formals,fformals,body,return)) = 
       let
-	fun con_folder ((var,kind),conmap) = 
-	  let
-	    val kind = substConInKind conmap kind
-	    val (var,conmap) = con_rebind (var,conmap)
-	  in
-	    ((var,kind),conmap)
-	  end
-	val (tformals,conmap) = 
-	  foldl_acc con_folder conmap tformals
-
-	fun exp_folder ((var,con),expmap) = 
-	  let
-	    val con = substConInCon conmap con
-	    val (var,expmap) = exp_rebind (var,expmap)
-	  in
-	    ((var,con),expmap)
-	  end
-	val (formals,expmap) = 
-	  foldl_acc exp_folder expmap formals
-	val (fformals,expmap) = exp_rebind_list (fformals,expmap)
-	val body = substExpConInExp' (expmap,conmap) body
-	val return = substConInCon conmap return
+	val (tformals,mapping) = substConInTFormals mapping tformals
+	val (formals,mapping) = substConInFormals mapping formals
+	val (fformals,mapping) = exp_rebind_list (fformals,mapping)
+	val body = substExpConInExp' mapping body
+	val return = substConInCon mapping return
       in
-	Function (effect,recursive,tformals,formals,fformals,body,return)
+	Function (effect,recursive,tformals,dep,formals,fformals,body,return)
       end
-    and substExpConInClosure' (maps as (expmap : exp subst,conmap : con subst))
+    and substExpConInClosure' (mapping : mapping)
       {code:var, cenv:con, venv:exp, tipe:con} = 
       let
 	val code = 
-	  (case substitute expmap code 
+	  (case substitute (#1 mapping) code 
 	     of SOME (Var_e var) => (local_subst_count := !local_subst_count + 1; var)
 	      | _ => code)
-	val cenv = substConInCon conmap cenv
-	val venv = substExpConInExp' maps venv
-	val tipe = substConInCon conmap tipe
+	val cenv = substConInCon mapping cenv
+	val venv = substExpConInExp' mapping venv
+	val tipe = substConInCon mapping tipe
       in
 	{code=code,cenv=cenv,venv=venv,tipe=tipe}
       end
 
-    fun substConInExp conmap = 
-      if is_empty conmap then 
+    fun substConInExp mapping = 
+      if is_empty_mapping mapping then 
 	id 
       else
-	substExpConInExp' (empty(),conmap)
+	substExpConInExp' empty_mapping
      
-    fun substExpInExp expmap = 
-      if is_empty expmap then 
+    fun substExpInExp mapping = 
+      if is_empty_mapping mapping then 
 	id 
       else
-	substExpConInExp' (expmap,empty())
+	substExpConInExp' mapping
 
-    fun substExpConInExp (expmap,conmap) = 
-      if (is_empty expmap) andalso (is_empty conmap) then 
-	id 
+    fun substExpConInExp mapping = 
+      if (is_empty_mapping mapping) 
+	then id 
       else
-	substExpConInExp' (expmap,conmap)
+	substExpConInExp' mapping
 
-    fun substConInBnd conmap bnd = 
-      if is_empty conmap then 
-	(bnd,conmap)
+    fun substConInBnd cm bnd = 
+      if is_empty cm then 
+	(bnd,cm)
       else
 	let
 	  (*substExpConInBnd' cannot make an empty expmap non-empty*)
-	  val (bnd,(expmap,conmap)) = substExpConInBnd' (bnd,(empty(),conmap))
+	  val (bnd,mapping) = substExpConInBnd' (bnd,(empty(),cm))
 	in
-	  (bnd,conmap)
+	  (bnd,#2 mapping)
 	end
 
-    val con_subst_compose = compose substConInCon
 
     fun varConConSubst var con = 
-      substConInCon' (add (empty()) (var,con))
+      substConInCon' (empty(),add (empty()) (var,con))
 
     fun varConKindSubst var con = 
-      substConInKind' (add (empty()) (var,con))
+      substConInKind' (empty(),add (empty()) (var,con))
 
     fun wrap2 f name arg1 arg2 = 
       (Util.lprintl ("Entering"^name);
        (f arg1 arg2) before (Util.lprintl ("Leaving"^name)))
 
+    fun wrap1 f name arg1 = 
+      (Util.lprintl ("Entering"^name);
+       (f arg1) before (Util.lprintl ("Leaving"^name)))
+
+    val substExpConInCon = 
+      fn em_cm => if !debug then 
+	        wrap1 substConInCon "substConInCon" em_cm
+               else substConInCon em_cm
+
     val substConInCon = 
-      if !debug then 
-	wrap2 substConInCon "substConInCon"
-      else substConInCon
+      fn cm => if !debug then 
+	        wrap1 substConInCon "substConInCon" (empty(),cm)
+               else substConInCon (empty(),cm)
 
-    val substConInExp = 
+    val substConInExp = fn cm =>
       if !debug then 
-	wrap2 substConInExp "substConInExp"
+	wrap1 substConInExp "substConInExp" (empty(),cm)
       else 
-	substConInExp
+	substConInExp (empty(),cm)
 
-    val substConInKind = 
+    val substConInKind = fn cm =>
       if !debug then 
-	wrap2 substConInKind "substConInKind"
-      else substConInKind
+	wrap1 substConInKind "substConInKind" (empty(),cm)
+      else substConInKind (empty(),cm)
 
-    val substExpInExp = 
+    val substExpInExp = fn em =>
       if !debug then 
-	wrap2 substExpInExp "substExpInExp"
+	wrap1 substExpInExp "substExpInExp" (em,empty())
       else 
-	substExpInExp
+	substExpInExp (em,empty())
 
     val varConConSubst = 
       if !debug then 
 	wrap2 varConConSubst "varConConSubst"
       else varConConSubst
 
-    val varConKindSubst = 
+    val varConKindSubst =
       if !debug then 
 	wrap2 varConKindSubst "varConSubst"
       else 

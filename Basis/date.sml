@@ -65,11 +65,11 @@ structure Date :> DATE =
    *)
     fun wrap f x = (f x) handle _ => raise Date
 
-    val ascTime : tm -> string = wrap (fn arg => posix_ascTime arg)
-    val localTime : (int * int) -> tm = wrap (fn arg => posix_localTime arg)
-    val gmTime : (int * int) -> tm = wrap (fn arg => posix_gmTime arg)
-    val mkTime : tm -> (int * int) = wrap (fn arg => posix_mkTime arg)
-    val strfTime : (string * tm) -> string = wrap (fn arg => posix_strfTime arg)
+    val ascTime : tm -> string = wrap (fn arg => Ccall(posix_ascTime, arg))
+    val localTime : (int * int) -> tm = wrap (fn arg => Ccall(posix_localTime, arg))
+    val gmTime : (int * int) -> tm = wrap (fn arg => Ccall(posix_gmTime, arg))
+    val mkTime : tm -> (int * int) = wrap (fn arg => Ccall(posix_mkTime, arg))
+    val strfTime : (string * tm) -> string = wrap (fn arg => Ccall(posix_strfTime, arg))
 
 
     fun mkDate (
@@ -160,9 +160,12 @@ structure Date :> DATE =
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  15:45:45  pscheng
-# adding the basis
+# Revision 1.2  98/04/06  21:17:34  pscheng
+# update: Typeof_c, dependent arrow/record types
 # 
+# Revision 1.1  1998/03/09  15:45:45  pscheng
+# adding the basis
+#
  * Revision 1.1.1.1  1997/01/14  01:38:14  george
  *   Version 109.24
  *

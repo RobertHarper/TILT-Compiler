@@ -54,7 +54,7 @@ val debug_full = ref false
 		val argc = con_tuple(map0count proj n)
 		val resc = proj n
 		val venv_var = Name.fresh_named_var "vararg_support_venv"
-		val venv_type = AllArrow_c(Closure,Partial,[],[argc],0w0,resc)
+		val venv_type = AllArrow_c(Closure,Partial,[],NONE,[argc],0w0,resc)
 		val expvars = map0count (fn n => Name.fresh_named_var 
 					 ("vararg_support_expvar_" ^ (Int.toString n))) n
 		val vclist = mapcount (fn (n,ev) => (ev,proj n)) expvars
@@ -62,6 +62,7 @@ val debug_full = ref false
 		val body = App_e(Closure,Var_e venv_var,[],[arg],[])
 		val call_function = Function(Partial,Arbitrary,
 					      [(cenv_var,cenv_kind)],
+					      false,
 					      vclist@[(venv_var,venv_type)],[],body,resc)
 
 		val convars = map0count (fn n => Name.fresh_named_var 
@@ -72,10 +73,12 @@ val debug_full = ref false
 		val resvar = Name.fresh_named_var "vararg_support_resvar"
 		val codevar = Name.fresh_named_var "vararg_support_codevar"
 		val funcon = AllArrow_c(Closure,Partial,[],
-					[con_tuple(map (Var_c o #1) (Listops.butlast vklist))], 0w0,
+					NONE,[con_tuple(map (Var_c o #1) (Listops.butlast vklist))],
+					0w0,
 					Var_c(#1(List.last vklist)))
 		val flat_funcon = AllArrow_c(Closure,Partial,[],
-					     map (Var_c o #1) (Listops.butlast vklist), 0w0,
+					     NONE,map (Var_c o #1) (Listops.butlast vklist), 
+					     0w0,
 					     Var_c(#1(List.last vklist)))
 		val vcl = (resvar,{code=codevar,venv=Var_e funvar,
 				   cenv=con_tuple_inject(map Var_c convars),
@@ -86,7 +89,7 @@ val debug_full = ref false
 				  Fixclosure_b(false,Sequence.fromList[vcl])],
 				 Var_e resvar)
 
-		val function = Function(Partial,Arbitrary,vklist,[(funvar,funcon)],[],body,flat_funcon)
+		val function = Function(Partial,Arbitrary,vklist,false,[(funvar,funcon)],[],body,flat_funcon)
 	    in  Fixcode_b(Sequence.fromList[(supportvar,function)])
 	    end
 	in  mapcount mapper vararg_support
@@ -101,13 +104,15 @@ val debug_full = ref false
 		val argc = con_tuple argcs
 		val resc = proj n
 		val venv_var = Name.fresh_named_var "onearg_support_venv"
-		val venv_type = AllArrow_c(Closure,Partial,[],argcs,0w0,resc)
+		val venv_type = AllArrow_c(Closure,Partial,[],
+					   NONE,argcs,
+					   0w0,resc)
 		val expvar = Name.fresh_named_var "onearg_support_expvar"
 		val args = map0count (fn n => Prim_e(NilPrimOp(select(generate_tuple_label (n+1))),
 						     [], [Var_e expvar])) n
 		val body = App_e(Closure,Var_e venv_var,[],args,[])
 		val call_function = Function(Partial,Arbitrary,
-					      [(cenv_var,cenv_kind)],
+					      [(cenv_var,cenv_kind)],false,
 					      [(expvar,argc),
 					       (venv_var,venv_type)],[],body,resc)
 
@@ -119,10 +124,12 @@ val debug_full = ref false
 		val resvar = Name.fresh_named_var "onearg_support_resvar"
 		val codevar = Name.fresh_named_var "onearg_support_codevar"
 		val funcon = AllArrow_c(Closure,Partial,[],
-					[con_tuple(map (Var_c o #1) (Listops.butlast vklist))], 0w0,
+					NONE,[con_tuple(map (Var_c o #1) (Listops.butlast vklist))], 
+					0w0,
 					Var_c(#1(List.last vklist)))
 		val flat_funcon = AllArrow_c(Closure,Partial,[],
-					     map (Var_c o #1) (Listops.butlast vklist), 0w0,
+					     NONE,map (Var_c o #1) (Listops.butlast vklist), 
+					     0w0,
 					     Var_c(#1(List.last vklist)))
 		val vcl = (resvar,{code=codevar,venv=Var_e funvar,
 				   cenv=con_tuple_inject(map Var_c convars),
@@ -133,7 +140,7 @@ val debug_full = ref false
 				  Fixclosure_b(false,Sequence.fromList[vcl])],
 				 Var_e resvar)
 
-		val function = Function(Partial,Arbitrary,vklist,[(funvar,flat_funcon)],[],body,funcon)
+		val function = Function(Partial,Arbitrary,vklist,false,[(funvar,flat_funcon)],[],body,funcon)
 	    in  Fixcode_b(Sequence.fromList[(supportvar,function)])
 	    end
 	in  mapcount mapper onearg_support
@@ -176,7 +183,8 @@ val debug_full = ref false
 		    val (_,state) = foldl folder (0,state) convars
 		    val state = add_convar "vararg" (state,resconvar,Type_k,NONE,NONE,
 						     SOME((VREGISTER (false,I resc))), NONE)
-		    val funcon = AllArrow_c(Closure,Partial,[],[con_tuple(map Var_c convars)],
+		    val funcon = AllArrow_c(Closure,Partial,[],
+					    NONE,[con_tuple(map Var_c convars)],
 					    0w0,Var_c resconvar)
 		    val state = add_var  (state,funvar,funcon,
 					  SOME((VREGISTER (false,I function))), NONE)
@@ -234,7 +242,8 @@ val debug_full = ref false
 		    val (_,state) = foldl folder (0,state) convars
 		    val state = add_convar "onearg" (state,resconvar,Type_k,NONE,NONE,
 						     SOME((VREGISTER (false,I resc))), NONE)
-		    val funcon = AllArrow_c(Closure,Partial,[],[con_tuple(map Var_c convars)],
+		    val funcon = AllArrow_c(Closure,Partial,[],
+					    NONE,[con_tuple(map Var_c convars)],
 					    0w0,Var_c resconvar)
 		    val state = add_var  (state,funvar,funcon,
 					  SOME((VREGISTER (false,I function))), NONE)

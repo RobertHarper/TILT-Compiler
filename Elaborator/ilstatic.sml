@@ -225,10 +225,11 @@ fun show_state ({modunself,...}:state) =
        and SelfifyMod (state:state,selfify) (popt: path option, module : mod) : mod = 
 	   let val x = 5
 	   in (case module of
-		   MOD_FUNCTOR (v,s,m) => 
-		       let val s' = SelfifySig (state,selfify) (NONE,s)
+		   MOD_FUNCTOR (v,s1,m,s2) => 
+		       let val s1' = SelfifySig (state,selfify) (NONE,s1)
+			   val s2' = SelfifySig (state,selfify) (NONE,s2)
 			   val m' = SelfifyMod (state,selfify) (NONE,m)
-		       in  MOD_FUNCTOR(v,s',m')
+		       in  MOD_FUNCTOR(v,s1',m',s2')
 		       end
 		 | (MOD_STRUCTURE sbnds) =>
 		       let val sbnds = do_sbnds (popt,selfify) (state, sbnds)
@@ -756,7 +757,17 @@ end
      (Exp_IsSyntacticValue exp) orelse
      (case exp of
 	MODULE_PROJECT (m,l) => Module_IsValuable m ctxt
-      | APP(e1,es2) => let val (va1,e1_con) = GetExpCon(e1,ctxt)
+      | APP(e1,e2) => let val (va1,e1_con) = GetExpCon(e1,ctxt)
+			  val (va2,e2_con) = GetExpCon(e1,ctxt)
+			  val _ = (print "exp_isvaluable: app case: e1_con is: \n";
+				   Ppil.pp_con e1_con; print "\n")
+			  val e1_con_istotal = 
+			      (case e1_con of
+				   CON_ARROW(_,_,_,comp) => eq_comp(comp,oneshot_init TOTAL,false)
+				 | _ => false)
+		      in va1 andalso e1_con_istotal andalso va2
+		      end
+      | EXTERN_APP(_,e1,es2) => let val (va1,e1_con) = GetExpCon(e1,ctxt)
 			  val _ = (print "exp_isvaluable: app case: e1_con is: \n";
 				   Ppil.pp_con e1_con; print "\n")
 			  val e1_con_istotal = 
@@ -778,7 +789,7 @@ end
 				       NONE => false
 				     | SOME e => Exp_IsValuable(ctxt,e))
      | NEW_STAMP _ => true
-     | SUM_TAIL (_,e) => Exp_IsValuable(ctxt,e)
+     | SUM_TAIL (_,_,e) => Exp_IsValuable(ctxt,e)
      | EXN_INJECT(_,e1,e2) => (Exp_IsValuable(ctxt,e1)) andalso (Exp_IsValuable(ctxt,e2))
      | _ => false)
 
@@ -934,7 +945,8 @@ end
    and GetExpAppCon' (exparg,ctxt) : bool * con = 
 	   let val ((va1,con1),es2) = 
 	       (case exparg of
-		    APP(e1,es2) => (GetExpCon(e1,ctxt),es2)
+		    APP(e1,e2) => (GetExpCon(e1,ctxt),[e2])
+		  | EXTERN_APP(_,e1,es2) => (GetExpCon(e1,ctxt),es2)
 		  | PRIM(p,cs,es) => ((true, PrimUtil.get_type' p cs), es)
 		  | ILPRIM(ip,cs,es) => ((true, PrimUtil.get_iltype' ip cs),es))
 	       val con1 = Normalize(con1,ctxt)
@@ -944,7 +956,8 @@ end
 	       val res_con = fresh_con ctxt
 	       val (guesscon,arrow) = 
 		   (case con1 of
-			CON_ARROW(_,_,closed,arrow) => (CON_ARROW(cons2,res_con,closed,arrow),arrow)
+			CON_ARROW(_,_,closed,arrow) => 
+			    (CON_ARROW(cons2,res_con,closed,arrow),arrow)
 		      | _ => (CON_ARROW (cons2,res_con,false,oneshot()), oneshot()))
 	       val is_sub = sub_con(guesscon,con1,ctxt) 
 	       val total = (case oneshot_deref arrow of
@@ -1026,6 +1039,7 @@ end
      | (PRIM _) => GetExpAppCon' (exparg,ctxt)
      | (ILPRIM _) => GetExpAppCon' (exparg,ctxt)
      | (APP _) => GetExpAppCon' (exparg,ctxt)
+     | (EXTERN_APP _) => GetExpAppCon' (exparg,ctxt)
      | (FIX (r,a,fbnds)) => (* must check that there are no function calls for TOTAL *)
 	   let fun get_arm_type(FBND(_,_,c,c',_)) = CON_ARROW([c],c',false,oneshot_init a)
 	       val res_type = (case fbnds of
@@ -1091,7 +1105,7 @@ end
 			 pp_con con; print "\n";
 			 error "Record Proj on exp not of type CON_RECORD"))
 	   end
-     | (SUM_TAIL (c,e)) => 
+     | (SUM_TAIL (_,c,e)) => 
 	   let val (va,con) = GetExpCon(e,ctxt)
 	   in if (eq_con(c,con,ctxt)) 
 		  then (case c of
@@ -1517,10 +1531,11 @@ end
 	       val res = SIGNAT_STRUCTURE(NONE,sdecs)
 	   in (va,res)
 	   end
-     | MOD_FUNCTOR (v,s,m) => 
+     | MOD_FUNCTOR (v,s,m,s2) => 
 	   let val ctxt' = add_context_dec(ctxt,DEC_MOD(v,SelfifySig ctxt (SIMPLE_PATH v, s)))
 	       val (va,signat) = GetModSig(m,ctxt')
-	   in  (true,SIGNAT_FUNCTOR(v,s,signat,
+	       (* check equivalence of s2 and signat *)
+	   in  (true,SIGNAT_FUNCTOR(v,s,s2,
 				    (if va then TOTAL else PARTIAL)))
 	   end
      | MOD_APP (a,b) => 

@@ -10,6 +10,7 @@ structure Real64 :> REAL where type real = real =
 (*    structure I = InlineT.DfltInt *)
 
     structure Math = Math64
+    val real_logb  : real -> int = fn arg => Ccall(real_logb, arg)
 
     infix 4 == !=
     type real = real
@@ -286,9 +287,12 @@ structure LargeReal = Real64
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:52:50  pscheng
-# added basis
+# Revision 1.2  98/04/06  21:17:40  pscheng
+# update: Typeof_c, dependent arrow/record types
 # 
+# Revision 1.1  1998/03/09  19:52:50  pscheng
+# added basis
+#
  * Revision 1.6  1997/07/08  19:06:26  jhr
  *   Fixed bug in REal64.isNormal on 0.0
  *

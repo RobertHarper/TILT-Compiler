@@ -8,19 +8,19 @@ structure Math64 : MATH =
     val e  = 2.7182818284590452354
 
     (* eta expansion to distingush between ML arrows and external arrows *)
-    val sqrt  : real -> real = fn arg => sqrt arg
-    val sin   : real -> real = fn arg => sin arg
-    val cos   : real -> real = fn arg => cos arg
-    val tan   : real -> real = fn arg => tan arg
-    val asin  : real -> real = fn arg => asin arg
-    val acos  : real -> real = fn arg => acos arg
-    val atan  : real -> real = fn arg => atan arg
-    val exp   : real -> real = fn arg => exp arg
-    val ln    : real -> real = fn arg => ln arg
-    val log10 : real -> real = fn arg => log10 arg
-    val sinh  : real -> real = fn arg => sinh arg
-    val cosh  : real -> real = fn arg => cosh arg
-    val tanh  : real -> real = fn arg => tanh arg
+    val sqrt  : real -> real = fn arg => Ccall(sqrt, arg)
+    val sin   : real -> real = fn arg => Ccall(sin, arg)
+    val cos   : real -> real = fn arg => Ccall(cos, arg)
+    val tan   : real -> real = fn arg => Ccall(tan, arg)
+    val asin  : real -> real = fn arg => Ccall(asin, arg)
+    val acos  : real -> real = fn arg => Ccall(acos, arg)
+    val atan  : real -> real = fn arg => Ccall(atan, arg)
+    val exp   : real -> real = fn arg => Ccall(exp, arg)
+    val ln    : real -> real = fn arg => Ccall(ln, arg)
+    val log10 : real -> real = fn arg => Ccall(log10, arg)
+    val sinh  : real -> real = fn arg => Ccall(sinh, arg)
+    val cosh  : real -> real = fn arg => Ccall(cosh, arg)
+    val tanh  : real -> real = fn arg => Ccall(tanh, arg)
 
     (* the following copied from math64.sml -- we neeed atan2 and pow since
        we don't have multi-arg call to C yet *)

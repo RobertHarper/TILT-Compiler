@@ -42,4 +42,6 @@ signature UTIL =
     val curry3 : ('a * 'b * 'c -> 'd) -> ('a -> 'b -> 'c -> 'd)
 
     val all_pairs : ('a * 'a -> bool) -> 'a list -> bool
+
+    val memoize : (unit -> 'a) -> (unit -> 'a)
   end

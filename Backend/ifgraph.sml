@@ -235,13 +235,12 @@ struct
 	   | SOME neighbors => (Regset.numItems neighbors) + (Regset.numItems (!bad))
 
      fun insert_node (GRAPH {all,bad,graph,size}) n =
-	  ((* print "insert_node "; print (msReg n); print "\n";*)
-	    if ((isPhysical n)
-		  orelse (member(n,!bad))
-		  orelse (hash_member(n,graph))) then ()
-	      else (A.insert graph (n,Regset.empty);
-		    all := Regset.add(!all,n);
-		    size := (!size) + 1))
+	  (if ((isPhysical n)
+	       orelse (member(n,!bad))
+	       orelse (hash_member(n,graph))) then ()
+	   else (A.insert graph (n,Regset.empty);
+		 all := Regset.add(!all,n);
+		 size := (!size) + 1))
 
 
      (* remove the node entry from graph and remove the node from its neighbors's entries *)
@@ -283,40 +282,62 @@ struct
 	       all = ref (!all),
 	       bad = ref (!bad)}
 
-
+     (* assumes a and b are different, 
+                        are not bad, and are of the same type;
+        does not assume either are in the graph already *)
+     fun insert_edge_fast (g as GRAPH{all,size,bad,graph}) (a,b) =
+	 (let 
+	      val graph_insert = A.insert graph
+	      fun add (a,b) = 
+		  if isPhysical a 
+		      then ()
+		  else let val l = A.lookup graph a 
+		      handle AdjList => 
+			  (insert_node g a;
+			   A.lookup graph a) 
+			   val l' = insert(b,l)
+		       in  graph_insert (a,l')
+		       end
+	      fun promote a = 
+		  if isPhysical a 
+		      then ()
+		  else let val l = A.lookup graph a 
+		       in if (Regset.numItems l > !badness_threshold) then
+			   (delete_from_graph graph a;
+			    bad := Regset.add(!bad,a))
+			  else ()
+		       end
+		   
+	  in  add(a,b); add(b,a); promote a; promote b
+	  end
+	  handle AdjList => 
+	      (if member(a,!bad) then ()
+	       else error "insert_edge: node not found!"))
+	    
      fun insert_edge (g as GRAPH{all,size,bad,graph}) (a,b) =
        let 
 (*
 	  val _ = (print "insert_edge "; print (msReg a); print "  ";
 			print (msReg b); print "\n")
 *)
-	   val _ = insert_node g a
-	   val _ = insert_node g b
-	   val graph_insert = A.insert graph
-	   fun add (a,b) = 
-	       if isPhysical a 
-		   then ()
-	       else 
-		   let val l = A.lookup graph a 
-				handle AdjList => error "insert_edge: node not found!"
-		       val l' = insert(b,l)
-		   in  graph_insert (a,l')
-		   end
-	   fun promote a = 
-	   if (isPhysical a) then () else
-	   let val l = A.lookup graph a 
-			handle AdjList => error "insert_edge: node not found!"
-	   in if (Regset.numItems l > !badness_threshold) then
-		       (delete_from_graph graph a;
-			bad := Regset.add(!bad,a))
-	      else ()
-	   end
-       in  if eqReg(a,b) orelse member(b,!bad) orelse member(a,!bad) then ()
-	    else case (a,b)
-		of (R _,R _) => (add(a,b); add(b,a); promote a; promote b)
-	      | (F _,F _) => (add(a,b); add(b,a); promote a; promote b)
-	      | _ => ()
+       in  if eqReg(a,b) orelse member(b,!bad) orelse member(a,!bad) 
+	       then ()
+	   else insert_edge_fast g (a,b)
        end
+
+     fun insert_edges (g as GRAPH{all,size,bad,graph}) (a,nodes) =
+       let 
+	   val canInterfere = 
+	       (case a of
+		    R _ => (fn b as R _ => not(eqReg(a,b) orelse (member(b,!bad))) | _ => false)
+		  | F _ => (fn b as F _ => not(eqReg(a,b) orelse (member(b,!bad))) | _ => false))
+	   val nodes = Regset.listItems nodes
+	   val nodes = List.filter canInterfere nodes
+       in  if member(a,!bad)
+	       then () 
+	   else app (fn b => insert_edge_fast g (a,b)) nodes
+       end
+
 
        fun print_stats (GRAPH{all,size,bad,graph}) =
 	   let val numBad = Regset.numItems (!bad)

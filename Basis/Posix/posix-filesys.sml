@@ -13,7 +13,7 @@ structure POSIX_FileSys :> POSIX_FILE_SYS =
     val & = Word.andb
     infix ++ &
 
-    fun w_osval str = Ccall(posix_filesys_num,str)
+    fun w_osval (str : string) : int = Ccall(posix_filesys_num,str)
 
     datatype uid = UID of word
     datatype gid = GID of word
@@ -62,10 +62,10 @@ structure POSIX_FileSys :> POSIX_FILE_SYS =
 	isOpen : bool ref
       }
 
-    val opendir' (* : string -> c_dirstream  *) = posix_filesys_opendir
-    val readdir' (* : c_dirstream -> string  *) = posix_filesys_readdir
-    val rewinddir' (* : c_dirstream -> unit  *) = posix_filesys_rewinddir
-    val closedir' (* : c_dirstream -> unit   *) = posix_filesys_closedir
+    val opendir' (* : string -> c_dirstream  *) = fn arg => Ccall(posix_filesys_opendir,arg)
+    val readdir' (* : c_dirstream -> string  *) = fn arg => Ccall(posix_filesys_readdir,arg)
+    val rewinddir' (* : c_dirstream -> unit  *) = fn arg => Ccall(posix_filesys_rewinddir,arg)
+    val closedir' (* : c_dirstream -> unit   *) = fn arg => Ccall(posix_filesys_closedir,arg)
     fun opendir path = DS{
 	    dirStrm = opendir' path,
 	    isOpen = ref true
@@ -145,23 +145,23 @@ structure POSIX_FileSys :> POSIX_FILE_SYS =
       end
 
 
-    fun openf (fname, omode, O.OFL flags) =
+    fun openf (fname : string, omode, O.OFL flags) =
           fd(Ccall (posix_filesys_openf,fname, flags ++ (omodeToWord omode), 0w0))
-    fun createf (fname, omode, O.OFL oflags, S.MODE mode) = let
+    fun createf (fname:string, omode, O.OFL oflags, S.MODE mode) = let
           val flags = O.o_creat ++ oflags ++ (omodeToWord omode)
           in
             fd(Ccall(posix_filesys_openf,fname, flags, mode))
           end
-    fun creat (fname, S.MODE mode) =
+    fun creat (fname:string, S.MODE mode) =
           fd(Ccall(posix_filesys_openf,fname, O.crflags, mode))
 
     fun umask (S.MODE mode) = S.MODE(Ccall(posix_filesys_umask, mode))
 
-    fun link {old, new} = Ccall(posix_filesys_link,old,new)
-    fun rename {old, new} = Ccall(posix_filesys_rename,old,new)
-    fun symlink {old, new} = Ccall(posix_filesys_symlink,old,new)
-    fun mkdir (dirname, S.MODE mode) = Ccall(posix_filesys_mkdir,dirname,mode)
-    fun mkfifo (name, S.MODE mode) = Ccall(posix_filesys_mkfifo,name,mode)
+    fun link {old : string, new : string} = Ccall(posix_filesys_link,old,new)
+    fun rename {old : string, new : string} = Ccall(posix_filesys_rename,old,new)
+    fun symlink {old : string, new : string} = Ccall(posix_filesys_symlink,old,new)
+    fun mkdir (dirname : string, S.MODE mode) = Ccall(posix_filesys_mkdir,dirname,mode)
+    fun mkfifo (name : string, S.MODE mode) = Ccall(posix_filesys_mkfifo,name,mode)
 
     fun unlink name = Ccall(posix_filesys_unlink,name)
     fun rmdir name = Ccall(posix_filesys_rmdir,name)

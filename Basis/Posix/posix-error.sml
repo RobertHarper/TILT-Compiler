@@ -14,13 +14,14 @@ structure POSIX_Error :> POSIX_ERROR  where type syserror = int =
 
     fun toWord se = int32touint32 se
     fun fromWord w = uint32toint32 w
-    fun errorMsg i    = posix_error_msg i
-    fun errorName err = posix_error_name err
-    fun syserror str  = let val s : int = posix_error_num (str : string)
-			in if s > 536870912
-			       then SOME s
-			   else NONE
-			end
+    fun errorMsg i    = Ccall(posix_error_msg, i)
+    fun errorName err = Ccall(posix_error_name, err)
+    val posix_error_num = fn (str : string) => Ccall(posix_error_num, str)
+    fun syserror str = let val s : int = posix_error_num str
+		       in if s > 536870912
+			      then SOME s
+			  else NONE
+		       end
 
     val toobig      = posix_error_num "toobig"
     val acces       = posix_error_num "acces"

@@ -286,9 +286,9 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 				     let val bound_vars = map #2 bounds
 					 val call = APP(VAR funvar,
 							if (length bound_cons = 1)
-							then [VAR (hd bound_vars)]
+							    then VAR (hd bound_vars)
 							else
-							[exp_tuple(map VAR bound_vars)])
+							    exp_tuple(map VAR bound_vars))
 				     in  oneshot_set(one,call)
 				     end
 			         val _ = app apper one_bounds
@@ -526,7 +526,7 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 					 then ()
 				     else (error_region();
 					   print "results types of rules mismatch\n")
-			       in SOME(make_let([BND_EXP(var,SUM_TAIL(sumcon,VAR rsvar))],me))
+			       in SOME(make_let([BND_EXP(var,SUM_TAIL(i,sumcon,VAR rsvar))],me))
 		       end)
 	end
 
@@ -543,9 +543,8 @@ val eq_con = fn (str,ctxt,c1,c2) => let (* val _ = (print "eq_con called from ";
 
       val exhaustive = List.all (fn NONE => false | SOME _ => true) expopt_list
 (*	val _ = (print "========casecon is: "; Ppil.pp_con casecon; print "\n") *)
-      val arg = (case (IlUtil.beta_reduce(expose_exp,casearg)) of
-			 NONE => APP(expose_exp,[casearg])
-		       | SOME e => e)
+      val arg = IlUtil.beta_reduce(expose_exp,casearg)
+
       val case_exp = 
 	  (CASE{sumtype=sumtype,
 	       arg = arg,

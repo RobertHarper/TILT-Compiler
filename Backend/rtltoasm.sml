@@ -267,7 +267,8 @@ struct
 		       findRtlProc (Toasm.untranslateLocalLabel name) procs
 		   in
 		     (known andalso (! knowns), 
-		      Stats.subtimer("toasm_translateproc",Toasm.translateProc) rtlproc)
+		      (* Stats.subtimer("toasm_translateproc", *) 
+			Toasm.translateProc rtlproc)
 		   end
 
 	     val _ = if (!debug)
@@ -333,8 +334,8 @@ struct
 			     then (print "allocateProc 2 entered\n")
 		       else ()
 	       val (new_sig, new_block_map, new_block_labels, gc_data) =
-		   Stats.subtimer("chaitin_allocproc2",
-				  Procalloc.allocateProc2) res_of_allocateproc1
+		   (* Stats.subtimer("chaitin_allocproc2", *)
+				  Procalloc.allocateProc2 res_of_allocateproc1
 	       fun doer (l,acc) = 
 		 let
 		   val (Bblock.BLOCK{instrs,in_live,out_live,succs,def,use,truelabel,...}) =
@@ -397,7 +398,8 @@ struct
 	     fun final_alloc arg = 
 		 case arg of
 		   (SOME psig, NONE, cls) => ((psig,[]),cls)
-		 | (NONE, SOME x, cls) => (Stats.subtimer("toasm_allocProc2",allocateProc2) x,cls)
+		 | (NONE, SOME x, cls) => (* Stats.subtimer("toasm_allocProc2", *)
+					  (allocateProc2 x,cls)
 		 | _ => error "allocateproc in allocatecomponent"
 	     val code_labels_listlist = map (fn ((_,a),b) => (a @ b)) (map final_alloc temps)
 	     val code_labels = flatten code_labels_listlist

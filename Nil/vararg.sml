@@ -1,11 +1,10 @@
 functor Vararg(val number_flatten : int
 	       structure NilContext : NILCONTEXT
 	       structure Normalize : NORMALIZE
-	       structure NilStatic : NILSTATIC
 	       structure NilUtil : NILUTIL
 	       structure Subst : NILSUBST
 	       structure Ppnil : PPNIL
-	       sharing type NilContext.context = NilStatic.context = Normalize.context)
+	       sharing type NilContext.context = Normalize.context)
     :> VARARG
     =
 
@@ -71,16 +70,16 @@ struct
 				     [Prim_e(NilPrimOp(Nil.record labels),
 					     map #2 vclist,
 					     map Var_e (map #1 vclist))], [])
-		    val funbnd = Function(Partial, Nonleaf,[],vclist,[],body,rescon)
+		    val funbnd = Function(Partial, Nonleaf,[],false,vclist,[],body,rescon)
 		    val newfuncon = AllArrow_c(Open,Partial,[],map #2 vclist,0w0,rescon)
 		    val bnd = Fixopen_b(Util.list2set[(newfunvar,funbnd)])
 		    val newfun = Let_e(Sequential,[bnd],Var_e newfunvar)
-		in  (primcon,Function(Partial,Nonleaf,vklist,[],[],newfun,newfuncon))
+		in  (primcon,Function(Partial,Nonleaf,vklist,false,[],[],newfun,newfuncon))
 		end
 	    val arms = Listops.map0count make_arm i
 	    val default = SOME (Var_e funvar)
 	    val body = Switch_e(Typecase_e{info=(),arg=typearg,arms=arms,default=default})
-	in  Function(Partial,Nonleaf,vklist,vclist,[],body,newfuntype)
+	in  Function(Partial,Nonleaf,vklist,vclist,false,[],body,newfuntype)
 	end
 
 
@@ -109,16 +108,16 @@ struct
 		    fun make_proj l = Prim_e(NilPrimOp(select l), rectypes, [Var_e argv])
 		    val projects = map make_proj labels
 		    val body = App_e(Open, Var_e funvar,[],projects,[])
-		    val funbnd = Function(Partial, Nonleaf,[],[(argv,argtype)],[],body,rescon)
+		    val funbnd = Function(Partial, Nonleaf,[],false,[(argv,argtype)],[],body,rescon)
 		    val newfuncon = AllArrow_c(Open,Partial,[],[argtype],0w0,rescon)
 		    val bnd = Fixopen_b(Util.list2set[(newfunvar,funbnd)])
 		    val newfun = Let_e(Sequential,[bnd],Var_e newfunvar)
-		in  (primcon,Function(Partial,Nonleaf,vklist,[],[],newfun,newfuncon))
+		in  (primcon,Function(Partial,Nonleaf,vklist,false,[],[],newfun,newfuncon))
 		end
 	    val arms = Listops.map0count make_arm i
 	    val default = SOME (Var_e funvar)
 	    val body = Switch_e(Typecase_e{info=(),arg=typearg,arms=arms,default=default})
-	in  Function(Partial,Nonleaf,vklist,vclist,[],body,newfuntype)
+	in  Function(Partial,Nonleaf,vklist,vclist,false,[],body,newfuntype)
 	end
 
     fun Vararg i : (var * kind) list * con * kind = 
@@ -168,8 +167,10 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
     end
 
 
-    fun getarrow(AllArrow_c (openness,effect,[],[argc],0w0,resc)) = SOME(openness,effect,argc,resc)
-      | getarrow(Prim_c(Vararg_c (openness,effect), [argc,resc])) = SOME(openness,effect,argc,resc)
+    fun getarrow(AllArrow_c (openness,effect,[],
+			     _,[argc],0w0,resc)) = SOME(openness,effect,argc,resc)
+      | getarrow(Prim_c(Vararg_c (openness,effect), 
+			[argc,resc])) = SOME(openness,effect,argc,resc)
       | getarrow _ = NONE
 
     fun getexn (Prim_c(Exntag_c, [c])) = SOME c
@@ -192,7 +193,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 
     fun getrecord argc =
 	(case argc of
-	     (Prim_c(Record_c labels, cons)) => SOME(RECORD(labels,cons))
+	     Prim_c(Record_c (labs,_),cons) => SOME(RECORD(labs, cons))
 	   | (Prim_c _) => SOME NOT_RECORD
 	   | (Mu_c _) => SOME NOT_RECORD
 	   | (AllArrow_c _) => SOME NOT_RECORD
@@ -229,12 +230,18 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 	       Prim_c(pc,clist) => Prim_c(pc, map (do_con state) clist)
 	     | Mu_c(recur,vc_seq) => Mu_c(recur,Sequence.map
 					  (fn (v,c) => (v,do_con state c)) vc_seq)
-	     | AllArrow_c(openness,effect,[],[argc],0w0,resc) =>
+	     | AllArrow_c(openness,effect,[],_,[argc],0w0,resc) =>
 		   do_arrow state (openness,effect,argc,resc)
-	     | AllArrow_c(openness,effect,vklist,vclist,numfloats,c) =>
+	     | AllArrow_c(openness,effect,vklist,vlist,clist,numfloats,c) =>
 		   let val (vklist,state) = do_vklist state vklist
+		       val (vlist,clist,state) = 
+			   case vlist of
+			       SOME vars => let val (vclist,state) = do_vclist state (Listops.zip vars clist)
+				            in  (SOME(map #1 vclist),map #2 vclist, state)
+					    end
+			     | NONE => (NONE,map (do_con state) clist, state)
 		   in  AllArrow_c(openness,effect,vklist,
-				  map (do_con state) vclist, numfloats, do_con state c)
+				  vlist, clist, numfloats, do_con state c)
 		   end
 	     | Var_c v => con
 	     | Crecord_c lclist => Crecord_c(map (fn (l,c) => (l, do_con state c)) lclist)
@@ -252,10 +259,12 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
      and do_arrow state (openness,effect,argc,resc) : con = 
 	 let val cr = do_con state
 	     val flatcount = get_count state
-	     fun nochange() = AllArrow_c(openness,effect,[],[cr argc],0w0,cr resc)
+	     fun nochange() = AllArrow_c(openness,effect,[],NONE,[cr argc],0w0,cr resc)
 	     fun change(labels,cons) = 
 		 if ((length labels) <= flatcount)
-		     then AllArrow_c(openness,effect,[],map cr cons,0w0,cr resc)
+		     then AllArrow_c(openness,effect,[],
+				     NONE, map cr cons,
+				     0w0,cr resc)
 		 else nochange()
 	 in  (case is_record state argc of
 		 NOT_RECORD => nochange()
@@ -303,20 +312,20 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 			App_e(openness, do_exp state f, map (do_con state) clist, 
 			      map (do_exp state) elist, map (do_exp state) eflist)
 		| Raise_e(e,c) => Raise_e(do_exp state e, do_con state c)
-		| Handle_e(e,v,handler,c) => 
+		| Handle_e(e,v,handler) => 
 			let val ([(v,_)],state) = do_vclist state [(v,Prim_c(Exn_c,[]))]
-			in  Handle_e(do_exp state e, v, do_exp state handler, do_con state c)
+			in  Handle_e(do_exp state e, v, do_exp state handler)
 			end)
 
-     and do_fun_recur state (funvar,Function(effect,recur,vklist,vclist,vflist,body,resc)) = 
+     and do_fun_recur state (funvar,Function(effect,recur,vklist,dep,vclist,vflist,body,resc)) = 
 	 let val (vklist,state) = do_vklist state vklist
 	     val resc = do_con state resc
 	     val (vclist,state) = do_vclist state vclist
 	     val body = do_exp state body
-	 in  [(funvar,Function(effect,recur,vklist,vclist,vflist,body,resc))]
+	 in  [(funvar,Function(effect,recur,vklist,dep,vclist,vflist,body,resc))]
 	 end
 
-     and do_fun state (funvar,f as Function(effect,recur,[],[(v,argc)],[],body,resc)) = 
+     and do_fun state (funvar,f as Function(effect,recur,[],dep,[(v,argc)],[],body,resc)) = 
 	 let val argc = do_con state argc
 	     val resc = do_con state resc
 	     fun change(labels,cons) = 
@@ -327,7 +336,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 			     val state = add_con(state,v,argc)
 			     val bnd = Exp_b(v,Prim_e(NilPrimOp(record labels),[],map Var_e vars))
 			     val body = Let_e(Sequential,[bnd],do_exp state body)
-			 in  [(funvar,Function(effect,recur,[],vclist,[],body,resc))]
+			 in  [(funvar,Function(effect,recur,[],dep,vclist,[],body,resc))]
 			 end
 		 else do_fun_recur state (funvar,f)
 	 in  (case (is_record state argc) of
@@ -343,7 +352,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 			  val fexp = Prim_e(NilPrimOp(make_vararg(Open,effect)),
 					    [argc,resc],
 					    [Var_e copy])
-			  val f2 = Function(effect,recur,[],[(v,argc)],[],
+			  val f2 = Function(effect,recur,[],false,[(v,argc)],[],
 						App_e(Open,fexp,[],[Var_e v],[]),resc)
 			  val vf2 = (funvar,f2)
 		      in  [vf, vf2]
@@ -387,17 +396,15 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 
      and do_switch (state : state) (switch : switch) : switch = 
 	    (case switch of
-		 Intsw_e {size,arg,result_type,arms,default} =>
+		 Intsw_e {size,arg,arms,default} =>
 		     let val arg = do_exp state arg
-			 val result_type = do_con state result_type
 			 val arms = map_second (do_exp state) arms
 			 val default = Util.mapopt (do_exp state) default
-		     in  Intsw_e {size=size,arg=arg,result_type=result_type,
+		     in  Intsw_e {size=size,arg=arg,
 				  arms=arms,default=default}
 		     end
-	       | Sumsw_e {sumtype,arg,result_type,bound,arms,default} =>
+	       | Sumsw_e {sumtype,arg,bound,arms,default} =>
 		     let val arg = do_exp state arg
-			 val result_type = do_con state result_type
 			 val (tagcount,totalcount,_,carrier) = 
 			     (case reduce state getsum sumtype of
 				  Normalize.REDUCED quad => quad
@@ -413,12 +420,11 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 			     end
 			 val arms = map do_arm arms
 			 val default = Util.mapopt (do_exp state) default
-		     in  Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,result_type=result_type,
+		     in  Sumsw_e {sumtype=sumtype,bound=bound,arg=arg,
 				  arms=arms,default=default}
 		     end
-	       | Exncase_e {arg,result_type,bound,arms,default} =>
+	       | Exncase_e {arg,bound,arms,default} =>
 		     let val arg = do_exp state arg
-			 val result_type = do_con state result_type
 			 fun do_arm(tag,body) = 
 			     let val tagcon = type_of(state,tag)
 				 val tag = do_exp state tag
@@ -430,7 +436,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 			     end
 			 val arms = map do_arm arms
 			 val default = Util.mapopt (do_exp state) default
-		     in  Exncase_e {bound=bound,arg=arg,result_type=result_type,
+		     in  Exncase_e {bound=bound,arg=arg,
 				     arms=arms,default=default}
 		     end
 	       | Typecase_e _ => error "typecase not done")
@@ -468,9 +474,9 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx *)
 	  | do_import(ImportType(l,v,k),state)  = (ImportType(l,v,do_kind state k), 
 						   add_kind(state,v,k))
 
-	fun do_export(ExportValue(l,e,c),state) = (ExportValue(l,do_exp state e,do_con state c), 
+	fun do_export(ExportValue(l,e),state) = (ExportValue(l,do_exp state e), 
 						   state)
-	  | do_export(ExportType(l,c,k),state)  = (ExportType(l,do_con state c,do_kind state k), 
+	  | do_export(ExportType(l,c),state)  = (ExportType(l,do_con state c), 
 						   state)
 
 	fun optimize (MODULE{imports, exports, bnds}) = 

@@ -1,4 +1,4 @@
-(*$import LinkIl Annotation Nil NilUtil NilContext PpNil NilStatic ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil *)
+(*$import LinkIl Annotation Nil NilUtil NilContext PpNil ToNil Optimize Specialize Normalize Linearize ToClosure  LINKNIL Stats Alpha NilPrimUtilParam NilSubst NilError PrimUtil *)
 
 structure Linknil :> LINKNIL  =
   struct
@@ -72,6 +72,7 @@ structure Linknil :> LINKNIL  =
 				      structure Subst = NilSubst)
 
 
+(*
     structure NilStatic = NilStaticFn(structure Annotation = Annotation
 				      structure PrimUtil = NilPrimUtil
 				      structure NilUtil = NilUtil
@@ -82,10 +83,9 @@ structure Linknil :> LINKNIL  =
 				      structure Subst = NilSubst
 				      structure Normalize = Normalize)
 
-    val nilstatic_exp_valid = NilStatic.exp_valid
+*)
 
-    structure Tonil = Tonil(structure Nilstatic = NilStatic
-			    structure NilError = NilError
+    structure Tonil = Tonil(structure NilError = NilError
 			    structure Nilprimutil = NilPrimUtil
 			    structure Ilutil = LinkIl.IlUtil
                             structure Ilcontext = LinkIl.IlContext
@@ -101,7 +101,6 @@ structure Linknil :> LINKNIL  =
 				  structure NilUtil = NilUtil
 				  structure NilContext = NilContext
 				  structure Normalize = Normalize
-				  structure NilStatic = NilStatic
 				  structure Ppnil = PpNil)
 (*
     structure Vararg = Vararg(val number_flatten = number_flatten
@@ -109,7 +108,6 @@ structure Linknil :> LINKNIL  =
 			      structure NilUtil = NilUtil
 			      structure NilContext = NilContext
 			      structure Normalize = Normalize
-			      structure NilStatic = NilStatic
 			      structure Ppnil = PpNil)
 *)
     structure Specialize = Specialize(structure NilUtil = NilUtil
@@ -134,7 +132,6 @@ structure Linknil :> LINKNIL  =
 
     structure ToClosure = ToClosure(structure NilContext = NilContext
 				    structure Normalize = Normalize
-				    structure NilStatic = NilStatic
 				    structure Ppnil = PpNil
 				    structure NilUtil = NilUtil
 				    structure Subst = NilSubst)
@@ -226,8 +223,9 @@ structure Linknil :> LINKNIL  =
 			        "OneOptimize" (filename, nilmod)
 		    else ()
 
+(*
 	    val nilmod = (Stats.timer("Linearization__temp",Linearize.linearize_mod)) nilmod
-
+*)
 	    val _ = if (!do_vararg) then error "no vararg" else ()
 (*
 	    val nilmod = if (!do_vararg)
@@ -257,6 +255,7 @@ structure Linknil :> LINKNIL  =
 		    else ()
 
 
+(*
  	    val nilmod' = 
 	      if (!typecheck_before_opt) then
 		(Stats.timer("Nil typechecking - pre opt",NilStatic.module_valid)) (D,nilmod)
@@ -266,6 +265,7 @@ structure Linknil :> LINKNIL  =
 	      if (!typecheck_before_opt) then 
 		  showmod (debug,!show_size) "Pre-opt typecheck" (filename, nilmod')
 	      else ()
+*)
 
 (*
 	    val nilmod = if (!do_opt) 
@@ -277,6 +277,7 @@ structure Linknil :> LINKNIL  =
 		    else ()
 *)
 
+(*
  	    val nilmod' = 
 	      if (!typecheck_after_opt andalso !do_opt) then
 		(Stats.timer("Nil typechecking",NilStatic.module_valid)) (D,nilmod)
@@ -286,6 +287,7 @@ structure Linknil :> LINKNIL  =
 	      if (!typecheck_after_opt andalso !do_opt) then 
 		  showmod (debug,!show_size) "Post-opt typecheck" (filename, nilmod')
 	      else ()
+*)
 	
 (*
 	    val _ = print "starting beta-reduction\n"	  
@@ -299,6 +301,7 @@ structure Linknil :> LINKNIL  =
 	    val nilmod = (Stats.timer("Linearization2",Linearize.linearize_mod)) nilmod
 	    val _ = showmod (debug orelse !show_before_rtl,!show_size) "Renaming2" (filename, nilmod)
 
+(*
  	    val nilmod' = 
 	      if (!typecheck_after_cc) then
 		(Stats.timer("Nil typechecking (post cc)",NilStatic.module_valid)) (D,nilmod)
@@ -308,6 +311,8 @@ structure Linknil :> LINKNIL  =
 	      if (!typecheck_after_cc) then 
 		  showmod (debug,!show_size) "Post-cc Typecheck" (filename, nilmod')
 	      else ()
+*)
+
 	in  nilmod
 	end
 

@@ -7,9 +7,9 @@ Elaborator/elaborator.cm (* ------ Elaborator Stuff ----- *)
 Nil/nil.cm               (* ------ Nil stuff ------ *)
 
 Rtl/rtl.cm
-(* RtlToMLRISC/RtlToMLRISC.cm *)
-RtlToMLRISC/Alpha/Alpha.cm
 Backend/backend.cm
 Alpha/alpha.cm
+(* RtlToMLRISC/RtlToMLRISC.cm *)
+(* RtlToMLRISC/Alpha/Alpha.cm *)
 Top/top.cm
 

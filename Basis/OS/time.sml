@@ -84,14 +84,12 @@ structure Time : TIME =
     fun lessEq (TIME{sec=s1, usec=u1}, TIME{sec=s2, usec=u2}) =
 	  (s1 < s2) orelse ((s1 = s2) andalso (u1 <= u2))
 
-    local
-      val gettimeofday = ml_timeofday
-    in
-    fun now () = let val (ts, tu) = gettimeofday()
+
+    fun now () = let val (ts, tu) = Ccall(ml_timeofday,())
 	  in
 	    TIME{sec=ts, usec=tu}
 	  end
-    end (* local *)
+
 
     local
       val zeros = "0000000000"
@@ -187,9 +185,12 @@ structure Time : TIME =
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:53:11  pscheng
-# added basis
+# Revision 1.2  98/04/06  21:17:42  pscheng
+# update: Typeof_c, dependent arrow/record types
 # 
+# Revision 1.1  1998/03/09  19:53:11  pscheng
+# added basis
+#
  * Revision 1.2  1997/05/29  14:44:29  jhr
  *   SML'97 Basis Library changes (phase 1)
  *

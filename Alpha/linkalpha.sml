@@ -58,6 +58,7 @@ struct
 				    structure Tracetable = Tracetable)
 
 
+
   structure Graph = Vargraph()
 
   structure Recursion = Recursion(structure Pprtl = Pprtl

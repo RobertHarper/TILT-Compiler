@@ -1,14 +1,13 @@
-(*$import RTL PPRTL RTLTAGS NIL NILCONTEXT NILSTATIC NILUTIL PPNIL TORTLBASE Listops Stats Bool NORMALIZE *)
+(*$import RTL PPRTL RTLTAGS NIL NILCONTEXT NILUTIL PPNIL TORTLBASE Listops Stats Bool NORMALIZE *)
 
 functor TortlBase(structure Pprtl : PPRTL 
 		  structure Rtltags : RTLTAGS 
 		  structure NilContext : NILCONTEXT
 		  structure Normalize : NORMALIZE
-		  structure NilStatic : NILSTATIC
 		  structure NilUtil : NILUTIL
 		  structure Ppnil : PPNIL
 		  sharing Pprtl.Rtltags = Rtltags
-		  sharing type NilStatic.context = NilContext.context = Normalize.context)
+		  sharing type NilContext.context = Normalize.context)
     :> TORTL_BASE 
    =
 struct
@@ -44,21 +43,9 @@ val debug_bound = ref false
     type label = Rtl.label
 
     val exncounter_label = ML_EXTERN_LABEL "exncounter"
-    val error = fn s => (Util.error "tortl.sml" s)
+    val error = fn s => (Util.error "tortl-base.sml" s)
     structure TW32 = TilWord32
     structure TW64 = TilWord64
-
-
-   fun memoize thunk = 
-       let val result = ref NONE
-       in  fn() =>
-	   (case !result of
-		NONE => let val res = thunk()
-			    val _ = result := SOME res
-			in  res
-			    end
-	      | SOME res => res)
-       end
 
 
    (* ------------------ Overall Data Structures ------------------------------ *)
@@ -97,7 +84,7 @@ val debug_bound = ref false
    type varmap = var_rep VarMap.map
    type convarmap = convar_rep' VarMap.map
    val unitval = VTAG 0w256
-   val unit_vvc = (VAR_VAL unitval, Prim_c(Record_c[],[]))
+   val unit_vvc = (VAR_VAL unitval, Prim_c(Record_c ([],NONE),[]))
 
    datatype gcinfo = GC_IMM of instr ref | GC_INF
    type gcstate = gcinfo list
@@ -283,48 +270,23 @@ val debug_bound = ref false
     fun get_shape ({env,...} : state) c = Normalize.get_shape env c
     fun make_shape ({env,...} : state) k = Normalize.make_shape env k
     fun simplify_type ({env,...} : state) con : bool * con = 
-	let val c = Normalize.reduce_hnf(env,con)
-	    val hnf = Normalize.is_hnf c
+	let val result = Normalize.reduce_hnf(env,con)
 	    val _ = if (!debug_simp)
 		    then (print "simplify on\n";  Ppnil.pp_con con;
-			  print "\nreduced to\n"; Ppnil.pp_con c;
+			  print "\nreduced to\n"; Ppnil.pp_con (#2 result);
 			  print "\n")
 		    else ()
-	in  (hnf,c)
+	in  result
 	end
 
+  fun reduce_to_sum str ({env,...}:state) sumcon = 
+	  (Normalize.reduceToSumtype(env,sumcon))
+	  handle e => (print "reduce_to_sum "; print str; print " failed\n"; raise e)
 
-val simplify_type = fn state => Stats.subtimer("tortl_simplify_type",simplify_type state)
-
-
-    local
-	fun help2 state (tagcount,totalcount,known,carrier) = 
-	    if (TilWord32.equal(totalcount,TilWord32.uplus(tagcount,0w1))) 
-		then SOME(tagcount,known,[carrier])
-	    else (case carrier of
-		      Crecord_c lcons => SOME(tagcount,known,map #2 lcons)
-		    | _ => (case #2(simplify_type state carrier) of
-				Crecord_c lcons => SOME(tagcount,known,map #2 lcons)
-			      | _ => NONE))
-	fun help state sumcon = 
-	    (case sumcon of
-		 Prim_c(Sum_c {tagcount,totalcount,known}, [carrier]) => 
-		     help2 state (tagcount,totalcount,known,carrier)
-	       | _ => 
-		     (case #2(simplify_type state sumcon) of
-		        Prim_c(Sum_c {tagcount,totalcount,known}, [carrier]) => 
-			    help2 state (tagcount,totalcount,known,carrier)
-	       | _ => NONE))
-    in  fun reduce_to_sum str state sumcon = 
-	(case help state sumcon of
-	     NONE => error (str ^ " got sum not reducible to a sum type")
-	   | SOME (tag,_,s) => (tag,s))
-	fun reduce_to_known_sum str state sumcon = 
-	    (case help state sumcon of
-		 NONE => error (str ^ " got sum not reducible to a sum type")
-	       | SOME (tag,NONE,s) => error (str ^ " got sum reducible to a unknown sum type")
-	       | SOME (tag,SOME k,s) => (tag,k,s))
-    end
+(*
+val simplify_type = fn state => 
+	Stats.subtimer("tortl_simplify_type",simplify_type state)
+*)
 
 
 
@@ -352,10 +314,10 @@ val simplify_type = fn state => Stats.subtimer("tortl_simplify_type",simplify_ty
 
        in case con of
 	   Prim_c(pcon,clist) => primcon2rep(pcon,clist)
-	 | AllArrow_c (Open,_,_,_,_,_) => error "no open lambdas allowed by this stage"
-	 | AllArrow_c(Closure,_,_,_,_,_) => SOME TRACE
-	 | AllArrow_c(Code,_,_,_,_,_) => SOME NOTRACE_CODE
-	 | AllArrow_c(ExternCode,_,_,_,_,_) => SOME NOTRACE_CODE
+	 | AllArrow_c (Open,_,_,_,_,_,_) => error "no open lambdas allowed by this stage"
+	 | AllArrow_c(Closure,_,_,_,_,_,_) => SOME TRACE
+	 | AllArrow_c(Code,_,_,_,_,_,_) => SOME NOTRACE_CODE
+	 | ExternArrow_c _ => SOME NOTRACE_CODE
 	 | Var_c v => 
 	       (case (getconvarrep' state v) of
 
@@ -395,7 +357,8 @@ val simplify_type = fn state => Stats.subtimer("tortl_simplify_type",simplify_ty
 		       in  loop acc con rest
 		       end
 		     | loop acc (Singleton_k c) labs = 
-		       let val k = Stats.subtimer("tortl_get_shape0",Normalize.get_shape (#env state)) c
+		       let val k = (* Stats.subtimer("tortl_get_shape0" *)
+	 				Normalize.get_shape (#env state) c
 		       in  loop acc k labs
 		       end
 		     | loop acc _ labs = error "expect record kind"
@@ -422,6 +385,7 @@ val simplify_type = fn state => Stats.subtimer("tortl_simplify_type",simplify_ty
 	 | (Let_c _) => NONE
 	 | (App_c _) => NONE
 	 | (Typecase_c _) => NONE
+	 | Typeof_c _ => NONE
 	 | (Crecord_c _) => error "Crecord_c not a type"
 	 | (Closure_c _) => error "Closure_c not a type"
 	 | (Annotate_c (_,c)) => con2rep_raw state c
@@ -436,10 +400,11 @@ val simplify_type = fn state => Stats.subtimer("tortl_simplify_type",simplify_ty
 				  | _ => print "no reduced con\n"))
 	    fun reduce c = 
 		 (case c of
-		      (Proj_c _) => #2(simplify_type state c)
-		    | (Let_c _) => #2(simplify_type state c)
-		    | (App_c _) => #2(simplify_type state c)
-		    | (Var_c _) => #2(simplify_type state c)
+		      Proj_c _ => #2(simplify_type state c)
+		    | Let_c _ => #2(simplify_type state c)
+		    | App_c _ => #2(simplify_type state c)
+		    | Var_c _ => #2(simplify_type state c)
+		    | Typeof_c _ => #2(simplify_type state c)
 		    | _ => c)
 
 	in  (case (con2rep_raw state con) of
@@ -448,8 +413,8 @@ val simplify_type = fn state => Stats.subtimer("tortl_simplify_type",simplify_ty
 		     in  (case ((con2rep_raw state c) handle e => (failure (SOME c); raise e)) of
 			      SOME rep => rep
 			    | NONE => (print "con2rep failed on orig and reduced con; assuming TRACE\n";
-				     failure (SOME c); 
-					TRACE))
+				       if (!debug) then failure (SOME c) else ();
+				       TRACE))
 				(* error "con2rep failed" *)
 		     end
 	       | SOME(rep as (COMPUTE _)) => (* a reduction here might be advantageous *)
@@ -461,8 +426,9 @@ val simplify_type = fn state => Stats.subtimer("tortl_simplify_type",simplify_ty
 	       | SOME rep => rep)
 	end)
 
+(*
 val con2rep = Stats.subtimer("tortl_con2rep",con2rep)
-
+*)
 
    fun varloc2rep varloc =
        (case varloc of

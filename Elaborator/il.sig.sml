@@ -27,11 +27,12 @@ signature IL =
                  | ETAPRIM of prim * con list
                  | ETAILPRIM of ilprim * con list
                  | VAR     of var
-                 | APP     of exp * exp list
+                 | APP     of exp * exp
+                 | EXTERN_APP of con * exp * exp list  (* con is type of function *)
                  | FIX     of bool * arrow * fbnd list
                  | RECORD  of (label * exp) list
                  | RECORD_PROJECT of exp * label * con
-                 | SUM_TAIL of con * exp
+                 | SUM_TAIL of int * con * exp
                  | HANDLE  of exp * exp      
                  | RAISE   of con * exp       (* annotate with the type of the raised expression *)
                  | LET     of bnd list * exp
@@ -91,7 +92,7 @@ signature IL =
                  | KIND_INLINE of kind * con
     and      mod = MOD_VAR of var
                  | MOD_STRUCTURE of sbnd list
-                 | MOD_FUNCTOR of var * signat * mod
+                 | MOD_FUNCTOR of var * signat * mod * signat
                  | MOD_APP of mod * mod
                  | MOD_PROJECT of mod * label
                  | MOD_SEAL of mod * signat

@@ -30,8 +30,8 @@ datatype parseResult
   = EOF   (* end of file reached *)
   | ERROR (* parsed successfully, but with syntactic or semantic errors *)
   | ABORT (* could not even parse to end of declaration *)
-  | PARSE_IMPL of string list * Ast.dec
-  | PARSE_INTER of string list * Ast.spec list
+  | PARSE_IMPL of int * string list * Ast.dec
+  | PARSE_INTER of int * string list * Ast.spec list
 
 val dummyEOF = MLLrVals.Tokens.EOF(0,0)
 val dummySEMI = MLLrVals.Tokens.SEMICOLON(0,0)
@@ -100,9 +100,11 @@ fun parse (source as {sourceStream,errConsumer,interactive,
                           val _ = lexer' := lexer''
 			  val Ast.MarkTop(top, _) = result
 		      in if !anyErrors then ERROR
-			 else case top 
-				of Ast.ImplTop res => PARSE_IMPL res
-				 | Ast.InterTop res => PARSE_INTER res
+			 else case top of
+				   Ast.ImplTop (imports,dec) => 
+				    PARSE_IMPL(linesRead(),imports,dec)
+			         | Ast.InterTop (imports,spec) => 
+				    PARSE_INTER(linesRead(),imports,spec)
 				 | _ => ERROR 
                       end 
         end handle LrParser.ParseError => ABORT
@@ -116,9 +118,12 @@ end (* structure FrontEnd *)
 
 (*
  * $Log$
-# Revision 1.7  98/02/15  22:43:26  pscheng
-# bootstrapping changes
+# Revision 1.8  98/04/06  21:19:40  pscheng
+# update: Typeof_c, dependent arrow/record types
 # 
+# Revision 1.7  1998/02/15  22:43:26  pscheng
+# bootstrapping changes
+#
 # Revision 1.6  1998/02/01  01:27:59  pscheng
 # Changes to facilitate bootstrapping:
 #   Added ascription in various places

@@ -19,7 +19,6 @@ functor Datatype(structure IlStatic : ILSTATIC
     val debug = ref false
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
-    fun make_eqcon c = CON_ARROW([con_tuple[c,c]], con_bool, false, oneshot_init PARTIAL)
 
 
     (* ------------------------------------------------------------------
@@ -113,7 +112,7 @@ functor Datatype(structure IlStatic : ILSTATIC
 		       (tyvar_labs, tyvar_vars))
 	  val sdecs_eq = (map2 (fn (tv,v) => 
 				let val eq_label = to_eq_lab tv
-				    val eq_con = make_eqcon(CON_VAR v)
+				    val eq_con = con_eqfun(CON_VAR v)
 				in SDEC(eq_label,DEC_EXP(fresh_var(),eq_con))
 				end)
 			  (tyvar_labs, tyvar_vars))
@@ -316,8 +315,8 @@ functor Datatype(structure IlStatic : ILSTATIC
 	    val var_poly_dec = DEC_MOD(mpoly_var,SelfifySig context (SIMPLE_PATH mpoly_var,sigpoly_eq))
 	    val temp_ctxt = add_context_dec(context,var_poly_dec)
 	    val eq_con = if (is_noncarrying)
-				then make_eqcon top_type_mproj
-			 else let fun mapper i = make_eqcon(CON_TUPLE_PROJECT(i,top_type_mproj))
+				then con_eqfun top_type_mproj
+			 else let fun mapper i = con_eqfun(CON_TUPLE_PROJECT(i,top_type_mproj))
 			      in  con_tuple(map0count mapper num_datatype)
 			      end
 	    val eq_exp = if (is_noncarrying)
@@ -350,13 +349,14 @@ functor Datatype(structure IlStatic : ILSTATIC
 	    val expose_modvar = fresh_named_var "exposer_mod"
 	    val expose_expbnd = BND_EXP(expose_var,exp_expose_i)
 	    val expose_expdec = DEC_EXP(expose_var,con_expose_i)
+	    val expose_inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expose_expdec)])
 	    val expose_modbnd = BND_MOD(expose_modvar,
 					MOD_FUNCTOR(mpoly_var,sigpoly,
-						    MOD_STRUCTURE[SBND(it_lab,expose_expbnd)]))
+						    MOD_STRUCTURE[SBND(it_lab,expose_expbnd)],
+						    expose_inner_sig))
 	    val expose_moddec = DEC_MOD(expose_modvar,
 					SIGNAT_FUNCTOR(mpoly_var,sigpoly,
-						  SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expose_expdec)]),
-						  TOTAL))
+						       expose_inner_sig,TOTAL))
 	    val expose_sbnd = SBND(expose_lab,if is_monomorphic 
 						  then expose_expbnd else expose_modbnd)
 	    val expose_sdec = SDEC(expose_lab,if is_monomorphic
@@ -370,13 +370,14 @@ functor Datatype(structure IlStatic : ILSTATIC
 		  val mkpoly_var = fresh_var()
 		  val bnd = BND_EXP(mk_var, exp_mk_ij)
 		  val dec = DEC_EXP(mk_var, con_mk_ij)
+		  val inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,dec)])
 		  val modbnd = BND_MOD(mkpoly_var,
 					   MOD_FUNCTOR(mpoly_var,sigpoly,
-						       MOD_STRUCTURE[SBND(it_lab,bnd)]))
+						       MOD_STRUCTURE[SBND(it_lab,bnd)],
+						       inner_sig))
 		  val moddec = DEC_MOD(mkpoly_var,
 				       SIGNAT_FUNCTOR(mpoly_var,sigpoly,
-						      SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,dec)]),
-						      TOTAL))
+						      inner_sig,TOTAL))
 	      in  (SBND(constr_lab_ij, if is_monomorphic then bnd else modbnd),
 		   SDEC(constr_lab_ij, if is_monomorphic then dec else moddec))
 	      end
@@ -419,11 +420,13 @@ functor Datatype(structure IlStatic : ILSTATIC
 						then top_eq_exp
 						else RECORD_PROJECT(VAR top_eq_var, 
 							generate_tuple_label(i+1), top_eq_con)
-			     val con_eq = make_eqcon(if is_monomorphic 
+			     val con_eq = con_eqfun(if is_monomorphic 
 							then CON_VAR type_var_i
 						     else CON_APP (CON_VAR type_var_i, tyvar_mproj))
 			     val eq_expbnd = BND_EXP(equal_var,exp_eq)
 			     val eq_expdec = DEC_EXP(equal_var,con_eq)
+			     val eq_inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,
+									    eq_expdec)])
 			     val eq_sbnd = 
 				 SBND((eq_lab,
 				       if (is_monomorphic)
@@ -431,16 +434,15 @@ functor Datatype(structure IlStatic : ILSTATIC
 				       else
 					   BND_MOD(bnd_var,
 						   MOD_FUNCTOR(mpoly_var,sigpoly_eq,
-							   MOD_STRUCTURE[SBND(it_lab,eq_expbnd)]))))
+							   MOD_STRUCTURE[SBND(it_lab,eq_expbnd)],
+							       eq_inner_sig))))
 			     val eq_sdec = 
 				 SDEC(eq_lab,
 				      if (is_monomorphic)
 					  then eq_expdec
 				      else DEC_MOD(bnd_var,
 					     SIGNAT_FUNCTOR(mpoly_var,sigpoly_eq,
-							    SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,
-											eq_expdec)]),
-							    TOTAL)))
+							    eq_inner_sig,TOTAL)))
 			 in (eq_sbnd, eq_sdec)
 			 end)
 	in val eq_sbnd_sdecs = if (!is_eq)
@@ -458,10 +460,12 @@ functor Datatype(structure IlStatic : ILSTATIC
 				    else fresh_named_var_transparent "top_eq"
 		    val expbnd = BND_EXP(equal_var, eq_exp)
 		    val expdec = DEC_EXP(equal_var, eq_con)
+		    val inner_sig = SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expdec)])
 		    val modbnd = BND_MOD(top_eq_var, MOD_FUNCTOR(mpoly_var,sigpoly_eq,
-					MOD_STRUCTURE[SBND(it_lab,expbnd)]))
+							 MOD_STRUCTURE[SBND(it_lab,expbnd)],
+							 inner_sig))
 		    val moddec = DEC_MOD(top_eq_var, SIGNAT_FUNCTOR(mpoly_var,sigpoly_eq,
-					SIGNAT_STRUCTURE(NONE,[SDEC(it_lab,expdec)]), TOTAL))
+								    inner_sig, TOTAL))
 		    val bnd = if is_monomorphic then expbnd else modbnd
 		    val dec = if is_monomorphic then expdec else moddec
 		in  [(SBND(top_eq_lab, bnd), SDEC(top_eq_lab, dec))]
@@ -1028,7 +1032,7 @@ functor Datatype(structure IlStatic : ILSTATIC
 		(SOME(_,PHRASE_CLASS_EXP(e,_)),_) => e
 	      | (SOME(_,PHRASE_CLASS_MOD(m,_)),SOME(sbnds,_,_)) => 
 		    (case m of
-			 MOD_FUNCTOR(v,_,MOD_STRUCTURE[SBND(_,BND_EXP(_,e))]) =>
+			 MOD_FUNCTOR(v,_,MOD_STRUCTURE[SBND(_,BND_EXP(_,e))],_) =>
 			     exp_subst_modvar(e,[(v,MOD_STRUCTURE sbnds)])
 		       | _ => MODULE_PROJECT(MOD_APP(m,MOD_STRUCTURE sbnds),it_lab))
 	      | _ => error "cannot construct expose_exp")

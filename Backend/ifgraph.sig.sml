@@ -21,6 +21,7 @@ sig
    val insert_node : graph -> node -> unit
    val delete_node : graph -> node -> unit
    val insert_edge : graph -> node * node -> unit
+   val insert_edges : graph -> node * Machine.Regset.set -> unit
    val print_stats : graph-> unit
 
 end

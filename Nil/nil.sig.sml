@@ -16,7 +16,7 @@ sig
   (* In general, we want to distinguish between functions/arrow types that 
    * are open (possibly having free variables) or those that are closed.
    *)
-  datatype openness = Open | Code | Closure | ExternCode
+  datatype openness = Open | Code | Closure
 
   (* In addition, we would like to know if application of an arrow object
    * is total(i.e. effect-free) or partial (i.e. not necessarily effect-free)
@@ -60,10 +60,10 @@ sig
     | Vector_c                                (* vectors *)
     | Ref_c                                   (* references *)
     | Exntag_c                                (* exception tags *)
+    | Record_c of label list * var list option  (* records *)
     | Sum_c of {tagcount : w32,
 		totalcount : w32,
                 known : w32 option}           (* sum types *)
-    | Record_c of label list                  (* records *)
     | Vararg_c of openness * effect           (* classifies make_vararg and make_onearg *)
 
   and con = 
@@ -72,10 +72,14 @@ sig
     | Mu_c of bool * (var,con) sequence           (* Constructors that classify values of
 						    a recursive type; bool indicates if it
 						    is really recursive *)
-    | AllArrow_c of openness * effect *           (* open functions, code functions, and closures *)
-                    (var * kind) list * con list * w32 * con
+    | AllArrow_c of openness * effect *        (* open functions, code functions, and closures *)
+                    (var * kind) list * 
+		    var list option * con list *
+		    w32 * con
+    | ExternArrow_c of con list * con
     | Var_c of var
     | Let_c of letsort * conbnd list * con        (* Constructor-level bindings *)
+    | Typeof_c of exp                             (* is equivalent to type of given expression *)
     | Crecord_c of (label * con) list             (* Constructor-level records *)
     | Proj_c of con * label                       (* Constructor-level record projection *)
     | Closure_c of con * con                      (* Constructor-level closure: 
@@ -86,15 +90,13 @@ sig
                      arms : (primcon * (var * kind) list * con) list,
                      default : con,
 		     kind : kind}        (* Constructor-level typecase *)
-    | Annotate_c of annot * con                   (* General-purpose place to hang information *)
+    | Annotate_c of kind annotation * con  (* General-purpose place to hang information *)
 
   and conbnd = Con_cb of (var * con)
              | Open_cb of (var * (var * kind) list * con * kind)
              | Code_cb of (var * (var * kind) list * con * kind)
 
-  withtype annot = kind Annotation.annotation
-
-  datatype nilprim = 
+  and nilprim = 
       record of label list       (* record intro *)
     | select of label            (* record field selection; takes the record type *)
     | inject of TilWord32.word   (* slow; must be given one type that is
@@ -119,7 +121,7 @@ sig
     | peq                        (* polymorphic equality: unused since HIL compiles away equality *)
 
 
-  datatype allprim = NilPrimOp of nilprim
+  and allprim = NilPrimOp of nilprim
                    | PrimOp of prim
 
   (* Intswitch should be apparent.
@@ -128,25 +130,21 @@ sig
    * Exncase's arms are indexed by expressions that must have type Exntag_c(c) and
    *    the arms must be functions from [c]->tau for some fixed result type tau.  
    *)
-  datatype switch =                                 (* Switching on / Elim Form *)
-      Intsw_e of {result_type : con,
-		  arg  : exp, 
+  and switch =                                 (* Switching on / Elim Form *)
+      Intsw_e of {arg  : exp, 
 		  size : Prim.intsize,
 		  arms : (w32 * exp) list,
 		  default : exp option}             (* integers *)
-    | Sumsw_e of {result_type : con,
-		  arg : exp,
+    | Sumsw_e of {arg : exp,
 		  sumtype : con,
 		  bound : var,
 		  arms : (w32 * exp) list,
 		  default : exp option}             (* sum types *)
-    | Exncase_e of {result_type : con,
-		    arg : exp,
+    | Exncase_e of {arg : exp,
 		    bound : var,
 		    arms : (exp * exp) list,
 		    default : exp option}           (* exceptions *)
-    | Typecase_e of {result_type : con,
-		     arg : con,
+    | Typecase_e of {arg : con,
 		     arms : ((var * kind) list * exp) list,
 		     default : exp option}          (* typecase *)
 
@@ -158,8 +156,9 @@ sig
     | Switch_e of switch                             (* Switch statements *)
     | App_e of openness * exp * con list *           (* application of open funs, code, or closures *)
                        exp list * exp list           (* in the case of code, the first exp must be a var *)
+    | ExternApp_e of exp * exp list
     | Raise_e of exp * con                                
-    | Handle_e of exp * var * exp * con
+    | Handle_e of exp * var * exp
 
 
   (* result types are needed for recursive definitions in order to make
@@ -187,13 +186,13 @@ sig
    *)
 
   and function = Function of effect * recursive * (var * kind) list * 
-                             (var * con) list * (var list) * exp * con  
+                             bool * (var * con) list * (var list) * exp * con  
 
 
   datatype import_entry = ImportValue of label * var * con
                         | ImportType of label * var * kind
-  datatype export_entry = ExportValue of label * exp * con
-                        | ExportType of label * con * kind
+  datatype export_entry = ExportValue of label * exp
+                        | ExportType of label * con
   datatype module = MODULE of {bnds : bnd list,
 			       imports : import_entry list,
 			       exports : export_entry list}

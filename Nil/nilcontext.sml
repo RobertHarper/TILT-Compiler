@@ -36,6 +36,8 @@ functor NilContextFn(structure PpNil : PPNIL
 
    val profile = Stats.bool "nil_profile"
    val debug = Stats.bool "nil_debug"
+   val eager = Stats.bool "nil_eager"
+   val _ = eager := false
    val (nilcontext_kinds_bound,
 	nilcontext_kinds_renamed) =
      (Stats.counter "nilcontext_kinds_bound",
@@ -50,37 +52,26 @@ functor NilContextFn(structure PpNil : PPNIL
    fun locate fn_name = "nilcontext.sml::"^fn_name
 
    (*Possibly uncomputed data.*)
-   type 'a delay = 'a option ref
+   datatype 'a thunk = FROZEN of (unit -> 'a) | THAWED of 'a
+   type 'a delay = 'a thunk ref
 
-   fun delay () = ref NONE
+   fun delay thunk = ref(if (!eager)
+			 then THAWED (thunk())
+			 else FROZEN thunk)
+  fun immediate value = ref (THAWED value)
+   fun thaw (ref (THAWED v)) = v
+     | thaw (r as ref(FROZEN t)) = let val v = t()
+				       val _ = r := (THAWED v)
+				   in  v
+				   end
+   fun delayed (ref (FROZEN _)) = true
+     | delayed (ref (THAWED _)) = false
 
-   fun immediate value = ref (SOME value)
-
-   fun instantiate' delay value = delay := (SOME value)
-
-   fun instantiate delay value = 
-     (case delay 
-	of ref NONE => delay := (SOME value)
-	 | _ => error (locate "instantiate") "Trying to instantiate previously instantiated delay")
-
-   fun fill_delay delay fill = 
-     (case delay 
-	of ref NONE => 
-	  let
-	    val value = fill ()
-	  in
-	    (delay := SOME value;
-	     value)
-	  end
-	 | ref (SOME value) => value)
 
    fun valOf str NONE = (print "valOf failed at "; print str; print "\n";
 			 raise Option.Option)
      | valOf str (SOME x) = x
 
-   fun extract delay = valOf "1" (!delay)
-
-   fun delayed delay = not(Option.isSome (!delay))
 
    type k_entry = {eqn: con option,
 		   kind : kind delay,
@@ -144,7 +135,7 @@ functor NilContextFn(structure PpNil : PPNIL
       (if delayed kind then
 	 print "Delayed"
        else
-	 PpNil.pp_kind (extract kind));
+	 PpNil.pp_kind (thaw kind));
       print "\n")
 
    fun print_kinds ({kindmap,...}:context) = 
@@ -268,7 +259,7 @@ functor NilContextFn(structure PpNil : PPNIL
 		else NilUtil.kind_tuple(Listops.copy(len,Type_k))
 	    end
 
-	 | (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) => Type_k
+	 | (AllArrow_c _) => Type_k
 
 	 | (v as (Var_c var)) => 
 	    (find_shape (D,var)
@@ -286,8 +277,8 @@ functor NilContextFn(structure PpNil : PPNIL
 	 | (Closure_c (code,env)) => 
 	    let 
 	      val (vklist,body_kind) = 
-		(case shape_of (D,code) 
-		   of Arrow_k (Code,vklist,body_kind) => (vklist,body_kind)
+		(case shape_of (D,code) of
+		      Arrow_k (Code,vklist,body_kind) => (vklist,body_kind)
 		    | Arrow_k (ExternCode,vklist,body_kind) => (vklist,body_kind)
 		    | _ => error (locate "shape_of") "Invalid closure: code component does not have code kind")
 	      val shape = Arrow_k(Closure,Listops.butlast vklist,body_kind)
@@ -346,24 +337,11 @@ functor NilContextFn(structure PpNil : PPNIL
      end
    and find_shape (context as {kindmap,...}:context,var) = 
      (case (V.find (kindmap, var)) of
-	SOME {eqn,kind,shape,index} => 
-	  if delayed shape then
-	    let
-	      val value = 
-		if delayed kind then
-		  (shape_of (context,valOf "3" eqn))
-		else
-		  (make_shape (context,extract kind))
-	    in
-	      (instantiate' shape value;
-		  value)
-	    end
-	  else
-	    extract shape
+	SOME {eqn,kind,shape,index} => thaw shape
       | NONE => raise Unbound)
 
 
-   fun insert_kind ({conmap,kindmap,counter}:context,var,kind) = 
+   fun insert_kind (context as {conmap,kindmap,counter}:context,var,kind) = 
      let
        val _ =  
 	 if !debug then
@@ -375,11 +353,11 @@ functor NilContextFn(structure PpNil : PPNIL
 		 fn () => (PpNil.pp_kind kind;
 			   print "Kind contains variables not found in context"))
 	    ]
-	 else ();
-
+	 else (); 
+       fun thunk() = make_shape (context,kind)
        val entry = {eqn = NONE,
 		    kind = immediate kind,
-		    shape = delay (),
+		    shape = delay thunk,
 		    index = counter}
      in
        {conmap = conmap, 
@@ -387,7 +365,7 @@ functor NilContextFn(structure PpNil : PPNIL
 	kindmap = V.insert (kindmap, var, entry)}
      end
 
-   fun insert_kind_shape ({conmap,kindmap,counter}:context,var,kind,shape) = 
+   fun insert_kind_shape (context as {conmap,kindmap,counter}:context,var,kind,shape) = 
      let
        val _ =  
 	 if !debug then
@@ -450,7 +428,7 @@ functor NilContextFn(structure PpNil : PPNIL
 	kindmap = V.insert (kindmap, var, entry)}
      end
 
-   fun insert_kind_equation ({conmap,kindmap,counter}:context,var,con,kind) = 
+   fun insert_kind_equation (context as {conmap,kindmap,counter}:context,var,con,kind) = 
      let
        val _ =  
 	 if !debug then
@@ -466,9 +444,10 @@ functor NilContextFn(structure PpNil : PPNIL
 			   print "Kind contains variables not found in context"))
 	    ]
 	 else ();
+       fun thunk() = make_shape (context,kind)
        val entry = {eqn = SOME con,
 		    kind = immediate kind,
-		    shape = delay (),
+		    shape = delay thunk,
 		    index = counter}
      in
        {conmap = conmap, 
@@ -476,7 +455,7 @@ functor NilContextFn(structure PpNil : PPNIL
 	kindmap = V.insert (kindmap, var, entry)}
      end
 
-   fun insert_equation ({conmap,kindmap,counter}:context,var,con) =  
+   fun insert_equation (context as {conmap,kindmap,counter}:context,var,con) =  
      let
        val _ =  
 	 if !debug then
@@ -489,10 +468,12 @@ functor NilContextFn(structure PpNil : PPNIL
 				  print "Constructor contains variables not found in context"))
 		   ]
 	 else ();
-
+       fun kthunk() = kind_of (context,con)
+       val kind = delay kthunk
+       fun sthunk() = make_shape (context,thaw kind)
        val entry = {eqn = SOME con,
-		    kind = delay (),
-		    shape = delay (),
+		    kind = kind,
+		    shape = delay sthunk,
 		    index = counter}
      in
        {conmap = conmap, 
@@ -500,11 +481,11 @@ functor NilContextFn(structure PpNil : PPNIL
 	kindmap = V.insert (kindmap, var, entry)}
      end
 
-   fun insert_kind_list (C:context,vklist) = 
+   and insert_kind_list (C:context,vklist) = 
      foldl (fn ((v,k),C) => insert_kind (C,v,k)) C vklist
 
 
-   fun strip_singleton (D : context,kind : kind) : kind = 
+   and strip_singleton (D : context,kind : kind) : kind = 
      (case kind
 	of Singleton_k con => kind_of (D,con)
 	 | _ => kind)
@@ -530,7 +511,7 @@ functor NilContextFn(structure PpNil : PPNIL
 		else NilUtil.kind_tuple(Listops.copy(len,Type_k))
 	    end
 
-	 | (AllArrow_c (openness,effect,tformals,formals,numfloats,body)) => Type_k
+	 | (AllArrow_c _) => Type_k
 
 	 | (v as (Var_c var)) => 
 	    (find_kind (D,var)
@@ -616,26 +597,7 @@ functor NilContextFn(structure PpNil : PPNIL
      end
    and find_kind (context as {kindmap,...}:context,var) = 
      (case (V.find (kindmap, var)) of
-	   SOME {eqn,kind,shape,index} => 
-	     if delayed kind then
-	       (case eqn
-		  of NONE => extract shape
-		   (*All three cannot be delayed *)
-		   | SOME con => 
-		    let
-		      val value = kind_of (context,con)
-		    in
-		      (instantiate' kind value;
-		       value)
-		    end)
-		    (*This relies fundamentally on the context invariants.
-		     * Since every inserted equation is guaranteed to 
-		     * be closed by the context, and since no variable
-		     * can be shadowed in the context, no free variables
-		     * in con can be captured by subsequent insertions
-		     *)
-	     else
-	       extract kind
+	   SOME {eqn,kind,shape,index} => thaw kind
 	 | NONE => raise Unbound)
 
    (*PRE:  con :: T or W *)
@@ -664,7 +626,12 @@ functor NilContextFn(structure PpNil : PPNIL
 		 in  loop subst lvk_list
 		 end
 	    | Singleton_k c => (CON(Proj_c(c,l)), subst)
-	    | _ => error (locate "find_kind_equation.project_kind") "bad kind to project_kind")
+	    | _ => 
+		 (print "bad kind to project from = \n";
+		  PpNil.pp_kind k;
+		  print "\n\n";
+		  error (locate "find_kind_equation.project_kind") 
+		  "bad kind to project_kind"))
 
 	 fun app_kind(k,c1,clist,subst) = 
 	   (case k 
@@ -688,7 +655,7 @@ functor NilContextFn(structure PpNil : PPNIL
 			  if delayed kind then
 			    raise Opaque
 			  else
-			    (KIND (extract kind), Subst.empty()))
+			    (KIND (thaw kind), Subst.empty()))
 		    | NONE => raise Unbound)
 	       | (Proj_c (c,l)) => 
 		   let 

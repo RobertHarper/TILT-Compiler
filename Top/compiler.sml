@@ -1,4 +1,4 @@
-(*$import COMPILER LinkIl Linknil Linkrtl Linkalpha OS *)
+(*$import COMPILER LinkIl Linknil Linkrtl Linkalpha OS Stats *)
 structure Til : COMPILER =
     struct
 
@@ -30,7 +30,7 @@ structure Til : COMPILER =
                   in  loop()
                   end
 	        else 
-	          (if (OS.Process.system as_command =  OS.Process.success 
+	          (if ((Stats.timer("Assemble",OS.Process.system)as_command) =  OS.Process.success 
 		       andalso ((OS.FileSys.fileSize o_file > 0)
 				handle _ => false))
 		       then (if (!keep_asm)

@@ -41,14 +41,13 @@ signature NORMALIZE =
      * POST: result is the normal form version of the argumentwith
      * respect to the context
      *)
+    datatype progress = PROGRESS | HNF | IRREDUCIBLE
     val kind_normalize' : (context * (con subst)) -> kind -> kind
     val con_normalize' : (context * (con subst)) -> con -> con
     val exp_normalize' : (context * (con subst)) -> exp -> exp
-    val con_reduce_once : context * con subst -> con -> bool * con subst * con
-
 
     val is_hnf       : con -> bool
-    val reduce_hnf   : context * con -> con
+    val reduce_hnf   : context * con -> bool * con   (* bool indicates whether HNF was reached *)
     val reduce_once  : context * con -> con
     val reduce       : context * con -> con
     datatype 'a ReduceResult = REDUCED of 'a | UNREDUCED of con
@@ -69,13 +68,6 @@ signature NORMALIZE =
      *)
     val beta_confun : context -> con -> con
 
-    (*PRE: argument is a well kinded normalized record, {l1=c1,...ln=cn}
-     *POST: If forall i, ci == c'.li, and c' has the appropriate
-     * shape, then
-     * eta_conrecord D {l1=c1,...ln=cn} => c'
-     *)
-    val eta_conrecord : context -> con -> con
-
 
     (*PRE: argument is a well kinded, normalized function, lambda(a1...an).c'
      *POST: If c' is syntactically a function application of the form
@@ -94,6 +86,7 @@ signature NORMALIZE =
     val beta_typecase : context -> con -> con
 
     (* gets the type of a well-formed expression *)
+    val reduceToSumtype : context * Nil.con -> TilWord32.word * TilWord32.word option * Nil.con list
     val type_of : context * Nil.exp -> Nil.con
 
   end

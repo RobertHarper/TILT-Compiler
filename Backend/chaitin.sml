@@ -87,12 +87,12 @@ struct
 
    (* time various phases *)
 
-   fun precolor_time f = Stats.subtimer("precolor",f)
-   fun replace_calls_time f = Stats.subtimer("replace calls",f)
-   fun annotate_time f =      Stats.subtimer("annotate",f)
-   fun build_graph_time f =   Stats.subtimer("build graph",f)
-   fun summarize_time f =     Stats.subtimer("summarize info",f)
-   fun rewrite_time f =       Stats.subtimer("rewrite prog",f)
+   fun precolor_time f =      f (* Stats.subtimer("precolor",f) *)
+   fun replace_calls_time f = f (* Stats.subtimer("replace calls",f) *)
+   fun annotate_time f =      f (* Stats.subtimer("annotate",f) *)
+   fun build_graph_time f =  f (*  Stats.subtimer("build graph",f) *)
+   fun summarize_time f =     f (* Stats.subtimer("summarize info",f) *)
+   fun rewrite_time f =      f (* Stats.subtimer("rewrite prog",f) *)
 
 
 
@@ -576,20 +576,22 @@ struct
 	       val (def_regs,_) =  Bblock.defUse (stripAnnot instr)
 	       val live_regs = Bblock.live instr
 	       fun process_defined reg = 
-		       Regset.app (addConflict reg) live_regs
-             in (* add conflicts between pseudo-regs live after
-		   instruction and pseudo-regs defined by 
-		   instruction *)
-		app process_defined def_regs;
+(*		   Regset.app (addConflict reg) live_regs  *)
+		   Ifgraph.insert_edges igraph (reg,live_regs) 
+             in 
 
 		(* don't add nodes for pseudo-regs def'd 
 		   if there are no registers live after the
 		   instruction.   Those regs are dead, and
 	           wil be assigned to Rzero/Fzero *)
-(* 
 	        app insert_node def_regs;
-*)
-	        case (stripAnnot instr) of
+
+	        (* add conflicts between pseudo-regs live after
+		   instruction and pseudo-regs defined by 
+		   instruction *)
+		app process_defined def_regs;
+
+		case (stripAnnot instr) of
 		 (BASE(RTL(call as (CALL{func, args, results, ...})))) =>
 		   let
 		     val {regs_destroyed, ...} =
@@ -1351,10 +1353,11 @@ struct
 		 | has_exn ((BASE(RTL HANDLER_ENTRY))::_) = true
 		 | has_exn (_::rest) = has_exn rest
 	       val instr_blocks = 
-		   Stats.subtimer("chaitin_has_exn",
+		   (* Stats.subtimer("chaitin_has_exn", *)
 				  Labelmap.app (fn (BLOCK{instrs,...}) => 
 				 if (has_exn (map stripAnnot (!instrs)) )
-				     then (has_exn_flag := true) else ()) )
+				     then (has_exn_flag := true) else ()) 
+				  (* ) *)
 		   block_map
 	   in
 	       val _ = if (!has_exn_flag)
@@ -1369,15 +1372,16 @@ struct
        (* initialize information on storage *)
 
        val storage_info = 
-	 Stats.subtimer("chaitin_newinfo",
-	 Trackstorage.newInfo) {callee_saves = callee_saved,
+	 (* Stats.subtimer("chaitin_newinfo", *)
+	 Trackstorage.newInfo (* ) *) 
+	                      {callee_saves = callee_saved,
 			       stack_resident = stack_resident,
 			       max_on_stack = max_passed_args,
 			       max_C_args = max_C_args,
 			       regs_destroyed = (!regs_destroyed)}
 
        val stackOffset = Trackstorage.stackOffset storage_info
-       val _ = Stats.subtimer("chaitin_initbias",initBias) block_map
+       val _ = (* Stats.subtimer("chaitin_initbias", *) initBias (* ) *) block_map
        val _ = msg "\tbuilding interference graph\n"
        val igraph =  buildGraph(getSignature,name,block_map,
 			       args,res,callee_saved)
@@ -1394,7 +1398,7 @@ struct
 					    stackframe_size,
 					    registers_used,
 					    callee_save_slots,...}) = 
-	               Stats.subtimer("chaitin_summarize", summarize) storage_info
+	               (* Stats.subtimer("chaitin_summarize", *) summarize (* ) *) storage_info
 
         val new_procsig =
 	       let 
@@ -1425,13 +1429,13 @@ struct
 	    at every call site. *)
 
 	 val callsite_info = 
-		Stats.subtimer("chaitin_rewrite",
+		(* Stats.subtimer("chaitin_rewrite", *)
 			       map (fn bblock => 
 		        allocateBlock (mapping,
 				       stackframe_size,
 				       fixStackOffset,
 				       tailcallImpossible,
-				       name) callee_save_slots bblock))
+				       name) callee_save_slots bblock) (* ) *)
 		(Labelmap.listItems block_map)
 
 	 val callsite_info = foldr (op @) nil callsite_info 
@@ -1440,15 +1444,15 @@ struct
 	 val _ = createPostamble(block_map,hd(rev block_labels),arg_ra_pos,summary)
          val _ = createPreamble (block_map,name,arg_ra_pos,summary)
 
-	 val callinfo = Stats.subtimer("chaitin_getcallinfo",
-				       getCallInfo name summary mapping tracemap) callsite_info
+	 val callinfo = (* Stats.subtimer("chaitin_getcallinfo",*)
+				       getCallInfo name summary mapping tracemap (* ) *) callsite_info
 
 
 	 val _ = msg "\tleaving allocateproc2\n"
      in	(new_procsig, 
 	 block_map, 
 	 block_labels,
-	 Stats.subtimer("chaitin_maketable",Tracetable.MakeTable) callinfo)
+	 (* Stats.subtimer("chaitin_maketable", *) Tracetable.MakeTable (* ) *) callinfo)
      end (* allocateProc2 *)
 
 (*   val allocateProc = allocateProcOrig  *)

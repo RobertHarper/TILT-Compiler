@@ -1920,33 +1920,17 @@ struct
 
       fun import_valid (D,import) = import_valid' (import,(D,Subst.empty()))
 
-      fun export_valid' ((D,subst),ExportValue (label,exp,con)) = 
+      fun export_valid' ((D,subst),ExportValue (label,exp)) = 
 	let
 	  val exp = substConInExp subst exp
-	  val con = substConInCon subst con
-	  val (exp,found_con) = exp_valid(D,exp)
-	  val (con,kind) = con_valid(D,con)
-	  val bnd_con = if !bnds_made_precise then found_con else con
-	in
-	  if type_equiv (D,found_con,con) then
-	    ExportValue (label,exp,bnd_con)
-	  else
-	    (perr_e_c_c (exp,con,found_con);
-	     (error "Type error in value exports of module" handle e => raise e))
+	  val (exp,con) = exp_valid(D,exp)
+	in  ExportValue (label,exp)
 	end
-	| export_valid' ((D,subst),ExportType (label,con,kind)) = 
+	| export_valid' ((D,subst),ExportType (label,con)) = 
 	let
 	  val con = substConInCon subst con
-	  val kind = substConInKind subst kind
-	  val (con,found_kind) = con_valid(D,con)
-	  val kind = kind_valid(D,kind)
-	  val bnd_kind = if !bnds_made_precise then found_kind else kind
-	in
-	  if sub_kind (D,found_kind,kind) then
-	    ExportType (label,con,bnd_kind)
-	  else
-	    (perr_c_k_k (con,kind,found_kind);
-	     (error "Type error in type exports of module" handle e => raise e))
+	  val (con,kind) = con_valid(D,con)
+	in ExportType (label,con)
 	end
 
       fun export_valid (D,export) = export_valid' ((D,Subst.empty()),export)

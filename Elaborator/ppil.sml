@@ -186,13 +186,15 @@ struct
 	  (case module of
 	     MOD_VAR var => pp_var var
 	   | MOD_STRUCTURE sbnds => pp_list (pp_sbnd seen) sbnds ("STR[",", ","]", true)
-	   | MOD_FUNCTOR (v,s,m) => HOVbox[String "FUNC(",
-					   pp_var v,
-					   String ", ",
-					   pp_signat seen s,
-					   String ", ", Break,
-					   pp_mod seen m,
-					   String ")"]
+	   | MOD_FUNCTOR (v,s1,m,s2) => HOVbox[String "FUNC(",
+					       pp_var v,
+					       String ", ",
+					       pp_signat seen s1,
+					       String ", ", Break,
+					       pp_mod seen m, Break,
+					       String ": ", Break,
+					       pp_signat seen s2,
+					       String ")"]
 	   | MOD_APP (m1,m2) => pp_region "MAPP(" ")"
 	                         [pp_mod seen m1,
 				  String ", ",
@@ -258,9 +260,13 @@ struct
 					    pp_list (pp_con seen) cons ("[",",","]",false),
 					    pp_list (pp_exp seen) elist ("[",",","]",false)]
        | VAR var => pp_var var
-       | APP (e1,[e2]) => pp_region "APP(" ")" [pp_exp seen e1, String ",", Break, pp_exp seen e2]
-       | APP (e1,elist) => pp_region "APP(" ")" [pp_exp seen e1, String ";", Break, 
-						 pp_list (pp_exp seen) elist ("[",",","]", true)]
+       | APP (e1,e2) => pp_region "APP(" ")" [pp_exp seen e1, String ",", Break, pp_exp seen e2]
+       | EXTERN_APP (c,e1,elist) => 
+	     pp_region "EXTERN_APP(" ")" [pp_con seen c, String ";", Break, 
+					  pp_exp seen e1, String ";", Break, 
+					  pp_list (pp_exp seen) elist ("[",",","]", true)]
+
+							  
        | FIX (r,a,[FBND(v',v,c,cres,e)]) => 
 		  HOVbox[String ((case a of TOTAL => "/TOTAL" | PARTIAL => "/") ^
 				 (if r then "\\" else "NONRECUR\\")),
@@ -286,7 +292,7 @@ struct
 			  in pp_list doer rbnds format
 			  end
        | RECORD_PROJECT (e,l,_) => HOVbox[pp_region "(" ")" [pp_exp seen e], String "#", pp_label l]
-       | SUM_TAIL (c,e) => pp_region "SUM_TAIL(" ")" [pp_con seen c, String ",", pp_exp seen e]
+       | SUM_TAIL (i,c,e) => pp_region "SUM_TAIL(" ")" [pp_con seen c, String ",", pp_exp seen e]
        | HANDLE (body,handler) => Vbox[HOVbox[String "HANDLE ",
 					      pp_exp seen body],
 				       Break0 0 0,

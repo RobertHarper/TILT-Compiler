@@ -39,8 +39,8 @@ structure IEEEReal : IEEE_REAL =
 	    CInterface.c_function "SMLNJ-Math" "ctlRoundingMode"
     fun setRoundingMode' m = (ctlRoundingMode (SOME m); ()) 
 *)
-	fun setRoundingMode' m = (setRoundingMode m; ())
-	fun getRoundingMode'() = getRoundingMode 0
+    fun setRoundingMode' m = (Ccall(setRoundingMode,m); ())
+    fun getRoundingMode'() = Ccall(getRoundingMode,0)
 
     fun setRoundingMode TO_NEAREST	= setRoundingMode' 0
       | setRoundingMode TO_ZERO		= setRoundingMode' 1
@@ -92,9 +92,12 @@ structure IEEEReal : IEEE_REAL =
 
 (*
  * $Log$
-# Revision 1.1  98/03/09  19:52:34  pscheng
-# added basis
+# Revision 1.2  98/04/06  21:17:39  pscheng
+# update: Typeof_c, dependent arrow/record types
 # 
+# Revision 1.1  1998/03/09  19:52:34  pscheng
+# added basis
+#
  * Revision 1.2  1997/05/29  14:44:22  jhr
  *   SML'97 Basis Library changes (phase 1)
  *

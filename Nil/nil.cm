@@ -47,8 +47,10 @@ linearize.sml
 normalize.sig.sml
 normalize.sml
 
+(*
 nilstatic.sig.sml
 nilstatic.sml 
+*)
 
 optimize.sig.sml  
 optimize.sml  

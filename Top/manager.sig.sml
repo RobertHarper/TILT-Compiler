@@ -47,6 +47,7 @@ signature MANAGER = sig
 
   val eager : bool ref
   val cache_context : int ref
+  val flush_cache : unit -> unit
   val up_to_phasesplit : bool ref
   val up_to_elaborate : bool ref
   val stat_each_file : bool ref

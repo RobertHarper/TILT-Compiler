@@ -23,16 +23,17 @@ struct
     type filepos = SourceMap.charpos -> string * int * int
     fun parse_impl s =
       case parse s of 
-	(ins,fp,FrontEnd.PARSE_IMPL (imports,dec)) => 
+	(ins,fp,FrontEnd.PARSE_IMPL (lines,imports,dec)) => 
 	  let val dec = tvscope_dec dec
 	      val dec = named_form_dec dec
 	      val _ = TextIO.closeIn ins
-	  in (fp,imports,dec)
+	  in (lines,fp,imports,dec)
 	  end
       | (ins,_,result) => (TextIO.closeIn ins; raise Parse result)
     fun parse_inter s =
       case parse s of 
-	(ins,fp,FrontEnd.PARSE_INTER (includes,specs)) => (TextIO.closeIn ins; (fp,includes,specs))
+	(ins,fp,FrontEnd.PARSE_INTER (lines,includes,specs)) => 
+	    (TextIO.closeIn ins; (lines,fp,includes,specs))
       | (ins,_,result) => (TextIO.closeIn ins; raise Parse result)
   end
 end;

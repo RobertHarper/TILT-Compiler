@@ -11,6 +11,6 @@ sig
     val phasesplit : Il.context *  (Il.sbnd option * Il.context_entry) list -> Nil.module
 
     val elaborator_specific_optimizations : bool ref
-    val optimize_empty_structure : bool ref
+
 
 end

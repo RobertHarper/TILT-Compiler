@@ -89,6 +89,8 @@ functor IlUtil(structure Ppil : PPIL
     val con_bool =  CON_SUM{noncarriers = 2,
 			    carrier = CON_TUPLE_INJECT[],
 			    special = NONE}
+    fun con_eqfun c = CON_ARROW([con_tuple[c,c]],
+				con_bool,false, oneshot_init PARTIAL)
     val con_false =  CON_SUM{noncarriers = 2,
 			    carrier = CON_TUPLE_INJECT[],
 			    special = SOME 0}
@@ -254,11 +256,12 @@ functor IlUtil(structure Ppil : PPIL
 	   | ILPRIM (ilp,cs,es) => ILPRIM(ilp, map (f_con state) cs, map self es)
 	   | ETAPRIM (p,cs) => ETAPRIM(p, map (f_con state) cs)
 	   | ETAILPRIM (ilp,cs) => ETAILPRIM (ilp, map (f_con state) cs)
-	   | APP (e1,elist) => APP(self e1, map self elist)
+	   | APP (e1,e2) => APP(self e1, self e2)
+	   | EXTERN_APP (c,e1,elist) => EXTERN_APP(f_con state c, self e1, map self elist)
 	   | FIX (r,a,fbnds) => FIX(r,a,map (f_fbnd state) fbnds)
 	   | RECORD (rbnds) => RECORD(map (f_rbnd state) rbnds)
 	   | RECORD_PROJECT (e,l,c) => RECORD_PROJECT(self e,l,f_con state c)
-	   | SUM_TAIL (c,e) => SUM_TAIL(f_con state c, self e)
+	   | SUM_TAIL (i,c,e) => SUM_TAIL(i,f_con state c, self e)
 	   | HANDLE (e1,e2) => HANDLE(self e1, self e2)
 	   | RAISE (c,e) =>  RAISE(f_con state c, self e)
 	   | LET (bnds,e) => let fun loop [] h = h
@@ -351,7 +354,8 @@ functor IlUtil(structure Ppil : PPIL
 	(case m of
 	   MOD_VAR _ => m
 	 | MOD_STRUCTURE sbnds => MOD_STRUCTURE (map (f_sbnd state) sbnds)
-	 | MOD_FUNCTOR (v,s,m) => MOD_FUNCTOR (v, f_signat state s, f_mod state m)
+	 | MOD_FUNCTOR (v,s1,m,s2) => MOD_FUNCTOR (v, f_signat state s1, 
+						   f_mod state m, f_signat state s2)
 	 | MOD_APP (m1,m2) => MOD_APP (f_mod state m1, f_mod state m2)
 	 | MOD_PROJECT (m,l) => MOD_PROJECT(f_mod state m,l)
 	 | MOD_LET (v,m1,m2) => MOD_LET (v, f_mod state m1, f_mod state m2)
@@ -1193,7 +1197,7 @@ functor IlUtil(structure Ppil : PPIL
 	   | PRIM _ => false
 	   | ILPRIM _ => false
 	   | (RECORD le_list) => List.all (fn (_,e) => is_inline_exp e) le_list
-	   | SUM_TAIL (_,e)  => is_inline_exp e
+	   | SUM_TAIL (_,_,e)  => is_inline_exp e
 	   | ROLL(_,e) => is_inline_exp e
 	   | UNROLL(_,_,e) => is_inline_exp e
 	   | HANDLE (e1,e2) => (is_inline_exp e1) andalso (is_inline_exp e2)
@@ -1204,6 +1208,7 @@ functor IlUtil(structure Ppil : PPIL
 	   | (INJ _) => true
 	   | (RECORD_PROJECT _) => false (* could be sometimes true *)
 	   | (APP _) => false (* could be sometimes true *)
+	   | (EXTERN_APP _) => false (* could be sometimes true *)
 	   | (CASE _) => false (* could be sometimes true *)
 	   | (EXN_CASE _) =>  false (* could be sometimes true *)
 	   | (MODULE_PROJECT _) => false (* could be sometimes true *)
@@ -1311,32 +1316,33 @@ functor IlUtil(structure Ppil : PPIL
 
     fun beta_reduce_mod(x : mod, y : mod) : mod option = 
 	(case (x,y) of
-	     (MOD_FUNCTOR(v,s,m), _) => SOME (MOD_LET(v,y,m))
+	     (MOD_FUNCTOR(v,s,m,_), _) => SOME (MOD_LET(v,y,m))
 	   | _ => NONE)
 
 
-    fun beta_reduce(x : exp, y : exp) : exp option = 
+    fun beta_reduce(x : exp, y : exp) : exp =
 	let fun red (exp as (OVEREXP (c,_,oe))) = 
 		      (case (oneshot_deref oe) of
 			   SOME exp => exp
 			 | NONE => exp)
 		   | red exp = exp
+	    val def = APP(x,y)
 	in (case (red x, red y) of
-	     (ETAPRIM(p,cs),RECORD rbnds) => SOME(PRIM(p,cs,map #2 rbnds))
-	   | (ETAILPRIM(ip,cs),RECORD rbnds) => SOME(ILPRIM(ip,cs,map #2 rbnds))
+	     (ETAPRIM(p,cs),RECORD rbnds) => PRIM(p,cs,map #2 rbnds)
+	   | (ETAILPRIM(ip,cs),RECORD rbnds) => ILPRIM(ip,cs,map #2 rbnds)
 	   | (x as ETAPRIM(p,cs),y) =>
 		     (case (PrimUtil.get_type' p cs) of
-			  CON_ARROW([_],_,_,_) => SOME(PRIM(p,cs,[y]))
-			| _ => NONE)
+			  CON_ARROW([_],_,_,_) => PRIM(p,cs,[y])
+			| _ => def)
 	   | (x as ETAILPRIM(ip,cs),y) =>
 		     (case (PrimUtil.get_iltype' ip cs) of
-			 CON_ARROW([_],_,_,_) => SOME(ILPRIM(ip,cs,[y]))
-			| _ => NONE)
+			 CON_ARROW([_],_,_,_) => ILPRIM(ip,cs,[y])
+			| _ => def)
 	   | (FIX (false,TOTAL,[FBND(name,arg,argtype,bodytype,body)]), VAR argvar) => 
-			  SOME(exp_subst_expvar(body,[(arg,VAR argvar)]))
+			  exp_subst_expvar(body,[(arg,VAR argvar)])
 	   | (FIX (false,TOTAL,[FBND(name,arg,argtype,bodytype,body)]), y) => 
-			  SOME(LET([BND_EXP(arg,y)],body))
-	   | _ => NONE)
+			  LET([BND_EXP(arg,y)],body)
+	   | _ => def)
 	end
 
   end;

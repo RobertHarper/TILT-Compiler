@@ -52,9 +52,10 @@ signature ILUTIL =
     val prim_etaexpand : (Prim.prim * con list) -> exp
     val ilprim_etaexpand : (Prim.ilprim * con list) -> exp
     val beta_reduce_mod : mod * mod -> mod option
-    val beta_reduce : exp * exp -> exp option
+    val beta_reduce : exp * exp -> exp
 
     val con_bool : con
+    val con_eqfun : con -> con
     val con_tuple : con list -> con                 (* the type of tuple values *)
     val con_tuple_inject : Il.con list -> Il.con    (* makes a tuple of types   *)
     val con_record : (Symbol.symbol * con) list -> con

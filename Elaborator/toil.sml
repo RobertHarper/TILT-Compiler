@@ -54,8 +54,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
     val fresh_con = fn ctxt => ((!tyvar_counter)(); fresh_con ctxt)
     val fresh_tyvar = fn ctxt => ((!tyvar_counter)(); fresh_tyvar ctxt)
     val fresh_named_tyvar = fn arg => ((!tyvar_counter)(); fresh_named_tyvar arg)
-    fun mk_eq_con c = CON_ARROW([con_tuple[c,c]],
-				con_bool,false, oneshot_init PARTIAL)
+
 
     type tyvar = (context,con) Tyvar.tyvar
     type ocon = (context,con) Tyvar.ocon
@@ -450,10 +449,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 						 val _ = tyvar_use_equal tyvar
 						 val con = CON_TYVAR tyvar
 						 val exp_os = oneshot()
-						 val eq_con = CON_ARROW([con_tuple[con,con]],
-									con_bool,
-									false,
-									oneshot_init PARTIAL)
+						 val eq_con = con_eqfun con
 						 val _ = add_eq_entry(tyvar,exp_os)
 						 val e2 = OVEREXP(eq_con,true,exp_os)
 					     in (con,eq_con,e2)
@@ -461,10 +457,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				   | SOME con => let val e2 = (case xeq(ctxt,con) of
 								   SOME e => e
 								 | NONE => raise NoEqExp)
-						     val eq_con = CON_ARROW([con_tuple[con,con]],
-									    con_bool,
-									    false,
-									    oneshot_init PARTIAL)
+						     val eq_con = con_eqfun con
 						 in (con,eq_con,e2)
 						 end)
 
@@ -537,7 +530,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			val (tyvar,(sbnd1,sdec1)) = dotype l1 v1
 			val _ = tyvar_use_equal tyvar
 			val con = CON_TYVAR tyvar
-			val eq_con = CON_ARROW([con_tuple[con,con]],con_bool,false,oneshot_init PARTIAL)
+			val eq_con = con_eqfun con
 			val exp_os = oneshot()
 			val _ = add_eq_entry(tyvar,exp_os)
 			val eqexp = OVEREXP(eq_con,true,exp_os)
@@ -577,7 +570,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			  elab_error "Failed rule 24 Sig_IsSub")
 	    val exp = (case (mod_poly,module) of
 			   (MOD_STRUCTURE sbnds,
-			    MOD_FUNCTOR(v,SIGNAT_STRUCTURE sdecs,MOD_STRUCTURE[SBND(it_maybe,BND_EXP(_,e))])) =>
+			    MOD_FUNCTOR(v,SIGNAT_STRUCTURE sdecs,
+					MOD_STRUCTURE[SBND(it_maybe,BND_EXP(_,e))],_)) =>
 			       if (eq_label(it_lab,it_maybe))
 				   then
 				       let fun table_entry (SBND(l,BND_CON(_,c))) = (l,c)
@@ -680,16 +674,14 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 			 val _ = tyvar_use_equal tyvar
 			 val con = CON_TYVAR tyvar
 			 val arg_con = con_tuple[con,con]
-			 val eq_con = CON_ARROW([arg_con],con_bool,
-						false,oneshot_init PARTIAL)
+			 val eq_con = con_eqfun con
 			 val _ = add_eq_entry(tyvar,exp_os)
 			 val eqexp = OVEREXP(eq_con,true,exp_os)
 			 val res = if iseq
 				       then eqexp
 				   else let val v = fresh_named_var "neq_arg"
 					in  #1(make_lambda(v,arg_con, con_bool,
-							   make_ifthenelse(APP(eqexp,
-									       [VAR v]),
+							   make_ifthenelse(APP(eqexp,VAR v),
 									   false_exp,true_exp,con_bool)))
 					end
 		     in (res,eq_con,true)
@@ -783,8 +775,8 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		      val dummy_fun = #1(make_thunk(c, RAISE(c,bindexn_exp)))
 		      val bnd = BND_EXP(ref_arg,PRIM(mk_ref,[thunk_c], [dummy_fun]))
 		      val thunk_e = #1(make_thunk(c, APP(PRIM(deref,[thunk_c],[VAR ref_arg]),
-							 [unit_exp])))
-		      val wrapped_exp = APP(wrapper_exp,[thunk_e])
+							 unit_exp)))
+		      val wrapped_exp = APP(wrapper_exp,thunk_e)
 		      val final_c = CON_APP(sc, c)
 		      val inner_body = #1(make_seq[(PRIM(setref,[thunk_c],
 						    [VAR ref_arg,
@@ -812,17 +804,17 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 
        | Ast.CcallExp (function,arguments) => 
 	     let val (e,con,va) = xexp(context,function)
-		 val e_con_va_args = map (fn e => xexp(context,e)) arguments
 		 val arrow_oe =
 		     (case con of
 			  CON_ARROW(_,_,true,arrow) => arrow
 			| _ => (case (con_normalize(context,con)) of
 				    CON_ARROW(_,_,true,arrow) => arrow
 				  | _ => oneshot()))
-		 val spec_rescon = fresh_con context
+		 val e_con_va_args = map (fn e => xexp(context,e)) arguments
+		 val va_args = Listops.orfold #3 e_con_va_args
 		 val exp_args = map #1 e_con_va_args
 		 val con_args = map #2 e_con_va_args
-		 val va_args = map #3 e_con_va_args
+		 val spec_rescon = fresh_con context
 		 val spec_funcon = CON_ARROW(con_args,spec_rescon,
 					     true,arrow_oe)
 	     in
@@ -832,14 +824,14 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 				      NONE => (oneshot_set(arrow_oe,PARTIAL); false)
 				    | SOME PARTIAL => false
 				    | SOME TOTAL => true)
-			   in  (APP(e,exp_args),
+			   in  (EXTERN_APP(con,e,exp_args),
 				con_deref spec_rescon,
-				va andalso (List.all (fn x => x) va_args) andalso va3)
+				va andalso va_args andalso va3)
 			   end)
 		 else
 		     (case (con_normalize(context,con)) of
 			 CON_ARROW(argcons,rescon,_,_) => 
-			     (error_region(); print " application is ill-typed.\n";
+			     (error_region(); print " external application is ill-typed.\n";
 			      print "  Function domain: "; 
 			      app (fn c => (pp_con c; print "; ")) argcons;
 			      print "\n  Argument type: "; 
@@ -856,18 +848,9 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
        | Ast.AppExp {argument,function} => 
 	     let val (e1',con1,va1) = xexp(context,function)
 		 val (e2',con2,va2) = xexp(context,argument)
-		 val (closed,arrow_oe) = 
-		     (case con1 of
-			  CON_ARROW(_,_,closed,arrow) => (closed,arrow)
-			| _ => (case (con_normalize(context,con1)) of
-				    CON_ARROW(_,_,closed,arrow) => (closed,arrow)
-				  | _ => (false,oneshot())))
+		 val arrow_oe = oneshot()
 		 val spec_rescon = fresh_con context
-		 val spec_funcon = CON_ARROW([con2],spec_rescon,closed,arrow_oe)
-		 fun reduce(x,y) = 
-		     (case (IlUtil.beta_reduce(x,y)) of
-			 NONE => APP(x,[y])
-		       | SOME e => e)
+		 val spec_funcon = CON_ARROW([con2],spec_rescon,false,arrow_oe)
 		 fun red (exp as (OVEREXP (c,_,oe))) = 
 		     ((case c of 
 			   CON_OVAR ocon => overload_help false (peek_region(),ocon)
@@ -882,7 +865,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 					      NONE => (oneshot_set(arrow_oe,PARTIAL); false)
 					    | SOME PARTIAL => false
 					    | SOME TOTAL => true)
-			   in  (reduce(red e1',red e2'),con_deref spec_rescon,
+			   in  (beta_reduce(red e1',red e2'),con_deref spec_rescon,
 				va1 andalso va2 andalso va3)
 			   end)
 		 else
@@ -947,10 +930,12 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 		     then 
 			 let val loop_var = fresh_named_var "loop"
 			     val arg_var = fresh_named_var "loop_arg"
-			     val (then_exp,_) = make_seq[body_ec, (APP(VAR loop_var, [unit_exp]),con_unit)]
+			     val (then_exp,_) = make_seq[body_ec, 
+							 (APP(VAR loop_var, unit_exp),
+							  con_unit)]
 			     val loop_body = make_ifthenelse(teste,then_exp,unit_exp,con_unit)
 			     val loop_fun = FIX(true,PARTIAL,[FBND(loop_var,arg_var,con_unit,con_unit,loop_body)])
-			 in (LET([BND_EXP(loop_var,loop_fun)],APP(VAR loop_var, [unit_exp])),
+			 in (LET([BND_EXP(loop_var,loop_fun)],APP(VAR loop_var, unit_exp)),
 			     con_unit, false)
 			 end
 		 else (error_region();
@@ -1050,8 +1035,7 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 	     val eq_lab = to_eq_lab type_lab
 	     val eq_str = label2string eq_lab
 	     val eq_var = fresh_named_var eq_str
-	     val eq_con =  CON_ARROW([con_tuple[CON_VAR type_var, CON_VAR type_var]],
-				     con_bool, false, oneshot_init PARTIAL)
+	     val eq_con =  con_eqfun (CON_VAR type_var)
 	     val eq_sdec = SDEC(eq_lab,DEC_EXP(eq_var, eq_con))
 	 in  if (is_eq) then (type_sdec :: eq_sdec :: rest) else type_sdec :: rest
 	 end
@@ -1071,40 +1055,12 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 
 
    and xdatatype (context,datatycs) : (sbnd * sdec) list =
-       let val sbnd_sdecs = Datatype.compile{transparent=false,
-					     context=context,
-					     typecompile=xty,
-					     datatycs=datatycs,
-					     eq_compile=xeq,
-					     eq_compile_mu=xeq_mu}
-	   (* we want to eventually expose all the types;
-	    we want to inline all the structures now though *)
-	   fun revise ((sbnd as SBND(l,bnd),sdec as SDEC(_,dec)), (context,acc)) = 
-	       let val (dec,dec_local) = 
-		   (case (bnd,dec) of
-			       (BND_CON(v,c),DEC_CON(_,k,copt)) => 
-				   let val k' = KIND_INLINE(k,c)
-				   in  (DEC_CON(v,k',copt), DEC_CON(v,k',SOME c))
-				   end
-			     | (BND_MOD(v,MOD_STRUCTURE sbnds),
-				   DEC_MOD(_,SIGNAT_STRUCTURE(_,sdecs))) =>
-				   let val s' = SIGNAT_INLINE_STRUCTURE{self = NONE,
-									code = sbnds,
-									abs_sig = sdecs}
-				   in  (DEC_MOD(v,s'), DEC_MOD(v,s'))
-				   end
-				 | _ => (dec,dec))
-		   val context = add_context_sdec(context,SDEC(l,SelfifyDec context dec_local))
-	       in  (context,(sbnd,SDEC(l,dec))::acc)
-	       end
-(*
-	   val revise = Stats.timer("toil.revise",revise)
-	   val (_,rev_sbnd_sdecs) = foldl revise (context,[]) sbnd_sdecs
-	   val res = rev rev_sbnd_sdecs
-*)
-       in  sbnd_sdecs
-       end
-	   
+        Datatype.compile{transparent=false,
+			 context=context,
+			 typecompile=xty,
+			 datatycs=datatycs,
+			 eq_compile=xeq,
+			 eq_compile_mu=xeq_mu}
 
      and xfundec islocal (context : context, dec_list, tyvar_stamp, sdecs1, var_poly, open_lbl) =
 	 let
@@ -1208,17 +1164,6 @@ fun con_head_normalize (arg as (ctxt,con)) = IlStatic.con_head_normalize arg han
 								generate_tuple_label (i+1),
 								#2 top_exp_con), c))
 			 fbnd_cons
-	     (*
-val exp_con_list = map2count 
-	      (fn (i,v',c) => (let val f = FIX(PARTIAL,fbnds)
-	 in case fbnd_con_list of
-	      [_] => f
-		   | _ => RECORD_PROJECT(f,generate_tuple_label(i+1),
-		  #2 top_exp_con)
-				       end,
-					   c))
-		      (fun_vars,map #2 fbnd_con_list)
-*) 
 
 
 	     val _ = 
@@ -1227,35 +1172,32 @@ val exp_con_list = map2count
 		 end
 
 
-	     fun modsig_helper nameopt (id,(exp,con)) = 
-		 let val v1 = fresh_named_var "fixexp"
-		     val v2 = (case nameopt of
-				   NONE => fresh_named_var (label2string id)
-				 | SOME v => v)
+	     fun modsig_helper (name,id,(exp,con)) = 
+		 let val inner = Name.fresh_named_var ((Name.var2name name) ^ "_inner")
 		     fun poly_case () = 
 			 let 
 			     val sig_poly = SIGNAT_STRUCTURE (NONE,sdecs)
-			     val sbnd = SBND(it_lab, BND_EXP(v1,exp))
-			     val sdec = SDEC(it_lab, DEC_EXP(v1,con))
+			     val sbnd = SBND(it_lab, BND_EXP(inner,exp))
+			     val sdec = SDEC(it_lab, DEC_EXP(inner,con))
+			     val inner_sig = SIGNAT_STRUCTURE(NONE, [sdec])
 			     val functor_mod = MOD_FUNCTOR(var_poly,sig_poly,
-							   MOD_STRUCTURE[sbnd])
+							   MOD_STRUCTURE[sbnd],inner_sig)
 			     val functor_sig = 
 				 SIGNAT_FUNCTOR(var_poly,sig_poly,
-						SIGNAT_STRUCTURE(NONE, [sdec]),
-						TOTAL)
-			 in  (SBND(id,BND_MOD(v2,functor_mod)),
-			      SDEC(id,DEC_MOD(v2,functor_sig)))
+						inner_sig,TOTAL)
+			 in  (SBND(id,BND_MOD(name,functor_mod)),
+			      SDEC(id,DEC_MOD(name,functor_sig)))
 			 end
 		 in
 		     (case sdecs of
-			  [] => (SBND(id,BND_EXP(v2,exp)),
-				 SDEC(id,DEC_EXP(v2,con)))
+			  [] => (SBND(id,BND_EXP(name,exp)),
+				 SDEC(id,DEC_EXP(name,con)))
 			| _ => poly_case())
 		 end
 	     
-	     val (top_sbnd,top_sdec) = modsig_helper (SOME top_var) (top_label, top_exp_con)
+	     val (top_sbnd,top_sdec) = modsig_helper (top_var,top_label, top_exp_con)
 	     val top_sbnd_entry = (SOME top_sbnd, CONTEXT_SDEC top_sdec)
-	     val sbnds_sdecs = map2 (modsig_helper NONE) (fun_ids,exp_con_list)
+	     val sbnds_sdecs = map3 modsig_helper (fun_vars,fun_ids,exp_con_list)
 	     val sbnds_entries = (map (fn (sbnd,sdec) => (SOME sbnd,CONTEXT_SDEC sdec)) 
 				  sbnds_sdecs)
 	 in  top_sbnd_entry :: sbnds_entries
@@ -1386,7 +1328,7 @@ val exp_con_list = map2count
 					     val temp_sig = SIGNAT_STRUCTURE(NONE,
 									     [SDEC(it_lab,
 										   DEC_EXP(inner_var,c))])
-					     val bnd = BND_MOD(outer_var,MOD_FUNCTOR(var_poly,sig_poly,temp_mod))
+					     val bnd = BND_MOD(outer_var,MOD_FUNCTOR(var_poly,sig_poly,temp_mod,temp_sig))
 					     val dec = DEC_MOD(outer_var,
 							       SIGNAT_FUNCTOR(var_poly,sig_poly,
 									      temp_sig,
@@ -1394,7 +1336,9 @@ val exp_con_list = map2count
 										       then TOTAL else PARTIAL))
 					 in (SBND(l,bnd),SDEC(l,dec))
 					 end
-				     val temp_mod = MOD_FUNCTOR(var_poly,sig_poly,MOD_STRUCTURE sbnds)
+				     val temp_mod = MOD_FUNCTOR(var_poly,sig_poly,
+								MOD_STRUCTURE sbnds,
+								SIGNAT_STRUCTURE(NONE, sdecs))
 				     val temp_sig = SIGNAT_FUNCTOR(var_poly,sig_poly,
 								   SIGNAT_STRUCTURE(NONE, sdecs),
 								   if is_irrefutable 
@@ -1562,7 +1506,7 @@ val exp_con_list = map2count
 						  val v = fresh_var()
 						  val sdec1 = SDEC(l,DEC_CON(v,KIND_TUPLE 1, NONE))
 						  val sdec2 = SDEC(eql,DEC_EXP(fresh_var(),
-									       mk_eq_con(CON_VAR v)))
+									       con_eqfun(CON_VAR v)))
 					      in  [sdec1,sdec2]
 					      end
 					  val sdecs = List.concat (map mapper lbls)
@@ -1574,7 +1518,7 @@ val exp_con_list = map2count
 				      in  (ctxt',c',sp)
 				      end
 			  val eqlab = to_eq_lab l
-			  val eq_con = mk_eq_con c'
+			  val eq_con = con_eqfun c'
 		    in case (xeq(ctxt',c')) of
 			SOME eq_exp =>
 			    let
@@ -1585,15 +1529,17 @@ val exp_con_list = map2count
 					   DEC_EXP(v1, eq_con))
 				| SOME _ => 
 				      let val v2 = fresh_var()
-					  val innermod = 
+					  val inner_innersig = SIGNAT_STRUCTURE(NONE,
+								    [SDEC(it_lab,
+									  DEC_EXP(v2,eq_con))])
+					  val innermod =
 					      MOD_FUNCTOR(vp,sigpoly,
-							  MOD_STRUCTURE[SBND(it_lab,BND_EXP(v2,eq_exp))])
+							  MOD_STRUCTURE[SBND(it_lab,
+									     BND_EXP(v2,eq_exp))],
+							  inner_innersig)
 					  val innersig = 
 					      SIGNAT_FUNCTOR(vp,sigpoly,
-							     SIGNAT_STRUCTURE(NONE,
-									      [SDEC(it_lab,
-									       DEC_EXP(v2,eq_con))]),
-							      TOTAL)
+							     inner_innersig,TOTAL)
 					      
 				      in  (BND_MOD(v1,innermod), DEC_MOD(v1, innersig))
 				      end
@@ -1820,9 +1766,9 @@ val exp_con_list = map2count
 		    | _ => 
 		      if (length syms = 1 andalso
 			     Symbol.eq(hd syms, Symbol.tycSymbol "-->"))
-		      then let fun split acc [] = error "need at least result type"
-				 | split acc [c] = (rev acc,c)
-			         | split acc (c::d) = split (c::acc) d
+		      then let fun split _ [] = error "need at least result type"
+				 | split cons [c] = (rev cons,c)
+			         | split cons (c::d) = split (c::cons) d
 			       val (arg_cons,res_con) = split [] con_list
 			   in  CON_ARROW(arg_cons,res_con,true,
 					 oneshot_init PARTIAL)
@@ -1894,7 +1840,7 @@ val exp_con_list = map2count
 		       val type_sdec = SDEC(type_label, DEC_CON(type_var,kind,conopt))
 		       val eq_dec = 
 			   (case tyvars of
-				[] => DEC_EXP(eq_var,mk_eq_con(CON_VAR type_var))
+				[] => DEC_EXP(eq_var,con_eqfun(CON_VAR type_var))
 			      | _ => 
 				let val vpoly = fresh_named_var "vpoly"
 				    val lbls = Listops.map0count canonical_tyvar_label (length tyvars)
@@ -1903,13 +1849,13 @@ val exp_con_list = map2count
 					    val v = fresh_var()
 					    val sdec1 = SDEC(l,DEC_CON(v,KIND_TUPLE 1, NONE))
 					    val sdec2 = SDEC(eql,DEC_EXP(fresh_var(),
-									 mk_eq_con(CON_VAR v)))
+									 con_eqfun(CON_VAR v)))
 					in  [sdec1,sdec2]
 					end
 				    val sdecs = List.concat (map mapper lbls)
 				    val sigpoly = SIGNAT_STRUCTURE(NONE,sdecs)
 				    val args = map (fn l => CON_MODULE_PROJECT(MOD_VAR vpoly,l)) lbls
-				    val eq_con = mk_eq_con(CON_APP(CON_VAR type_var, 
+				    val eq_con = con_eqfun(CON_APP(CON_VAR type_var, 
 								   con_tuple_inject args))
 				    val innersig = SIGNAT_STRUCTURE(NONE,
 								    [SDEC(it_lab,
@@ -2033,8 +1979,7 @@ val exp_con_list = map2count
 				    val type_str = Symbol.name tv_sym
 				    val is_eq =  ((size type_str > 1) andalso 
 						  (String.substring(type_str,0,2) = "''"))
-				    val eq_con = CON_ARROW([con_tuple[CON_VAR type_var, CON_VAR type_var]],
-							   con_bool,false, oneshot_init PARTIAL)
+				    val eq_con = con_eqfun(CON_VAR type_var)
 				    val type_sdec = SDEC(type_lab,DEC_CON(type_var,KIND_TUPLE 1, NONE))
 				    val eq_sdec = SDEC(eq_lab, DEC_EXP(eq_var,eq_con))
 				in if is_eq
@@ -2203,7 +2148,7 @@ val exp_con_list = map2count
 				| addbool(SOME sbnd,ce) = (SOME(false,sbnd), ce)
 			      val sbnd_ce_list' = map addbool sbnd_ce_list
 			      val v = fresh_named_var "functor_var"
-			      val sbnd = SBND(funid,BND_MOD(v,MOD_FUNCTOR(argvar,signat,m')))
+			      val sbnd = SBND(funid,BND_MOD(v,MOD_FUNCTOR(argvar,signat,m',s')))
 			      val sdec = SDEC(funid,DEC_MOD(v,SIGNAT_FUNCTOR(argvar,signat,s',
 									     PARTIAL)))
 			  in sbnd_ce_list' @ [(SOME(false,sbnd), CONTEXT_SDEC sdec)]

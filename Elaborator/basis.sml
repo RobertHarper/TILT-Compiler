@@ -80,9 +80,14 @@ functor Basis(structure IlContext : ILCONTEXT
 		  val resmod = MOD_STRUCTURE[SBND(it_lab,
 						  BND_EXP(fresh_var(),
 							  (c2exp instcon)))]
-		  val m = MOD_FUNCTOR(argvar,argsig,resmod)
-		  val s = IlStatic.GetModSig(empty_context,m)
-	      in result := add_context_inline(!result,mk_var_lab str, fresh_named_var str, INLINE_MODSIG(m,s))
+		  val ctxt = add_context_dec(empty_context,
+					     IlStatic.SelfifyDec empty_context
+					       (DEC_MOD(argvar,argsig)))
+		  val inner_sig = IlStatic.GetModSig(ctxt,resmod)
+		  val m = MOD_FUNCTOR(argvar,argsig,resmod,inner_sig)
+		  val s = SIGNAT_FUNCTOR(argvar,argsig,inner_sig,TOTAL)
+	      in result := add_context_inline(!result,mk_var_lab str, 
+					      fresh_named_var str, INLINE_MODSIG(m,s))
 	      end
 	  fun over_entry str con_exp =
 	      result := add_context_inline(!result,
@@ -166,18 +171,14 @@ functor Basis(structure IlContext : ILCONTEXT
 				      int32, false, oneshot_init PARTIAL)
 	       val wordbin = CON_ARROW([con_tuple[uint32, uint32]], 
 				      uint32, false, oneshot_init PARTIAL)
-	       val intuni = CON_ARROW([int32],int32, false, oneshot_init PARTIAL)
-	       val intpred = CON_ARROW([con_tuple[int32, int32]], 
-				       con_bool, false, oneshot_init PARTIAL)
-	       val floatuni = CON_ARROW([float64],float64, false, oneshot_init PARTIAL)
+	       val intuni = CON_ARROW([int32], int32, false, oneshot_init PARTIAL)
+	       val intpred = con_eqfun int32
+	       val floatuni = CON_ARROW([float64], float64, false, oneshot_init PARTIAL)
 	       val floatbin = CON_ARROW([con_tuple[float64, float64]], 
 					 float64, false, oneshot_init PARTIAL)
-	       val floatpred = CON_ARROW([con_tuple[float64, float64]], 
-					  con_bool, false, oneshot_init PARTIAL)
-	       val charpred = CON_ARROW([con_tuple[uint8, uint8]], 
-					con_bool, false, oneshot_init PARTIAL)
-	       val wordpred = CON_ARROW([con_tuple[uint32, uint32]], 
-					con_bool, false, oneshot_init PARTIAL)
+	       val floatpred = con_eqfun float64
+	       val charpred = con_eqfun uint8
+	       val wordpred = con_eqfun uint32
 	       fun add_uni_entry (str,ei,ef) = over_entry str [(intuni, ei), (floatuni, ef)]
 	       fun add_bin_entry (str,ei,ew,ef) = over_entry str [(intbin, ei), (wordbin, ew), (floatbin, ef)]
 	       fun add_pred_entry (str,ei,ew,ec,ef) = over_entry str [(charpred, ei), 

@@ -214,8 +214,11 @@ struct
 		| App_e(openness,Var_e v,clist,[],[]) => use_candidate(state,v,clist)
 		| App_e(openness,f,clist,elist,eflist) => 
 			(scan_exp state f; app (scan_exp state) elist; app (scan_exp state) eflist)
+		| ExternApp_e(f,elist) => 
+			(scan_exp state f; app (scan_exp state) elist)
+
 		| Raise_e(e,c) => scan_exp state e
-		| Handle_e(e,bound,handler,c) => (scan_exp state e; scan_exp state handler))
+		| Handle_e(e,bound,handler) => (scan_exp state e; scan_exp state handler))
 
 	and scan_switch (state : state) (switch : switch) : unit = 
 	  let fun scan_sw scan_info scan_arg scan_tag {info,arg,arms,default} = 
@@ -241,7 +244,7 @@ struct
 		| Typecase_e _ => error "typecase_e not done")
 	  end
 
-	and scan_function (state : state) (Function(effect,recur,vklist,vclist,vlist,e,c)) : unit =
+	and scan_function (state : state) (Function(effect,recur,vklist,_,vclist,vlist,e,c)) : unit =
 		let val state = add_vars(state,map (fn (v,_) => (v,NONE)) vklist) 
 		in scan_exp state e
 		end
@@ -262,7 +265,7 @@ struct
 		      let val vflist = (Sequence.toList vfset)
 			  val _ = 
 			      (case vflist of
-				   [(v,Function(_,Leaf,vklist,[],[],e,_))] => 
+				   [(v,Function(_,Leaf,vklist,_,[],[],e,_))] => 
 				       (case e of
 					   Let_e(_,[Fixopen_b vfset], Var_e inner) =>
 					       (case (Sequence.toList vfset) of
@@ -281,8 +284,8 @@ struct
 	fun scan_import(ImportValue(l,v,c),state) : state = state
 	  | scan_import(ImportType(l,v,k),state)  = add_var(state,v,NONE)
 
-	fun scan_export state (ExportValue(l,e,c)) : unit = scan_exp state e
-	  | scan_export state (ExportType(l,c,k)) = ()
+	fun scan_export state (ExportValue(l,e)) : unit = scan_exp state e
+	  | scan_export state (ExportType(l,c)) = ()
 
 	fun scan_module(MODULE{imports, exports, bnds}) : unit = 
 	  let val state = new_state()
@@ -310,38 +313,39 @@ struct
 			 | SOME (inner,_) => Var_e inner)
 		| App_e(openness,f,clist,elist,eflist) => 
 		      App_e(openness,do_exp f,clist,map do_exp elist,map do_exp eflist) 
-
+		| ExternApp_e(f,elist) =>
+		      ExternApp_e(do_exp f,map do_exp elist)
 		| Raise_e(e,c) => Raise_e(do_exp e, c)
-		| Handle_e(e,v,handler,c) => Handle_e(do_exp e, v, do_exp handler, c))
+		| Handle_e(e,v,handler) => Handle_e(do_exp e, v, do_exp handler))
 
 	and do_switch (switch : switch) : switch = 
 	   (case switch of
-		Intsw_e {size,arg,result_type,arms,default} =>
+		Intsw_e {size,arg,arms,default} =>
 		    let val arg = do_exp arg
 			val arms = map (fn (w,e) => (w,do_exp e)) arms
 			val default = Util.mapopt do_exp  default
-		    in  Intsw_e {size=size,arg=arg,result_type=result_type,arms=arms,default=default}
+		    in  Intsw_e {size=size,arg=arg,arms=arms,default=default}
 		    end
-	      | Sumsw_e {sumtype,arg,result_type,bound,arms,default} =>
+	      | Sumsw_e {sumtype,arg,bound,arms,default} =>
 		    let val arg = do_exp arg
 			val arms = map (fn (t,e) => (t,do_exp e)) arms
 			val default = Util.mapopt do_exp default
-		    in  Sumsw_e {sumtype=sumtype,arg=arg,result_type=result_type,
+		    in  Sumsw_e {sumtype=sumtype,arg=arg,
 				 bound=bound,arms=arms,default=default}
 	      end
-	      | Exncase_e {arg,result_type,bound,arms,default} =>
+	      | Exncase_e {arg,bound,arms,default} =>
 		let val arg = do_exp arg
 		    val arms = map (fn (e1,e2) => (do_exp e1, do_exp e2)) arms
 		    val default = Util.mapopt do_exp  default
-		in  Exncase_e {arg=arg,result_type=result_type,
+		in  Exncase_e {arg=arg,
 			       bound=bound,arms=arms,default=default}
 		end
 	      | Typecase_e _ => error "typecase not handled")
 
 
-	and do_function (Function(effect,recur,vklist,vclist,vlist,e,c)) : function =
+	and do_function (Function(effect,recur,vklist,dep,vclist,vlist,e,c)) : function =
 	    let val e = do_exp e
-	    in  Function(effect,recur,vklist,vclist,vlist,e,c)
+	    in  Function(effect,recur,vklist,dep,vclist,vlist,e,c)
 	    end
 
 	and do_bnds(bnds : bnd list) : bnd list = 
@@ -358,7 +362,7 @@ struct
 			  fun do_vflist vflist = 
 			      [Fixopen_b(Sequence.fromList(map (fn (v,f) => (v,do_function f)) vflist))]
 		      in  (case vflist of
-			       [(v,Function(_,Leaf,vklist,[],[],Let_e(_,[Fixopen_b vflist'],_),_))] =>
+			       [(v,Function(_,Leaf,vklist,_,[],[],Let_e(_,[Fixopen_b vflist'],_),_))] =>
 				   (case (is_candidate v) of
 					NONE => do_vflist vflist
 				      | SOME (v,clist) => 
@@ -373,8 +377,8 @@ struct
 
 	fun do_import import = import
 
-	fun do_export(ExportValue(l,e,c)) = ExportValue(l,do_exp e,c)
-	  | do_export(ExportType(l,c,k))  = ExportType(l,c,k)
+	fun do_export(ExportValue(l,e)) = ExportValue(l,do_exp e)
+	  | do_export(ExportType(l,c))  = ExportType(l,c)
 	    
 	fun do_module(MODULE{imports, exports, bnds}) = 
 	  let val imports = map do_import imports
