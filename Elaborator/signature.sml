@@ -394,9 +394,11 @@ structure Signature :> SIGNATURE =
         end (* xsig_sharing_rewrite *)
 
     fun xsig_where_type(ctxt,orig_sdecs,lpath, con, kind) : sdecs =
-	let val _ = if (!debug)
-			then print "xsig_where_type called\n"
-		    else ()
+	let val _ = debugdo (fn () =>
+			     (print "-------xsig_where_type-------\n";
+			      print "lpath = "; pp_lpath lpath; print "\n";
+			      print "con = "; pp_con con; print "\n";
+			      print "kind = "; pp_kind kind; print "\n"))
 	    val mjunk = fresh_named_var "xsig_where_type_mjunk"
 	    val mpath = PATH(mjunk,[])
 	    val msig = SelfifySig ctxt (mpath,SIGNAT_STRUCTURE orig_sdecs)
@@ -429,7 +431,12 @@ structure Signature :> SIGNATURE =
          but then we must recognize that some transparent type
 	   slots are actually opaque *)
     and xsig_where_structure_slow(context,sdecs,labs1,m2,sig2) = 
-	let 
+	let val _ = debugdo (fn () =>
+			     (print "-------xsig_where_structure_slow-------\n";
+			      print "sdesc = "; pp_sdecs sdecs; print "\n";
+			      print "labs1 = "; pp_lpath labs1; print "\n";
+			      print "m2 = "; pp_mod m2; print "\n";
+			      print "sig2 = "; pp_signat sig2; print "\n"))
 	    val SOME sdecs2 = signat2sdecs context sig2
 	    val mjunk_var = fresh_named_var "mjunk_where_structure_slow"
 	    val mjunk = MOD_VAR mjunk_var
@@ -442,6 +449,7 @@ structure Signature :> SIGNATURE =
 		   | _ => (error_region();
 			   print "can't where non-existent or non-structure component\n";
 			   raise WhereError))
+	    val nlabels1 = length labels1
 
             (* kinds and reversed partial lpaths *)
 	    val SOME sdecs1 = signat2sdecs context s1
@@ -451,14 +459,17 @@ structure Signature :> SIGNATURE =
 	      we cannot follow_labels all at once at the beginning *)
 	    fun constrain((k,plabs),sdecs) = 
 		let val labs = labels1 @ plabs
-		in  (case follow_labels (NONE,sdecs,context) (labels1 @ plabs) of
-		       ABSTRACT (labs,_) => 
-			 (case (Sdecs_Lookup_Open context (m2,sdecs2,plabs)) of
-			      SOME(_,PHRASE_CLASS_CON(c,_,_,_)) => 
-				  xsig_where_type(context,sdecs,labs,c,k)
-			    | _ => (error_region();
-				    print "where's rhs structure missing components\n";
-				    sdecs))
+		in  (case follow_labels (NONE,sdecs,context) labs of
+		       ABSTRACT (labs',_) =>
+			   let val plabs' = List.drop(labs',nlabels1)
+			   in
+			       (case (Sdecs_Lookup_Open context (m2,sdecs2,plabs')) of
+				    SOME(_,PHRASE_CLASS_CON(c,_,_,_)) => 
+					xsig_where_type(context,sdecs,labs',c,k)
+				  | _ => (error_region();
+					  print "where's rhs structure missing components\n";
+					  sdecs))
+			   end
 		     | CONCRETE _ => sdecs)
 		end
 
@@ -472,7 +483,13 @@ structure Signature :> SIGNATURE =
 
      (* it is difficult to correctly optimize this case: we try to catch only some cases *)
     and xsig_where_structure(context,sdecs,labs1,m2,sig2) = 
-	let fun find_sig [] s = SOME s
+	let val _ = debugdo (fn () =>
+			     (print "-------xsig_where_structure-------\n";
+			      print "sdesc = "; pp_sdecs sdecs; print "\n";
+			      print "labs1 = "; pp_lpath labs1; print "\n";
+			      print "m2 = "; pp_mod m2; print "\n";
+			      print "sig2 = "; pp_signat sig2; print "\n"))
+	    fun find_sig [] s = SOME s
 	      | find_sig (l::ls) (SIGNAT_STRUCTURE sdecs) =
 		(case find_sdec (sdecs,l) of
 		     SOME (SDEC(_,DEC_MOD(_,_,signat))) => find_sig ls signat
@@ -890,7 +907,7 @@ structure Signature :> SIGNATURE =
 	  end
 
         (* Substitution takes variables in the specification into the target variables. *)
-	fun doit ctxt (lab,spec_dec) : (bnd * dec * var) option =
+	fun doit ctxt (lab,spec_dec) : (bnd * dec) option =
 
 	    (case (spec_dec, actual_self_lookup lab) of
 
@@ -902,16 +919,15 @@ structure Signature :> SIGNATURE =
 			    | (SOME _, NONE) => false
 			    | (NONE, _) => true))
 			 then
-			     let val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
-				 val exp = (case (inline,eopt') of
+			     let val exp = (case (inline,eopt') of
 						(true, SOME e) => e
 					      | _ => path2exp(join_path_labels(path_actual,lbls)))
 				 val con_actual_reduced = con_normalize(ctxt, con_actual)
 				 val con_actual_smaller = if (con_size con_actual) < (con_size con_actual_reduced)
 							      then con_actual else con_actual_reduced
-				 val bnd = BND_EXP(v,exp)
-				 val dec = DEC_EXP(v,con_actual_smaller,eopt',inline)
-			     in  SOME(bnd,dec,v_spec)
+				 val bnd = BND_EXP(v_spec,exp)
+				 val dec = DEC_EXP(v_spec,con_actual_smaller,eopt',inline)
+			     in  SOME(bnd,dec)
 			     end 
 		     else 
 			 let val con_spec_norm = con_normalize(ctxt,con_spec)
@@ -937,16 +953,15 @@ structure Signature :> SIGNATURE =
 			 | SOME (var_actual, 
 				 SIGNAT_STRUCTURE sdecs_actual,
 				 con_actual,_,inline) =>
-			       let val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
-				   val path = join_path_labels(path_actual,lbls)
+			       let val path = join_path_labels(path_actual,lbls)
 				   val (coerced,SOME(resbnd,resdec)) = 
 				       polyval_case ctxt
-				         {name = v, path = path,
+				         {name = v_spec, path = path,
 					  varsig_spec = NONE, con_spec = con_spec,
 					  inline = inline, var_actual = var_actual,
 					  sdecs_actual = sdecs_actual, con_actual = con_actual}
 				   val _ = coerce(coerced,"polyval")
-			       in  SOME (resbnd,resdec,v_spec)
+			       in  SOME (resbnd,resdec)
 			       end)
 				
                 (* --------- Coercion from con, overexp, or none to monoval --------------- *)
@@ -966,15 +981,14 @@ structure Signature :> SIGNATURE =
 			 (* ----------- Coercion from polyval to polyval ------------------ *)
 			 (SOME (v1,s1,con_spec,_,_),
 			  SOME (v2,SIGNAT_STRUCTURE sdecs2,con_actual,_,inline_actual)) =>
-			 let val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
-			     val (coerced,SOME(resbnd,resdec)) =
+			 let val (coerced,SOME(resbnd,resdec)) =
 				 polyval_case ctxt
-				 {name = v, path = join_path_labels(path_actual,lbls),
+				 {name = v_spec, path = join_path_labels(path_actual,lbls),
 				  varsig_spec = SOME(v1,s1), con_spec = con_spec,
 				  inline = inline_actual, var_actual = v2,
 				  sdecs_actual = sdecs2, con_actual = con_actual}
 			     val _ = coerce(coerced,"polyval")
-			 in  SOME(resbnd,resdec,v_spec)
+			 in  SOME(resbnd,resdec)
 			 end
 			(* ----------- Coercion from module to module ------------------ *)
 			| (NONE, NONE) => 
@@ -982,10 +996,9 @@ structure Signature :> SIGNATURE =
 			     val (coerced,mbody,sig_ret) = 
 				 xcoerce(ctxt,mod_path,sig_actual,sig_spec)
 			     val _ = coerce(coerced,"inner module")
-			     val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
-			     val bnd = BND_MOD(v,b,mbody)
-			     val dec = DEC_MOD(v,b,sig_ret)
-			 in SOME(bnd,dec,v_spec)
+			     val bnd = BND_MOD(v_spec,b,mbody)
+			     val dec = DEC_MOD(v_spec,b,sig_ret)
+			 in SOME(bnd,dec)
 			 end
 			(* ----------- Coercion from module to polyval or polyval to module --------- *)
 			| (NONE, SOME _) => 
@@ -1005,10 +1018,9 @@ structure Signature :> SIGNATURE =
 	       (* ------- coercion of a type component to a type spec ---- *)
 	       | (DEC_CON (v_spec, k_spec, copt_spec, _),
 	          SOME(lbls,PHRASE_CLASS_CON (con_actual,k_actual,con_opt,inline))) => 
-			let val v = fresh_named_var ("copy_" ^ (Name.label2string lab))
-			    val bnd = BND_CON(v,con_actual)
-			    val dec = DEC_CON(v,k_actual,SOME con_actual,inline)
-			    val res = SOME(bnd,dec,v_spec)
+			let val bnd = BND_CON(v_spec,con_actual)
+			    val dec = DEC_CON(v_spec,k_actual,SOME con_actual,inline)
+			    val res = SOME(bnd,dec)
 			in  if eq_kind(k_spec,k_actual)
 			      then 
 			        (case copt_spec of
@@ -1039,19 +1051,12 @@ structure Signature :> SIGNATURE =
 			end
 
 		   (* ------- coercion of a non-type component to a type spec ---- *)
-		   | (DEC_CON (v_spec, k_spec, SOME c_spec, inline_spec), NONE) => 
-			if (is_questionable lab)
-			    then 
-				let val v = fresh_named_var ("generated_" ^ (Name.label2string lab))
-				in  SOME(BND_CON(v, c_spec),
-					 DEC_CON(v, k_spec, SOME c_spec, inline_spec),
-					 v_spec)
-				end
-			else
-			    (error_region_with "coercion of a non-existent component\n";
-			     tab_region_with   "  to a type specification failed at ";
-			     pp_label lab; print "\n";
-			     NONE)
+		   | (DEC_CON (v_spec, k_spec, SOME c_spec, inline_spec), NONE) =>
+			(* Used to check is_questionable for transparent datatypes. *) 
+			(error_region_with "coercion of a non-existent component\n";
+			 tab_region_with   "  to a type specification failed at ";
+			 pp_label lab; print "\n";
+			 NONE)
 		   | (DEC_CON _, _) =>
 			(error_region_with "coercion of a non-type or non-existent component\n";
 			 tab_region_with   "  to a type specification failed at ";
@@ -1065,12 +1070,8 @@ structure Signature :> SIGNATURE =
 		       pp_label l; print "\n")
 	     else ();
 	     case (doit ctxt (l,dec)) of
-		 SOME (resbnd,resdec,v_spec) =>
-		     let val specdec = (case resdec of
-		               DEC_EXP(_,c,eopt,i) => DEC_EXP(v_spec,c,eopt,i)
-			     | DEC_CON(_,k,copt,i) => DEC_CON(v_spec,k,copt,i)
-			     | DEC_MOD(_,b,s) => DEC_MOD(v_spec,b,s))
-			 val ctxt' = add_context_dec(ctxt, SelfifyDec ctxt specdec)
+		 SOME (resbnd,resdec) =>
+		     let val ctxt' = add_context_dec(ctxt, SelfifyDec ctxt resdec)
 			 val (sbnds,sdecs) = loop ctxt' rest
 		     in ((SBND(l,resbnd))::sbnds,
 			 (SDEC(l,resdec))::sdecs)
@@ -1140,26 +1141,26 @@ structure Signature :> SIGNATURE =
 
     fun generateModFromSig (ctxt, baseModule : mod, signat : signat, typeOnly : bool) =
 	let fun generateSdec m (sdec as (SDEC(l,dec))) = 
-		(case (dec, typeOnly) of
-		     (DEC_MOD(v,b,s), _) =>
+		(case dec of
+		     DEC_MOD(v,b,s) =>
 			 (case generateSig (MOD_PROJECT(m, l)) s of
 			      NONE => NONE
 			    | SOME (m,s) => SOME(SBND(l,BND_MOD(v,b,m)),
 						 SDEC(l,DEC_MOD(v,b,s))))
-		   | (DEC_EXP (v,c,eopt,b), _) => 
-			      if not typeOnly orelse is_coercion l then
+		   | DEC_EXP (v,c,eopt,b) => 
+			      if not typeOnly orelse is_coercion l orelse is_eq l then
 				  SOME(SBND(l, BND_EXP(v,MODULE_PROJECT(m,l))),
 				       SDEC(l, DEC_EXP(v,c,eopt,b)))
 			      else NONE
-		   | (DEC_CON (v,_,_,_), _) => SOME (SBND(l, BND_CON(v,CON_MODULE_PROJECT(m,l))), sdec))
+		   | DEC_CON (v,_,_,_) => SOME (SBND(l, BND_CON(v,CON_MODULE_PROJECT(m,l))), sdec))
 	    and generateSig m s = 
-		(case (s, typeOnly) of
-		     (SIGNAT_STRUCTURE sdecs, _) =>
+		(case s of
+		     SIGNAT_STRUCTURE sdecs =>
 			 let val (sbnds,sdecs) = Listops.unzip(List.mapPartial (generateSdec m) sdecs)
 			 in  SOME(MOD_STRUCTURE sbnds, SIGNAT_STRUCTURE sdecs)
 			 end
-		   | (SIGNAT_FUNCTOR _, true) => NONE  (* these can be polymorphic values *)
-		   | (SIGNAT_FUNCTOR _, _) => SOME(m, s)
+		   | SIGNAT_FUNCTOR _ => if typeOnly then NONE  (* these can be polymorphic values *)
+					 else SOME(m, s)
 		   | _ => generateSig m (IlContext.reduce_signat ctxt s))
 	in  generateSig baseModule signat
 	end
@@ -1346,8 +1347,7 @@ structure Signature :> SIGNATURE =
 		       val var_coerced = fresh_named_var "coercedModule"
 		       val var_thin = fresh_named_var "thinModule"
 		       val SOME(mod_thick, sig_thick) = generateModFromSig(context, MOD_VAR var_actual, sig_coerced, false)
-		       val context_var_actual = add_context_mod'(context, var_actual, sig_actual_self)
-		       val mod_sig_thin_option = generateModFromSig(context_var_actual, MOD_VAR var_actual, sig_actual_self, true)
+		       val mod_sig_thin_option = generateModFromSig(context, MOD_VAR var_actual, sig_actual_self, true)
 		       val substActualToCoerced = subst_add_modvar(empty_subst, var_actual, MOD_VAR var_coerced)
 		       val substActualToThin = subst_add_modvar(empty_subst, var_actual, MOD_VAR var_thin)
 		       val MOD_STRUCTURE copy_sbnds = mod_subst(mod_thick, substActualToCoerced)
@@ -1357,10 +1357,25 @@ structure Signature :> SIGNATURE =
 			   (case mod_sig_thin_option of
 				NONE => ([],[])
 			      | SOME (mod_thin, sig_thin) => 
-				    let 
+				    let
 				        (* Simply unselfifying with respect to var_actual does not work *)
 					val sig_thin = sig_subst(sig_thin, substActualToThin)
-					val used = Name.PathSet.filter (fn (v,_) => eq_var(v,var_thin)) (findPathsInSig sig_copy)
+					val paths = findPathsInSig sig_copy
+					val used = Name.PathSet.filter (fn (v,_) => eq_var(v,var_thin)) paths
+					fun addEqSig (currentPrefix, s, used) =
+					    let val SIGNAT_STRUCTURE sdecs = s
+					    in  foldl (addEqSdec currentPrefix) used sdecs
+					    end
+					and addEqSdec currentPrefix (sdec, used) =
+					    let val SDEC (l,dec) = sdec
+						val currentPrefix = currentPrefix @ [l]
+					    in  case dec
+						  of DEC_MOD (_,_,s) => addEqSig (currentPrefix,s,used)
+						   | DEC_EXP _ => if is_eq l then Name.PathSet.add (used, (var_thin,currentPrefix))
+								  else used
+						   | DEC_CON _ => used
+					    end
+					val used = addEqSig (nil, sig_thin, used)
 					val (mod_thin, sig_thin) = structureGC(context, var_thin, mod_thin, sig_thin, used)
 					val sig_thin = UnselfifySig context (PATH(var_thin,[]), sig_thin)
 				    in  ([SBND(hidden_lbl, BND_MOD(var_thin, false, mod_thin))],
