@@ -100,7 +100,7 @@ void GetIRegs(struct ucontext *uctxt, unsigned long *dest)
     dest[i] = GetIReg(uctxt,i);
 }
 
-int zero()
+int zero(void)
 {
   return 0;
 }
@@ -148,7 +148,7 @@ void buserror_on(void)
 
 
 /*
-void signaltest()
+void signaltest(void)
 {
   static int which = 3;
   static int dummy = 567;
@@ -381,7 +381,7 @@ void alarm_handler(int signum,
   Interrupt(uctxt);
 }
 
-void signal_init()
+void signal_init(void)
 {
   buserror_on();
   float_exn_on();

@@ -24,12 +24,12 @@ typedef struct SharedStack__t
 SharedStack_t *SharedStack_Alloc(int stackletSize, int globalLocSize, int rootLocSize, int objSize, int segmentSize);
 int isEmptySharedStack(SharedStack_t *);                /* Was is (possibly) empty at some point? - Conservative */
 void resetSharedStack(SharedStack_t *, LocalWork_t *);          /* Make local stack seem non-empty */
-int popSharedStack(SharedStack_t *ss, LocalWork_t *lw,
-		   int stackletRequest,
-		   int globalLocRequest,
-		   int rootLocRequest,
-		   int objRequest,
-		   int segmentRequest);  /* Increments ss->numStack and lw->hasShared if number of items fetched > 0 */
+void popSharedStack(SharedStack_t *ss, LocalWork_t *lw,
+		    int stackletRequest,
+		    int globalLocRequest,
+		    int rootLocRequest,
+		    int objRequest,
+		    int segmentRequest);  /* Increments ss->numStack and lw->hasShared if number of items fetched > 0 */
 
 int pushSharedStack(int conditional,                        /* conditional = 1 for pushes that don't effect termination */
 		    SharedStack_t *, LocalWork_t *lw);

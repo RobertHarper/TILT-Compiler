@@ -1,6 +1,6 @@
 /* Used only for solaris */
 
-void dummyFirstFunction()
+void dummyFirstFunction(void)
 {
 }
 

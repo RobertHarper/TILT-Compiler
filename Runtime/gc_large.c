@@ -41,7 +41,7 @@ mem_t gc_large_alloc(Proc_t *proc, int byteLen, Align_t align)
   return region;
 }
 
-void gc_large_startCollect()
+void gc_large_startCollect(void)
 {
   ClearBitmap(markMap);
 }
@@ -57,13 +57,13 @@ void gc_large_addRoot(ptr_t obj)
     SetBitmapRange(markMap,chunkPos,chunkLen);
 }
 
-void gc_large_endCollect()
+void gc_large_endCollect(void)
 {
   ClearBitmap(allocMap);
   typed_swap(Bitmap_t *, allocMap, markMap);
 }
 
-void gc_large_init()
+void gc_large_init(void)
 {
   largeSpace = Heap_Alloc(largeheapsize * 1024, largeheapsize * 1024);
   allocMap = CreateBitmap(largeheapsize * 1024 / largebitmapsize);

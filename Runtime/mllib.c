@@ -38,7 +38,7 @@ FILE* des2ptr(int des)
   return des2ptr_table[des];
 }
 
-void mllib_init()
+void mllib_init(void)
 {
   int i=0;
   for (i=0; i<100; i++)

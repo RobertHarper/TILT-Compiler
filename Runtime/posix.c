@@ -373,7 +373,7 @@ int real_logb(double arg)
 }
 
 
-intpair ml_timeofday()
+intpair ml_timeofday(void)
 {
   ptr_t result;
   struct timeval tp;
@@ -1584,7 +1584,7 @@ intpair posix_filesys_fpathconf (int unused1, string unused)
 }
 
 
-ptr_t til_selfusage()
+ptr_t til_selfusage(void)
 {
   val_t fields[4];
   int masks[1];
@@ -1600,7 +1600,7 @@ ptr_t til_selfusage()
   return alloc_record(fields, masks, 4);
 }
 
-ptr_t til_realtime()
+ptr_t til_realtime(void)
 {
   struct timeb tp;
   ftime(&tp);

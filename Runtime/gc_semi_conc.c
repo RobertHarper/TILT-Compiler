@@ -168,7 +168,7 @@ void flipRootLoc(ploc_t root)
   }
 }
 
-static int shouldDoubleAllocate()
+static int shouldDoubleAllocate(void)
 {
   int gcAgressive = doAgressive ? (GCStatus == GCAgressive) || (GCStatus == GCPendingOn) : 0;
   int gcOn = gcAgressive || (GCStatus == GCOn) || (GCStatus == GCPendingOff);
@@ -494,7 +494,7 @@ void GCRelease_SemiConc(Proc_t *proc)
     if (!inHeap(primary, fromSpace))
       continue;
     alloc1_copyCopySync_primaryStack(proc,primary,&proc->work.objs,&proc->majorRange,fromSpace); 
-    while ((replica = (ptr_t) primary[-1]) == STALL_TAG)  /* Somebody might be scanning object */
+    while ((replica = (ptr_t) primary[-1]) == (ptr_t)STALL_TAG)  /* Somebody might be scanning object */
       ;
     tag = replica[-1];
     byteLen = GET_ANY_ARRAY_LEN(tag);
@@ -738,7 +738,7 @@ void GCPoll_SemiConc(Proc_t *proc)
   }
 }
 
-void GCInit_SemiConc()
+void GCInit_SemiConc(void)
 {
   int expandedSize, reducedSize;
   init_int(&MaxHeap, 128 * 1024);

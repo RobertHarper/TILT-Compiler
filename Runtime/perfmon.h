@@ -60,7 +60,7 @@ extern unsigned long long pm_get_pcr(void);
 
 #endif /* _KERNEL */
 
-extern unsigned long long get_tick();
+extern unsigned long long get_tick(void);
 extern void cpu_sync(void);
 extern void clr_pic(void);
 extern unsigned long long get_pic(void);

@@ -6,6 +6,7 @@
 #include "memobj.h"
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 #include "til-signal.h"
 #include <sys/types.h>
 #include <sys/procset.h>
@@ -290,7 +291,7 @@ void DeleteJob(Proc_t *proc)
 }
 
 
-void StopAllThreads()
+void StopAllThreads(void)
 {
   int i;
 
@@ -312,7 +313,7 @@ Proc_t *getNthProc(int i)
   return &(Procs[i]);
 }
 
-Proc_t *getProcPthread()
+Proc_t *getProcPthread(void)
 {
   int i;
   pthread_t sys = pthread_self();
@@ -323,9 +324,9 @@ Proc_t *getProcPthread()
   return NULL;
 }
 
-Thread_t *getThread()
+Thread_t *getThread(void)
 {
-  int localVar;
+  ui_t localVar;
   Stacklet_t *stacklet = GetStacklet(&localVar);
   Thread_t *thread = NULL;
 
@@ -343,7 +344,7 @@ Thread_t *getThread()
   return thread;
 }
 
-Proc_t *getProc()
+Proc_t *getProc(void)
 {
   Thread_t *thread = getThread();
   if (thread != NULL)
@@ -450,7 +451,7 @@ int isLocalWorkEmpty(LocalWork_t *lw)
 }
 
 
-void thread_init()
+void thread_init(void)
 {
   int i, j;
   assert(intSz == sizeof(int));
@@ -706,12 +707,12 @@ void procChangeState(Proc_t *proc, ProcessorState_t newState, int newSubstate)
   assert(proc->substate != 0);
 }
 
-int thread_total() 
+int thread_total(void)
 {
   return totalThread;
 }
  
-int thread_max() 
+int thread_max(void) 
 {
   return maxThread;
 }
@@ -945,7 +946,8 @@ static void* proc_go(void* untypedProc)
 void thread_go(ptr_t thunk)
 {
   int curproc = -1;
-  int i, status, discard;
+  int i, status;
+  pthread_t discard;
 
   mainThread = thread_create(NULL,thunk);
   AddJob(mainThread);
@@ -1051,7 +1053,7 @@ Thread_t *SpawnRest(ptr_t thunk)
 
 /* This should not be called by the mutator directly.  
    Rather start_client returns here after swithcing to system thread stack. */
-void Finish()
+void Finish(void)
 {
   Proc_t *proc = getProc();
   Thread_t *th = proc->userThread;
@@ -1063,7 +1065,7 @@ void Finish()
 }
 
 /* Mutator calls Yield which is defined in the service_platform_asm.s assembly file */
-Thread_t *YieldRest()
+Thread_t *YieldRest(void)
 {
   Proc_t *proc = getProc();
   proc->userThread->request = YieldRequest;  /* Record why this thread pre-empted */

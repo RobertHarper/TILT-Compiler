@@ -25,7 +25,7 @@ static struct rusage start_rusage, stop_rusage;
 
 int information = 1;
 int	prof_fd = 1;
-static double time_diff(),time2double();
+static double time_diff(void),time2double(void);
 static double eps=1e-7;
 
 

@@ -41,7 +41,7 @@ int RuntimePrimeStamp(void)
   return getExnStamp(RuntimeErrorPRIME_r_INT);
 }
 
-void exn_init()
+void exn_init(void)
 {
   static int buf[100];
   static mem_t alloc=0, limit=0;

@@ -296,7 +296,7 @@ void DequeueStacklet(StackChain_t *stackChain)
   assert(stackChain->cursor>=0);
 }
 
-void showAllThreads()
+void showAllThreads(void)
 {
   int i;
   for (i=0; i<NumThread; i++) {
@@ -591,7 +591,7 @@ mem_t StackError(struct ucontext *ucontext, mem_t badadd)
 
 extern mem_t datastart;
 
-void memobj_init()
+void memobj_init(void)
 {
   Stacklet_t *s1, *s2;
   Heapbitmap_bits = heapspace / chunksize;

@@ -222,7 +222,7 @@ void GC_Gen(Proc_t *proc, Thread_t *th)
   assert(GCSatisfiable(proc,th));
 }
 
-void GCInit_Gen() 
+void GCInit_Gen(void)
 {
   int cache_size = GetBcacheSize();
 

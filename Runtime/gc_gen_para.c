@@ -299,7 +299,7 @@ void GCPoll_GenPara(Proc_t *proc)
     GCCollect_GenPara(proc);
 }
 
-void GCInit_GenPara() 
+void GCInit_GenPara(void) 
 {
   /* secondary cache size */
   int cache_size = GetBcacheSize();

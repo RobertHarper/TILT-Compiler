@@ -135,7 +135,7 @@ void GC_Semi(Proc_t *proc, Thread_t *th)
 }
 
 
-void GCInit_Semi()
+void GCInit_Semi(void)
 {
   init_int(&MaxHeap, 128 * 1024);
   init_int(&MinHeap, 256);

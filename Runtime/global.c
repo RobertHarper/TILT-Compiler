@@ -53,7 +53,7 @@ extern unsigned long firstdata;
 extern unsigned long firsttext;
 #endif
 
-void global_init()
+void global_init(void)
 {
   val_t fields[3];
   int masks[1];

@@ -26,12 +26,16 @@ m4undefine(`hide')
 m4undefine(`hideall')
 
 
-dnl	INLINE
+dnl	INLINE(functionName)
 	
 m4ifdef(`alpha_osf',
 	`m4define(`INLINE',
 		  `#pragma inline $1
 static')',
 	`m4define(`INLINE', `static inline')')
+
+dnl	DISCARD_VOLATILE(type, exp)
+
+m4define(`DISCARD_VOLATILE', `(($1)($2))')
 
 m4divert`'m4dnl

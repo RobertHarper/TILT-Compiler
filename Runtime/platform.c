@@ -87,21 +87,21 @@ void GetPlatform(PlatformType *platform)
 static PlatformType platform;
 
 #ifdef alpha_osf
-int GetBcacheSize() { return platform.bcacheSize; }
-int GetIcacheSize() { return platform.icacheSize; }
-int GetDcacheSize() { return platform.dcacheSize; }
+int GetBcacheSize(void) { return platform.bcacheSize; }
+int GetIcacheSize(void) { return platform.icacheSize; }
+int GetDcacheSize(void) { return platform.dcacheSize; }
 #endif
 
 #ifdef rs_aix
-int GetBcacheSize() { return 256 * 1024; }
-int GetIcacheSize() { return 8 * 1024; }
-int GetDcacheSize() { return 8 * 1024; }
+int GetBcacheSize(void) { return 256 * 1024; }
+int GetIcacheSize(void) { return 8 * 1024; }
+int GetDcacheSize(void) { return 8 * 1024; }
 #endif
 
 #ifdef solaris
-int GetBcacheSize() { return 512 * 1024; }
-int GetIcacheSize() { return 8 * 1024; }
-int GetDcacheSize() { return 8 * 1024; }
+int GetBcacheSize(void) { return 512 * 1024; }
+int GetIcacheSize(void) { return 8 * 1024; }
+int GetDcacheSize(void) { return 8 * 1024; }
 
 
 enum PerfType {NoPerf = -1, UserBasic = 0, SysBasic, BothBasic, UserDCache, SysDCache, UserECache, SysECache, UserEWrite, UserESnoop};
@@ -141,7 +141,8 @@ int initializePerfMon(Proc_t *proc)
     perror("ioctl(PERFMON_SETPCR)");
     exit(1);
   }
-  ioctl(fd, PERFMON_FLUSH_CACHE);
+  ioctl(fd, PERFMON_FLUSH_CACHE); /* XXX */
+  return 1;
 }
 
 void resetPerfMon(Proc_t *proc)
@@ -272,7 +273,7 @@ void showPerfMon(Proc_t *proc, int which)
 }
 
 /*
-void testPerfMon()
+void testPerfMon(void)
 {
   resetPerfMon();
   lapPerfMon();
@@ -283,17 +284,17 @@ void testPerfMon()
 
 #else
 int perfType;
-int initializePerfMon(Proc_t *) {}
-void resetPerfMon(Proc_t *) {}
-void startAlternatePerfMon(Proc_t *) {}
-void stopAlternatePerfMon(Proc_t *) {}
-void lapPerfMon(Proc_t *) {}
-void showPerfMon(Proc_t *, int) {}
+int initializePerfMon(Proc_t * proc) {return 1;}
+void resetPerfMon(Proc_t * proc) {}
+void startAlternatePerfMon(Proc_t * proc) {}
+void stopAlternatePerfMon(Proc_t * proc) {}
+void lapPerfMon(Proc_t * proc, int which) {}
+void showPerfMon(Proc_t *proc, int which) {}
 #endif
 
 
 
-void platform_init()
+void platform_init(void)
 {
 #ifdef alpha_osf
   GetPlatform(&platform); 

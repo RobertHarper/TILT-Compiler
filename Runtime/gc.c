@@ -36,8 +36,8 @@ int SHOW_GCFORWARD = 0;
 double pauseWarningThreshold = -1.0;
 
 
-GCType_t GCType = Minor;
-GCStatus_t GCStatus = GCOff;
+volatile GCType_t GCType = Minor;
+volatile GCStatus_t GCStatus = GCOff;
 
 Statistic_t        heapSizeStatistic;    
 Statistic_t        minorSurvivalStatistic;
@@ -433,7 +433,7 @@ mem_t AllocFromThread(Thread_t *thread, int bytesToAlloc, Align_t align) /* byte
     alloc += wordsToAlloc;
     thread->saveregs[ALLOCPTR] = (val_t) alloc;
   }
-  assert((thread->saveregs[ALLOCLIMIT] == limit) ||
+  assert((thread->saveregs[ALLOCLIMIT] == (unsigned long) limit) ||
 	 (thread->saveregs[ALLOCPTR] < thread->saveregs[ALLOCLIMIT]));
   return region;
 }

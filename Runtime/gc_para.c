@@ -97,13 +97,13 @@ static int segSize = 3; /* Number of items that constitute a segment */
 extern double roomTime;
 
 #define MakeFraction(a,b,c) ((int) ((a) * (((double)((b) - (c))) / (b))))
-int popSharedStack(SharedStack_t *ss, 
-		   LocalWork_t *lw,
-		   int stackletRequest,
-		   int globalLocRequest,
-		   int rootLocRequest, 
-		   int objRequest, 
-		   int segRequest)
+void popSharedStack(SharedStack_t *ss, 
+		    LocalWork_t *lw,
+		    int stackletRequest,
+		    int globalLocRequest,
+		    int rootLocRequest, 
+		    int objRequest, 
+		    int segRequest)
 {
   int stackletFetched = 0, globalLocFetched = 0, rootLocFetched = 0, objFetched = 0, segFetched = 0;
   enterRoom(ss->threeRoom,0);

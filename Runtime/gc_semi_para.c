@@ -218,7 +218,7 @@ void GC_SemiPara(Proc_t *proc, Thread_t *th)
   assert(GCSatisfiable(proc,th));
 }
 
-void GCInit_SemiPara()
+void GCInit_SemiPara(void)
 {
   minOffRequest = 4 * pagesize;
   init_int(&MaxHeap, 128 * 1024);

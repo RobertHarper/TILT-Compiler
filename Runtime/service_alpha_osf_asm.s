@@ -116,6 +116,7 @@ GetRpcc:
  # ----------------------------------------------------------------------------
 	.ent	start_client 
 start_client:
+.set noat
  	ldgp	$gp, 0($27)				# get self gp
 	mov	$16,THREADPTR_REG			# initialize thread ptr
 	mov	$17,$1					# save thunk
@@ -130,7 +131,6 @@ start_client:
 start_client_getgp1:	
 	ldgp	$gp, 0($gp)				# fix $gp
 	stq	$31, notinml_disp(THREADPTR_REG)
-.set noat
 	ldl	$27, ($at)				# fetch code pointer
 	ldl	$0, 4($at)				# fetch type env
 	ldl	$1, 8($at)				# fetch term env

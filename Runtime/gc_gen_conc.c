@@ -976,7 +976,7 @@ void GCPoll_GenConc(Proc_t *proc)
   (void) GC_GenConc(proc, NULL);
 }
 
-void GCInit_GenConc()
+void GCInit_GenConc(void)
 {
   int cache_size = GetBcacheSize();
   double nurseryFraction = 1.2 * NumProc;

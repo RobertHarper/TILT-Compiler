@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-main()
+main(void)
 {
   int sz = 1000;
   Bitmap_t *res = CreateBitmap(sz);

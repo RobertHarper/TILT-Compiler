@@ -158,7 +158,7 @@ void GC_SemiStack(Proc_t *proc, Thread_t *th)
   assert(GCSatisfiable(proc,th));
 }
 
-void GCInit_SemiStack()
+void GCInit_SemiStack(void)
 {
   minOffRequest = 4 * pagesize;
   init_int(&MaxHeap, 128 * 1024);
