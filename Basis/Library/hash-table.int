@@ -1,0 +1,3 @@
+(*$include HASH_TABLE *)
+
+structure HashTable : HASH_TABLE 

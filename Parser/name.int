@@ -1,0 +1,3 @@
+(*$include NAME *)
+
+structure Name : NAME

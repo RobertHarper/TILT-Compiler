@@ -1,0 +1,3 @@
+(*$include POSIX_IO_SIG POSIX_FileSys *)
+structure POSIX_IO : POSIX_IO where type open_mode = POSIX_FileSys.open_mode 
+				     and type file_desc = POSIX_FileSys.file_desc 

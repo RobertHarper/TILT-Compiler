@@ -1,0 +1,6 @@
+(*$include WORD *)
+
+structure Word32 : WORD where type word = word32
+structure Word : WORD where type word = word32
+structure LargeWord : WORD where type word = word32
+structure SysWord : WORD where type word = word32

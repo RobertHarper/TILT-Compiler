@@ -1,0 +1,3 @@
+(*$include Prelude OPTION *)
+
+structure Option : OPTION where type 'a option = 'a option

@@ -1,0 +1,6 @@
+(*$include BIN_IO BinPrimIO *)
+
+structure BinIO : BIN_IO  
+    where type StreamIO.reader = BinPrimIO.reader
+    where type StreamIO.writer = BinPrimIO.writer
+

@@ -1,0 +1,2 @@
+(*$include Prelude SUBSTRING *)
+structure Substring : SUBSTRING where type substring = substring

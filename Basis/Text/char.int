@@ -1,0 +1,3 @@
+(*$include CHAR *)
+
+structure Char : CHAR where type char = char 

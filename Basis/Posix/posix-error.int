@@ -1,0 +1,3 @@
+(*$include POSIX_ERROR *)
+
+structure POSIX_Error : POSIX_ERROR where type syserror = int

@@ -1,0 +1,3 @@
+(*$include POSIX_SIGNAL *)
+
+structure POSIX_Signal : POSIX_SIGNAL

@@ -1,0 +1,4 @@
+(*$include REAL *)
+structure Real64 : REAL where type real = real
+structure LargeReal : REAL where type real = real
+structure Real : REAL where type real = real

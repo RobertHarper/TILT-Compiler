@@ -1,0 +1,2 @@
+(*$include OS_IO_SIG PreOS *)
+structure OS_IO : OS_IO where type iodesc = PreOS.IO.iodesc 

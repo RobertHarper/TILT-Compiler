@@ -1,0 +1,3 @@
+(*$include STRING Prelude *)
+
+structure String : STRING where type string = string

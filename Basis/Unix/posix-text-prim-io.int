@@ -1,0 +1,15 @@
+(*$include OS_PRIM_IO TextPrimIO Posix *)
+
+structure PosixTextPrimIO : sig
+
+    include OS_PRIM_IO
+
+    val stdIn  : unit -> PrimIO.reader
+    val stdOut : unit -> PrimIO.writer
+    val stdErr : unit -> PrimIO.writer
+
+    val strReader : string -> PrimIO.reader
+
+  end
+	where PrimIO = TextPrimIO
+	where type file_desc = Posix.ProcEnv.file_desc	

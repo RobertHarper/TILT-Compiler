@@ -1,0 +1,3 @@
+(*$include SOURCE *)
+
+structure Source : SOURCE

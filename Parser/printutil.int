@@ -1,0 +1,3 @@
+(*$include PRINTUTIL Symbol *)
+
+structure PrintUtil : PRINTUTIL where Symbol = Symbol 

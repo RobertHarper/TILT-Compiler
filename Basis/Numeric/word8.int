@@ -1,0 +1,4 @@
+(*$include WORD *)
+
+structure Word8 : WORD where type word = word8
+

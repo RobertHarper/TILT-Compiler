@@ -1,0 +1,4 @@
+(*$include OS_SIG PreOS Posix *)
+
+structure OS : OS where type IO.iodesc = PreOS.IO.iodesc and type syserror = Posix.Error.syserror 
+

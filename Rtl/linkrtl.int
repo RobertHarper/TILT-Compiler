@@ -1,0 +1,3 @@
+(*$include LINKRTL *)
+
+structure Linkrtl : LINKRTL
