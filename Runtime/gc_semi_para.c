@@ -218,6 +218,6 @@ void GCInit_SemiPara(void)
   if (ordering == DefaultOrder)
     ordering = StackOrder;
   GCInit_Help(256, 128 * 1024, 0.1, 0.7, 512, 50 * 1024);
-  workStack = SharedStack_Alloc(0, 0, 0, 0, 64 * 1024, 1024, 0, 0);
+  workStack = SharedStack_Alloc(0, 100, 16 * 1024, 12 * 1024, 64 * 1024, 16 * 1024, 0, 0);
   barriers = createBarriers(NumProc, 5);
 }

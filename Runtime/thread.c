@@ -349,7 +349,7 @@ Proc_t *getProc(void)
 {
   Thread_t *thread = getThread();
   if (thread != NULL)
-    return thread->proc;
+    return (Proc_t *) (thread->proc);
   return getProcPthread();
 }
 

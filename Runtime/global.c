@@ -29,6 +29,11 @@ extern unsigned long _end;
 mem_t datastart, dataend;
 mem_t textstart, textend;
 
+val_t GetGlobal(ptr_t globalLoc)
+{
+  return globalLoc[primaryGlobalOffset / sizeof(val_t)];
+}
+
 extern val_t Div_r_INT, Overflow_r_INT;   /* Must use & to get global's address */
   
 ptr_t getOverflowExn(void)

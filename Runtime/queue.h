@@ -12,7 +12,9 @@ typedef struct Set__t
 {
   long size;         /* Size of data array */
   ptr_t *data;       /* Array of data elements - layout depends on whether accessed as a stack or queue */
-  long first, last;
+  ptr_t *first;
+  ptr_t *last;
+  ptr_t *limit;     /* equals s->data + size */
                     /* The data elements are from first to last - 1 with no wraparound.  
 		       If first = last, then the set is empty.  
 		       If size = last + 1, then the set is full.  The last slot of the data array at last is always NULL.
@@ -39,8 +41,7 @@ void     SetTransfer(Set_t *from, Set_t *to);   /* Transfers the contents of fro
 INLINE(SetLength)
 long SetLength(Set_t *s)
 {
-  int diff = s->last - s->first;
-  return (diff >= 0) ? diff : diff + s->size;
+  return s->last - s->first;
 }
 
 INLINE(SetFullSize)
@@ -52,7 +53,8 @@ long SetFullSize(Set_t *s)
 INLINE(SetReset)
 void SetReset(Set_t *s)
 {
-  s->first = s->last = 0;
+  s->first = s->data;
+  s->last = s->data;
 }
 
 INLINE(SetIsEmpty)
@@ -65,10 +67,9 @@ INLINE(SetPush)
 void SetPush(Set_t *set, ptr_t item)
 {
   fastAssert(item != NULL); 
-  if (set->last + 1 >= set->size) 
+  if (set->last + 1 >= set->limit)
     SetNormalize(set);
-  set->data[set->last++] = item;
-
+  *(set->last++) = item;
 }
 
 INLINE(SetPush2)
@@ -76,10 +77,10 @@ void SetPush2(Set_t *set, ptr_t item1, ptr_t item2)
 {
   fastAssert(item1 != NULL); 
   fastAssert(item2 != NULL); 
-  if (set->last + 2 >= set->size)
+  if (set->last + 2 >= set->limit)
     SetNormalize(set);
-  set->data[set->last++] = item1;
-  set->data[set->last++] = item2;
+  *(set->last++) = item1;
+  *(set->last++) = item2;
 }
 
 INLINE(SetPush3)
@@ -88,40 +89,38 @@ void SetPush3(Set_t *set, ptr_t item1, ptr_t item2, ptr_t item3)
   fastAssert(item1 != NULL); 
   fastAssert(item2 != NULL); 
   fastAssert(item3 != NULL); 
-  if (set->last + 3 >= set->size)
+  if (set->last + 3 >= set->limit)
     SetNormalize(set);
-  set->data[set->last++] = item1;
-  set->data[set->last++] = item2;
-  set->data[set->last++] = item3;
+  *(set->last++) = item1;
+  *(set->last++) = item2;
+  *(set->last++) = item3;
 }
 
 /* Dequeue and SetPop* return NULL if the set is empty */
 INLINE(SetDequeue)
 ptr_t SetDequeue(Set_t *s)
 {
-  ptr_t result = s->data[s->first];
   if (s->first == s->last)
     return NULL;
-  s->first++;
-  return result;
+  return *(s->first++);
 }
 
 INLINE(SetPop)
 ptr_t SetPop(Set_t *set)
 {
-  assert(set->first == 0);
-  if (set->last) 
-    return set->data[--set->last];
-  return NULL;
+  /*  fastAssert(set->first == set->data); */
+  if (set->first == set->last) 
+    return NULL;
+  return *(--set->last);
 }
 
 INLINE(SetPop2)
 ptr_t SetPop2(Set_t *set, ptr_t *item2Ref)
 {
-  assert(set->first == 0);
-  if (set->last > 1) {
-    *item2Ref = set->data[--set->last];  /* In reverse order of push */
-    return set->data[--set->last];
+  fastAssert(set->first == set->data);
+  if (set->last > set->first + 1) {
+    *item2Ref = *(--set->last);  /* In reverse order of push */
+    return *(--set->last);
   }
   return NULL;
 }
@@ -129,11 +128,12 @@ ptr_t SetPop2(Set_t *set, ptr_t *item2Ref)
 INLINE(SetPop3)
 ptr_t SetPop3(Set_t *set, ptr_t *item2Ref, ptr_t *item3Ref)
 {
-  assert(set->first == 0);
-  if (set->last > 2) {
-    *item3Ref = set->data[--set->last];  /* In reverse order of push */
-    *item2Ref = set->data[--set->last];  /* In reverse order of push */
-    return set->data[--set->last];
+  fastAssert(set->first == set->data);
+  if (set->last > set->first + 2) {
+    *item3Ref = set->last[-1];  /* In reverse order of push */
+    *item2Ref = set->last[-2];  /* In reverse order of push */
+    set->last -= 3;
+    return *set->last;
   }
   return NULL;
 }

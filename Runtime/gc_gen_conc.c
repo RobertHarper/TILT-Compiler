@@ -269,7 +269,7 @@ static void CollectorOn(Proc_t *proc)
 
   /* Collection cannot proceed until all processors have stopped running mutators.
      While waiting for the processors, the "first" processor begins to do some
-     prelimiary work.  This work must be completed before any processor begins collection.
+     preliminary work.  This work must be completed before any processor begins collection.
      As a result, the "first" processor is counted twice.
   */
   isFirst = (weakBarrier(barriers,proc) == 0);
@@ -720,6 +720,7 @@ void GCRelease_GenConc(Proc_t *proc)
     int mirrorWordDisp = (primaryArrayOffset == 0) ? wordDisp + 1 : wordDisp - 1;
     int doubleWordDisp = byteDisp / (sizeof(double));
     int byteLen;  /* Length of data portion of array */
+    int syncIndex;
 
     if (IsGlobalData(mutatorPrimary)) {
       add_global_root(proc,mutatorPrimary);
@@ -747,18 +748,30 @@ void GCRelease_GenConc(Proc_t *proc)
       vptr_t toSpaceReplica = NULL;           /* Used only during major GC*/
       tag_t tag;                              /* Actual tag deteremined after traversing forwarding pointers */
 
+      
       /* Make a copy of the modified arrays and get tag */
       if (inHeap(mutatorPrimary, nursery)) {
-	assert(GCType == Minor);
+	fastAssert(GCType == Minor);
 	nurseryPrimary = mutatorPrimary;
-	alloc1_copyCopySync_primarySet(proc,nurseryPrimary,srcRange);
-	fromSpaceEither = (ptr_t) nurseryPrimary[-1];
+	tag = nurseryPrimary[-1];
+	/* If object has not been copied, simply gray previous pointer value */
+	switch (GET_TYPE(tag)) {
+          case PTR_ARRAY_TYPE:
+          case MIRROR_PTR_ARRAY_TYPE:
+	    alloc1_copyCopySync_primarySet(proc,possPrevPtrVal, fromSpace);
+	    continue;
+          case WORD_ARRAY_TYPE: 
+          case QUAD_ARRAY_TYPE: 
+	    continue;
+	}
+	while ((val_t)(fromSpaceEither = (ptr_t) nurseryPrimary[-1]) == STALL_TAG)
+	  ;
 	tag = fromSpaceEither[-1];
       }
       else if (inHeap(mutatorPrimary,fromSpace)) {
 	fromSpaceEither = mutatorPrimary;
 	if (GCType == Major) {
-	  alloc1_copyCopySync_primarySet(proc,fromSpaceEither,srcRange);
+	  alloc1_copyCopySync_primarySet(proc,(ptr_t) fromSpaceEither,srcRange);
 	  toSpaceReplica = (ptr_t) fromSpaceEither[-1];
 	  tag = toSpaceReplica[-1];
 	}
@@ -768,24 +781,16 @@ void GCRelease_GenConc(Proc_t *proc)
       else 
 	assert(0);
 
+      /* Copy-Write synchronization on replica object */
       byteLen = GET_ANY_ARRAY_LEN(tag);
-      if (byteLen <= arraySegmentSize) {
-	if (nurseryPrimary)
-	  while (nurseryPrimary[-1] == STALL_TAG)
+      syncIndex = (byteLen <= arraySegmentSize) ? -1 : -2-(DivideDown(byteDisp, arraySegmentSize));
+      if (nurseryPrimary)
+	while (fromSpaceEither[syncIndex] == SEGSTALL_TAG)
 	    ;
-	if (toSpaceReplica)
-	  while (fromSpaceEither[-1] == STALL_TAG)
-	    ;
-      }
-      else {
-	int segment = DivideDown(byteDisp, arraySegmentSize);
-	if (nurseryPrimary)
-	  while (nurseryPrimary[-2-segment] == SEGSTALL_TAG)
-	    ;
-	if (toSpaceReplica)
-	  while (fromSpaceEither[-2-segment] == SEGSTALL_TAG)
-	    ;
-      }
+      else if (toSpaceReplica)
+	while (toSpaceReplica[syncIndex] == SEGSTALL_TAG)
+	  ;
+
       switch (GET_TYPE(tag)) {
       case WORD_ARRAY_TYPE:
 	if (nurseryPrimary)

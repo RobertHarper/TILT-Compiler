@@ -42,10 +42,10 @@
 #define fastAssert(x) 
 #endif
 
-#define DivideUp(a,div) (((a) + (div) - 1) / (div))
-#define DivideDown(a,div) ((a)  / (div))
-#define RoundUp(x,mult) (((x) + (mult) - 1) / (mult) * (mult))
-#define RoundDown(x,mult) (((x) / (mult)) * (mult))
+#define DivideUp(a,div) (((int)(a) + (div) - 1) / (div))
+#define DivideDown(a,div) ((int)(a)  / (div))
+#define RoundUp(x,mult) (((int)(x) + (mult) - 1) / (mult) * (mult))
+#define RoundDown(x,mult) (((int)(x) / (mult)) * (mult))
 #define Max(a,b) ((a) > (b) ? (a) : (b))
 #define Min(a,b) ((a) < (b) ? (a) : (b))
 #define typed_swap(t,a,b) { t swap_temp = a; a = b; b = swap_temp; }

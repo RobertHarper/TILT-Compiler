@@ -125,6 +125,7 @@ static void GCCollect_Semi(Proc_t *proc)
   }
   else {
     ptr_t gray;
+
     while (rootLoc = (ploc_t) SetPop(&proc->work.roots))
       locCopy1_replicaSet(proc, rootLoc,fromSpace); 
     while (globalLoc = (ploc_t) SetPop(&proc->work.globals))

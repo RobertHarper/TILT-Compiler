@@ -33,12 +33,12 @@ static int getExnStamp(ptr_t exnstructure)
 
 int RuntimeStamp(void)
 {
-  return getExnStamp(GetGlobal(&RuntimeError_r_INT));
+  return getExnStamp((ptr_t) GetGlobal((ptr_t) &RuntimeError_r_INT));
 }
 
 int RuntimePrimeStamp(void)
 {
-  return getExnStamp(GetGlobal(&RuntimeErrorPRIME_r_INT));
+  return getExnStamp((ptr_t) GetGlobal((ptr_t) &RuntimeErrorPRIME_r_INT));
 }
 
 void exn_init(void)
@@ -94,8 +94,7 @@ ptr_t exnMessageRuntime(ptr_t);
 void toplevel_exnhandler(Thread_t *th)
 {
   char* msg = "";
-  unsigned long *saveregs = th->saveregs;
-  ptr_t exn = (ptr_t)saveregs[EXNARG];
+  ptr_t exn = (ptr_t)th->saveregs[EXNARG];
 
   printf("Proc %d: Thread %d (%d): Uncaught exception ",
 	 getProc()->procid, th->tid, th->id);

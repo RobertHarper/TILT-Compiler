@@ -102,6 +102,7 @@ int localWorkSize = 4096;
 int usageCount = 50;
 int ordering = DefaultOrder;
 int forceSpaceCheck = 0;
+int grayAsReplica = 0;
 
 /* Agressive: Use the Off -> On -> Commit protocol.
    Conservative: Use Off -> Commit protocol. */
@@ -132,16 +133,14 @@ long ComputeHeapSize(long oldsize, double oldratio, int withhold, double reserve
     double constrainedRatio = ((double)oldlive) / (1024 * MaxHeap);
     if (collectDiag >= 1 || constrainedRatio > 0.95)
       printf("GC warning: Would like to make newheap %d kb but constrained to <= %d kb\n",unreservedSize / 1024, MaxHeap);
-    if (constrainedRatio > 0.95)
-      printf("GC warning: Ratio is dangerously high %lf.\n", constrainedRatio);
-    unreservedSize = 1024 * MaxHeap;
-    newSize = RoundDown(unreservedSize * (1.0 - reserve), 1024);
+    if (constrainedRatio > 0.90)
+      printf("GC warning: Liveness ratio is dangerously high %lf.\n", constrainedRatio);
+    newSize = RoundDown(1024 * MaxHeap * (1.0 - reserve), pagesize);
   }
   if (unreservedSize < 1024 * MinHeap) {
     if (collectDiag >= 1)
       printf("GC warning: Would like to make newheap %d kb but constrained to >= %d kb\n",unreservedSize / 1024, MinHeap);
-    unreservedSize = 1024 * MinHeap;
-    newSize = RoundDown(unreservedSize * (1.0 - reserve), 1024);
+    newSize = RoundDown(1024 * MinHeap * (1.0 - reserve), pagesize);
   }
   assert(newSize >= oldlive + withhold);
   return newSize;
@@ -525,9 +524,9 @@ int expandedToReduced(int size, double rate)
   return RoundDown(newSize, pagesize);
 }
 
-int reducedToExpanded(int size, int rate)
+int reducedToExpanded(int size, double rate)
 {
-  int newSize = size * (1 + rate)  / rate;
+  int newSize = (int) size * (1.0 + rate)  / rate;
   return RoundUp(newSize, pagesize);
 }
 

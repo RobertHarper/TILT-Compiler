@@ -28,14 +28,14 @@
 
 void show_stack(mem_t sp, mem_t cur_retadd, mem_t top);
 void stack_init(void);
-void add_global_root(Proc_t *proc, mem_t global);
+void add_global_root(Proc_t *proc, vmem_t global);
 void do_global_work(Proc_t *proc, int workToDo);  /* Do some global work */
 void minor_global_scan(Proc_t *);    /* Return all initialized global locs not in the tenured list */
 void minor_global_promote(Proc_t *);         /* Move initialized global locs into the tenured list */
 void major_global_scan(Proc_t *);
 void stub_error(void);
 void NullGlobals(int globalOffset);           /* For debugging - pass in primary or replica globalOffset */
-val_t GetGlobal(ptr_t);
+
 
 void thread_root_scan(Proc_t *, Thread_t *);  /* Scan all root locations in primaryStack */
 
@@ -53,7 +53,7 @@ extern long SMLGlobalSize;
 extern long TotalStackDepth, MaxStackDepth, TotalStackSize, TotalNewStackDepth;
 
 INLINE(DupGlobal)
-ploc_t DupGlobal(ptr_t global)
+ploc_t DupGlobal(vptr_t global)
 {
   ploc_t primaryLoc = (ploc_t) &global[primaryGlobalOffset / sizeof(val_t)];
   ploc_t replicaLoc = (ploc_t) &global[replicaGlobalOffset / sizeof(val_t)];
@@ -61,7 +61,7 @@ ploc_t DupGlobal(ptr_t global)
   return replicaLoc;
 }
 
-void installThreadRoot(Thread_t *th, ploc_t rootLoc);
-void uninstallThreadRoot(Thread_t *th, ploc_t rootLoc);
+void installThreadRoot(Thread_t *th, vploc_t rootLoc);
+void uninstallThreadRoot(Thread_t *th, vploc_t rootLoc);
 
 #endif

@@ -8,8 +8,9 @@ void SetInit(Set_t *set, long size)
   set->size = Max(16,size);
   set->data = (ptr_t *)malloc(size*sizeof(ptr_t));
   memset((void *)set->data, 0, size * sizeof(ptr_t));
-  set->first = 0;
-  set->last = 0;
+  set->first = set->data;
+  set->last = set->data;
+  set->limit = set->data + set->size;
 }
 
 Set_t *SetCreate(long size)
@@ -39,16 +40,17 @@ void SetNormalizeExpand(Set_t *s, int addSize)
     newData = (ptr_t *) malloc(newSize * sizeof(ptr_t));
   }
 
-  memmove(&newData[0], &oldData[s->first], numElem * sizeof(ptr_t));
+  memmove(newData, s->first, numElem * sizeof(ptr_t));
 
   if (oldData != newData)
     free(oldData);
-  s->first = 0;
-  s->last = numElem;
   s->data = newData;
+  s->first = s->data;
+  s->last = s->data + numElem;
   s->size  = newSize;
+  s->limit = s->data + s->size;
 
-  assert(s->last + 3 < s->size);
+  assert(s->last + 3 < s->limit);
 }
 
 void SetNormalize(Set_t *s) 
@@ -63,13 +65,13 @@ void SetCopy(Set_t *from, Set_t *to)
   assert(from->first <= from->last);
   assert(to->first <= to->last);
   if (to->first == to->last)
-    to->first = to->last = 0;
+    to->first = to->last = to->data;
   if (targetLength + srcLength + 1 >= to->size)
     SetNormalizeExpand(to, srcLength);
-  else if (to->first + srcLength + 1 >= to->size)
+  else if (to->first + srcLength + 1 >= to->limit)
       SetNormalizeExpand(to, 0);
-  assert(to->first + srcLength < to->size);
-  memmove(&to->data[to->last], &from->data[from->first], srcLength * sizeof(ptr_t));
+  assert(to->first + srcLength < to->limit);
+  memmove(to->last, from->first, srcLength * sizeof(ptr_t));
   to->last += srcLength;
   assert(from->first <= from->last);
   assert(to->first <= to->last);

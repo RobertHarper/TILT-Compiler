@@ -450,15 +450,15 @@ static void addRegRoots(Proc_t *proc, unsigned long *saveregs, unsigned int regM
 }
 
 /* Might be given rootLoc that was already installed */
-void installThreadRoot(Thread_t *th, ploc_t rootLoc)
+void installThreadRoot(Thread_t *th, vploc_t rootLoc)
 {
   int i;
   for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
     if (th->rootLocs[i] == rootLoc)
       return;
     if (th->rootLocs[i] == NULL) {
-      th->rootLocs[i] = rootLoc;
-      th->rootVals[i] = *rootLoc;
+      th->rootLocs[i] = (ploc_t) rootLoc;
+      th->rootVals[i] = (ptr_t) *rootLoc;
       return;
     }
   }
@@ -466,7 +466,7 @@ void installThreadRoot(Thread_t *th, ploc_t rootLoc)
 }
 
 /* Might be given rootLoc that was never installed */
-void uninstallThreadRoot(Thread_t *th, ploc_t rootLoc)
+void uninstallThreadRoot(Thread_t *th, vploc_t rootLoc)
 {
   int i;
   for (i=0; i<sizeof(th->rootLocs)/sizeof(ploc_t); i++) {
@@ -740,7 +740,7 @@ void global_root_init(void)
   tenuredGlobal = SetCreate(numGlobals);
 }
 
-void add_global_root(Proc_t *proc, mem_t global)
+void add_global_root(Proc_t *proc, vmem_t global)
 {
   tag_t tag = global[-1];
   if (tag == TAG_REC_INT) 
@@ -748,13 +748,13 @@ void add_global_root(Proc_t *proc, mem_t global)
   else if (tag == TAG_REC_TRACE) {
     ptr_t globalVal = (ptr_t) *global;
     if (!IsGlobalData(globalVal) && !IsTagData(globalVal))
-      SetPush(promotedGlobal, global);
+      SetPush(promotedGlobal, (ptr_t) global);
   }
   else if (tag == MIRROR_GLOBAL_PTR_TAG) {
     ptr_t globalVal = (ptr_t) global[primaryGlobalOffset / sizeof(val_t)];
     assert(global[replicaGlobalOffset / sizeof(val_t)] == uninit_val);
     if (!IsGlobalData(globalVal) && !IsTagData(globalVal))
-      SetPush(promotedGlobal, global);
+      SetPush(promotedGlobal, (ptr_t) global);
     else
       DupGlobal(global);
   }
@@ -799,7 +799,4 @@ void NullGlobals(int globalOffset)
   }
 }
 
-val_t GetGlobal(ptr_t globalLoc)
-{
-  return globalLoc[primaryGlobalOffset / sizeof(val_t)];
-}
+

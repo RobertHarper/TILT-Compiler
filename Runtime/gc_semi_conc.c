@@ -208,9 +208,20 @@ mem_t AllocBigArray_SemiConc(Proc_t *proc, Thread_t *thread, ArraySpec_t *spec)
     case MirrorPointerField : init_double_ptr_array(obj, spec->elemLen, spec->pointerVal); break;
     case DoubleField : init_farray(obj, spec->elemLen, spec->doubleVal); break;
   }
-  /* If collection is on, we must double-allocate */
-  if (shouldDoubleAllocate()) 
-    alloc1_copyCopySync_primarySet(proc, obj, fromSpace);
+  /* If collection is on in commit mode, we must double-allocate */
+  if (shouldDoubleAllocate()) {
+    if (ordering == StackOrder) {
+      if (grayAsReplica)
+	alloc1_copyCopySync_replicaSet(proc, obj, fromSpace);
+      else
+	alloc1_copyCopySync_primarySet(proc, obj, fromSpace);
+    }
+    else if (ordering == HybridOrder) {
+      alloc1_copyCopySync(proc, obj, fromSpace);
+    }
+    else
+      assert(0);
+  }
   return obj;
 }
 
@@ -457,7 +468,16 @@ void GCRelease_SemiConc(Proc_t *proc)
       while (tag == SEGPROCEED_TAG || tag == SEGSTALL_TAG)
 	tag = *(++obj); /* Skip past segment tags */
       obj++;            /* Skip past object tag */
-      alloc_copyCopySync_primarySet(proc,obj);
+      if (ordering == StackOrder) {
+	if (grayAsReplica)
+	  alloc_copyCopySync_replicaSet(proc,obj);
+	else
+	  alloc_copyCopySync_primarySet(proc,obj);
+      }
+      else {
+	assert(ordering == HybridOrder);
+	alloc_copyCopySync(proc,obj);
+      }
       objSize = proc->bytesCopied;
       if (objSize == 0) {
 	mem_t dummy = NULL;
@@ -471,6 +491,7 @@ void GCRelease_SemiConc(Proc_t *proc)
   if (collectDiag >= 3)
     printf("Proc %d: Processing writes from %d to %d\n",proc->procid,writelistCurrent,writelistStop);
   procChangeState(proc, GCWrite, 115);
+  assert(primaryArrayOffset == 0);
   while (writelistCurrent < writelistStop) {
     vptr_t primary = *writelistCurrent++, replica;
     int byteDisp = (int) *writelistCurrent++;
@@ -488,28 +509,60 @@ void GCRelease_SemiConc(Proc_t *proc)
       continue;
     if (!inHeap(primary, fromSpace))
       continue;
-    alloc1_copyCopySync_primarySet(proc,primary,fromSpace); 
-    while ((replica = (ptr_t) primary[-1]) == (ptr_t)STALL_TAG)  /* Somebody might be scanning object */
+    /* If object has not been copied, we need to only gray the old pointer value.
+       Snapshot-at-the-beginning (Yuasa) write barrier requires copying prevPtrVal 
+       even if it might die to prevent the mutator from hiding live data */
+    tag = primary[-1];
+    switch (GET_TYPE(tag)) {
+      case PTR_ARRAY_TYPE:
+      case MIRROR_PTR_ARRAY_TYPE:
+	if (ordering == StackOrder) {
+	  if (grayAsReplica)
+	    alloc1_copyCopySync_replicaSet(proc,possPrevPtrVal, fromSpace);
+	  else
+	    alloc1_copyCopySync_primarySet(proc,possPrevPtrVal, fromSpace);
+	}
+	else {
+	  assert(ordering == HybridOrder);
+	  alloc1_copyCopySync(proc,possPrevPtrVal, fromSpace);
+	}
+	continue;
+      case WORD_ARRAY_TYPE: 
+      case QUAD_ARRAY_TYPE: 
+	continue;
+    }
+    /* Object must be copied or being copied */
+    while ((replica = (ptr_t) primary[-1]) == (ptr_t)STALL_TAG)  
       ;
     tag = replica[-1];
+    /* Backpointer present indicates object not yet scanned - can skip replica update */
+    if (replica[0] == (val_t) primary) 
+      continue;
+
     byteLen = GET_ANY_ARRAY_LEN(tag);
     if (byteLen <= arraySegmentSize)
-      ;    /* Already waited for stall */
+      while (replica[-1] == SEGSTALL_TAG)
+	; 
     else {
       int segment = DivideDown(byteDisp, arraySegmentSize);
-      while (primary[-2-segment] == SEGSTALL_TAG)
+      while (replica[-2-segment] == SEGSTALL_TAG)
 	;
     }
-    assert(primaryArrayOffset == 0);
     switch (GET_TYPE(tag)) {
     case PTR_ARRAY_TYPE: 
     case MIRROR_PTR_ARRAY_TYPE: {
       ptr_t primaryField = (ptr_t) primary[wordDisp];
       ptr_t replicaField = primaryField;
-      /* Snapshot-at-the-beginning (Yuasa) write barrier requires copying prevPtrVal 
-	 even if it might die to prevent the mutator from hiding live data */
-      alloc1_copyCopySync_primarySet(proc,possPrevPtrVal, fromSpace);
-      locAlloc1_copyCopySync_primarySet(proc,&replicaField, fromSpace);
+      if (ordering == StackOrder) {
+	if (grayAsReplica)
+	  locAlloc1_copyCopySync_replicaSet(proc,&replicaField, fromSpace);
+	else 
+	  locAlloc1_copyCopySync_primarySet(proc,&replicaField, fromSpace);
+      }
+      else {
+	assert(ordering == HybridOrder);
+	locAlloc1_copyCopySync(proc,&replicaField, fromSpace);
+      }
       replica[wordDisp] = (val_t) replicaField;  /* update replica with replicated object */
       break;
     }
@@ -525,7 +578,9 @@ void GCRelease_SemiConc(Proc_t *proc)
     }
     default: assert(0);
     }
-  }
+  } /* while */
+  if (ordering == HybridOrder)   /* Add new gray objects */
+    AddGrayCopyRange(&proc->copyRange);
   if (gcOn)
     pushSharedStack(1,workStack,&proc->work);
   assert(proc->work.hasShared == 0);
@@ -553,6 +608,7 @@ static void do_work(Proc_t *proc, int workToDo)
   assert(isLocalWorkEmpty(&proc->work));
 
   while (updateWorkDone(proc) < workToDo) {
+    int start, end;
     int i, globalEmpty;
     Thread_t *thread;
     ploc_t rootLoc, globalLoc;
@@ -569,26 +625,67 @@ static void do_work(Proc_t *proc, int workToDo)
       if (!work_root_scan(proc, thread, workToDo)) 
 	SetPush(&proc->work.stacklets, (ptr_t) thread);
     }
-    while (!recentWorkDone(proc) &&
-	   (rootLoc = (ploc_t) SetPop(&proc->work.roots)) != NULL) 
-      locAlloc1_copyCopySync_primarySet(proc,rootLoc,fromSpace);
-    while (!recentWorkDone(proc) &&
-	   (globalLoc = (ploc_t) SetPop(&proc->work.globals)) != NULL) {
-      ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
-      locAlloc1_copyCopySync_primarySet(proc,replicaLoc,fromSpace);  
-      proc->segUsage.globalsProcessed++;
+
+    if (ordering == StackOrder) {
+      if (grayAsReplica) {
+	while (!recentWorkDone(proc) && (rootLoc = (ploc_t) SetPop(&proc->work.roots)) != NULL) 
+	  locAlloc1_copyCopySync_replicaSet(proc,rootLoc,fromSpace);
+	while (!recentWorkDone(proc) && (globalLoc = (ploc_t) SetPop(&proc->work.globals)) != NULL) {
+	  ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
+	  locAlloc1_copyCopySync_replicaSet(proc,replicaLoc,fromSpace);  
+	  proc->segUsage.globalsProcessed++;
+	}
+	/* segments are stored with primary gray even when grayAsReplica is true */
+	while ((updateWorkDone(proc) < workToDo) &&
+	       (gray = SetPop3(&proc->work.segments,(ptr_t *)&start,(ptr_t *)&end)) != NULL) 
+	  transferScanSegment_copyWriteSync_locAlloc1_copyCopySync_replicaSet(proc,gray,start,end,fromSpace); 
+	while (!recentWorkDone(proc) && 
+	       ((gray = SetPop(&proc->work.objs)) != NULL)) 
+	  backTransferScanObj_copyWriteSync_locAlloc1_copyCopySync_replicaSet(proc,gray,fromSpace); 
+      }
+      else {
+	while (!recentWorkDone(proc) && (rootLoc = (ploc_t) SetPop(&proc->work.roots)) != NULL) 
+	  locAlloc1_copyCopySync_primarySet(proc,rootLoc,fromSpace);
+	while (!recentWorkDone(proc) && (globalLoc = (ploc_t) SetPop(&proc->work.globals)) != NULL) {
+	  ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
+	  locAlloc1_copyCopySync_primarySet(proc,replicaLoc,fromSpace);  
+	  proc->segUsage.globalsProcessed++;
+	}
+	while ((updateWorkDone(proc) < workToDo) &&
+	       (gray = SetPop3(&proc->work.segments,(ptr_t *)&start,(ptr_t *)&end)) != NULL) 
+	  transferScanSegment_copyWriteSync_locAlloc1_copyCopySync_primarySet(proc,gray,start,end,fromSpace); 
+	while (!recentWorkDone(proc) && 
+	       ((gray = SetPop(&proc->work.objs)) != NULL)) 
+	  transferScanObj_copyWriteSync_locAlloc1_copyCopySync_primarySet(proc,gray,fromSpace); 
+      }
     }
-    while (updateWorkDone(proc) < workToDo) {
-      int start, end;
-      ptr_t gray = SetPop3(&proc->work.segments,(ptr_t *)&start,(ptr_t *)&end);
-      if (gray == NULL)
-	break;
-      transferScanSegment_copyWriteSync_locAlloc1_copyCopySync_primarySet(proc,gray,start,end,fromSpace); 
+    else if (ordering == HybridOrder) {
+      assert(grayAsReplica);
+      while (!recentWorkDone(proc) && (rootLoc = (ploc_t) SetPop(&proc->work.roots)) != NULL) 
+	  locAlloc1_copyCopySync(proc,rootLoc,fromSpace);
+      while (!recentWorkDone(proc) && (globalLoc = (ploc_t) SetPop(&proc->work.globals)) != NULL) {
+	ploc_t replicaLoc = (ploc_t) DupGlobal((ptr_t) globalLoc);
+	locAlloc1_copyCopySync(proc,replicaLoc,fromSpace);  
+	proc->segUsage.globalsProcessed++;
+      }
+      /* segments are stored with primary gray even when grayAsReplica is true */
+      while ((updateWorkDone(proc) < workToDo) &&
+	     (gray = SetPop3(&proc->work.segments,(ptr_t *)&start,(ptr_t *)&end)) != NULL) 
+	transferScanSegment_copyWriteSync_locAlloc1_copyCopySync(proc,gray,start,end,fromSpace); 
+      assert(SetIsEmpty(&proc->work.objs));
+      while (!recentWorkDone(proc)) {
+	mem_t start, stop;
+	if (start = (mem_t) SetPop2(&proc->work.grayRegion, &stop)) {
+	  backTransferScanRegion_copyWriteSync_locAlloc1_copyCopySync(proc,start,stop,fromSpace);
+	}
+	AddGrayCopyRange(&proc->copyRange);
+	updateWorkDone(proc);   /* recentWorkDone only counts down once */
+	if (SetIsEmpty(&proc->work.grayRegion))
+	  break;
+      }
     }
-    while (!recentWorkDone(proc) && 
-	   ((gray = SetPop(&proc->work.objs)) != NULL)) {
-      transferScanObj_copyWriteSync_locAlloc1_copyCopySync_primarySet(proc,gray,fromSpace); 
-    }
+    else
+      assert(0);
 
     if (pushSharedStack(0,workStack,&proc->work)) {
       if (collectDiag >= 2)
@@ -744,6 +841,8 @@ void GCInit_SemiConc(void)
 
   if (ordering == DefaultOrder)
     ordering = StackOrder;
+  if (ordering == HybridOrder)
+    grayAsReplica = 1;
   GCInit_Help(256, 128 * 1024, 0.1, 0.7, 512, 50 * 1024);   
   expandedSize = Heap_GetSize(fromSpace);
   reducedSize = expandedToReduced(expandedSize, majorCollectionRate);

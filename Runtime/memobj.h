@@ -3,6 +3,7 @@
 #ifndef _memobj_h
 #define _memobj_h
 
+#include "assert.h"
 #include "bitmap.h"
 #include "tag.h"
 #include "queue.h"
@@ -118,7 +119,7 @@ typedef struct Heap__t
 } Heap_t;
 
 INLINE(inHeap)
-int inHeap(ptr_t v, Heap_t *heap)
+int inHeap(vptr_t v, Heap_t *heap)
 {
   return (((val_t) v - (val_t) heap->bottom) < heap->size);
 }

@@ -48,33 +48,34 @@ static void moveToSharedStack(Set_t *to, Set_t *from)
 {
   int i; 
   int numToTransfer = SetLength(from);
-  int oldToCursor = FetchAndAdd(&to->last,numToTransfer);
-  if (to->last >= to->size && to->last > 0) {
-    printf("Shared stack %d of size %d overflowed with %d items\n", to, to->size, to->last);
+  ptr_t * oldToCursor = (ptr_t *) FetchAndAdd((long *)&to->last, 4 * numToTransfer);
+  if (to->last >= to->limit && to->limit > to->data) {
+    printf("Shared stack %d of size %d overflowed with %d items\n", to, to->size, to->last - to->data);
     assert(0);
   }
-  memcpy((void *)&to->data[oldToCursor], (void *)&from->data[from->first], sizeof(val_t) * numToTransfer);
-  from->last = 0;
+  memcpy(oldToCursor, from->first, sizeof(val_t) * numToTransfer);
+  from->last = from->data;
 }
 
 /* Transfer up to numToFetch items from 'from' to 'to', handling overreach */
 static int getFromSharedStack(Set_t *to, Set_t *from, long numToFetch)
 {
   int i;
-  int oldFromCursor = FetchAndAdd(&from->last,-numToFetch);  /* FetchAndAdd returns the pre-added value */
-  int newFromCursor = oldFromCursor - numToFetch;  
-  if (oldFromCursor < 0) {        /* Handle complete overreach */
+  ptr_t *oldFromCursor = (ptr_t *) FetchAndAdd((long *)&from->last, -(sizeof(val_t) * numToFetch));  /* FetchAndAdd returns the pre-added value */
+  ptr_t *newFromCursor = oldFromCursor - numToFetch;  
+  if (oldFromCursor <= from->data) {  /* Handle complete overreach */
     numToFetch = 0;
-    from->last = 0;             /* Multiple processors might execute this; ok since there are no increments */
+    from->last = from->data;         /* Multiple processors might execute this; ok since there are no increments */
   }
-  else if (newFromCursor < 0) {   /* Handle partial overreach */
-    numToFetch += newFromCursor;  /* Fetching fewer items than requested */
-    newFromCursor = oldFromCursor - numToFetch; /* Recompute newFromCursor */
-    from->last = 0;             /* Multiple processors might execute this; ok since there are no increments */
+  else if (newFromCursor < from->data) {   /* Handle partial overreach */
+    numToFetch -= (from->data - newFromCursor);  /* Fetching fewer items than requested */
+    newFromCursor = oldFromCursor - numToFetch;  /* Recompute newFromCursor */
+    assert(numToFetch > 0);
+    from->last = from->data;             /* Multiple processors might execute this; ok since there are no increments */
   }
-  memcpy((void *)&to->data[to->last], (void *)&from->data[newFromCursor], sizeof(val_t) * numToFetch);
+  memcpy(to->last, newFromCursor, sizeof(val_t) * numToFetch);
   to->last += numToFetch;
-  assert(to->last < to->size);
+  assert(to->last < to->limit);
   return numToFetch;
 }
 

@@ -30,9 +30,12 @@ typedef val_t *loc_t;        /* A location which contains an ML value.
 				or in the heap.
 			      */
 typedef ptr_t *ploc_t;        /* A location which contains an ML pointer */
+typedef volatile ptr_t *vploc_t;
 typedef unsigned int  tag_t;  /* An ML tag */
 typedef unsigned int *mem_t;  /* A memory address into the stack and heap.
 				 There is not necessarily a object at the location. */
+typedef volatile unsigned int *vmem_t;
+
 #ifdef alpha_osf
 #pragma pointer_size restore
 #endif

@@ -163,6 +163,7 @@ extern int ordering;                 /* Implicit queue, explicit stack, explicit
 extern int forceSpaceCheck;          /* Do space check even when not necessary */
 extern double minorCollectionRate;   /* Ratio of minor coll rate to alloc rate */
 extern double majorCollectionRate;   /* Ratio of major coll rate to alloc rate */
+extern int grayAsReplica;            /* In concurrent collector, store gray set as replicas (with backpointers) */
 
 extern double objCopyWeight;  
 extern double objScanWeight;
@@ -181,7 +182,7 @@ long ComputeHeapSize(long oldsize, double oldratio, int withhold, double reserve
 double HeapAdjust1(int request, int unused, int withhold,  double reserve, Heap_t *from1, Heap_t *to);
 double HeapAdjust2(int request, int unused, int withhold,  double reserve,  Heap_t *from1, Heap_t *from2, Heap_t *to);
 int expandedToReduced(int size, double rate);
-int reducedToExpanded(int size, int rate);
+int reducedToExpanded(int size, double rate);
 
 /* Make sure all the pointer values in the stack/globals are in the legal heaps */
 void paranoid_check_all(Heap_t *firstPrimary, Heap_t *secondPrimary,

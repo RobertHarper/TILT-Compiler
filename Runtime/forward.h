@@ -113,176 +113,12 @@ mem_t allocFromCopyRange(Proc_t *proc, int request, Align_t align, int noCheck) 
 
 
 
-/* ----------- Functions relating to copying an object or allocating space for a copy ------------------- */
 
-INLINE(acquireOwnership)
-tag_t acquireOwnership(Proc_t *proc, ptr_t white, tag_t tag)
-     /* Tag is the the tag value when the caller checked.  It may have changed */
-{
-
-#ifdef alpha_osf
-  int done = 0;
-  while (!done) {
-    /*    asm("ldl_l %0,-4(%1)" : "=i" (tag) : "i" (white)); */
-    tag = asm("ldl_l %v0,-4(%a0)",white); 
-    if (tag == STALL_TAG)
-      done = 1;
-    else 
-      done |= asm("stl_c %a0,-4(%a1) ; mov %a0,%v0",STALL_TAG,white);
-  }
-  while (tag == STALL_TAG)
-    tag = white[-1];
-  return tag;
-#endif
-
-#ifdef sparc
-  mem_t tagloc = white - 1;
-  if (tag == STALL_TAG) {         /* Somebody grabbed it but did not finish forwarding */
-    while (tag == STALL_TAG) {
-      tag = white[-1];
-      memBarrier();               /* Might need to refetch from memory */
-    }
-    assert(TAG_IS_FORWARD(tag));  /* Object forwarded by someone else now */
-  }
-  else {                          /* Try to be the copier */
-    /* Example of a SPARC ld statement with gcc asm
-       int *ptr;
-       int val;
-       asm("ld   [%1],%0" : "=r" (val) : "r" (ptr)); 
-       
-       The following tries to atomicaly swap in the stall tag by comparing with original tag.
-       Note that registers that are input and output are specified twice with the input
-       use referring to the output register.
-    */
-    val_t localStall = STALL_TAG;
-    asm("cas [%2],%3,%0" : "=r" (localStall) : "0" (localStall), "r" (tagloc), "r" (tag)); 
-    /* localStall == tag           : we are the copier
-       localStall == STALL_TAG     : somebody else is the copier and was in the middle of its operation
-       localStall == a forward ptr : somebody else is the copier and forwarded it already */
-    if (localStall == tag)
-      ;                             
-    else if (localStall == STALL_TAG) {
-      proc->numContention++;
-      if (diag) 
-	printf("Proc %d: contention copying object white = %d\n", proc->procid, white);
-      while ((tag = white[-1]) == STALL_TAG)
-	memBarrier();
-      assert(TAG_IS_FORWARD(tag));
-    }
-    else if (TAG_IS_FORWARD(localStall))
-      tag = localStall;
-    else {
-      printf("Proc %d: forward.c: Odd tag of %d from white obj %d with original tag = %d -----------\n", 
-	     proc->procid, localStall, white, tag);
-      assert(0);
-    }
-  }
-  return tag;
-#endif
-}
-
-
-/* Returns the copied/allocated version 
-   (1) Check proc->bytesCopied to see if actually copied 
-   (2) Check proc->needScan (in addition to bytesCopied) for non-zero to see if copied object might have pointer field
-*/
-INLINE(genericAlloc)
-ptr_t genericAlloc(Proc_t *proc, ptr_t white, int doCopy, 
-		   int doCopyCopy, int skipSpaceCheck)
-{
-  ptr_t obj;                       /* forwarded object */
-  tag_t tag = white[-1];           /* original tag */
-  int type;
-
-  /* assert(white < copyRange->start || white >= copyRange->stop); */
-
-  /* If the objects has not been forwarded, atomically try commiting to be the copier.
-     When we leave the block, we are the copier if "tag" is not a forwarding pointer. */
-  if (TAG_IS_FORWARD(tag)) {
-     ptr_t replica = (ptr_t) tag;
-     fastAssert(replica != (ptr_t) replica[-1]); /* Make sure object is not self-forwarded */
-     proc->numShared++;
-     proc->bytesCopied = 0;
-     return replica;
-  }
-  else {
-    if (doCopyCopy && doCopyCopySync)  { /* We omit copy-copy sync for measuring the costs of the copy-copy sync */
-      tag = acquireOwnership(proc, white, tag);
-    }
-  }
-
-  proc->segUsage.objsCopied++;
-
-  /* The tag must be restored only after the forwarding address is written */
-  type = GET_TYPE(tag);
-  if (type == RECORD_TYPE) {           /* As usual, the record case is the most common */
-    int i, numFields = GET_RECLEN(tag);
-    int objByteLen = 4 * (1 + numFields);
-    mem_t region = allocFromCopyRange(proc, objByteLen, NoWordAlign, skipSpaceCheck);
-    obj = region + 1;
-    if (doCopy)
-      for (i=0; i<numFields; i++) {    /* Copy fields */
-	obj[i] = white[i];
-	}
-    obj[-1] = tag;                    /* Write tag last */
-    white[-1] = (val_t) obj;        /* Store forwarding pointer last */
-    /* Sparc TSO order guarantees forwarding pointer will be visible only after fields are visible */
-    proc->numCopied++;
-    proc->segUsage.fieldsCopied += numFields;
-    proc->bytesCopied = objByteLen;
-    proc->needScan = GET_RECMASK(tag);
-    return obj;
-  }
-  else if (TYPE_IS_FORWARD(type)) {
-    ptr_t replica = (ptr_t) tag;
-    fastAssert(replica != (ptr_t) replica[-1]); /* Make sure object is not self-forwarded */
-    proc->numShared++;
-    proc->bytesCopied = 0;
-    return replica;
-  }
-  else if (TYPE_IS_ARRAY(type)) {
-    int i, arrayByteLen = GET_ANY_ARRAY_LEN(tag);
-    int dataByteLen = RoundUp(arrayByteLen, 4);
-    int numTags = 1 + ((arraySegmentSize > 0) ? 
-		       (arrayByteLen > arraySegmentSize ? DivideUp(arrayByteLen,arraySegmentSize) : 0) : 0);
-    int objByteLen = dataByteLen + 4 * numTags;
-    Align_t align = (type == QUAD_ARRAY_TYPE) ? ((numTags & 1) ? OddWordAlign : EvenWordAlign) : NoWordAlign;
-    mem_t region = allocFromCopyRange(proc, objByteLen, align, skipSpaceCheck);
-    obj = region + numTags;
-    if (type != WORD_ARRAY_TYPE)
-      assert(arrayByteLen % 4 == 0);
-    if (doCopy)
-      memcpy((char *) obj, (const char *)white, objByteLen - 4);
-    for (i=0; i<numTags-1; i++)
-      obj[-2-i] = SEGPROCEED_TAG;
-    obj[-1] = tag;	
-    white[-1] = (val_t) obj;
-    proc->numCopied++;
-    proc->segUsage.fieldsCopied += objByteLen / 2;
-    proc->bytesCopied = objByteLen;
-    proc->needScan = (type == PTR_ARRAY_TYPE || type == MIRROR_PTR_ARRAY_TYPE);
-    return obj;
-  }
-
-  printf("\n\nError in genericAlloc: bad tag value %d of white object %d\n",tag, white);
-  memdump("", white - 8, 16, white - 1);
-
-  assert(0);
-}
-
-
-static ptr_t copy_replicaSet(Proc_t *proc, ptr_t white)
-{
-  ptr_t replica = genericAlloc(proc, white, 1, 0, 0);
-  if (proc->bytesCopied) {
-    SetPush(&proc->work.objs, (ptr_t) white[-1]);
-  }
-  return replica;
-}
 
 
 ptr_t copy(Proc_t *, ptr_t obj);
 ptr_t alloc(Proc_t *, ptr_t obj);
+ptr_t copy_replicaSet(Proc_t *, ptr_t obj);
 ptr_t copy_noSpaceCheck(Proc_t *, ptr_t obj);
 ptr_t copy_noSpaceCheck_replicaSet(Proc_t *, ptr_t obj);
 ptr_t copy_copyCopySync(Proc_t *, ptr_t obj);
@@ -367,6 +203,20 @@ void alloc1_copyCopySync_primarySet(Proc_t *proc, ptr_t obj, Heap_t *from)
     alloc_copyCopySync_primarySet(proc,obj);
 }
 
+INLINE(alloc1_copyCopySync)
+void alloc1_copyCopySync(Proc_t *proc, ptr_t obj, Heap_t *from)
+{ 
+  if (InRange((mem_t) obj, &from->range))
+    alloc_copyCopySync(proc,obj);
+}
+
+INLINE(alloc1_copyCopySync_replicaSet)
+void alloc1_copyCopySync_replicaSet(Proc_t *proc, ptr_t obj, Heap_t *from)
+{ 
+  if (InRange((mem_t) obj, &from->range))
+    alloc_copyCopySync_replicaSet(proc,obj);
+}
+
 INLINE(alloc1L_copyCopySync_primarySet)
 void alloc1L_copyCopySync_primarySet(Proc_t *proc, ptr_t obj, Heap_t *from, Heap_t *large)
 { 
@@ -382,6 +232,25 @@ void locAlloc1_copyCopySync_primarySet(Proc_t *proc, ploc_t loc, Heap_t *from)
   ptr_t white = *loc;							
   if (InRange((mem_t) white, &from->range)) {
     *loc = alloc_copyCopySync_primarySet(proc,white);
+  }
+}
+
+
+INLINE(locAlloc1_copyCopySync)
+void locAlloc1_copyCopySync(Proc_t *proc, ploc_t loc, Heap_t *from)
+{ 
+  ptr_t white = *loc;							
+  if (InRange((mem_t) white, &from->range)) {
+    *loc = alloc_copyCopySync(proc,white);
+  }
+}
+
+INLINE(locAlloc1_copyCopySync_replicaSet)
+void locAlloc1_copyCopySync_replicaSet(Proc_t *proc, ploc_t loc, Heap_t *from)
+{ 
+  ptr_t white = *loc;							
+  if (InRange((mem_t) white, &from->range)) {
+    *loc = alloc_copyCopySync_replicaSet(proc,white);
   }
 }
 
