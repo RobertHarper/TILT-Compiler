@@ -201,31 +201,26 @@ structure Linknil :> LINKNIL  =
 
 	    val nilmod = transform specialize (Specialize.optimize, nilmod)
 	    val nilmod = transform hoist (Hoist.optimize, nilmod)
- 	    val nilmod = transform typecheck_after_opt (typecheck,nilmod)
 	    val nilmod = transform optimize2
 				   (Optimize.optimize {doDead = true, 
 						       doProjection = SOME 50,
 						       doCse = !do_cse, 
 						       doUncurry = !do_uncurry},
 				   nilmod) 
- 	    val nilmod = transform typecheck_after_opt (typecheck,nilmod)
 	    val nilmod = transform inline2 
 		                   (Inline.inline {sizeThreshold = 50, 
 						   occurThreshold = 5},
 				    nilmod)
- 	    val nilmod = transform typecheck_after_opt (typecheck,nilmod)
 	    val nilmod = transform optimize3
 				   (Optimize.optimize {doDead = true, 
 						       doProjection = SOME 50,
 						       doCse = !do_cse, 
 						       doUncurry = !do_uncurry},
 				   nilmod) 
- 	    val nilmod = transform typecheck_after_opt (typecheck,nilmod)
 	    val nilmod = transform inline3 
 		                   (Inline.inline {sizeThreshold = 50, 
 						   occurThreshold = 5},
 				    nilmod)
- 	    val nilmod = transform typecheck_after_opt (typecheck,nilmod)
             val nilmod = transform reify2 (Reify.reify_mod, nilmod)
 
  	    val nilmod = transform typecheck_after_opt2 (typecheck, nilmod)
