@@ -10,6 +10,7 @@ sig
     type term = TortlBase.term
     type state = TortlBase.state
 
+
    (* If do_reject_nonValue is true, then static allocation occurs only if all fields are values.
       make_record              statically allocates if all fields are values or we are at top-level
       make_record_const        statically allocates because caller asserts non-value fields are invariant 

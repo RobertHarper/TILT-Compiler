@@ -177,13 +177,17 @@ struct
     | CATCH_EXN
 
     | LOAD8I    of ea * regi             
-    | STORE8I   of ea * regi     (* unchecked stores *)
-    | LOAD32I   of ea * regi            
-    | STORE32I  of ea * regi     (* unchecked stores *)
+    | LOAD32I   of ea * regi
     | LOAD64F   of ea * regf
-    | STORE64F  of ea * regf     (* unchecked stores *)
-    | LOADGLOBAL of label * regi  (* load/init word-sized globals *)
-    | INITGLOBAL of label * regi
+
+    (* unchecked stores - STOREMUTATE adds to write list *)
+    | STORE8I   of ea * regi
+    | STORE32I  of ea * regi
+    | STORE64F  of ea * regf
+
+    | MIRROR_GLOBAL_OFFSET of regi    (* 0 or 4 *)
+    | MIRROR_PTR_ARRAY_OFFSET of regi (* 0 or 4 *)
+
     | REL_STACKPTR of regi * regi (* b = relativize (abs stack pointer a) *)
     | ABS_STACKPTR of regi * regi (* b = absolutize (rel stack pointer b) *)
     | STOREMUTATE of ea * mutateType

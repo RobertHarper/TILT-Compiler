@@ -1009,22 +1009,14 @@ struct
 
      | translate (Rtl.ICOMMENT str) = emit (BASE(ICOMMENT str))
 
-     | translate (Rtl.LOADGLOBAL (l, rtl_Rdest)) =
-       let val globalOffset = translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
-	   val (Raddr, disp) = loadEA (Rtl.LEA(l,0))
-	   val Rdest = translateIReg rtl_Rdest
-       in  emit (SPECIFIC (LOADI (LDL, globalOffset, globalOffset_disp, Rth)));
-	   emit (SPECIFIC (INTOP (ADDL, Raddr, REGop globalOffset, Raddr)));
-	   emit (SPECIFIC (LOADI (LDL, Rdest, disp, Raddr)))
+     | translate (Rtl.MIRROR_GLOBAL_OFFSET (rtl_Rdest)) =
+       let val Rdest = translateIReg rtl_Rdest
+       in  emit (SPECIFIC (LOADI (LDL, Rdest, globalOffset_disp, Rth)))
        end
 
-     | translate (Rtl.INITGLOBAL (l, rtl_Rsrc)) =
-       let val globalOffset = translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
-	   val (Raddr, disp) = loadEA (Rtl.LEA(l,0))
-	   val Rsrc = translateIReg rtl_Rsrc
-       in  emit (SPECIFIC (LOADI(LDL, globalOffset, globalOffset_disp, Rth)));
-	   emit (SPECIFIC (INTOP (ADDL, Raddr, REGop globalOffset, Raddr)));
-	   emit (SPECIFIC (STOREI (STL, Rsrc, disp, Raddr)))
+     | translate (Rtl.MIRROR_PTR_ARRAY_OFFSET (rtl_Rdest)) =
+       let val Rdest = translateIReg rtl_Rdest
+       in  emit (SPECIFIC (LOADI (LDL, Rdest, arrayOffset_disp, Rth)))
        end
 
      | translate (Rtl.REL_STACKPTR (rtl_Rsrc, rtl_Rdest)) =

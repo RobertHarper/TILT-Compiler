@@ -1,7 +1,5 @@
 (*$import Rtl Pprtl Rtltags Nil NilContext NilUtil Ppnil Normalize TORTLBASE Listops Stats Bool *)
 
-(* 258 is the value for an uninitialied slot *)
-
 structure TortlBase
     :> TORTL_BASE 
    =
@@ -22,11 +20,6 @@ struct
     structure TW64 = TilWord64
 
     val do_gcmerge = ref true
-    val do_writeBarrier = Stats.tt("WriteBarrier")
-    val do_fullWriteBarrier = Stats.tt("FullWriteBarrier")
-    val do_arrayReadBarrier = Stats.tt("ArrayReadBarrier")
-    val do_double_globalVars = Stats.tt("DoubleGlobalVars") (* Each word-sized global variable is doubled in place *)
-
     val do_constant_records = ref true
     val do_forced_constant_records = ref true
     val do_single_crecord = ref true
@@ -128,7 +121,6 @@ struct
 
    type varmap = var_rep VarMap.map
    type convarmap = convar_rep VarMap.map
-   val uninit_val = 0w258 : TilWord32.word
 
    datatype gcstate = ALLOC_IMM of instr ref list   (* all ways of reaching current point went through these fixed-size allocation checks *)
 	            | MUTATE_IMM of instr ref list  (* all ways of reaching current point went through these mutation checks *)
@@ -723,25 +715,26 @@ struct
 
   (* for reals, the len reg measures quads *)
 
-  (* measured in octets *)
-  fun mk_realarraytag(len,tag) = 
-    (add_instr(SLL(len,IMM (real_len_offset),tag));
-     add_instr(ORB(tag,IMM (w2i realarray),tag)))
-    
-  (* measured in bytes *)
-  fun mk_intarraytag(len,tag) = 
-    (add_instr(SLL(len,IMM (int_len_offset),tag));
-     add_instr(ORB(tag,IMM (w2i intarray),tag)))
-    
-  (* measured in words *)
-  fun mk_ptrarraytag(len,tag) = 
-    (add_instr(SLL(len,IMM (ptr_len_offset),tag));
-     add_instr(ORB(tag,IMM (w2i ptrarray),tag)))
-    
-  fun mk_recordtag(flags) = recordtag(flags)
+  (* all lengths measured in bytes *)
+  local
+      fun mk_arraytag (granularity,offset,tagDesc) (byteLen,dest) =
+	  let (*
+	      val _ = if (byteLen mod granularity <> 0)
+			  then error "mk_arraytag - byte length is incorrect multiple"
+		      else ()
+              *)
+	  in  add_instr(SLL(byteLen,IMM offset,dest));
+	      add_instr(ORB(dest,IMM (w2i tagDesc),dest))
+	  end
+  in
+      val mk_word_arraytag = mk_arraytag (1, word_array_len_offset, wordarray)
+      val mk_quad_arraytag = mk_arraytag (8, quad_array_len_offset, quadarray)
+      val mk_ptr_arraytag = mk_arraytag  (4, ptr_array_len_offset, ptrarray)
+      val mk_mirror_ptr_arraytag = mk_arraytag (8, mirror_ptr_array_len_offset, mirrorptrarray)
+  end
+  val mk_recordtag = recordtag
     
   (* storing a tag *)
-    
   fun store_tag_zero tag =
     let val tmp = alloc_regi(NOTRACE_INT)
       in add_instr(LI(tag,tmp));
@@ -762,6 +755,66 @@ struct
    or load an sv; for int/float regs, one can optionally specify a dest register *)
 
 
+  (* if (reg != 0) then thenClause else elseClause *)
+  fun ifthenelse (reg, thenInstr, elseInstr) = 
+      let val elsel = fresh_code_label "else_case"
+	  val afterl = fresh_code_label "after_ite"
+      in  (add_instr(BCNDI(EQ,reg,IMM 0,elsel,false));
+	   app add_instr thenInstr;
+	   add_instr(BR afterl);
+	   add_instr(ILABEL elsel);
+	   app add_instr elseInstr;
+	   add_instr(ILABEL afterl))
+      end
+
+  fun loadPtrGlobal (label, global) = 
+      let val addr = alloc_regi NOTRACE_LABEL
+	  val offset = alloc_regi NOTRACE_INT
+	  val instr = LADDR(LEA(label,0),addr)
+      in  if (!mirrorGlobal)
+	      then instr::[(MIRROR_GLOBAL_OFFSET offset),
+			   (LOAD32I(RREA(addr,offset),global))]
+	  else instr::[(LOAD32I(REA(addr,0),global))]
+      end
+
+  fun initPtrGlobal (label, global) = 
+      let val addr = alloc_regi NOTRACE_LABEL
+	  val offset = alloc_regi NOTRACE_INT
+	  val instr = LADDR(LEA(label,0),addr)
+      in  if (!mirrorGlobal)
+	      then instr::[(MIRROR_GLOBAL_OFFSET offset),
+			   (STORE32I(RREA(addr,offset),global))]
+	  else instr::[(LOAD32I(REA(addr,0),global))]
+      end
+
+  fun repPathIsPointer repPath = 
+      let fun loop (r,[]) = let 
+				val result = alloc_regi NOTRACE_INT
+				val _ = add_instr(CMPUI(GT,r,IMM 3,result))
+			    in  result
+			    end
+	    | loop (r,index::rest) = let val s = alloc_regi TRACE
+	                                 (* XXX should use record_project but in tortl-record *)
+					 val _ = if (index >= Rtltags.maxRecordLength)
+						     then error "Record too big"
+						 else ()
+					 val _ = add_instr(LOAD32I(REA(r,4*index),s))
+				     in  loop (s,rest)
+				     end
+      in  (case repPath of
+	       Notneeded_p => error "load_repPath called on Notneeded_p"
+	     | Projvar_p (r,ind) => loop(r,ind)
+	     | Projlabel_p (lab,ind) => let val addr = alloc_regi NOTRACE_LABEL
+					    val _ = add_instr(LADDR(LEA(lab,0),addr))
+					in  loop(addr,ind)
+					end
+	     | Projglobal_p (lab,ind) => let val global = alloc_regi TRACE
+					     val instrs = loadPtrGlobal (lab,global)
+					     val _ = app add_instr instrs
+					 in  loop(global,ind)
+					 end)
+      end
+
     (* --- load an RTL location into an integer register --- *)
     fun load_ireg_loc (loc : location, destOpt : regi option) =
 	(case loc of
@@ -769,7 +822,18 @@ struct
 	   | GLOBAL(label,rep) => let val dest = (case destOpt of
 						      NONE => alloc_regi rep
 						    | SOME d => d)
-				  in  add_instr(LOADGLOBAL(label,dest)); dest
+				  in  (case rep of
+					   TRACE => let val instrs = loadPtrGlobal(label,dest)
+						    in  app add_instr instrs
+						    end
+					 | COMPUTE rtl_rep => 
+					       let val isPtr = repPathIsPointer rtl_rep
+					       in  ifthenelse(isPtr,
+							      loadPtrGlobal(label,dest),
+							      [LOAD32I(LEA(label,0),dest)])
+					       end
+					 | _ => add_instr(LOAD32I(LEA(label,0),dest)));
+				      dest
 				  end
 	   | REGISTER (_,I ir) => (case destOpt of
 					NONE => ir
@@ -799,7 +863,7 @@ struct
 
     fun mk_named_float_data (r : string, label : label) =
 	(oddlong_align();
-	 add_data(INT32 (realarraytag (i2w 1)));
+	 add_data(INT32 (mk_quad_array_tag (i2w 8)));
 	 add_data(DLABEL label);
 	 add_data(FLOAT r))
 	
@@ -926,128 +990,130 @@ struct
 		  add_instr(ADD(reg,REG size,dest))
 	      end
 
-  fun repPathIsPointer repPath = 
-      let fun loop (r,[]) = let 
-				val result = alloc_regi NOTRACE_INT
-				val _ = add_instr(CMPUI(GT,r,IMM 3,result))
-			    in  result
-			    end
-	    | loop (r,index::rest) = let val s = alloc_regi TRACE
-	                                 (* XXX should use record_project but in tortl-record *)
-					 val _ = if (index >= Rtltags.maxRecordLength)
-						     then error "Record too big"
-						 else ()
-					 val _ = add_instr(LOAD32I(REA(r,4*index),s))
-				     in  loop (s,rest)
-				     end
-      in  (case repPath of
-	       Notneeded_p => error "load_repPath called on Notneeded_p"
-	     | Projvar_p (r,ind) => loop(r,ind)
-	     | Projlabel_p (lab,ind) => let val addr = alloc_regi NOTRACE_LABEL
-					    val _ = add_instr(LADDR(LEA(lab,0),addr))
-					in  loop(addr,ind)
-					end
-	     | Projglobal_p (lab,ind) => let val addr = alloc_regi NOTRACE_LABEL
-					     val _ = add_instr(LOADGLOBAL(lab, addr))
-					 in  loop(addr,ind)
-					 end)
-      end
 
-  fun allocate_global (label,labels,rtl_rep,lv) = 
-      let 
+
+  (* Real globals (NOTRACE_REAL) require alignment.
+     Pointer globals may require mirroring.
+     Unknown globals (int or pointer)'s tags cannot be statically determined.
+     Uninitialized pointers or unknowns have a skip tag (two or three words) until it is initialized.
+  *)
+
+    (* sometime the tags must be computed at run-time *)
+    fun add_dynamic (r,dynamic) = 
+	let fun do_one {bitpos,path} =
+	    let val isPointer = repPathIsPointer path
+		val tmp = alloc_regi NOTRACE_INT
+	    in  add_instr(SLL(isPointer,IMM bitpos,tmp));
+		add_instr(ORB(tmp,REG r,r))
+	    end
+	in  app do_one dynamic
+	end
+
+    local
+	(* Some values used below *)
+	val {static=recIntTag,dynamic=[]} = mk_recordtag [NOTRACE_INT]
+	val {static=recPtrTag,dynamic=[]} = mk_recordtag [TRACE]
+	val skip1 = Rtltags.skip 1
+	val skip2 = Rtltags.skip 2
+	val skip3 = Rtltags.skip 3
+	val quadArrayTag = mk_quad_array_tag 0w8
+	val uninit = INT32 uninitVal
+    in
+
+      fun allocate_global (label,labels,rtl_rep,lv) = 
+	let 
 	  val _ = incGlobal()
 	  val _ = add_data(COMMENT "Global")
-	  val (wordSized,tagData, tagMaskOpt) = 
-	      (case rtl_rep of
-		   LOCATIVE => error "global locative"
-		 | UNSET => error "global unset"
-		 | NOTRACE_REAL => 
-		       let val tagData = mk_recordtag [NOTRACE_INT, NOTRACE_INT]
-			   val {dynamic=[],static} = tagData
-		       in  oddlong_align();
-			   (false,static, NONE)
+
+	  (* Do the static part.  Tag is always known statically since otherwise a skip tag is used *)
+	  fun staticPortion (tag, data) = 
+	      (add_data (INT32 tag);
+	       app (fn l => add_data(DLABEL l)) (label::labels);
+	       app add_data data);
+
+	  val _ = 
+	      (case lv of
+		   LOCATION (REGISTER (_, F fr)) => (oddlong_align();
+						     staticPortion(quadArrayTag, [FLOAT "0.0"]);
+						     add_instr (STORE64F(LEA(label,0), fr)))
+		 (* Is this case possible? XXXX *)
+		 | LOCATION (GLOBAL (l, NOTRACE_REAL)) => let val fr = alloc_regf()
+							  in  oddlong_align();
+							      staticPortion(quadArrayTag, [FLOAT "0.0"]);
+							      add_instr (LOAD64F(LEA(l,0), fr));
+							      add_instr (STORE64F(LEA(label,0), fr))
+							  end
+		 | LOCATION loc =>
+		       let val tag = alloc_regi NOTRACE_INT
+			   val (ir,rep) = (case loc of
+					       REGISTER (_, I (ir as (REGI (_, rep)))) => (ir, rep)
+					     | GLOBAL (l, rep) => (load_ireg_loc(loc,NONE), rep))
+		       in  (case rep of
+				LOCATIVE => error "global locative"
+			      | UNSET => error "global unset"
+			      | NOTRACE_LABEL => error "global label"
+			      | NOTRACE_REAL => error "global real"
+			      | TRACE => let val _ = add_static_record (label, 0, 1)
+					 in  if (!mirrorGlobal)
+						 then (staticPortion(skip3, [uninit, uninit]);
+						       add_instr(LI(Rtltags.mirrorGlobalTag, tag));
+						       add_instr (STORE32I(LEA(label,~4), tag));
+						       app add_instr (initPtrGlobal(label, ir)))
+					     else (staticPortion(skip2, [uninit]);
+						   add_instr(LI(recPtrTag, tag));
+						   add_instr (STORE32I(LEA(label,~4), tag));
+						   add_instr (STORE32I(LEA(label,0), ir)))
+					 end
+			      | COMPUTE rep => 
+					     let val _ = add_static_record (label, 0, 1)  (* Might be *)
+						 val isPtr = repPathIsPointer rep
+					     in  if (!mirrorGlobal)
+						     then (staticPortion(skip3, [uninit, uninit]);
+							   ifthenelse(isPtr,
+								      [LI(Rtltags.mirrorGlobalTag, tag),
+								       STORE32I(LEA(label,~4), tag)] @
+								      initPtrGlobal(label,ir),
+								      [LI(recIntTag, tag),
+								       STORE32I(LEA(label,~4), tag),
+								       STORE32I(LEA(label,0), ir),
+								       LI(skip1, tag),
+								       STORE32I(LEA(label,4), tag)]))
+						 else (staticPortion(skip2, [uninit]);
+						       ifthenelse(isPtr,
+								  [LI(recPtrTag, tag)],
+								  [LI(recIntTag, tag)]);
+						       add_instr(STORE32I(LEA(label,~4), tag));
+						       add_instr(STORE32I(LEA(label,0), ir)))
+					     end
+			      | _ => (staticPortion(skip2, [uninit]);
+				      add_instr (STORE32I(LEA(label,0), ir))))
 		       end
-		 | _ => 
-		       let val {dynamic,static} = mk_recordtag 
-                               			   (if !do_double_globalVars
-							 then [rtl_rep, rtl_rep]
-						     else [rtl_rep])
-			   val maskOpt = 
-			       (case dynamic of 
-				    [] => NONE
-				  | _ => 
-					let val mask = alloc_regi NOTRACE_INT
-					    fun do_bit {bitpos,path} = 
-						let val isPointer = repPathIsPointer path
-						    val tmp = alloc_regi NOTRACE_INT
-						in  add_instr(SLL(isPointer,IMM bitpos,tmp));
-						    add_instr(ORB(tmp,REG mask,mask))
-						end
-					    val _ = add_instr(LI(0w0,mask))
-					    val _ = app do_bit dynamic
-					in  SOME mask
-					end)
-		       in  (true, static, maskOpt)
-		       end)
-	  fun doNonHeap(datum,instrs) = 
-	      let val _ = (case tagMaskOpt of
-			       NONE => ()
-			     | SOME tagMask => error "cannot doNonHeap with tagMask present")
-		  val _ = add_static_record (label, 1, 0)
-	      in  add_data (INT32 tagData);
-		  app (fn l => add_data(DLABEL l)) (label::labels);
-		  add_data (datum);
-		  if (wordSized andalso !do_double_globalVars)
-		      then add_data(datum)
-		  else ();
-		  app add_instr instrs
-	      end
-
-	  fun doHeap(instrs) = 
-	      let val tag = alloc_regi NOTRACE_INT
-		  val _ = add_static_record (label, 0, 1)
-	      in  add_data (INT32 (Rtltags.skip (if !do_double_globalVars then 3 else 2)));  
-		  app (fn l => add_data(DLABEL l)) (label::labels);
-		  add_data(INT32 uninit_val);
-		  if (!do_double_globalVars)
-		      then add_data(INT32 uninit_val)
-		  else ();
-		  add_instr(LI(tagData, tag));
-		  (case tagMaskOpt of
-		       NONE => ()
-		     | SOME mask => add_instr(ORB(mask,REG tag,tag)));
-		  add_instr(STORE32I(LEA(label,~4), tag));
-		  app add_instr instrs
-	      end
-
-	  val labelEa = LEA(label,0)
-      in  (case lv of
-	     LOCATION (REGISTER (_,reg)) =>
-		 (case reg of
-		      I r => doHeap([INITGLOBAL(label,r)])
-		    | F r => doNonHeap(FLOAT "0.0", [STORE64F(labelEa,r)]))
-	   | LOCATION (GLOBAL (l,rep)) => 
-		      let val value = alloc_regi rep
-			  val instrs = [LOADGLOBAL(l,value),
-					INITGLOBAL(label,value)]
-		      in if (repIsNonheap rep)
-			     then doNonHeap(INT32 0w0, instrs)
-			 else doHeap(instrs)
-		      end
-	   | VALUE (VOID _) => (print "Warning: alloc_global got a VOID\n";
-				doNonHeap(INT32 0w0, []))
-	   | VALUE (INT w32) => doNonHeap(INT32 w32, [])
-	   | VALUE (TAG w32) => doNonHeap(INT32 w32, [])
-	   | VALUE (REAL l) => let val fr = alloc_regf()
-			       in  doNonHeap(FLOAT "0.0",
-					     [LOAD64F(LEA(l,0), fr),
-					      STORE64F(labelEa, fr)])
-			       end
-	   | VALUE (RECORD (l,_)) => doNonHeap(DATA l,[])
-	   | VALUE (LABEL l) => doNonHeap(DATA l,[])
-	   | VALUE (CODE l) => doNonHeap(DATA l,[]))
+		 | VALUE (REAL l) => let val fr = alloc_regf()
+				     in  oddlong_align();
+					 staticPortion(quadArrayTag, [FLOAT "0.0"]);
+					 add_instr (LOAD64F(LEA(l,0), fr));
+					 add_instr (STORE64F(LEA(label,0), fr))
+				     end
+		 | VALUE (VOID _) => (print "Warning: alloc_global got a VOID\n";
+				      staticPortion(recIntTag, [INT32 0w0]))
+		 | VALUE (INT w32) => staticPortion(recIntTag, [INT32 w32])
+		 | VALUE (CODE l) => staticPortion(recIntTag, [DATA l])
+		 (* Although the following values are not from the heap, 
+		    they still have a trace-able type and so must be mirrored. *)
+		 | VALUE v =>
+		     let val datum = (case v of
+					  TAG w32 => INT32 w32
+					| RECORD (l, _) => DATA l
+					| LABEL l => DATA l
+					| _ => error "impossible control flow")
+		     in  add_static_record (label, 0, 1);
+			 if (!mirrorGlobal)
+			     then staticPortion(mirrorGlobalTag, [datum, uninit])
+			 else (staticPortion(recPtrTag, [datum]))
+		     end)
+      in  ()
       end
-
+    end (* local *)
 
   fun help_global (add_obj, (state,v, obj, term, obj2)) : state =
     let 
@@ -1127,7 +1193,7 @@ struct
       let val dest = alloc_regi TRACE
 	  val state = needalloc(state,IMM 4)
 	  val _ = (align_odd_word();
-		   store_tag_zero(realarraytag (i2w 1));
+		   store_tag_zero(mk_quad_array_tag (i2w 8));
 		   add_instr(STORE64F(REA(heapptr,4),regf));
 		   add(heapptr,4,dest);
 		   add(heapptr,12,heapptr))
@@ -1158,7 +1224,7 @@ struct
 	  end
       val state = needalloc(state,IMM((if len = 0 then 1 else 2*len)+2))
       val _ = (align_odd_word();
-	       store_tag_zero(realarraytag(i2w len));
+	       store_tag_zero(mk_quad_array_tag(i2w (8 * len)));
 	       add_instr(ADD(heapptr,IMM 4,res)))
 
     in

@@ -871,22 +871,14 @@ struct
        in  emit (SPECIFIC (STOREF (STDF, Fsrc, disp, Raddr)))
        end
 
-     | translate (Rtl.LOADGLOBAL (l, rtl_Rdest)) =
-       let val globalOffset = translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
-	   val (Raddr, disp) = loadEA (Rtl.LEA(l,0))
-	   val Rdest = translateIReg rtl_Rdest
-       in  emit (SPECIFIC (LOADI (LD, globalOffset, INT globalOffset_disp, Rth)));
-	   emit (SPECIFIC (INTOP (ADD, Raddr, REGop globalOffset, Raddr)));
-	   emit (SPECIFIC (LOADI (LD, Rdest, disp, Raddr)))
+     | translate (Rtl.MIRROR_GLOBAL_OFFSET rtl_Rdest) =
+       let val Rdest = translateIReg rtl_Rdest
+       in  emit (SPECIFIC (LOADI (LD, Rdest, INT globalOffset_disp, Rth)))
        end
 
-     | translate (Rtl.INITGLOBAL (l, rtl_Rsrc)) =
-       let val globalOffset = translateIReg(Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT))
-	   val (Raddr, disp) = loadEA (Rtl.LEA(l,0))
-	   val Rsrc = translateIReg rtl_Rsrc
-       in  emit (SPECIFIC (LOADI (LD, globalOffset, INT globalOffset_disp, Rth)));
-	   emit (SPECIFIC (INTOP (ADD, Raddr, REGop globalOffset, Raddr)));
-	   emit (SPECIFIC (STOREI (ST, Rsrc, disp, Raddr)))
+     | translate (Rtl.MIRROR_PTR_ARRAY_OFFSET rtl_Rdest) =
+       let val Rdest = translateIReg rtl_Rdest
+       in  emit (SPECIFIC (LOADI (LD, Rdest, INT arrayOffset_disp, Rth)))
        end
 
      | translate (Rtl.REL_STACKPTR (rtl_Rsrc, rtl_Rdest)) =
@@ -912,6 +904,7 @@ struct
 	       val writeAllocTemp = Rtl.REGI(Name.fresh_var(),Rtl.LOCATIVE)
 	       val store_obj = Rtl.REGI(Name.fresh_var(),Rtl.TRACE)
 	       val store_disp = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT)
+	       val sentinel = Rtl.REGI(Name.fresh_var(),Rtl.NOTRACE_INT)
 	       val wordsForEachMutate = 3
 	       val bytesForEachMutate = 4 * wordsForEachMutate
 	   in  emit (SPECIFIC(LOADI (LD, translateIReg writeAlloc, INT writelistAlloc_disp, Rth)));

@@ -17,6 +17,7 @@ struct
     val stackLimit_disp     = writelistLimit_disp + 4
     val globalOffset_disp   = stackLimit_disp + 4
     val stackletOffset_disp   = globalOffset_disp + 4
+    val arrayOffset_disp   = stackletOffset_disp + 4
 
 structure Machine = 
   struct

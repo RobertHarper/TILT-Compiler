@@ -3,9 +3,6 @@ signature TORTL_BASE =
 sig
 
     val do_gcmerge : bool ref
-    val do_writeBarrier : bool ref
-    val do_fullWriteBarrier : bool ref
-    val do_arrayReadBarrier : bool ref
 
     val do_constant_records : bool ref
     val do_forced_constant_records : bool ref
@@ -46,7 +43,9 @@ sig
 
    type var_rep = location option * value option
    type convar_rep = location option * value option
-   val uninit_val : TilWord32.word
+
+    val add_dynamic : Rtl.regi * {bitpos : int,
+				 path : Rtl.rep_path} list -> unit
 
    (* (global) RTL translation state *)
    val set_global_state : string * (var * label) list * Name.VarSet.set -> unit
@@ -149,10 +148,11 @@ sig
    val unboxFloat : regi -> regf
    val fparray : state * term list -> regi * state
 
-   (* Tag-related Operations *)
-   val mk_realarraytag : regi * regi -> unit
-   val mk_intarraytag : regi * regi -> unit
-   val mk_ptrarraytag : regi * regi -> unit
+   (* Tag-related Operations - length always measured in bytes *)
+   val mk_word_arraytag : regi * regi -> unit
+   val mk_quad_arraytag : regi * regi -> unit
+   val mk_ptr_arraytag : regi * regi -> unit
+   val mk_mirror_ptr_arraytag : regi * regi -> unit
    val store_tag_zero : TilWord32.word -> unit
    val store_tag_disp : int * TilWord32.word -> unit
 

@@ -24,6 +24,7 @@ struct
     val maxRtlRecord = maxRecordLength - 1      (* We reserve one slot from Rtl-generated record so that sums can be handled *)
 
 
+
   fun make_record_core (const, state, reps, terms, labopt) = 
     let 
 	val numTerms = length terms
@@ -90,22 +91,14 @@ struct
 						then nonHeapCount := 1 + !nonHeapCount
 					    else heapCount := 1 + !heapCount;
 				    val r = load_ireg_term(vl,NONE)
-				in  add_data(INT32 uninit_val);
+				in  add_data(INT32 uninitVal);
 				    add_instr(STORE32I(LEA(recordLabel, 
-							  offset - 4 * (length tagwords)), r))
+							   offset - 4 * (length tagwords)), r))
 				end)
 	     else let val r = load_ireg_term(vl,NONE)
 		  in  storenew(REA(heapptr(),offset),r,rep)
 		  end;
 	     scan_vals(offset+4,reps,vls))
-
-        (* sometime the tags must be computed at run-time *)
-	fun do_dynamic (r,{bitpos,path}) =
-	    let val isPointer = repPathIsPointer path
-		val tmp = alloc_regi NOTRACE_INT
-	    in  add_instr(SLL(isPointer,IMM bitpos,tmp));
-		add_instr(ORB(tmp,REG r,r))
-	    end
 
 	(* usually, the tags are known at compile time *)	
 	fun scantags (offset,nil : Rtltags.tag list) = offset
@@ -118,14 +111,14 @@ struct
 		       else let val _ = add_data(INT32 (Rtltags.skip (1 + numTerms)))
 				val tag = alloc_regi(NOTRACE_INT)
 			    in  add_instr (LI(static,tag));
-				app (fn a => do_dynamic(tag,a)) dynamic;
+				add_dynamic(tag,dynamic);
 				add_instr(STORE32I(LEA(recordLabel,
 						       offset - 4 * (length tagwords)),tag))
 			  end)
 	   else 
 	       let val r = alloc_regi(NOTRACE_INT)
 	       in  add_instr (LI(static,r));
-		   app (fn a => do_dynamic(r,a)) dynamic;
+		   add_dynamic(r,dynamic);
 		   add_instr(STORE32I(REA(heapptr(),offset),r))
 	       end;
 	   scantags(offset+4,vl))

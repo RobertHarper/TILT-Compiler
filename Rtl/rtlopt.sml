@@ -203,7 +203,7 @@ functor MakeRtlopt(structure Pprtl : PPRTL)
 	| END_SAVE => []
 	| RESTORE_CS => []
 	    
-	| LOAD32I (_,r) => [r]
+	| LOAD32I (_,r,_) => [r]
 	| STORE32I (add,r) => [r]
 	| STORENEW32I (add,r) => [r]
 	| LOADQF  (_,_) => nil
@@ -481,14 +481,14 @@ functor MakeRtlopt(structure Pprtl : PPRTL)
 	    let 
 		val _ = print "  RTL: localkilling\n"
 		fun cand_loop p [] = []
-		  | cand_loop p ((a as LOAD32I(ea,r1)) :: (b as MV(r2,r3)) :: rest) = 
+		  | cand_loop p ((a as LOAD32I(ea,r1,_)) :: (b as MV(r2,r3)) :: rest) = 
 		    if (eqregi(r1,r2) andalso (islocal_reg(r1,p)))
 			then r1::(cand_loop p rest)
 		    else (cand_loop p rest)
 		  | cand_loop p (a::rest) = cand_loop p rest
 			
 		fun final_loop p seen c [] = true
-		  | final_loop p seen c ((a as LOAD32I(EA(rea,_),r1)) :: (b as MV(r2,r3)) :: rest) = 
+		  | final_loop p seen c ((a as LOAD32I(EA(rea,_),r1,_)) :: (b as MV(r2,r3)) :: rest) = 
 			if (eqregi(r1,c)) 
 			    then
 				if (eqregi(r1,r2) andalso (islocal_reg(r1,p)))
@@ -502,10 +502,10 @@ functor MakeRtlopt(structure Pprtl : PPRTL)
 				    then false
 				else final_loop p seen c rest
 		fun code_walk fs [] = []
-		  | code_walk fs ((a as LOAD32I(ea,r1)) :: (b as MV(r2,r3)) :: rest) = 
+		  | code_walk fs ((a as LOAD32I(ea,r1,isPtrArray_)) :: (b as MV(r2,r3)) :: rest) = 
 		    if (eqregi(r1,r2) andalso (inreglist(r1,fs)))
 			then 
-			    (LOAD32I(ea,r3)::(code_walk fs rest))
+			    (LOAD32I(ea,r3,isPtrArray)::(code_walk fs rest))
 		    else
 			(a::(b::(code_walk fs rest)))
 		  | code_walk fs (a::rest) = a::(code_walk fs rest)

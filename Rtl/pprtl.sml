@@ -247,13 +247,14 @@ struct
 	      | CATCH_EXN => String "catch_exn"
 
 	      | LOAD8I a           => op2li "ldb" a
-	      | LOAD32I a          => op2li "ldl" a
-              | LOAD64F (ea,r)     => plain ["ldt ",regf2s r,", ",ea2s ea]
+	      | LOAD32I (ea,r) => op2li "ldw" (ea,r)
+              | LOAD64F (ea,r)     => plain ["ldf ",regf2s r,", ",ea2s ea]
 	      | STORE8I (ea,r)  => op2si "stb" (ea, r)
-	      | STORE32I (ea,r) => op2si "stl" (ea, r)
+	      | STORE32I (ea,r) => op2si "stw" (ea, r)
               | STORE64F (ea,fr) => plain ["stt",regf2s fr,", ",ea2s ea]
-	      | LOADGLOBAL (l,r) => plain ["ldGlobal",label2s l, ", ", regi2s r]
-	      | INITGLOBAL (l,r) => plain ["initGlobal",label2s l, ", ", regi2s r]
+	      | MIRROR_GLOBAL_OFFSET r => plain ["mirror_global_offset",regi2s r]
+	      | MIRROR_PTR_ARRAY_OFFSET r => plain ["mirror_ptr_array_offset",regi2s r]
+
 	      | REL_STACKPTR (ra,rb) => plain ["relStackPtr", regi2s ra, ", ", regi2s rb]
 	      | ABS_STACKPTR (ra,rb) => plain ["absStackPtr", regi2s ra, ", ", regi2s rb]
 	      | STOREMUTATE (ea,mutType) => plain ["storemutate", ea2s ea, ",", (case mutType of

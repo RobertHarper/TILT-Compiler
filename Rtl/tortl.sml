@@ -24,7 +24,6 @@ structure Tortl :> TORTL =
 struct
 
   val diag = ref false
-  val extraWordForEmptyArray = Stats.ff "extraWordForEmptyArray"
   val debug = Stats.ff("TortlDebug")
   val debug_full_when = Stats.int("TortlDebugFull")
   val _ = debug_full_when := 99999
@@ -152,7 +151,7 @@ struct
 				  (case (toplevel,is_recur) of
 				       (true,_) => xexp(state,fresh_named_var "venv",venv,
 							Nil.TraceUnknown,NOTID)
-				     | (_,true) => (VALUE(TAG uninit_val),state)
+				     | (_,true) => (VALUE(TAG uninitVal),state)
 				     | (_,false) => xexp(state,fresh_named_var "venv",venv,
 							 Nil.TraceUnknown,NOTID))
 			      val vls = [code_lv, con_lv, exp_lv]
@@ -232,62 +231,6 @@ struct
       let
 	  open Prim
 	  open TW64
-	  fun xvector (c,a : exp Array.array) : term * state =
-	      let 
-		  val (vals,state) = 
-		      (Array.foldr (fn (e,(vls,state)) => 
-				    let val (v,state) = xexp(state,Name.fresh_var(),e,
-							     Nil.TraceUnknown,NOTID)
-				    in  (v::vls,state)
-				    end)
-		       ([],state) a)
-		  fun charVector() =
-		      let fun mapper (VALUE (INT w)) = chr (TW32.toInt w)
-			    | mapper _ = error "char vector but non-INT value"
-			  val chars = map mapper vals
-			  val str = String.implode chars
-		      in  add_data(COMMENT ("string size = " ^ (Int.toString (size str))));
-			  add_data(STRING str)
-			  (* add_data(ALIGN LONG) *)
-		      end
-		  fun wordVector() =
-		      let fun apper (VALUE v) = 
-			       (case v of
-				    INT w => add_data(INT32 w)
-				  | TAG w => add_data(INT32 w)
-				  | REAL l => add_data(DATA l)
-				  | RECORD (l,_) => add_data(DATA l)
-				  | VOID _ => error "got a vvoid in xvector"
-				  | LABEL l => add_data(DATA l)
-				  | CODE l => add_data(DATA l))
-			    | apper _ = error "vector but non value component"
-		      in  app apper vals
-		      end
-
-		  val c = #2(simplify_type state c)
-		  val shiftAmount= (case c of
-					Prim_c(Int_c Prim.W8, []) => int_len_offset
-				      | Prim_c(Int_c Prim.W16, []) => error "word16 not handled"
-				      | _ => 2 + int_len_offset)
-		  val numElem = TW32.fromInt(Array.length a)
-		  val tagword = TW32.orb(TW32.lshift(numElem, shiftAmount), intarray)
-		  val _ = add_data(INT32 tagword)
-		  val label = (fresh_data_label 
-			       (case c of
-				    Prim_c(Int_c Prim.W8, []) => "string"
-				  | Prim_c(Int_c Prim.W16, []) => error "word16 not handled"
-				  | _ => "wordVector"))
-		  val _ = add_data(DLABEL label)
-		  val _ = (case c of
-			       Prim_c(Int_c Prim.W8, []) => charVector()
-			     | Prim_c(Int_c Prim.W16, []) => error "word16 not handled"
-			     | _ => wordVector())
-		  (* Empty arrays have one word of storage for the collector *)
-		  val _ = if (!extraWordForEmptyArray andalso numElem = 0w0)  
-			       then add_data(INT32 0w0)
-			   else ()
-	      in  (VALUE(LABEL label), state)
-	      end
       in
 	  (case arg_v of
 	       uint (W64, _) => error "64-bit ints not done"
@@ -302,7 +245,15 @@ struct
 		   end
 	      | (float (F64, s)) => (VALUE(REAL (mk_float_data s)), state)
 	      | (float (F32, _)) => error "32 bit floats not done"
-	      | (vector (c,a)) => xvector(c,a)
+	      | (vector (c,a)) => let val (vals,state) = 
+		                          (Array.foldr (fn (e,(vls,state)) => 
+							let val (VALUE v,state) = xexp(state,Name.fresh_var(),e,
+										 Nil.TraceUnknown,NOTID)
+							in  (v::vls,state)
+							end)
+					   ([],state) a)
+				  in   TortlArray.xvector(state,c,vals)
+				  end
 	      | (array _)  => error "array/vector/refcell constants not implemented"
 	      | refcell _ => error "array/vector/refcell constants not implemented"
 	      | (tag(t,c)) => let val i = TW32.fromInt (tag2int t)
@@ -1245,8 +1196,8 @@ struct
 		     | (IntVector is,_) => xint (state,is) arg
 		     | (FloatArray fs,_) => xfloat (state,fs) arg
 		     | (FloatVector fs,_) => xfloat (state,fs) arg
-		     | (OtherArray true, [c]) => xknown (state,c) arg
-		     | (OtherVector true, [c]) => xknown (state,c) arg
+		     | (OtherArray true, [c]) => xknown (state) arg
+		     | (OtherVector true, [c]) => xknown (state) arg
 		     | (OtherArray false, [c]) => dynamic c
 		     | (OtherVector false, [c]) => dynamic c
 		     | _ => error' "table primitive did not have right type args")
@@ -1884,6 +1835,12 @@ struct
 		 let val vl = (GLOBAL(ML_EXTERN_LABEL(Name.label2string l),TRACE))
 		 in  add_conterm (s,v,k, SOME(LOCATION vl))
 		 end
+	     val localMirrorArray = load_ireg_val(INT (if (!Rtltags.mirrorPtrArray) then 0w1 else 0w0), NONE)
+	     val _ = add_instr(CALL{call_type = C_NORMAL,
+				    func = LABEL' (ML_EXTERN_LABEL "AssertMirrorPtrArray"),
+				    args = [I localMirrorArray],
+				    results = [],
+				    save = getLocals()})
 	     val state = needalloc(make_state(),IMM 0)
 	     val state = foldl folder state imports
 	     val return = alloc_regi NOTRACE_CODE

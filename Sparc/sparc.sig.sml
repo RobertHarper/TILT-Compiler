@@ -16,6 +16,7 @@ sig
   val heapLimit_disp : int
   val globalOffset_disp : int
   val stackletOffset_disp : int
+  val arrayOffset_disp : int
 
   datatype storei_instruction = ST | STUB | STD
   datatype storef_instruction = STF | STDF

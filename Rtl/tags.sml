@@ -6,21 +6,34 @@
 structure Rtltags :> RTLTAGS =
 struct
   
-    (* The low 3 bits of the 32-bit word describe the object type *)
-    val record    = 0w1 : TilWord32.word
-    val intarray  = 0w2 : TilWord32.word
-    val ptrarray  = 0w3 : TilWord32.word
-    val realarray = 0w5 : TilWord32.word
-    val skipbase  = 0w6 : TilWord32.word
-    val stall     = 0w7 : TilWord32.word
-    fun skip numSkip = TilWord32.orb(skipbase, TilWord32.fromInt (8 * numSkip))
+   val ptrWriteBarrier = Stats.tt "PtrWriteBarrier"     (* record pointer array mutation *)
+   val fullWriteBarrier = Stats.tt "FullWriteBarrier"   (* all mutations recorded *)
+   val mirrorGlobal = Stats.tt "MirrorGlobal"           (* replicate pointer globals *)
+   val mirrorPtrArray = Stats.ff "MirrorPtrArray"       (* replicate pointer arrays *)
+
+   val uninitVal = 0w258 : TilWord32.word
+
+    (* The low 3 bits of the 32-bit word describe the object type - 0w0 and 0w4 for forwarding ptrs; 0w7 for special tags *)
+    val record         = 0w1 : TilWord32.word
+    val wordarray      = 0w2 : TilWord32.word
+    val quadarray      = 0w3 : TilWord32.word
+    val ptrarray       = 0w5 : TilWord32.word
+    val mirrorptrarray = 0w6 : TilWord32.word
+
+    (* Special tags have low 3 bits set to 0w7; fourth bit is zero for skip tags *)
+    fun skip numSkip    = TilWord32.orb(0w7, TilWord32.lshift(TilWord32.fromInt numSkip, 4))
+    val stall           = TilWord32.orb(0w15, TilWord32.lshift(0w0, 5))
+    val segstall        = TilWord32.orb(0w15, TilWord32.lshift(0w1, 5))
+    val segproceed      = TilWord32.orb(0w15, TilWord32.lshift(0w2, 5))
+    val mirrorGlobalTag = TilWord32.orb(0w15, TilWord32.lshift(0w3, 5))
 
     (* For raw(bytes), pointer(words), and real(double) arrays, 
        the upper 29 bits measure the length of the array in bytes.
        The following offsets can be used for masking in the logical lengths. *)
-    val int_len_offset = 3
-    val ptr_len_offset = 5
-    val real_len_offset = 6
+   val word_array_len_offset = 3        (* measured in bytes *)
+   val quad_array_len_offset = 3        (* measured in bytes - mult of 8 *)
+   val ptr_array_len_offset  = 3        (* measured in bytes - mult of 4 *)
+   val mirror_ptr_array_len_offset = 3  (* measured in bytes - mult of 8 *)
 
     (* For records, bits 3 to 7 inclusive give the record length which 
        can vary from 1 to 24.  Note that the empty record is represented 
@@ -43,15 +56,17 @@ struct
 			   else W.rshiftl(v,~disp)
     val bitor = W.orb
 
+    fun mk_word_array_tag len =
+	bitor(bitshift(len,word_array_len_offset),wordarray)
 
-    fun realarraytag len =
-	bitor(bitshift(len,real_len_offset),realarray)
+    fun mk_quad_array_tag len =
+	bitor(bitshift(len,quad_array_len_offset),quadarray)
 
-    fun intarraytag len =
-	bitor(bitshift(len,int_len_offset),intarray)
+    fun mk_ptr_array_tag len =
+	bitor(bitshift(len,ptr_array_len_offset),ptrarray)
 
-    fun ptrarraytag len =
-	bitor(bitshift(len,int_len_offset),ptrarray)
+    fun mk_mirror_ptr_array_tag len =
+	bitor(bitshift(len,mirror_ptr_array_len_offset),mirrorptrarray)
 
 
     fun pp_flag TRACE = print "TRACE, "
