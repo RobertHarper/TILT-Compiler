@@ -1,4 +1,4 @@
-(*$import Prelude TopLevel GRAPH Int TextIO String List Array SplayMapFn SplaySetFn Util HashString HashTableFn *)
+(*$import Prelude TopLevel GRAPH Int TextIO String List Array Util HashString HashTableFn *)
 
 functor Graph(A : NODE) : DIRECTEDGRAPH =
 struct
@@ -267,27 +267,9 @@ struct
 	structure Graph = Graph(Node)
     end			
 
-    local
-	structure StringKey = 
-	    struct
-		type ord_key = string
-		val compare = String.compare
-	    end
-    in  structure StringMap = SplayMapFn(StringKey)
-	structure StringSet = SplaySetFn(StringKey)
-	structure StringOrderedSet = 
-	    struct
-		type set = StringSet.set * string list
-		val empty = (StringSet.empty, [])
-		fun member (str,(set,_) : set) = StringSet.member(set,str)
-		fun cons (str,(set,list) : set) : set = if (StringSet.member(set,str))
-							    then (set,list)
-							else (StringSet.add(set,str), str::list)
-		fun toList ((set,list) : set) = list
-		fun append (s1, s2) = foldr cons s2 (toList s1)
-	    end
-    end
-
+    structure StringMap = Util.StringMap
+    structure StringOrderedSet = Util.StringOrderedSet
+	
     type node = string
     exception UnknownNode of node
     exception Cycle of node list

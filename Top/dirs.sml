@@ -1,4 +1,4 @@
-(*$import OS DIRS Delay Util Platform String Option List SplaySetFn Paths *)
+(*$import OS DIRS Delay Util Platform String Option List Paths *)
 
 structure Dirs :> DIRS =
 struct
@@ -189,9 +189,8 @@ struct
     fun getRuntimeDir (DIRS {runtimeDir,...}) = runtimeDir
     fun getBinDir     (DIRS {binDir,...})     = binDir
     fun getCommDir    (DIRS {commDir,...})    = Delay.force commDir
-	
-    structure StringSet = SplaySetFn (type ord_key = string
-				      val compare = String.compare)
+
+    structure StringSet = Util.StringSet
 	
     type dir_cache = StringSet.set
 

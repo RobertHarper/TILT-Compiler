@@ -28,8 +28,8 @@ struct
 	
     structure Cache = UpdateHelp.Cache
     structure InfoCache = UpdateHelp.InfoCache
-    structure StringOrderedSet = Help.StringOrderedSet
-    structure StringMap = Help.StringMap
+    structure StringOrderedSet = Util.StringOrderedSet
+    structure StringMap = Util.StringMap
 	
     val chat = Help.chat
     val chat_strings = Help.chat_strings

@@ -29,7 +29,7 @@ struct
 	end
 	
     structure Ue = UnitEnvironment
-    structure StringSet = Help.StringSet
+    structure StringSet = Util.StringSet
     structure Cache = UpdateHelp.Cache
     structure InfoCache = UpdateHelp.InfoCache
     structure IlCache = UpdateHelp.IlCache

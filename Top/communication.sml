@@ -7,7 +7,7 @@ struct
 
     structure SS = Substring
     structure Q = Queue
-    structure Map = Help.StringMap
+    structure Map = Util.StringMap
 	
     datatype message =
 	READY					(* Slave signals readiness. *)

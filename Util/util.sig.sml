@@ -1,8 +1,8 @@
-(*$import Prelude *)
+(*$import ORD_MAP ORD_SET *)
 
 (*Non IL specific utility routines *)
 signature UTIL =
-  sig
+sig
 
     exception UNIMP
 
@@ -58,4 +58,21 @@ signature UTIL =
      *)
     val system : string -> bool
 
-  end
+    structure StringMap : ORD_MAP
+	where type Key.ord_key = string
+
+    structure StringSet : ORD_SET
+	where type Key.ord_key = string
+
+    (* A set with an ordering maintained by a list *)
+    structure StringOrderedSet :
+    sig
+	type set
+	val empty : set
+	val member : string * set -> bool
+	val cons : string * set -> set
+	val append : set * set -> set
+	val toList : set -> string list (* respects ordering of cons and append calls *)
+    end
+    
+end

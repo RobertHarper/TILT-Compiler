@@ -109,7 +109,7 @@ struct
 	in  lines
 	end
 
-    structure StringMap = Help.StringMap
+    structure StringMap = Util.StringMap
 
     (* The file is a mapping from section names to pairs of the form
      * (entMap, order) where entMap maps entry names to line numbers

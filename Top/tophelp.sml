@@ -1,4 +1,4 @@
-(*$import Time String Util Stats TextIO Date ORD_MAP ORD_SET Real SplayMapFn SplaySetFn *)
+(*$import Time String Util Stats TextIO Date ORD_MAP ORD_SET Real *)
 
 signature HELP = 
     sig
@@ -14,22 +14,6 @@ signature HELP =
 	val statEachFile : bool ref		(* Print and clear statistics after each file. *)
 	val makeBackups : bool ref		(* Write foo.BACKUP before overwriting file foo. *)
 	    
-	structure StringMap : ORD_MAP
-	    where type Key.ord_key = string
-
-	structure StringSet : ORD_SET
-	    where type Key.ord_key = string
-
-	(* A set with an ordering maintained by a list *)
-	structure StringOrderedSet :
-	sig
-	    type set
-	    val empty : set
-	    val member : string * set -> bool
-	    val cons : string * set -> set
-	    val toList : set -> string list (* respects ordering of cons() calls *)
-	end
-
 	val chat : string -> unit
 	val chat_strings : int -> string list -> int
 
@@ -98,27 +82,6 @@ struct
 			 start := SOME(Time.now()); 
 			 showTime (true,str))
     fun reshowTimes() = (chat "\n\n"; app chat (rev (!msgs)); msgs := []; start := NONE)
-
-    structure StringKey = 
-	struct
-	    type ord_key = string
-	    val compare = String.compare
-	end
-
-    structure StringMap = SplayMapFn(StringKey)
-    
-    structure StringSet = SplaySetFn(StringKey)
-    
-    structure StringOrderedSet = 
-	struct
-	    type set = StringSet.set * string list
-	    val empty = (StringSet.empty, [])
-	    fun member (str,(set,_) : set) = StringSet.member(set,str)
-	    fun cons (str,(set,list) : set) : set = if (StringSet.member(set,str))
-							then (set,list)
-						    else (StringSet.add(set,str), str::list)
-	    fun toList ((set,list) : set) = list
-	end
 
     fun wantAssembler () = not (!uptoElaborate orelse
 				!uptoPhasesplit orelse

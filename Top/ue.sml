@@ -1,9 +1,9 @@
-(*$import UNIT_ENVIRONMENT Crc TopHelp *)
+(*$import UNIT_ENVIRONMENT Crc TopHelp Util *)
 
 structure UnitEnvironment :> UNIT_ENVIRONMENT =
 struct
 
-    structure Map = Help.StringMap
+    structure Map = Util.StringMap
 	
     type ue = Crc.crc Map.map
 

@@ -1,7 +1,7 @@
-(*$import Prelude TopLevel Array String UtilError Platform UTIL OS TextIO *)
+(*$import Array String UtilError Platform UTIL OS TextIO SplayMapFn SplaySetFn *)
 
 structure Util :> UTIL = 
-  struct
+struct
     exception UNIMP
 
     (* avoid shadowing error since we export it at a different type! *)
@@ -114,4 +114,24 @@ structure Util :> UTIL =
     val raise_error = UtilError.raise_error
     val error = UtilError.error
 
-  end
+    local
+	structure StringKey = 
+	struct
+	    type ord_key = string
+	    val compare = String.compare
+	end
+    in  structure StringMap = SplayMapFn(StringKey)
+	structure StringSet = SplaySetFn(StringKey)
+	structure StringOrderedSet = 
+	struct
+	    type set = StringSet.set * string list
+	    val empty = (StringSet.empty, [])
+	    fun member (str,(set,_) : set) = StringSet.member(set,str)
+	    fun cons (str,(set,list) : set) : set = if (StringSet.member(set,str))
+							then (set,list)
+						    else (StringSet.add(set,str), str::list)
+	    fun toList ((set,list) : set) = list
+	    fun append (s1, s2) = foldr cons s2 (toList s1)
+	end
+    end
+end
