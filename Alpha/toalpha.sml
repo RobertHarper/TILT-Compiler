@@ -11,13 +11,13 @@
          
 functor Toalpha(structure Decalpha: DECALPHA 
                 structure Pprtl: PPRTL
-                structure Machineutils : MACHINEUTILS
-                structure ArgTracetable : TRACETABLE 
+                structure Machineutils : MACHINEUTILS 
+	        structure ArgTracetable : TRACETABLE 
                 structure Bblock : BBLOCK
+		    where type Machine.specific_instruction = Decalpha.specific_instruction
+		    where type Machine.instruction = Decalpha.Machine.instruction
                 structure DM : DIVMULT
-(*		sharing Decalpha.Rtl = Pprtl.Rtl  *)
-(*		sharing Machineutils.Machine.Rtl = ArgTracetable.Machine.Rtl = Bblock.Machine.Rtl = DM.DA.Machine.Rtl = Decalpha.Machine.Rtl = Pprtl.Rtl *)
-		sharing Machineutils.Machine = Bblock.Machine = DM.DA.Machine = Decalpha.Machine
+		    where type DA.Machine.instruction = Decalpha.Machine.instruction
 		sharing ArgTracetable = Bblock.Tracetable)
   :> TOASM where Machine = Decalpha.Machine
 	   where Bblock = Bblock
@@ -245,7 +245,7 @@ struct
    fun emit (instr : instruction) =
        (current_instrs := (NO_ANN instr) :: (! current_instrs);
 
-	case (Machineutils.Machine.cFlow instr) of 
+	case (Decalpha.Machine.cFlow instr) of 
 	  NONE => ()
 	| SOME (fallthrough, succ_labels) =>
 	    let 

@@ -7,8 +7,8 @@
 functor AlphaFloatAllocation(
 	  structure AlphaInstructions: ALPHA32INSTR
 	  structure Cells:	       CELLS
-	  structure FloatConvention:   FLOAT_CONVENTION
-	  structure FlowGraph:	       FLOWGRAPH
+	  structure FloatConvention:   FLOAT_CONVENTION where type id = int
+	  structure FlowGraph:	       FLOWGRAPH 
 	  structure IntegerConvention: INTEGER_CONVENTION where type id = int
 	  structure MLRISCRegion:      MLRISC_REGION
 
@@ -37,8 +37,6 @@ functor AlphaFloatAllocation(
 
 	  sharing type AlphaInstructions.instruction =
 		       AlphaRewrite.I.instruction
-	      and type IntegerConvention.id =
-		       FloatConvention.id
 	      and type MLRISCRegion.region =
 		       AlphaInstructions.Region.region
 	) :> REGISTER_ALLOCATION
@@ -95,9 +93,8 @@ functor AlphaFloatAllocation(
     val getreg	  = GetRegister.getreg
 
     exception Unimplemented
-    fun copyInstr((dest, src), i) = (raise Unimplemented; 
-					 AlphaInstructions.FCOPY{dst = dest, src = src, 
-								 impl = ref NONE, tmp = NONE})
+    fun copyInstr((dest, src), i) = (AlphaInstructions.FCOPY{dst = dest, src = src, 
+							     impl = ref NONE, tmp = NONE})
 
     (* -- spill functions -------------------------------------------------- *)
 

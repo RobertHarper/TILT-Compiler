@@ -1,16 +1,14 @@
-(*$import RTL DECALPHA Labelmap Regmap Regset String Rtl Util Char *)
+(*$import RTL DECALPHA String Rtl Util Char *)
 functor Decalpha (val exclude_intregs : int list) :> DECALPHA  =
 
 
 struct
       
- val error = fn s => Util.error "decalpha.sml" s
- open Rtl
+    val error = fn s => Util.error "decalpha.sml" s
 
- structure Temp = 
+structure Machine = 
   struct
-    structure Rtl = Rtl
-
+    open Rtl
     open Core
 
     datatype operand = REGop of register
@@ -80,25 +78,8 @@ struct
     datatype jmp_instruction = 
       JMP | JSR | RET
 
-  datatype call_type = DIRECT of label * register option | INDIRECT of register
 
-  datatype rtl_instruction =
-    CALL of 
-    {calltype : Rtl.calltype,          (* Is this an extern call to C *)
-     func: call_type,                  (* label or temp containing addr. *)
-     args : register list,             (* integer, floating temps *)
-     results : register list,          (* integer, floating temps *)
-     argregs : register list option,   (* actual registers *)
-     resregs : register list option,   (*   "         "    *)
-     destroys: register list option}   (*   "         "    *)
-
-    | RETURN of {results: register list}       (* formals *)
-
-    | JMP of register * label list
-    | HANDLER_ENTRY
-    | SAVE_CS of label
-
-    datatype decalpha_specific_instruction =
+    datatype specific_instruction =
       IALIGN of align
     | STOREI of storei_instruction * register * int * register
     | LOADI  of loadi_instruction * register * int * register
@@ -110,31 +91,10 @@ struct
     | FPOP   of fp_instruction * register * register * register
     | FPCONV of fpconv_instruction * register * register
     | TRAPB				(* Trap barrier *)
-   type specific_instruction = decalpha_specific_instruction
 
-   datatype base_instruction = 
-      MOVI     of register * register
-    | MOVF     of register * register
-    | PUSH     of register * stacklocation
-    | POP      of register * stacklocation
-    | PUSH_RET of stacklocation option
-    | POP_RET  of stacklocation option
-    | RTL      of rtl_instruction
-    | TAILCALL of label
-    | BR       of label
-    | BSR      of label * register option * {regs_modified : register list, regs_destroyed : register list,
-					     args : register list}
-    | JSR      of bool * register * int * label list
-    | RET      of bool * int
-    | GC_CALLSITE of label
-    | ILABEL of label
-    | ICOMMENT of string
-    | LADDR of register * label         (* dest, offset, label *)
-
-  datatype instruction = 
-    BASE     of base_instruction
-  | SPECIFIC of specific_instruction
-
+    datatype instruction = 
+	BASE     of base_instruction
+      | SPECIFIC of specific_instruction
 
     fun in_imm_range i = (i >= 0) andalso (i <= 255)
     fun in_ea_disp_range i = (i >= ~32768) andalso (i <= 32767)
@@ -142,43 +102,43 @@ struct
     structure W = TilWord32
     val i2w = W.fromInt
     val w2i = W.toInt
-  fun ms n = if n<0 then ("-"^(Int.toString (~n))) else Int.toString n
-
-  fun msReg (R 30) = "$sp"
-    | msReg (R 29) = "$gp"
-    | msReg (R 28) = "$at"
-    | msReg (R n) = "$" ^ (ms n)
-    | msReg (F n) = "$f" ^ (ms n)
-      
-  val makeAsmLabel =
-    let 
-      fun loop [] = ""
-        | loop (#"'" :: rest) = "PRIME" ^ (loop rest)
-        | loop (#"!" :: rest) = "BANG" ^ (loop rest)
-        | loop (#"%" :: rest) = "PERCENT" ^ (loop rest)
-        | loop (#"&" :: rest) = "AND" ^ (loop rest)
-        | loop (#"$" :: rest) = "DOLLAR" ^ (loop rest)
-        | loop (#"#" :: rest) = "HASH" ^ (loop rest)
-        | loop (#"+" :: rest) = "PLUS" ^ (loop rest)
-        | loop (#"-" :: rest) = "MINUS" ^ (loop rest)
-        | loop (#"/" :: rest) = "SLASH" ^ (loop rest)
-        | loop (#":" :: rest) = "COLON" ^ (loop rest)
-        | loop (#"<" :: rest) = "LT" ^ (loop rest)
-        | loop (#"=" :: rest) = "EQ" ^ (loop rest)
-        | loop (#">" :: rest) = "GT" ^ (loop rest)
-        | loop (#"?" :: rest) = "QUEST" ^ (loop rest)
-        | loop (#"@" :: rest) = "AT" ^ (loop rest)
-        | loop (#"\\" :: rest) = "BACKSLASH" ^ (loop rest)
-        | loop (#"~" :: rest) = "TILDE" ^ (loop rest)
-        | loop (#"`" :: rest) = "ANTIQUOTE" ^ (loop rest)
-        | loop (#"^" :: rest) = "HAT" ^ (loop rest)
-        | loop (#"|" :: rest) = "BAR" ^ (loop rest)
-        | loop (#"*" :: rest) = "STAR" ^ (loop rest)
+    fun ms n = if n<0 then ("-"^(Int.toString (~n))) else Int.toString n
+	
+    fun msReg (R 30) = "$sp"
+      | msReg (R 29) = "$gp"
+      | msReg (R 28) = "$at"
+      | msReg (R n) = "$" ^ (ms n)
+      | msReg (F n) = "$f" ^ (ms n)
+	
+    val makeAsmLabel =
+	let 
+	    fun loop [] = ""
+	      | loop (#"'" :: rest) = "PRIME" ^ (loop rest)
+	      | loop (#"!" :: rest) = "BANG" ^ (loop rest)
+	      | loop (#"%" :: rest) = "PERCENT" ^ (loop rest)
+	      | loop (#"&" :: rest) = "AND" ^ (loop rest)
+	      | loop (#"$" :: rest) = "DOLLAR" ^ (loop rest)
+	      | loop (#"#" :: rest) = "HASH" ^ (loop rest)
+	      | loop (#"+" :: rest) = "PLUS" ^ (loop rest)
+	      | loop (#"-" :: rest) = "MINUS" ^ (loop rest)
+	      | loop (#"/" :: rest) = "SLASH" ^ (loop rest)
+	      | loop (#":" :: rest) = "COLON" ^ (loop rest)
+	      | loop (#"<" :: rest) = "LT" ^ (loop rest)
+	      | loop (#"=" :: rest) = "EQ" ^ (loop rest)
+	      | loop (#">" :: rest) = "GT" ^ (loop rest)
+	      | loop (#"?" :: rest) = "QUEST" ^ (loop rest)
+	      | loop (#"@" :: rest) = "AT" ^ (loop rest)
+	      | loop (#"\\" :: rest) = "BACKSLASH" ^ (loop rest)
+	      | loop (#"~" :: rest) = "TILDE" ^ (loop rest)
+	      | loop (#"`" :: rest) = "ANTIQUOTE" ^ (loop rest)
+	      | loop (#"^" :: rest) = "HAT" ^ (loop rest)
+	      | loop (#"|" :: rest) = "BAR" ^ (loop rest)
+	      | loop (#"*" :: rest) = "STAR" ^ (loop rest)
         | loop (s :: rest) = (String.str s) ^ (loop rest)
-    in
-      loop o explode
-    end
-
+	in
+	    loop o explode
+	end
+    
 
   fun msLabel (LOCAL_CODE s) = makeAsmLabel s
     | msLabel (LOCAL_DATA s) = makeAsmLabel s
@@ -304,7 +264,7 @@ struct
            "CALL " ^ (msLabel func) ^ " (" ^
 	   (reglist_to_ascii args) ^ " ; " ^ (reglist_to_ascii results)
            ^ ")"
-    | rtl_to_ascii (JMP (Raddr,_)) = "JMP " ^ (msReg Raddr)
+    | rtl_to_ascii (Core.JMP (Raddr,_)) = "JMP " ^ (msReg Raddr)
     | rtl_to_ascii (RETURN{results}) = "RETURN [" ^ (reglist_to_ascii results) ^ "]"
     | rtl_to_ascii HANDLER_ENTRY = "HANDLER_ENTRY"
     | rtl_to_ascii (SAVE_CS _) = "SAVE_CS"
@@ -333,6 +293,7 @@ struct
 		   LONG => 2
 		 | QUAD => 3
 		 | OCTA => 4
+		 | ODDLONG => error "ODDLONG not handled"
 		 | ODDOCTA => error "ODDOCTA not handled"
 	 in tab^".align "^Int.toString i
          end
@@ -379,12 +340,12 @@ struct
 				           (msReg Rzero) ^ comma ^ (msLabel label))
     | msInstr_base (ILABEL label) = (msLabel label) ^ ":"
     | msInstr_base (ICOMMENT str) = (tab ^ "# " ^ str)
-    | msInstr_base (JSR(link, Raddr, hint, _)) =
+    | msInstr_base (Core.JSR(link, Raddr, hint, _)) =
                                 (tab ^ "jsr" ^ tab 
 				 ^ (if link then (msReg Rra) else (msReg Rzero))
 				 ^ comma ^ (msDisp(Raddr,0)) ^
 				 comma ^ (ms hint))
-    | msInstr_base (RET(link, hint)) =
+    | msInstr_base (Core.RET(link, hint)) =
                                 (tab ^ "ret" ^ tab 
 				 ^ (if link then (msReg Rra) else (msReg Rzero))
 				 ^ comma ^ (msDisp(Rra,0)) ^
@@ -579,13 +540,13 @@ struct
 	    ([Fdest],Fsrc1::Fsrc2::temp1)
 	end
       | defUse (SPECIFIC(FPCONV (_, Fsrc, Fdest)))      = ([Fdest], [Fsrc])
-      | defUse (BASE (JSR (false, Raddr, _, _)))       = ([], [Raddr])
-      | defUse (BASE (JSR (true, Raddr, _, _)))       = ([Rra], [Raddr])
-      | defUse (BASE (RET (false, _)))              = ([], [Rra])
-      | defUse (BASE (RET (true, _)))               = ([Rra], [Rra])
+      | defUse (BASE (Core.JSR (false, Raddr, _, _)))       = ([], [Raddr])
+      | defUse (BASE (Core.JSR (true, Raddr, _, _)))       = ([Rra], [Raddr])
+      | defUse (BASE (Core.RET (false, _)))              = ([], [Rra])
+      | defUse (BASE (Core.RET (true, _)))               = ([Rra], [Rra])
       | defUse (SPECIFIC TRAPB)                         = ([], [])
       | defUse (BASE (LADDR (Rdest,_)))             = ([Rdest], [])
-      | defUse (BASE (RTL (JMP (Raddr, _))))        = ([], [Raddr])
+      | defUse (BASE (RTL (Core.JMP (Raddr, _))))        = ([], [Raddr])
       | defUse (BASE (RTL (CALL {func=DIRECT (_,SOME sra),args,
 				 results, ...})))   = (results, real_Rpv :: sra :: args)
       | defUse (BASE (RTL (CALL {func=DIRECT (_,NONE), args,
@@ -617,8 +578,8 @@ struct
       | cFlow (BASE (BSR (label as _,_,_)))    = SOME (true, [])
       | cFlow (SPECIFIC (CBRANCHI(_, _, label))) = SOME (true, [label])
       | cFlow (SPECIFIC (CBRANCHF(_, _, label))) = SOME (true, [label])
-      | cFlow (BASE (JSR(_,_,_,labels)))         = SOME (false, labels)
-      | cFlow (BASE (RET(_,_)))  = SOME (false, [])
+      | cFlow (BASE (Core.JSR(_,_,_,labels)))         = SOME (false, labels)
+      | cFlow (BASE (Core.RET(_,_)))  = SOME (false, [])
       | cFlow (BASE(RTL(CALL {calltype=(Rtl.ML_TAIL _), ...})))  = SOME (true, []) (* why possible *)
       | cFlow (BASE(RTL(CALL _))) = SOME (true, [])
       | cFlow (BASE(RTL(RETURN _)))          = SOME (false, [])
@@ -653,8 +614,8 @@ struct
          | xbase (BR l) = BR l
          | xbase (BSR (l, NONE, md)) = BSR(l, NONE, md)
          | xbase (BSR (l, SOME d, md)) = BSR(l, SOME (fd d), md)
-         | xbase (JSR(link,Raddr,hint,labels)) = JSR(link,fs Raddr,hint,labels)
-         | xbase (RET(link,hint)) = RET(link,hint)
+         | xbase (Core.JSR(link,Raddr,hint,labels)) = Core.JSR(link,fs Raddr,hint,labels)
+         | xbase (Core.RET(link,hint)) = Core.RET(link,hint)
          | xbase (GC_CALLSITE l) = GC_CALLSITE l
          | xbase (ILABEL l) = ILABEL l
 	 | xbase (ICOMMENT l) = ICOMMENT l
@@ -690,21 +651,6 @@ struct
 	| (F _,ACTUAL8 offset) => SPECIFIC(LOADF(LDT, dst, offset, Rsp))
 	| _ => error "allocateBlock: pop"
 
-
-   (* information on a procedure *)
-
-   datatype procsig = 
-     PROCSIG of {arg_ra_pos : (assign list) option,
-		 res_ra_pos : assign list option,
-		 allocated  : bool,
-		 regs_destroyed  : register list ref,
-		 regs_modified  : register list ref,
-		 blocklabels: label list,
-                 framesize  : int option,
-		 ra_offset : int option,
-		 callee_saved: register list,
-		 args   : register list,  (* formals *)
-		 res    : register list}  (* formals *)
 
   fun assign2s (IN_REG r) = msReg r
     | assign2s (ON_STACK s) = "STACK:" ^ (msStackLocation s)
@@ -746,13 +692,8 @@ struct
    val special_regs  = listunion(special_iregs, special_fregs) 
    val general_regs  = listdiff(physical_regs, special_regs)
 
-   structure Labelmap = Labelmap()
-   structure Regmap = Regmap(structure Machine = struct datatype register = datatype register end)
-   structure Regset = Regset(structure Machine = struct datatype register = datatype register end)
-
  end
  
- open Temp
- structure Machine = Temp
+ open Machine
 
 end

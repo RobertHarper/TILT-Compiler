@@ -13,7 +13,6 @@ local
 		 structure Region = SparcMLRISCRegion)
 
   (* -- structures --------------------------------------------------------- *)
-
   structure SparcFlowGraph =
     FlowGraph(structure I = SparcInstr
 	      structure P = SparcMLRISCPseudo
@@ -39,7 +38,8 @@ local
   structure SparcAsmEmitter =
     SparcAsmEmitter(structure Instr	  = SparcInstr
 		    structure FlowGraph = SparcFlowGraph
-		    structure Shuffle = SparcShuffle)
+		    structure Shuffle = SparcShuffle
+		    structure PseudoOps = SparcMLRISCPseudo)
 
   (* -- structures --------------------------------------------------------- *)
 
@@ -76,16 +76,16 @@ local
 			 structure RegisterSpillMap  = SparcRegisterSpillMap
 			 functor RegisterAllocation  = SparcRegAlloc.FloatRa)
 
+  (* -- structures --------------------------------------------------------- *)
   (* -- values ------------------------------------------------------------- *)
 
   val sparc_codegen = SparcAsmEmit.asmEmit o
 		      SparcFloatAllocation.allocateCluster o
 		      SparcIntegerAllocation.allocateCluster
 
-  (* -- structures --------------------------------------------------------- *)
-
   structure SparcFlowGraphGen =
-    FlowGraphGen(val codegen	     = sparc_codegen
+    FlowGraphGen(val output	     = sparc_codegen 
+		 val optimize        = ref (NONE : (SparcFlowGraph.cluster -> SparcFlowGraph.cluster) option)
 		 structure Flowgraph = SparcFlowGraph
 		 structure InsnProps = SparcProps
 		 structure MLTree    = SparcMLTree)

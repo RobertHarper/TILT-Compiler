@@ -1,9 +1,6 @@
 (*$import DECALPHA MACHINEUTILS TilWord64 DIVMULT Util *)
 functor Divmult(structure Decalpha : DECALPHA 
-		structure MU : MACHINEUTILS 
-			     (* where Machine = Decalpha  this break 109.30 so we must have the following mess *) 
-		    sharing MU.Machine = Decalpha.Machine
-			     ) 
+		structure MU : MACHINEUTILS)
   :> DIVMULT where DA = Decalpha = 
   struct
     open Decalpha

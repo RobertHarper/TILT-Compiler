@@ -62,6 +62,7 @@ functor MakeRegisterSet(structure Pprtl : PPRTL)
      | ireg2int (SREGI EXNPTR) = 2
      | ireg2int (SREGI EXNARG) = 3
      | ireg2int (SREGI STACKPTR) = 4
+     | ireg2int (SREGI THREADPTR) = 5
 
    fun update_ireg(ri,v) = 
      let val rib = ireg2int ri

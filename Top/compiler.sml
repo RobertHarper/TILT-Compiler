@@ -48,33 +48,30 @@ structure Til : COMPILER =
 	exception Stop
 	val uptoElaborate = Stats.ff("UptoElaborate")
 	val uptoPhasesplit = Stats.ff("UptoPhasesplit")
+	val uptoClosureConvert = Stats.ff("UptoClosureConvert")
 	val uptoRtl = Stats.ff("UptoRtl")
-	val uptoAlpha = Stats.ff("UptoAlpha")
 	val uptoAsm = Stats.ff("UptoAsm")
 	fun compile (ctxt: context, unitName: string, 
 		     sbnd_entries: (sbnd option * context_entry) list , ctxt': context) : unit =
-	    let val sFile = unitName ^ ".s"
-		val oFile = unitName ^ ".o"
-		val _ = if (!uptoElaborate) then raise Stop else ()
-		val nilmod = (if !uptoPhasesplit 
-				 then Linknil.phasesplit
-			     else Linknil.il_to_nil) (unitName, (ctxt, sbnd_entries))
-		val _ = if !uptoPhasesplit then raise Stop else ()
+	    let val _ = if (!uptoElaborate) then raise Stop else ()
+		val nilmod = Linknil.il_to_nil(unitName, (ctxt, sbnd_entries))
+		val _ = if (!uptoPhasesplit orelse !uptoClosureConvert)
+			    then raise Stop else ()
 		val rtlmod = Linkrtl.nil_to_rtl (unitName,nilmod)
 		val _ = if (!uptoRtl) then raise Stop else ()
+
+
+		(* rtl_to_asm creates unitName.s file with main label * `unitName_doit' *)
 		val rtl_to_asm = 
 		    (case !platform of
 			 TIL_ALPHA => Linkalpha.rtl_to_asm
-		       | _ => error "commented out")
-(*
 		       | MLRISC_ALPHA => AlphaLink.rtl_to_asm 
 		       | MLRISC_SPARC => SparcLink.rtl_to_asm)
-*)
-
-		val _ = rtl_to_asm(unitName ^ ".s", rtlmod)    (* creates unitName.s file with main label
-								     * `unitName_doit' *)
-
+		val _ = rtl_to_asm(unitName ^ ".s", rtlmod)    
 		val _ = if (!uptoAsm) then raise Stop else ()
+
+		val sFile = unitName ^ ".s"
+		val oFile = unitName ^ ".o"
 		val _ = assemble(sFile, oFile)
 	    in ()
 	    end

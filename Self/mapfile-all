@@ -572,6 +572,8 @@ BBLOCK Backend/bblock.sig
 Bblock Backend/bblock
 PRINTUTILS Backend/printutils.sig
 PrintUtils Backend/printutils
+CORE  Backend/core.sig
+Core  Backend/core
 
 IFGRAPH Backend/ifgraph.sig
 IfGraph Backend/ifgraph
@@ -584,14 +586,9 @@ INTRAPROC Backend/intraproc.sig
 Chaitin Backend/chaitin
 
 Labelgraph Backend/labelgraph
-#labelmap.sml
 
 RECURSION Backend/recursion.sig
 Recursion Backend/recursion
-# REGMAP Backend/regmap.sig
-Regmap Backend/regmap
-Regset Backend/regset
-Labelmap Backend/labelmap
 RTLTOASM Backend/rtltoasm.sig
 RtlToAsm Backend/rtltoasm
 

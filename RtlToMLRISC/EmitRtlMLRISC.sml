@@ -9,41 +9,38 @@ functor EmitRtlMLRISC(
 	  structure CallConventionBasis: CALL_CONVENTION_BASIS
 	  structure Cells:		 CELLS
 	  structure ExternalConvention:	 CALL_CONVENTION
+		                           where type id = int
 	  structure FloatAllocation:	 REGISTER_ALLOCATION
+		                           where type id = int
 	  structure FloatConvention:	 FLOAT_CONVENTION
+					   where type id = int
 	  structure IntegerAllocation:	 REGISTER_ALLOCATION
+					   where type id = int
 	  structure IntegerConvention:	 INTEGER_CONVENTION
 					   where type id = int
 	  structure IntegerLiveness:	 REGISTER_LIVENESS
-					   where type idSet = DenseIntSet.set
+		                           where type idSet = DenseIntSet.set
 	  structure MLRISCConstant:	 MLRISC_CONSTANT
-	  structure MLRISCPseudo:	 MLRISC_PSEUDO
+	  structure MLRISCPseudo:	 MLRISC_PSEUDO 
+		                           where type idSet = DenseIntSet.set
 	  structure MLRISCRegion:	 MLRISC_REGION
 	  structure MLTreeComp:		 MLTREECOMP
 	  structure MLTreeExtra:	 MLTREE_EXTRA
 	  structure RegisterSpillMap:	 REGISTER_SPILL_MAP
+					   where type id = int
 	  structure RegisterTraceMap:	 REGISTER_TRACE_MAP
 					   where type rep = Rtl.rep
 					     and type var = Name.var
                                              and type stacklocation = Core.stacklocation
+		                             and type idSet = DenseIntSet.set
+					     and type id = int
 	  structure SpillReload:	 SPILL_RELOAD
+					   where type id = int
 	  structure StackFrame:		 STACK_FRAME
 	  structure TraceTable:		 TRACETABLE
 
 	  sharing type CallConventionBasis.assignment =
 		       ExternalConvention.assignment
-	      and type IntegerConvention.id =
-		       CallConventionBasis.id =
-		       ExternalConvention.id =
-		       FloatAllocation.id =
-		       FloatConvention.id =
-		       IntegerAllocation.id =
-		       RegisterSpillMap.id =
-		       RegisterTraceMap.id =
-		       SpillReload.id
-	      and type IntegerLiveness.idSet =
-		       MLRISCPseudo.idSet =
-		       RegisterTraceMap.idSet
 	      and type MLRISCConstant.const =
 		       CallConventionBasis.offset =
 		       FloatAllocation.offset =
@@ -232,7 +229,11 @@ functor EmitRtlMLRISC(
        * Return the accumulated call information of the current module.
        * <- the call information
        *)
-      fun infos() = !infosRef
+      fun infos() = let val _ = print "Perry: EmitRtlMLRISC: infos start\n"
+			val res = !infosRef
+			val _ = print "Perry: EmitRtlMLRISC: infos end\n"
+		    in  res
+		    end
     end
 
   end
@@ -2076,6 +2077,7 @@ functor EmitRtlMLRISC(
 
     fun emitBody(prefix, main, procedures, data) =
 	  let
+	      val _ = print "Perry EmitRtlMLRisc: emitBody start\n"
 	    fun define name =
 		  let
 		    val label = externalLabel(prefix^name)
@@ -2120,17 +2122,26 @@ functor EmitRtlMLRISC(
 		  [MLTree.PSEUDO_OP MLRISCPseudo.DataTrailer]
 
 	    val clusters = map (fn procedure => [procedure]) procedures
+	      val _ = print "Perry EmitRtlMLRisc: emitBody 1\n"
 	  in
 	    emitMLTree header;
 	    emitMLTree textHeader;
+	      print "Perry EmitRtlMLRisc: emitBody 3\n";
 	    emitMLTree [MLTree.ENDCLUSTER(Cluster.map())];
+	      print "Perry EmitRtlMLRisc: emitBody 4\n";
 	    app (emitCluster' protect resetCluster) clusters;
+	      print "Perry EmitRtlMLRisc: emitBody 5\n";
 	    emitMLTree [MLTree.BEGINCLUSTER];
+	      print "Perry EmitRtlMLRisc: emitBody 6\n";
 	    emitMLTree textTrailer;
 	    emitMLTree dataHeader;
+	      print "Perry EmitRtlMLRisc: emitBody 7\n";
 	    emitData data;
+	      print "Perry EmitRtlMLRisc: emitBody 8\n";
 	    emitMLTree dataTrailer;
-	    emitMLTree trailer
+	      print "Perry EmitRtlMLRisc: emitBody 9\n";
+	    emitMLTree trailer;
+	      print "Perry EmitRtlMLRisc: emitBody end\n"
 	  end
 
     fun resetBody() = ()
@@ -2184,13 +2195,16 @@ functor EmitRtlMLRISC(
 			procs		  = procedures,
 			data		  = data,
 			mutable}) =
-(*			mutable_variables = variables,
-			mutable_objects	  = objects
-*)
 	  let
 	    val name = Label'.string main
 
-	    fun emitBody' operand = (emitBody operand; Module.infos())
+	    fun emitBody' operand = let val _ = print "Perry EmitRtlMLRisc: emit start\n"
+					val _ = emitBody operand
+					val _ = print "Perry EmitRtlMLRisc: emit 1\n"
+					val res = Module.infos()
+					val _ = print "Perry EmitRtlMLRisc: emit end\n"
+				    in  res
+				    end
 
 	    val infos =
 		  (emitBody' protect resetBody)(name, main, procedures, data)

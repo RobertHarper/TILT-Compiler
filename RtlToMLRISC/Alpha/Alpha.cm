@@ -9,11 +9,8 @@ structure AlphaLink
 
 is
 
-../../Alpha/alpha.cm
 ../../smlnj-lib.cm
-
 ../RtlToMLRISC.cm
-../MLRISC.cm
 
 AlphaCallConventionBasis.sml
 AlphaEmitRtlMLRISC.sml

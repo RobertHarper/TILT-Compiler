@@ -2,9 +2,7 @@
 signature DECALPHA =
 sig
 
-  structure Machine : MACHINE
-
-  type register = Machine.register
+  type register = Core.register
   type label = Rtl.label
   type align = Rtl.align
 
@@ -43,7 +41,7 @@ sig
   | FCMOVEQ | FCMOVNE | FCMOVLT | FCMOVLE | FCMOVGT | FCMOVGE
 
 
-  datatype decalpha_specific_instruction =
+  datatype specific_instruction =
     IALIGN of align
   | STOREI of storei_instruction * register * int * register
   | LOADI  of loadi_instruction * register * int * register
@@ -56,7 +54,6 @@ sig
   | FPCONV of fpconv_instruction * register * register
   | TRAPB			      (* Trap barrier *)
 
-
-  sharing type Machine.specific_instruction = decalpha_specific_instruction
+  structure Machine : MACHINE where type specific_instruction = specific_instruction
 
 end

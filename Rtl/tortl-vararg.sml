@@ -4,8 +4,6 @@
 *)
 	
 
-val number_flatten = 6
-
 structure TortlVararg :> TORTL_VARARG =
 
 struct
@@ -14,7 +12,7 @@ structure TortlBase = TortlBase
 open Nil
 open TortlBase
 
-
+val number_flatten = 6
 val diag = ref true
 val debug = ref false
 val debug_full = ref false

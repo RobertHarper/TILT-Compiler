@@ -7,7 +7,7 @@
 functor SparcFloatAllocation(
 	  structure SparcInstructions: SPARCINSTR
 	  structure Cells:	       CELLS
-	  structure FloatConvention:   FLOAT_CONVENTION
+	  structure FloatConvention:   FLOAT_CONVENTION  where type id = int
 	  structure FlowGraph:	       FLOWGRAPH
 	  structure IntegerConvention: INTEGER_CONVENTION where type id = int
 	  structure MLRISCRegion:      MLRISC_REGION
@@ -36,8 +36,6 @@ functor SparcFloatAllocation(
 
 	  sharing type SparcInstructions.instruction =
 		       SparcRewrite.I.instruction
-	      and type IntegerConvention.id =
-		       FloatConvention.id
 	      and type MLRISCRegion.region =
 		       SparcInstructions.Region.region
 	) :> REGISTER_ALLOCATION

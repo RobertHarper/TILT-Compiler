@@ -16,7 +16,7 @@ infix  7 div mod quot rem / *
 infix  9 << >> ~>> && || 
 
 (* standard types *)
-
+datatype bool = false | true
 datatype 'a list = nil | :: of 'a * 'a list
 datatype 'a susp = Susp of unit -> 'a 
 datatype 'a option = NONE | SOME of 'a

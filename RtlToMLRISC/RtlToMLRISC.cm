@@ -11,8 +11,7 @@ is
 ../Parser/parser.cm
 ../Rtl/rtl.cm
 ../smlnj-lib.cm
-
-MLRISC.cm
+../MLRISC/MLRISC.cm
 
 BASIC_BLOCK.sig.sml
 CALL_CONVENTION.sig.sml

@@ -39,7 +39,8 @@ local
   structure Alpha32AsmEmitter =
     Alpha32AsmEmitter(structure Instr	  = Alpha32Instr
 		      structure FlowGraph = AlphaFlowGraph
-		      structure Shuffle = Alpha32Shuffle)
+		      structure Shuffle = Alpha32Shuffle
+		      structure PseudoOps = AlphaMLRISCPseudo)
 
   (* -- structures --------------------------------------------------------- *)
 
@@ -76,16 +77,27 @@ local
 			 structure RegisterSpillMap  = AlphaRegisterSpillMap
 			 functor RegisterAllocation  = Alpha32RegAlloc.FloatRa)
 
-  (* -- values ------------------------------------------------------------- *)
-
+  (* -- values and structures ---------------------------------------------- *)
+(*
   val alpha_codegen = AlphaAsmEmit.asmEmit o
 		      AlphaFloatAllocation.allocateCluster o
 		      AlphaIntegerAllocation.allocateCluster
-
-  (* -- structures --------------------------------------------------------- *)
+*)
+  fun alpha_codegen arg = 
+      let val _ = print "Perry: Alpha/AlphMLTreeComp.sml alpha_codegen start\n"
+	  val tmp = AlphaIntegerAllocation.allocateCluster arg
+	  val _ = print "Perry: Alpha/AlphMLTreeComp.sml alpha_codegen 1\n"
+	  val tmp = AlphaFloatAllocation.allocateCluster tmp
+	  val _ = print "Perry: Alpha/AlphMLTreeComp.sml alpha_codegen 2\n"
+	  val res = AlphaAsmEmit.asmEmit tmp
+	  val _ = print "Perry: Alpha/AlphMLTreeComp.sml alpha_codegen end\n"
+      in  res
+      end
+      
 
   structure AlphaFlowGraphGen =
-    FlowGraphGen(val codegen	     = alpha_codegen
+    FlowGraphGen(val optimize        = ref (NONE : (AlphaFlowGraph.cluster -> AlphaFlowGraph.cluster) option)
+		 val output          = alpha_codegen
 		 structure Flowgraph = AlphaFlowGraph
 		 structure InsnProps = Alpha32Props
 		 structure MLTree    = AlphaMLTree)

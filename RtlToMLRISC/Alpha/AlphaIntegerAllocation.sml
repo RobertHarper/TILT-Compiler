@@ -93,8 +93,7 @@ functor AlphaIntegerAllocation(
 
     exception Unimplemented
     fun copyInstr ((dest, src), i) = 
-	(raise Unimplemented;
-	AlphaInstructions.COPY{dst = dest, src = src, 
+	(AlphaInstructions.COPY{dst = dest, src = src, 
 			       impl = ref NONE, tmp = NONE})
 
     (* -- spill functions -------------------------------------------------- *)
@@ -169,7 +168,14 @@ functor AlphaIntegerAllocation(
   local
     val allocate = IntegerAllocation.ra IntegerAllocation.REGISTER_ALLOCATION
   in
-    fun allocateCluster cluster = allocate cluster before GetRegister.reset()
+    fun allocateCluster cluster = 
+	let val _ = print "Perry: AlphaIntegerAllocation.sml: allocateCluster start\n"
+	    val res = allocate cluster 
+	    val _ = print "Perry: AlphaIntegerAllocation.sml: allocateCluster 1\n"
+	    val _ = GetRegister.reset()
+	    val _ = print "Perry: AlphaIntegerAllocation.sml: allocateCluster end\n"
+	in  res
+	end
   end
 
 

@@ -1,6 +1,6 @@
 (*$import MACHINEUTILS DECALPHA Int32 Util *)
 functor Decalphautils(structure Decalpha: DECALPHA)
-    :> MACHINEUTILS where Machine = Decalpha.Machine =
+    :> MACHINEUTILS =
 struct
 
    open Decalpha

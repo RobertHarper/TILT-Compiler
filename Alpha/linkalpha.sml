@@ -1,4 +1,4 @@
-(*$import LINK Linkrtl DecAlpha Regset Regmap Labelgraph Labelmap DecAlphaUtils IfGraph CallConv Bblock Tracetable DivMult ToAlpha PrintUtils VarGraph TrackStorage Color Chaitin RtlToAsm ToAlpha Recursion *)
+(*$import LINKASM Linkrtl DecAlpha Labelgraph DecAlphaUtils IfGraph CallConv Bblock Tracetable DivMult ToAlpha PrintUtils VarGraph TrackStorage Color Chaitin RtlToAsm ToAlpha Recursion *)
 
 
 structure Linkalpha :> LINKASM =
@@ -10,33 +10,15 @@ struct
   structure Decalpha = Decalpha(val exclude_intregs = [] : int list
 				structure Rtl = Rtl)
   structure Machine = Decalpha.Machine
-
-(*
-  structure Regset     = Regset    (structure Machine = Machine)
-  structure Regmap     = Regmap    (structure Machine = Machine)
-  structure Labelgraph = Labelgraph(structure Machine = Machine)
-  structure Labelmap   = Labelmap  (structure Machine = Machine)
-*)
-
-  structure Decalphautils = Decalphautils(structure Decalpha = Decalpha
-(*
-					  structure Labelmap = Labelmap
-					  structure Regmap = Regmap
-					  structure Regset = Regset
-*)
-					      )
-
+  structure Decalphautils = Decalphautils(structure Decalpha = Decalpha)
   structure Callconv   = DecalphaCallconv (structure Decalpha = Decalpha
 					   structure Machineutils = Decalphautils)
-
-
   structure Ifgraph   = Ifgraph    (structure Machine = Machine)
-
-
   structure Tracetable = Tracetable(val little_endian = true
 				    structure ArgMachine = Decalpha.Machine)
 
-  structure Bblock = Bblock(structure Machineutils = Decalphautils
+  structure Bblock = Bblock(structure Machine = Machine
+			    structure Machineutils = Decalphautils
 			    structure Tracetable = Tracetable)
 
 

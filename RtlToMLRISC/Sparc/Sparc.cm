@@ -10,9 +10,7 @@ structure SparcLink
 is
 
 ../../smlnj-lib.cm
-
 ../RtlToMLRISC.cm
-../MLRISC.cm
 
 SparcCallConventionBasis.sml
 SparcEmitRtlMLRISC.sml

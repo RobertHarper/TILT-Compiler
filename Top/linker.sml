@@ -1,4 +1,4 @@
-(*$import LINKER Til Util Crc Listops OS Name Linkalpha *)
+(*$import LINKER Compiler Util Crc Listops OS Name Linkalpha *)
 structure Linker :> LINKER =
   struct
 
@@ -253,11 +253,9 @@ structure Linker :> LINKER =
 					   ("main_" ^ un ^ "_doit")) unitnames
 		   val _ = (case !Til.platform of
 				Til.TIL_ALPHA => Linkalpha.link
-			      | _ => error "commented out due to NJ 110.13 seg faulting")
-(*
-				Til.MLRISC_ALPHA => AlphaLink.link 
+			      | Til.MLRISC_ALPHA => AlphaLink.link 
 			      | Til.MLRISC_SPARC => SparcLink.link)
-*)
+
 		       (link_s, local_labels)
 		   val success = Util.system (as_path ^ " -o " ^ link_o ^ " " ^ link_s)
 		   val _ = if success then ()

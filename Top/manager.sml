@@ -1,97 +1,93 @@
-(*$import MANAGER LINKPARSE LINKIL COMPILER LINKER MAKEDEP OS LinkParse LinkIl List SplayMapFn SplaySetFn Compiler Linker MakeDep Specific *)
+(*$import MANAGER LinkParse LinkIl Compiler Linker MakeDep OS List SplayMapFn SplaySetFn *)
+
+structure Manager :> MANAGER = 
+
+  struct
+
+    structure Elaborator = LinkIl
+    structure Compiler = Til
+    structure Parser = LinkParse
+
+    val error = fn x => Util.error "Manager" x
+    val chat_ref = Stats.tt("ManagerChat")
+    val diag_ref = Stats.ff("ManagerDiag")
+    fun chat s = if !chat_ref then (print s; TextIO.flushOut TextIO.stdOut)
+		 else ()
+    fun diag s = if !diag_ref then (print s; TextIO.flushOut TextIO.stdOut)
+		 else ()
+
+    val stat_each_file = Stats.ff("TimeEachFile")
+    val cache_context = ref 5
+    val stop_early_compiling_sml_to_ui = ref false
+    val eager = ref true
+
+    fun chat_imports skip imports =
+	let fun f(str,acc) = let val acc = if acc > 80
+						then (chat "\n        "; 8)
+					    else acc + (size str) + 2
+			     in  chat str; chat "  "; acc
+			     end
+	in  if (!chat_ref) then foldl f skip imports else 0
+	end
+
+    fun help() = print "This is TILT - no help available.\n"
 
 
-functor Manager (structure Parser: LINK_PARSE
-		 structure Elaborator: LINKIL
-		 structure Compiler: COMPILER
-		     where type sbnd = Il.sbnd
-		     and type context_entry = Il.context_entry
-		     and type context = Il.context
-		 structure Linker: LINKER
-		 structure Makedep: MAKEDEP)
-		:> MANAGER = 
-struct
+    (* ---- we want to do lookup on strings ----- *)
+    local
+	structure StringKey = 
+	    struct
+		type ord_key = string
+		val compare = String.compare
+	    end
+    in  structure StringMap = SplayMapFn(StringKey)
+	structure StringSet = SplaySetFn(StringKey)
+    end
 
-
-  val stat_each_file = Stats.ff("TimeEachFile")
-  val cache_context = ref 5
-  val stop_early_compiling_sml_to_ui = ref false
-  val eager = ref true
-
-
-  val error = fn x => Util.error "Manager" x
-
-  val chat_ref = ref true
-  val diag_ref = ref false
-  fun chat s = if !chat_ref then (print s; TextIO.flushOut TextIO.stdOut)
-	       else ()
-  fun diag s = if !diag_ref then (print s; TextIO.flushOut TextIO.stdOut)
-	       else ()
-
-  fun chat_imports skip imports =
-      let fun f(i,n) = (chat i; chat "  ";
-			if (n > 0 andalso n mod 8 = 0) then chat "\n         " else (); n+1)
-      in  foldl f skip imports
-      end
-
-  fun help() = print "This is TILT - no help available.\n"
-
-
-  (* ---- we want to do lookup on strings ----- *)
-  local
-      structure StringKey = 
-	  struct
-	      type ord_key = string
-	      val compare = String.compare
-	  end
-  in  structure StringMap = SplayMapFn(StringKey)
-      structure StringSet = SplaySetFn(StringKey)
-  end
-
-  (* ---- memoize the result of getting file attributes ---- *)
-  local
-      datatype stat = ABSENT 
-                    | PRESENT of Time.time
-
-      val stats = ref (StringMap.empty : stat StringMap.map)
-
-      fun fetch_stat file =
-	  let val exists = 
-                    ((OS.FileSys.access(file, []) andalso
-                      OS.FileSys.access(file, [OS.FileSys.A_READ]))
-	             handle _ => (print ("Warning: OS.FileSys.access " ^ 
-                                    file ^ "\n"); false))
-	  in  if exists
-		  then (PRESENT(OS.FileSys.modTime file)
-			handle _ => (print "Warning: OS.FileSys.modTime raised exception\n"; ABSENT))
-	      else ABSENT
-	  end
-
-      fun fetch file = 
-	  (case StringMap.find(!stats,file) of
-	       NONE => let val stat = fetch_stat file
+    (* ---- memoize the result of getting file attributes ---- *)
+    local
+	datatype stat = ABSENT 
+	              | PRESENT of Time.time
+	    
+	val stats = ref (StringMap.empty : stat StringMap.map)
+	    
+	fun fetch_stat file =
+	    let val exists = 
+		((OS.FileSys.access(file, []) andalso
+		  OS.FileSys.access(file, [OS.FileSys.A_READ]))
+		 handle _ => (print ("Warning: OS.FileSys.access " ^ 
+				     file ^ "\n"); false))
+	    in  if exists
+		    then (PRESENT(OS.FileSys.modTime file)
+			  handle _ => (print "Warning: OS.FileSys.modTime raised exception\n"; ABSENT))
+		else ABSENT
+	    end
+	
+	fun fetch file = 
+	    (case StringMap.find(!stats,file) of
+		 NONE => let val stat = fetch_stat file
 		       in  (stats := (StringMap.insert(!stats,file,stat));
                             stat)
-		       end
-	     | SOME stat => stat)
-  in
-      fun reset_stats() = (stats := StringMap.empty)
-
-      fun forget_stat file = 
+			 end
+	       | SOME stat => stat)
+    in
+	fun reset_stats() = (stats := StringMap.empty)
+	    
+	fun forget_stat file = 
             (stats := #1 (StringMap.remove(!stats, file))
-                        handle _ => ())
-
-      fun exists file = (case fetch file of
-			     ABSENT => ((*print (file ^ " does not exist\n");*)
-                                        false)
-			   | PRESENT _ => ((*print (file ^ " exists\n");*)
-                                           true))
-
-      fun modTime file = (case fetch file of
-			     ABSENT => error ("Getting modTime on non-existent file " ^ file)
-			   | PRESENT t => t)
-
-  end
+	     handle _ => ())
+	    
+	fun exists file = (case fetch file of
+			       ABSENT => ((*print (file ^ " does not exist\n");*)
+					  false)
+			     | PRESENT _ => ((*print (file ^ " exists\n");*)
+					     true))
+	    
+	fun modTime file = (case fetch file of
+				ABSENT => error ("Getting modTime on non-existent file " ^ file)
+			      | PRESENT t => t)
+	    
+    end
 
   (* ------------ reading the import/include list of a file -------------*)
   (* Takes a string(line) and splits into white-space separted fields.
@@ -294,21 +290,21 @@ struct
        end
 
 
-  fun getContext (lines, imports) = 
+  fun getContext imports = 
       let 
 	  val _ = Name.reset_varmap()
 	  val _ = tick_cache()
           val cached_ctxts = map readContext imports
 	  val ctxts = map #2 cached_ctxts
-	  val cached = List.mapPartial (fn (imp,(true,_)) => SOME imp
-	                                 | _ => NONE) (Listops.zip imports cached_ctxts)
-	  val _ = (chat "  [These imports were cached: ";
-		   chat_imports 4 cached;
+	  val uncached = List.mapPartial (fn (imp,(false,_)) => SOME imp
+	                                   | _ => NONE) (Listops.zip imports cached_ctxts)
+	  val _ = (chat "  [These imports were not cached: ";
+		   chat_imports 30 uncached;
 		   chat "]\n")
-	  val _ = if (lines > 1000) then flush_cache() else ()
-	  val _ = chat ("  [Adding contexts now]\n")
+
 	  val initial_ctxt = Elaborator.initial_context()
 	  val context = addContext (initial_ctxt :: ctxts)
+	  val _ = chat ("  [Added contexts.]\n")
       in  context
       end
 
@@ -323,7 +319,7 @@ struct
   fun elab_nonconstrained(unit,pre_ctxt,sourcefile,fp,dec,uiFile,least_new_time) =
       case Elaborator.elab_dec(pre_ctxt, fp, dec)
 	of SOME(new_ctxt, sbnd_entries) => 
-	    let val _ =      (chat ("[writing " ^ uiFile);
+	    let val _ =      (chat ("  [writing " ^ uiFile);
 			      writeContext (unit, new_ctxt);
 			      chat "]\n")
 	    in (new_ctxt,sbnd_entries)
@@ -383,10 +379,10 @@ struct
   in
 
      fun getImportTr use_imp unitname = 
-           getImportTr' use_imp false unitname []
+           getImportTr' use_imp false unitname [unitname]
 
      fun getImportTr_link unitname =
-           getImportTr' true true unitname []
+           getImportTr' true true unitname [unitname]
 
   end
 
@@ -447,12 +443,13 @@ struct
 	  val direct_imports_base = map get_base direct_imports
           val direct_imports_ui = map base2ui direct_imports_base
 
-          (* make sure all imports are fresh *)
-	  val _ = app (compile false) direct_imports
-
+	  (* Call getImportTr to obtain all imports, possibly detecting cycles *)
 	  val all_imports = getImportTr true unitname
 	  val all_imports_base = map get_base all_imports
 	  val all_imports_ui = map base2ui all_imports_base
+
+          (* make sure all imports are fresh *)
+	  val _ = app (compile false) direct_imports
 
 	  val smldate = modTime smlfile
 
@@ -529,7 +526,7 @@ struct
 	  val _ = if fresh
 		      then diag ("  [" ^ smlfile ^ " is up-to-date]\n")
 		  else (chat ("  [" ^ smlfile ^ " has imports: ");
-			chat_imports 4 all_imports;
+			chat_imports 30 all_imports;
 			chat "]\n";
 			compileSML'' (unitname, all_imports, make_uo);
                         diag "returning from compileSML'\n")
@@ -560,9 +557,13 @@ struct
 		  else ()
 	  val srcBase = get_base unit
 	  val smlfile = base2sml srcBase
-	  val _ = chat ("  [Parsing " ^ smlfile ^ "]\n")
+
+	  val ctxt = getContext imports
+
+	  val _ = chat ("\n  [Parsing " ^ smlfile ^ "]\n")
 	  val (lines,fp, _, dec) = Parser.parse_impl smlfile
-	  val ctxt = getContext(lines, imports)
+	  val _ = if (lines > 1000) then flush_cache() else ()
+
 	  val import_bases = map get_base imports
 	  val import_uis = List.map (fn x => (x, Linker.Crc.crc_of_file (x^".ui"))) import_bases
 	  val uiFile = srcBase ^ ".ui"
@@ -581,15 +582,6 @@ struct
 	      else let val _ = chat ("  [Elaborating " ^ smlfile ^ " non-constrained]\n")
 		   in elab_nonconstrained(unit,ctxt,smlfile,fp,dec,uiFile,Time.zeroTime)
 		   end
-
-(*
-	  val _ = if (lines>1000)
-		      then (print "Source has ";
-			    print (Int.toString lines);
-			    print " lines: doing GC\n";
-			    Specific.doGC 4)
-		  else ()
-*)
 
 	  val _ = (chat ("  [Compiling into " ^ oFile ^ " ...");
 		   Compiler.compile(ctxt, srcBase, sbnds, ctxt');  (* generates oFile *)
@@ -664,12 +656,12 @@ struct
 
                 val all_includes = getImportTr false unitname
 
-                val ctxt = getContext(0,all_includes)
+                val ctxt = getContext all_includes
 
 	        val (_,fp, _, specs) = Parser.parse_inter sourcefile
 
 	      in  (case Elaborator.elab_specs(ctxt, fp, specs) of
-		       SOME ctxt' => (chat ("  [writing " ^ uifile);
+		       SOME ctxt' => (chat ("  [Writing " ^ uifile);
                                       writeContext (unitname, ctxt');
                                       chat "]\n")
 		     | NONE => error("File " ^ sourcefile ^ 
@@ -743,8 +735,9 @@ struct
 
 
   (* linkopt - if present, names the file containing the concatenation of the generated .uo files
-     exeopt - if present, names the final executable 
-     srcs    - .int, .uo, or .sml filenames *)
+     exeopt  - if present, names the final executable 
+     srcs    - unit names *)
+
   fun compileThem(linkopt, exeopt, units) = 
       let val _ = app (compile true) units
 	  val tmp = OS.FileSys.tmpName()
@@ -855,9 +848,3 @@ struct
 
 end
 
-
-structure TM = Manager(structure Parser = LinkParse
-		       structure Elaborator = LinkIl
-		       structure Compiler = Til
-		       structure Linker = Linker
-		       structure Makedep = Makedep)

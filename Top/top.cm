@@ -7,10 +7,9 @@ Group is
 ../Backend/backend.cm
 ../Alpha/alpha.cm
 
-(*
 ../RtlToMLRISC/Alpha/Alpha.cm
 ../RtlToMLRISC/Sparc/Sparc.cm
-*)
+
 
 (*
 ../Ppc/ppc.cm
