@@ -1549,11 +1549,18 @@ struct
 			let
 			  val (tformals,(v,last_k)) = split tformals
 			  val (formals,last_c) = split formals
+			  val last_c = varConConSubst v cenv last_c
+			  val (last_c,_) = con_valid(D,last_c)
 			in
 			  if alpha_sub_kind (ckind,last_k) andalso
 			    alpha_equiv_con (vcon,last_c) 
 			    then
-			      AllArrow_c (Closure,effect,tformals,formals,numfloats,body_c)
+				let val tformals = map (fn (tv,c) => (tv,varConKindSubst v cenv c)) tformals
+				    val formals = map (varConConSubst v cenv) formals
+				    val body_c = varConConSubst v cenv body_c
+				    val almost_c = AllArrow_c (Closure,effect,tformals,formals,numfloats,body_c)
+				in  #1(con_valid(D,almost_c))
+				end
 			  else
 			    (perr_k_k (last_k,ckind);
 			     perr_c_c (last_c,vcon);
@@ -1566,6 +1573,8 @@ struct
 		   {code=code,cenv=cenv,venv=venv,tipe=tipe}
 		 else
 		   (perr_c_c (tipe,con);
+		    print "code_type is "; PpNil.pp_con code_type; print "\n";
+		    print "con is "; PpNil.pp_con con; print "\n";
 		    (error "Type error in closure" handle e => raise e))
 	       end
 	     
@@ -1732,7 +1741,7 @@ struct
 	      val (exp',con'') = exp_valid (D,exp)
 	    in
 	      if is_exn_con (con'') then
-		(exp',con')
+		(Raise_e(exp',con'),con')
 	      else
 		(perr_e_c (exp',con');
 		 (error "Non exception raised - Ill formed expression" handle e => raise e))
