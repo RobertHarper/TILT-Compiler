@@ -1,0 +1,36 @@
+Number: 0083
+Title:       Backend liveness analysis is too conservative.
+Keywords:    tracing, GC, backend
+Submitter:   Leaf Petersen <leaf+@cs.cmu.edu>
+Date:        8/8/02
+Version:     CVS
+System:	     any
+Severity:    minor
+Problem:
+	This one is interesting, but probably low priority even if it still exists.
+
+	(3) backend liveness analysis is too conservative
+	        We recently fixed a backend bug where liveness analysis was not taking
+	        COMPUTE's into account, so that a variable could be live long after
+	        its type was considered dead; when the type was needed to GC this
+	        variable, the program crashed.
+
+	        The fix was to ensure that the type was always live whenever the
+	        variable was, by defining the pseudoregisters used by an instruction
+	        to include the variables in the representation of the
+	        pseudoregisters used.
+
+	        This is too conservative; we don't need to keep the type live
+	        if we know the variable will not be live across a function or
+	        GC call.  A better fix is to undo this last change to defUse
+	        and instead define function/GC calls to be uses of the types
+	        of all variables live across the call.
+
+Code:
+Transcript:
+Comments:
+	[Dave] This is from the old buglist.  It may no longer exist.
+Fix:
+Test:
+Owner:
+Status: open
