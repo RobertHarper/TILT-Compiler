@@ -165,6 +165,12 @@ struct
     in make_record_core_with_tag (const,state,tagword,terms,labopt)
     end
 
+  fun propogate_void l = 
+    (case l
+       of [] => NONE
+	| ((VALUE (VOID _))::_) => SOME (VALUE(VOID Rtl.TRACE))
+	| (_::rest) => propogate_void rest)
+
   fun make_record_help (const, state, reps, [], _) = (empty_record, state)
     | make_record_help (const, state, reps, terms, labopt) =
       let fun loop (state,reps,terms,labopt) =
@@ -178,16 +184,17 @@ struct
 		   val reps = reps1 @ [TRACE]
 	       in  make_record_core(const,state, map term2rep terms, terms, labopt)
 	       end
-	  fun check [] = loop (state,reps,terms,labopt)
-	    | check ((VALUE (VOID _))::_) = (VALUE(VOID Rtl.TRACE), state)
-	    | check (_::rest) = check rest
-      in   check terms
+      in case propogate_void terms
+	   of SOME v => (v,state)
+	    | NONE => loop (state,reps,terms,labopt)
       end
 
   fun make_record_help_with_tag (const,state,tagword,[],_) = (empty_record, state)
     | make_record_help_with_tag (const,state,tagword,terms,labopt) =
     if length terms < maxRtlRecord then 
-      make_record_core_with_tag (const,state,tagword,terms,labopt)
+      case propogate_void terms
+	of SOME v => (v,state)
+	 | NONE => make_record_core_with_tag (const,state,tagword,terms,labopt)
     else (* The precomputed tag is worthless; just do it the hard way. *) 
       make_record_help (const,state,map term2rep terms,terms,labopt)
 
