@@ -366,7 +366,12 @@ struct
 
 	and do_bnd (bnd : bnd) : bnd list =
 	  	(case bnd of
-		     Exp_b(v,traceinfo,e) => [Exp_b(v,traceinfo,do_exp e)]
+		     Exp_b(v,traceinfo,e) => 
+			 (case e of 
+			      (* XXX: May break if we go allow both
+                                 Sequential and Parallel bnds *)
+			      Let_e(Sequential,bnds,body) => bnds @ [Exp_b(v,traceinfo,body)]
+			    | _ => [Exp_b(v,traceinfo,e)])
 		   | Con_b(v,c) => [bnd]
 		   | Fixopen_b vfset =>
 		      let val vflist = (Sequence.toList vfset)
