@@ -33,8 +33,12 @@ Transcript:
 
 The code passes the elaborator, but bombs in the phase-splitter.
 
-Comments:    
-Fix:         
-Test: *
-Owner: *
-Status: open
+Comments:
+Fix:
+
+	When shadowing a convar's label, we also change its equality
+	function's label.
+
+Test: bug154
+Owner: swasey
+Status: closed
