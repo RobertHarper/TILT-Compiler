@@ -50,17 +50,36 @@ structure Render : RENDER =
 	      | Cylinder (name, m4, _) => cylinder(m4,src,dir)
 	      | _ => raise (Error "primIntersect for non-primitive object"))
 
+    fun getIntersects viewerPos dir scene = 
+	let val intersects = foldl (fn (obj,acc) => (primIntersect viewerPos dir obj) @ acc) [] scene
+	    fun greater ((_,_,{dist=d1,...}:l3info),
+			 (_,_,{dist=d2,...}:l3info)) = d1 > d2
+	    val intersects = ListMergeSort.sort greater intersects
+	in intersects
+	end
+
     fun shadowed (hit, dir, []) = false
       | shadowed (hit, dir, obj::rest) = (primHit hit dir obj) orelse (shadowed (hit, dir, rest))
 
     (* Diffuse intensity and Specular intensity *)
     fun castShadow (hit, scene, incident, N, n) light : v3 * v3 = 
-	let val Lj = Light.toLight (hit, light)  
-	in  if (shadowed(hit, Lj, scene))
+	let val (Lj, Ldist) = Light.toLight (hit, light)  
+	    val intersects = getIntersects hit Lj scene
+	    val shadowed = (case intersects of
+				[] => false
+			      | (_,_,{hit,dist,u,v,face,N})::_ => dist < Ldist)
+	in  if shadowed
 		then (black, black)
-	    else let val Ij = Light.illuminate(light, hit, Lj)
+	    else let 
+		     val Ij = Light.illuminate(light, hit, Lj)
 		     val Hj = halfway(Lj, incident)
-		 in  (scale(dp(N,Lj), Ij), scale(Math.pow(dp(N,Hj),n), Ij))
+		     val diffuse = scale(dp(N,Lj), Ij)
+		     val spec = scale(Math.pow(dp(N,Hj),n), Ij)
+(*
+		     val _ = (print "castShadow can find light    N = "; printV3 N; print "  Lj = "; printV3 Lj; print "\n")
+		     val _ = (print "           Ij = "; printV3 Ij; print "  diffuse = "; printV3 diffuse; print "\n")
+*)
+		 in  (diffuse, spec)
 		 end
 	end
 
@@ -72,10 +91,7 @@ structure Render : RENDER =
 	    val _ = if (!chat >= 2)
 			then (print "Casting in direction "; printV3 dir; print "\n") 
 		    else ()
-	    val intersects = foldl (fn (obj,acc) => (primIntersect viewerPos dir obj) @ acc) [] scene
-	    fun greater ((_,_,{dist=d1,...}:l3info),
-			 (_,_,{dist=d2,...}:l3info)) = d1 > d2
-	    val intersects = ListMergeSort.sort greater intersects
+	    val intersects = getIntersects viewerPos dir scene
 	    val _ = if (!chat >= 2)
 			then for (0, (length intersects),
 				  fn i => let val intersect = List.nth(intersects, i)
@@ -91,19 +107,25 @@ structure Render : RENDER =
 	    else let val (t, name, {u,v,face,N,hit,dist}) = hd intersects
 		     (* Surface properties *)
 		     val (C : Base.color, kd, ks, n) = apply(t,face,u,v)
+		     (* Direct contribution of light sources *)
+		     val (diffuses, speculars) = ListPair.unzip (map (castShadow (hit,scene,negate dir,N,n)) lights)
+		     val diffuse = foldl add black diffuses
+		     val finalDiffuse = mult(scale(kd, diffuse),C)
+		     val specular = foldl add black speculars 
 		     (* Recursive reflection *)
 		     val incident = negate dir
 		     val S = reverseHalfway (incident, N)
 		     val Is = cast(apply, Ia, hit, S, scene, lights, depth - 1)
-		     (* Direct contribution of light sources *)
-		     val (diffuses, speculars) = ListPair.unzip (map (castShadow (hit,scene,negate dir,N,n)) lights)
-		     val diffuse = foldl add black diffuses
-		     val specular = foldl add black speculars 
 		     (* Combine terms *)
-		 in  add(mult(scale(kd, Ia), C),
-			 add(mult(scale(kd, diffuse),C),
-			     add(mult(scale(ks,specular),C),
-				 mult(scale(ks, Is), C))))
+		     val finalIntensity = add(mult(scale(kd, Ia), C),
+					      add(finalDiffuse, 
+						  add(mult(scale(ks,specular),C),
+						      mult(scale(ks, Is), C))))
+(*
+		     val _ = (print "finalDiffuse is "; printV3 finalDiffuse; print "\n")
+		     val _ = (print "finalIntensity is "; printV3 finalIntensity; print "\n")
+*)
+		 in  finalIntensity
 		 end
 	end
 

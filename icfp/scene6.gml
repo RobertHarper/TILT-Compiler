@@ -3,6 +3,9 @@
 
 { /x x x } /dup
 
+1.0 0.0 0.0 point /red
+0.0 1.0 0.0 point /green
+
 0.0 0.0 1.0 point /blue1
 1.0 0.0 0.0 point /red1
 
@@ -21,8 +24,10 @@
 1.0 1.0 1.0 point /red6
 0.0 1.0 0.0 point /blue6
 
-0.8  0.8  0.8  point   % ambient light
-[ ]   % lights (none!)
+0.4  0.4  0.4  point   % ambient light
+[-3.0 0.0 1.0 point red light 
+ 100.0 0.0 1.0 point green light 
+] % light sources
 
 [
  [ red1 blue1 ]
@@ -47,7 +52,7 @@
   1.0
 } cube
 
-1.2 3.0 0.8 scale
+1.5 3.0 1.0 scale
 
 27.0 rotatex
 34.0 rotatey

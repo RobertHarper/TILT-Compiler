@@ -15,9 +15,12 @@ struct
     exception Ppm of string
 	
     fun colortorgb (r, g, b) =
-	(Word8.fromInt (Real.round(r * 255.0)),
-	 Word8.fromInt (Real.round(g * 255.0)),
-	 Word8.fromInt (Real.round(b * 255.0)))
+	let fun convert x = 
+	    let val x = Real.round(x * 255.0)
+	    in  Word8.fromInt(Int.min(255, x))
+	    end
+	in  (convert r, convert g, convert b)
+	end
 
     fun ppm (height, width) =
 	Array2.array (height, width, black)

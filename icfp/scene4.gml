@@ -21,7 +21,7 @@
 1.0 1.0 1.0 point /red6
 0.0 1.0 0.0 point /blue6
 
-0.8  0.8  0.8  point   % ambient light
+0.5  0.5  0.5  point   % ambient light
 [ ]   % lights (none!)
 
 { 
@@ -55,23 +55,26 @@
   1.0
 } cube
 
-1.2 1.5 0.8 scale
+2.5 uscale
+-1.0 -1.0 -1.0 translate
 
-27.0 rotatex
-34.0 rotatey
--7.0 rotatez
+/box
 
-0.0 0.0 5.0 translate
+box
+45.0 rotatex
+45.0 rotatey
+45.0 rotatez
+0.0 0.0 2.0 translate
 
 % transform here to look around
 
 
 % final params to render:
 
-3     % depth
+1     % depth
 90.0  % fov
-320   % width
-200   % height
+200   % width
+150   % height
 "scene4.ppm"   % file output
 
 render

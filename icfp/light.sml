@@ -4,12 +4,13 @@ structure Light =
 	open Base
 	open Vect
 	val black = (0.0, 0.0, 0.0)
+	val realInf = 1.0 / 0.0
 
 	fun toLight (src, light) = 
 	    (case light of
-		 Sunlight (dir, _) => dir
-	       | Pointlight (pos, _) => makeDir(src, pos)
-	       | Spotlight {pos, ...} => makeDir(src, pos))
+		 Sunlight (dir, _) => (dir, realInf)
+	       | Pointlight (pos, _) => (makeDir(src, pos), distance(src, pos))  (* Can optimize this *)
+	       | Spotlight {pos, ...} => (makeDir(src, pos), distance(src, pos)))
 
 	fun attenuate d = 100.0 / (99.0 + d * d)
 

@@ -47,9 +47,9 @@ structure Intersect : INTERSECT =
 	    val D = dp(N, newOrigin)
 	    val numerator = D - dp(N, src0)
 	    val denominator = dp(N, dir0)
+
 (*
 	    val _ = (print "\n--newOrigin = "; printV3 newOrigin;
-		     print "\n  newNormalPoint= "; printV3 newNormalPoint;
 		     print "\n  N = "; printV3 N;
 		     print "\n  D = "; printR D;
 		     print "  num = "; printR numerator;
@@ -205,6 +205,7 @@ structure Intersect : INTERSECT =
 		            (doFace(right, 3)) @ 
 			    (doFace(top, 4)) @ 
 		            (doFace(bottom, 5)) 
+
 	      in  res
 	      end
 	  val l3 = memoize l3

@@ -14,6 +14,7 @@
 0.0 1.0 0.0 point /green
 0.0 0.0 1.0 point /blue
 1.0 1.0 0.0 point /yellow
+1.0 1.0 1.0 point /white
 
 % this function takes a color and returns a surfaceparm fun
 
@@ -23,8 +24,8 @@
 
 % defs are done; the scene:
 
-0.5  0.5  0.5  point   % ambient light
-[ ]   % lights (none!)
+0.3  0.3  0.3  point   % ambient light
+[5.0 0.0 -1.0 point 0.4 0.4 0.4 point light ] % light sources
 
 % wall facing us (z=0), push back
 red solid-color apply plane 
@@ -56,8 +57,8 @@ union
 
 1     % depth
 90.0  % fov
-100   % width
-100   % height
+50   % width
+50   % height
 "scene1.ppm"   % file output
 
 render
