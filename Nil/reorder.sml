@@ -1,5 +1,9 @@
 (*$import Nil NilUtil Stats Name Util Sequence TraceOps Listops Ppnil NilDefs *)
 
+(* Reorder term-level bindings to allow operations that require memory allocation to be coalesced *)
+
+(* This phase is not currently being used *)
+
 structure Reorder = 
 struct
     open Prim Nil
@@ -62,7 +66,7 @@ struct
 
     datatype movability = Movable | Immovable
 
-    fun mergeMovabilities (Movable, Movable) = Movable 
+*    fun mergeMovabilities (Movable, Movable) = Movable 
       | mergeMovabilities _ = Immovable
 
     (************************************************************************
@@ -305,7 +309,7 @@ struct
 	  in
 	      (exp, vset, category, movability)
 	  end
-	       
+
     and rexps ([], _) = ([], VS.empty, OTHER, Movable)
       | rexps (exp::exps, env) = 
 	let
@@ -492,6 +496,9 @@ struct
 		(case default of
 		     (* if there's no default, the match might fail
 		      and so this switch is potentially side-effecting *)
+		     (* But if the elaborator and other parts of the compiler prevent that from being possible, then
+		      * this code could needlessly block optimizations.
+		      *)
 		     NONE => (NONE, VS.empty, OTHER, Immovable)
 		   | SOME arm => rexpopt (default, env))
 
@@ -649,7 +656,7 @@ struct
 	in
 	    (Code_cb(var, vklist, cbody), vset, ALLOCATE)
 	end
-	     
+
     and rcbnds ([], _) = ([], VS.empty, OTHER)
       | rcbnds (cbnd::cbnds, env) =
 	let
@@ -809,13 +816,19 @@ struct
 		    val (bnd, bnd_vset, bnd_category, bnd_movability) = rbnd(bnd, env)
 		    val newvars = NilUtil.varsBoundByBnds [bnd]
 		    val boundvars = VS.addList(boundvars, newvars)
+		                    (* add to the running list of variables bound in this sequence *)
                     val outer_vset = VS.difference(bnd_vset, boundvars)
+		                     (* find free variables in the current binding not bound in this sequence *)
 		    val local_vset = VS.intersection(bnd_vset, boundvars)
+			             (* find free variables in the current binding bound in this sequence *)
 		    val env = makeInteresting (env, newvars)
 		    val (anss, bnds_boundvars, bnds_outer_vset,
 			 bnds_category, bnds_movability) = 
 			loop (bnds, env, boundvars)
 		    val ans = (bnd, local_vset, bnd_category, bnd_movability)
+			(* Entry for this binding: the binding itself, which local variables appear free, and its
+			 * category and movability.
+			 *)
 		in
 		    (ans::anss, boundvars,
 		     VS.union(outer_vset, bnds_outer_vset),
@@ -826,6 +839,7 @@ struct
 	    val (unsorted_answer, boundvars, bnds_outer_vset,
 		 bnds_category, bnds_movability) = loop (bnds, env, VS.empty)
 
+	    (* Count how many times we switch between allocate and apply modes *)
 	    fun countAlternations ([], _, alts) = alts
 (*
 		 (* If there is at least one alternation then nothing
@@ -844,6 +858,7 @@ struct
 	    val alternations_before = 
 		countAlternations (unsorted_answer, OTHER, 0)
 
+	    (* Divide bindings by category/movability *)
 	    fun split ([], rev_immovable, rev_apply, rev_allocate, rev_other) =
 		(rev rev_immovable, rev rev_apply, 
 		 rev rev_allocate, rev rev_other)
@@ -887,12 +902,12 @@ struct
 		   let
 		       val vset = VS.difference (vset, alreadybound_vset)
 		   in
-		       if (VS.numItems vset = 0) then
+		       if (VS.numItems vset = 0) then (* no free variables have not already been processed in this loop *)
 			   pickValidDepSet (rest, VS.addList(alreadybound_vset,
 							     NilUtil.varsBoundByBnds 
 							     [bnd]),
 					    stuff :: rev_bnds, rev_keep)
-		       else
+		       else (* Defer this binding for later *)
 			   pickValidDepSet (rest, alreadybound_vset,
 					    rev_bnds, 
 					    (bnd, vset, category, movability) :: rev_keep)
@@ -922,6 +937,7 @@ struct
 			   (alreadybound_vset, rev rev_bnds, bindings)
 		   end
 
+	    (* Extract as many other/allocate bindings as possible, and then continue in the appopriate mode *)
 	    fun allocateMode(alreadybound_vset, [], [], [], []) = []
               | allocateMode(alreadybound_vset, immovables, applies, allocates, others) =
 		let
@@ -943,6 +959,7 @@ struct
 						 applies, allocates, others)
 		end
 
+	    (* Extract as many other/apply bindings as possible, and then continue in the appropriate mode *)
 	    and applyMode(alreadybound_vset, [], [], [], []) = []
               | applyMode(alreadybound_vset, immovables, applies, allocates, others) =
 		let
@@ -985,6 +1002,7 @@ struct
               | doit ((bnd,_,_,_)::rest) = doit rest
 *)
 
+            (* Extract the bindings with minimal alternation while still preserving dependency order *)
 	    fun doit _ = 
 		   allocateMode(VS.empty, immovables, applies, allocates, others)
 
