@@ -14,6 +14,7 @@ sig
     val mapfileToPs  : string -> string
     val ilToUnself : string -> string
     val fileToBackup : string -> string
+    val exeToProf : string -> string
 	
     type unit_paths
     (* Invariant: If p = sourceUnitPaths{unit,file} and file is

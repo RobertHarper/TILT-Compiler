@@ -22,6 +22,7 @@ struct
     fun mapfileToPs mapfile = joinBaseExt (mapfile, "ps")
     fun ilToUnself il = joinBaseExt (il, "unself")
     fun fileToBackup file = joinBaseExt (file, "BACKUP")
+    fun exeToProf file = joinBaseExt (file, "prof")
 
     datatype unit_paths = SOURCE of {unit : string, file : string}
 
