@@ -1,50 +1,84 @@
-// include the basis and NJ library
-#include    ../Basis/Library/mapfile
+import group "../Basis/Library/mapfile"
 
-// ------------ Util directory --------------
+source unit EQUIV = "equiv.sig.sml" {}
+source unit Equiv = "equiv.sml" {EQUIV ORD_MAP URef}
 
-UTIL_ERROR util-error.sig.sml
-UtilError util-error.sml
+source unit UTIL_ERROR = "util-error.sig.sml" {}
+source unit UtilError = "util-error.sml" {UTIL_ERROR TextIO}
 
-PLATFORM platform.sig.sml
-Platform platform.sml
+source unit PLATFORM = "platform.sig.sml" {Word32}
+source unit Platform = "platform.sml" {
+	PLATFORM List Real Int Time Word32 UtilError String OS Posix
+}
 
-UTIL util.sig.sml
-Util util.sml
+source unit UTIL = "util.sig.sml" {ORD_MAP ORD_SET}
+source unit Util = "util.sml" {
+	Array String UtilError Platform UTIL OS TextIO SplayMapFn
+	SplaySetFn ORD_MAP ORD_SET
+}
 
-LISTOPS listops.sig.sml
-Listops listops.sml
+source unit LISTOPS = "listops.sig.sml" {}
+source unit Listops = "listops.sml" {
+	LISTOPS List Util ListPair Substring StringCvt Int
+}
 
-SEQUENCE sequence.sig.sml
-Sequence sequence.sml
+source unit SEQUENCE = "sequence.sig.sml" {}
+source unit Sequence = "sequence.sml" {
+	Util SEQUENCE Listops List
+}
 
-STATS stats.sig.sml
-Stats stats.sml
+source unit STATS = "stats.sig.sml" {}
+source interface Stats = "stats.int" {STATS}
+source unit Stats : Stats = "stats.sml" {
+	List Int Real Bool String StringCvt Time Util STATS Timer Listops
+	Date ListMergeSort
+}
 
-Timestamp timestamp.sml
+source unit Timestamp = "timestamp.sml" {
+	Stats Time Timer Real Int
+}
 
-TILWORD tilword.sig.sml
-TilWord32 tilword32-native.sml
-TilWord64 tilword64.sml
+source unit TILWORD = "tilword.sig.sml" {Word32}
+source unit TilWord32 = "tilword32-native.sml" {
+	TILWORD Word32 Util Char Listops String
+}
+source unit TilWord64 = "tilword64.sml" {
+	TILWORD TilWord32 Util Char String
+}
 
-FORMATTER formatter.sig.sml
-Formatter formatter.sml
+source unit FORMATTER = "formatter.sig.sml" {TextIO}
+source unit Formatter = "formatter.sml" {
+	Util Int TextIO FORMATTER Listops Stats
+}
 
-BINIOUTIL bin_io_util.sig.sml
-BinIoUtil bin_io_util.sml
+source unit BINIOUTIL = "bin_io_util.sig.sml" {BinIO}
+source unit BinIoUtil = "bin_io_util.sml" {
+	Word8 Word8Vector BINIOUTIL BinIO Char
+}
 
-CRC crc.sig.sml
-Crc crc-native.sml
+source unit BLASTER = "blast.sig.sml" {Word8 Word32 TilWord64}
+source interface BLASTER = "blast.int" {BLASTER}
+source unit Blaster : BLASTER = "blast.sml" {
+	BLASTER BinIO Util TilWord64 Word8Vector Word8 Word32 Int String
+	IntListMap Option HashTableFn HashString Stats Byte
+}
 
-GRAPH graph.sig.sml
-Graph graph.sml
+source unit CRC = "crc.sig.sml" {Blaster}
+source unit Crc = "crc-native.sml" {
+	Word8 String Byte Option Word32 Array Vector Word8Vector
+	CharVector CRC Char Blaster BinIO CharArray BinIoUtil Blaster Util
+}
 
-GRAPHUTIL graphutil.sig.sml
-GraphUtil graphutil.sml
+source unit GRAPH = "graph.sig.sml" {TextIO}
+source unit Graph = "graph.sml" {
+	GRAPH Int TextIO String List Array Util HashString HashTableFn
+	ORD_MAP UTIL
+}
 
-Blaster  blast.sml
+source unit GRAPHUTIL = "graphutil.sig.sml" {}
+source unit GraphUtil = "graphutil.sml" {
+	GRAPHUTIL List Array
+}
+source unit Specific = "specific-til.sml" {}
 
-Specific specific-til.sml
-
-Trace trace.sml
-
+source unit Trace = "trace.sml" {Int Time List}

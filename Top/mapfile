@@ -1,72 +1,128 @@
-#include ../Backend/mapfile
+import group "../Basis/Library/mapfile"
+include group "../Util/mapfile-util"
+include group "../Parser/mapfile-parse"
+include group "../Elaborator/mapfile-elaborate"
+include group "../Nil/mapfile-nil"
+include group "../Rtl/mapfile-rtl"
+include group "../Backend/mapfile"
+include group "../Alpha/mapfile"
+include group "../Sparc/mapfile"
 
-// ----------------- Alpha directory -----------------
-DECALPHA           ../Alpha/decalpha.sig.sml
-DecAlpha           ../Alpha/decalpha.sml
-DecAlphaUtils      ../Alpha/decalphautils.sml
-CallConv           ../Alpha/callconv.sml
-DIVMULT            ../Alpha/divmult.sig.sml
-DivMult            ../Alpha/divmult.sml
-ToAlpha            ../Alpha/toalpha.sml
-TrackStorage       ../Alpha/trackstorage.sml
-Linkalpha          ../Alpha/linkalpha.sml
+source unit ExtSyn = "extsyn.sml" {}
+source unit Group_TOKENS = "group.grm.sig" {YaccBase}
+source unit GroupLrValsFun = "group.grm.sml" {
+	YaccBase Group_TOKENS ExtSyn Char String Array
+}
+source unit GroupLexFun = "group.lex.sml" {
+	Group_TOKENS ExtSyn List Char Vector String
+}
+source unit TARGET = "target.sig.sml" {Blaster}
+source unit Target = "target.sml" {
+	TARGET Stats Word32 Util Platform Linkrtl Core Blaster
+}
+source unit PATHS = "paths.sig.sml" {Blaster}
+source unit Paths = "paths.sml" {PATHS Target OS Blaster Util}
+source unit FILE = "file.sig.sml" {Blaster}
+source interface FILE = "file.int" {FILE}
+source unit File : FILE = "file.sml" {
+       FILE Util OS List BinIO Blaster Word8Vector Paths
+}
+source unit POPEN = "popen.sig.sml" {}
+source unit Popen = "popen.sml" {POPEN TextIO OS Util}
+source unit DIRS = "dirs.sig.sml" {OS}
+source unit Dirs = "dirs.sml" {OS DIRS Util String Paths File}
+source unit FILECACHE = "filecache.sig.sml" {Time Crc}
+source unit FileCache = "filecache.sml" {Util Time Crc FILECACHE OS}
+source unit TOOLS = "tools.sig.sml" {}
+source unit Tools = "tools.sml" {
+	String List TOOLS Util Stats OS Dirs Target Popen Listops Paths
+}
+source unit UNIT_ENVIRONMENT = "ue.sig.sml" {Crc Blaster}
+source unit UnitEnvironment = "ue.sml" {UNIT_ENVIRONMENT Crc Blaster Util}
+source unit INFO = "info.sig.sml" {Crc Blaster UnitEnvironment}
+source unit Info = "info.sml" {INFO Crc Blaster Util UnitEnvironment}
+source unit COMPILER = "compiler.sig.sml" {FILECACHE UnitEnvironment Info}
+source interface Compiler = "compiler.int" {COMPILER}
+source unit Compiler : Compiler = "compiler.sml" {
+	Int Name Time Real COMPILER LinkParse LinkIl Nil Linknil Rtl
+	Linkrtl Linkalpha Linksparc Target FileCache Stats Timestamp
+	Info UnitEnvironment File Util Blaster Crc List Il
+}
+source unit GROUP = "group.sig.sml" {ExtSyn Name}
+source interface GROUP = "group.int" {GROUP}
+source unit Group : GROUP = "group.sml" {
+	GROUP ExtSyn Name Util Int String Bool Word TextIO Listops
+	Option OS Join LrParser GroupLrValsFun GroupLexFun Stats
+	File SplayMapFn Compiler UnitEnvironment IO
+}
+source unit PRELINK = "prelink.sig.sml" {Crc UnitEnvironment}
+source unit Prelink = "prelink.sml" {
+	Stats PRELINK Crc Util UnitEnvironment
+}
+source unit UPDATE = "update.sig.sml" {
+	Compiler Crc Paths ExtSyn Blaster Name UnitEnvironment
+}
+source interface UPDATE = "update.int" {UPDATE}
+source unit Update : UPDATE = "update.sml" {
+	UPDATE Compiler Crc Paths ExtSyn Blaster Stats Timestamp Util
+	List Info Name UnitEnvironment TilWord64 Listops Option Int
+	Prelink Tools Target File String Group
+}
+source unit COMMUNICATION = "communication.sig.sml" {
+	Paths Target Update Compiler
+}
+source unit Communication = "communication.sml" {
+	Util Update String Posix Int Word32 Stats COMMUNICATION OS
+	List Platform Dirs Target Tools Queue Linknil Blaster
+	BinIO
+}
+source unit STATISTICS = "statistics.sig.sml" {}
+source unit Statistics = "statistics.sml" {
+	STATISTICS Vector Real Math
+}
+source unit EXN_HANDLER = "exnhandler.sig.sml" {}
+source interface EXN_HANDLER = "exnhandler.int" {EXN_HANDLER}
+source unit ExnHandler : EXN_HANDLER = "exnhandler.sml" {
+	Compiler Group UtilError TextIO Posix EXN_HANDLER Stats Word8
+}
+source unit BACKGROUND = "background.sig.sml" {}
+source unit Background = "background.sml" {
+	BACKGROUND Posix Word8 SysWord UtilError TextIO Option Int OS
+	Util Stats ExnHandler
+}
+source unit MASTER = "master.sig.sml" {Time}
+source unit Master = "master.sml" {
+	Util Stats Update Time GRAPH Graph Compiler Real Vector String
+	Int Listops SplayMapFn ListMergeSort MASTER Communication
+	Background List Platform Target Paths Statistics
+	ExtSyn UnitEnvironment Name Word HashTableFn EQUIV Equiv Crc
+	Group Option Formatter Date
+}
+source unit SLAVE = "slave.sig.sml" {Communication}
+source unit Slave = "slave.sml" {
+	Util Time Stats SLAVE Update Communication Platform Target
+	Name ExnHandler
+}
+source unit MANAGER = "manager.sig.sml" {}
+source interface Manager = "manager.int" {MANAGER}
+source unit Manager : Manager = "manager.sml" {
+	Util Stats Dirs String Int MANAGER Slave Compiler OS
+	Master MASTER Option ExnHandler Tools Normalize Specialize
+	NilStatic Inline Hoist IlContext ToNil LinkIl Update Linkalpha
+	Linksparc Linkrtl Linknil LinkParse List ExtSyn
+}
+source unit GETOPT = "getopt.sig.sml" {}
+source unit Getopt = "getopt.sml" {
+	GETOPT String Char List
+}
+source unit MAIN = "main.sig.sml" {OS}
+source unit Main = "main.sml" {
+	List String Int OS MAIN Manager Stats Getopt Dirs Target
+	Compiler ExnHandler
+}
+source unit RUN = "run.sig.sml" {OS}
+source unit Run = "run.sml" {Posix Word8 OS RUN CommandLine}
+source unit Top = "top.sml" {Run Main}
+make executable "../Bin/" ^ $target ^ "/tilt" {Top}
 
-// ----------------- Sparc directory -----------------
-SPARC              ../Sparc/sparc.sig.sml
-Sparc              ../Sparc/sparc.sml
-SparcUtils         ../Sparc/sparcutils.sml
-SparcCallConv      ../Sparc/sparccallconv.sml
-SparcTrackStorage  ../Sparc/sparctrackstorage.sml
-ToSparc            ../Sparc/tosparc.sml
-Linksparc          ../Sparc/linksparc.sml
-
-
-// ----------------- Top directory -----------------
-TARGET     target.sig.sml
-Target     target.sml
-TopHelp     tophelp.sml
-PATHS     paths.sig.sml
-Paths     paths.sml
-BACKGROUND     background.sig.sml
-Background     background.sml
-DELAY     delay.sig.sml
-Delay     delay.sml
-POPEN     popen.sig.sml
-Popen     popen.sml
-DIRS     dirs.sig.sml
-Dirs     dirs.sml
-FILECACHE     filecache.sig.sml
-FileCache     filecache.sml
-TOOLS     tools.sig.sml
-Tools     tools.sml
-COMPILER     compiler.sig.sml
-Compiler     compiler.sml
-UNIT_ENVIRONMENT     ue.sig.sml
-UnitEnvironment     ue.sml
-PRELINK     prelink.sig.sml
-Prelink     prelink.sml
-INFO     info.sig.sml
-Info     info.sml
-UPDATE_HELP     updatehelp.sig.sml
-UpdateHelp     updatehelp.sml
-UPDATE     update.sig.sml
-Update     update.sml
-COMMUNICATION     communication.sig.sml
-Communication     communication.sml
-STATISTICS     statistics.sig.sml
-Statistics     statistics.sml
-MASTER     master.sig.sml
-Master     master.sml
-SLAVE     slave.sig.sml
-Slave     slave.sml
-MANAGER     manager.sig.sml
-Manager     manager.sml
-GETOPT     getopt.sig.sml
-Getopt     getopt.sml
-MAIN     main.sig.sml
-Main     main.sml
-RUN     run.sig.sml
-Run     run.sml
-Top     top.sml TARGET
-
-// Dumpil     dumpil TARGET
+(* Dumpil     dumpil TARGET *)
