@@ -1,4 +1,4 @@
-(*$import TopLevel Util STATS Timer Listops *)
+(*$import TopLevel Util STATS Timer Listops Date *)
 
 structure Stats :> STATS =
    struct
@@ -158,7 +158,8 @@ structure Stats :> STATS =
 		       fprint 8 (real2string ((Real.fromInt lines) / total_real));
 		       print "\n")
 		 else ()
-	     end
+	     end;
+	     print (Date.toString(Date.fromTimeUniv(Time.now())))
 	 end
 
       fun print_counters() = 
