@@ -645,9 +645,25 @@ structure Machine =
 		 NONE => error "no Rpv for Alpha"
 	       | SOME x => x)
 
-   fun allocate_stack_frame (sz, prevframe_maxoffset) = if (sz >= 0)
-							    then [SPECIFIC(LOADI(LDA, Rsp, ~sz, Rsp))]
-							else error "allocate_stackptr given negative stack size"
+   fun allocate_stack_frame (sz, prevframe_maxoffset) =
+       if (sz >= 0) then
+	   let
+	       val after = freshCodeLabel()
+	   in [SPECIFIC (LOADI (LDA, Rsp, ~sz, Rsp)),
+	       SPECIFIC (LOADI (LDL, Rat, stackLimit_disp, Rth)),
+	       SPECIFIC (INTOP (CMPULE, Rsp, REGop Rat, Rat)),
+	       SPECIFIC (CBRANCHI (BEQ, Rat, after)),
+	       SPECIFIC (LOADI (LDA, Rsp, sz, Rsp)),	(* Restore stack pointer to original value *)
+	       SPECIFIC (LOADI (LDA, Rat, prevframe_maxoffset, Rzero)),
+	       BASE (MOVE (Rra, Rat2)),
+	       BASE (BSR (Rtl.ML_EXTERN_LABEL ("NewStackletFromML"), NONE,
+			  {regs_modified=[Rat], regs_destroyed=[Rat],
+			   args=[Rat]})),
+	       SPECIFIC (LOADI (LDA, Rsp, ~sz, Rsp)),	(* Reallocate frame on new stacklet *)
+	       BASE (ILABEL after)]
+	   end
+       else error "allocate_stackptr given negative stack size"
+	   
    fun deallocate_stack_frame sz = if (sz >= 0)
 				    then [SPECIFIC(LOADI(LDA, Rsp, sz, Rsp))]
 				else error "deallocate_stackptr given negative stack size"
