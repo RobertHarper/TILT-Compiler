@@ -2267,7 +2267,10 @@ end (* local defining splitting context *)
 
 	   val kill_con = is_poly andalso (! elaborator_specific_optimizations)
 
-       in  {crdecs = ((lbl, var_c), knd) :: crdecs,
+       in  {crdecs = if kill_con then
+                          crdecs
+                     else
+                          ((lbl, var_c), knd) :: crdecs,
 	    erdecs = (lbl,var_r,substConInCon subst con) :: erdecs}
        end
 
