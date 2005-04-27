@@ -3,12 +3,11 @@
 #include "s.h"
 #include "r.h"
 
-/*int*/cresult
-posix_process_fork(unit unused)
+int
+posix_process_fork(cerr er)
 {
 	pid_t pid = fork();
 	if(pid == (pid_t)-1)
-		return Error(SysErr(errno));
-	else
-		return Normal(pid);
+		send_errno(er,errno);
+	return pid;
 }

@@ -1,0 +1,17 @@
+type uct
+type cerr
+
+val ccall0 : (cerr,'r) -->
+	-> unit -> 'r
+	
+val ccall1 : (cerr,'a,'r) -->
+	-> 'a -> 'r
+	
+val ccall2 : (cerr,'a,'b,'r) -->
+	-> 'a * 'b -> 'r
+	
+val ccall3 : (cerr,'a,'b,'c,'r) -->
+	-> 'a * 'b * 'c -> 'r
+	
+val ccall4 : (cerr,'a,'b,'c,'d,'r) -->
+	-> 'a * 'b * 'c * 'd -> 'r

@@ -20,10 +20,8 @@ end
 structure PrePosix :> PRE_POSIX =
 struct
 
-    fun ccall (f : ('a, 'b cresult) -->, a:'a) : 'b =
-	(case (Ccall(f,a)) of
-	    Normal r => r
-	|   Error e => raise e)
+    val omode : string -> word = ccall1 pre_posix_omode
+    val sysconf : string -> word = ccall1 pre_posix_sysconf
 
     datatype uid = UID of word
     datatype gid = GID of word
@@ -35,11 +33,9 @@ struct
     fun gidToWord (GID i) = i
     fun wordToGid i = GID i
 
-    fun w_osval (str : string) : word = ccall(posix_filesys_num,str)
-
-    val o_rdonly = w_osval "O_RDONLY"
-    val o_wronly = w_osval "O_WRONLY"
-    val o_rdwr = w_osval "O_RDWR"
+    val o_rdonly = omode "O_RDONLY"
+    val o_wronly = omode "O_WRONLY"
+    val o_rdwr = omode "O_RDWR"
 
     fun omodeFromWord omode =
           if omode = o_rdonly then O_RDONLY
@@ -51,7 +47,5 @@ struct
     fun omodeToWord O_RDONLY = o_rdonly
       | omodeToWord O_WRONLY = o_wronly
       | omodeToWord O_RDWR = o_rdwr
-
-    fun sysconf (s : string) : SysWord.word = ccall(posix_process_sysconf,s)
 
 end

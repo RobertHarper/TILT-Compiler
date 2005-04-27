@@ -6,6 +6,14 @@
 	These types must agree with the runtime.
 *)
 
+(* ../Runtime/port/timer.c *)
+type rusagerep =
+	int *	(* ru_utime.tv_sec *)
+	int *	(* ru_utime.tv_usec *)
+	int *	(* ru_stime.tv_sec *)
+	int	(* ru_stime.tv_usec *)
+
+(* ../Runtime/port/date.c *)
 type tmrep =
 	int *	(* tm_sec *)
 	int *	(* tm_min *)
@@ -17,6 +25,7 @@ type tmrep =
 	int *	(* tm_yday *)
 	int	(* tm_isdst *)
 
+(* ../Runtime/port/posix_io.c *)
 type flockrep =
 	int *	(* l_type *)
 	int *	(* l_whence *)
@@ -24,27 +33,17 @@ type flockrep =
 	int *	(* l_len *)
 	int	(* l_pid *)
 
+(* ../Runtime/port/posix_tty.c *)
 type termiorep =
-	word *	(* iflags *)
-	word *	(* oflags *)
-	word *	(* cflags *)
-	word *	(* lflags *)
-	TiltPrim.word8vector *	(* cc *)
-	word *	(* inspeed *)
-	word	(* outspeed *)
+	word *	(* c_iflag *)
+	word *	(* c_oflag *)
+	word *	(* c_cflag *)
+	word *	(* c_lflag *)
+	(* c_cc is allocated separately *)
+	word *	(* ispeed *)
+	word	(* ospeed *)
 
-type grouprep =
-	string *	(* gr_name *)
-	word *	(* gr_gid *)
-	string list	(* gr_mem *)
-
-type passwdrep =
-	string *	(* pw_name *)
-	word *	(* pw_uid *)
-	word *	(* pw_gid *)
-	string *	(* pw_dir *)
-	string	(* pw_shell *)
-
+(* ../Runtime/port/posix_procenv.c *)
 type timesrep =
 	int *	(* elapsed real time *)
 	int *	(* tms_utime *)
@@ -52,10 +51,12 @@ type timesrep =
 	int *	(* tms_cutime *)
 	int	(* tms_cstime *)
 
+(* ../Runtime/port/posix_process.c *)
 type waitpidrep =
 	int *	(* pid *)
 	int * int	(* (0,sts) if exited; (1,sig) if signalled; (2,sig) if stopped *)
 
+(* ../Runtime/port/posix_filesys.c *)
 type statrep =
 	int *	(* st_mode & S_IFMT *)
 	word *	(* st_mode & (S_IRWXU | S_IRWXG | S_IRWXO | S_ISUID | S_ISGID) *)

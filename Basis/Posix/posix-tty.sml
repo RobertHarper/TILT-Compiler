@@ -6,9 +6,24 @@
  *
  *)
 
-structure POSIX_TTY :> POSIX_TTY where type pid = POSIX_Process.pid
-				   and type file_desc = POSIX_FileSys.file_desc =
-  struct
+structure POSIX_TTY :> POSIX_TTY
+	where type pid = POSIX_Process.pid
+	where type file_desc = POSIX_FileSys.file_desc =
+struct
+
+    val osval : string -> int = ccall1 posix_tty_num
+    val posix_tty_tcgetattr :  int -> uct = ccall1 posix_tty_tcgetattr
+    val posix_tty_tcgetattr_termiorep : uct -> termiorep = fn uct => Ccall(posix_tty_tcgetattr_termiorep,uct)
+    val posix_tty_tcgetattr_cc : uct -> string = fn uct => Ccall(posix_tty_tcgetattr_cc,uct)
+    val posix_tty_tcgetattr_free : uct -> unit = fn uct => Ccall(posix_tty_tcgetattr_free,uct)
+    val posix_tty_tcsetattr :  int * int * termiorep * string -> unit = ccall4 posix_tty_tcsetattr
+    val posix_tty_tcsendbreak :  int * int -> unit = ccall2 posix_tty_tcsendbreak
+    val posix_tty_tcdrain :  int -> unit = ccall1 posix_tty_tcdrain
+    val posix_tty_tcflush :  int * int -> unit = ccall2 posix_tty_tcflush
+    val posix_tty_tcflow :  int * int -> unit = ccall2 posix_tty_tcflow
+    val posix_tty_tcgetpgrp :  int -> int = ccall1 posix_tty_tcgetpgrp
+    val posix_tty_tcsetpgrp :  int * int -> unit = ccall2 posix_tty_tcsetpgrp
+
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
 
@@ -25,22 +40,6 @@ structure POSIX_TTY :> POSIX_TTY where type pid = POSIX_Process.pid
     val & = SysWord.andb
     infix ++ &
 
-    fun ccall (f : ('a, 'b cresult) -->, a:'a) : 'b =
-	(case (Ccall(f,a)) of
-	    Normal r => r
-	|   Error e => raise e)
-
-    fun ccall2 (f : ('a, 'b, 'c cresult) -->, a:'a, b:'b) : 'c =
-	(case (Ccall(f,a,b)) of
-	    Normal r => r
-	|   Error e => raise e)
-
-    fun ccall3 (f : ('a, 'b, 'c, 'd cresult) -->, a:'a, b:'b, c:'c) : 'd =
-	(case (Ccall(f,a,b,c)) of
-	    Normal r => r
-	|   Error e => raise e)
-
-    fun osval (s : string) : s_int = ccall(posix_tty_num,s)
     val w_osval = SysWord.fromInt o osval
 
     structure I =
@@ -254,19 +253,11 @@ structure POSIX_TTY :> POSIX_TTY where type pid = POSIX_Process.pid
         val oflush = QS (osval "TCOFLUSH")
         val ioflush = QS (osval "TCIOFLUSH")
 
-(*
-	type termio_rep = (
-			   word *       	(* iflags *)
-			   word *       	(* oflags *)
-			   word *       	(* cflags *)
-			   word *       	(* lflags *)
-			   V.WV.vector *	(* cc *)
-			   word *		(* inspeed *)
-			   word			(* outspeed *)
-			   )
-*)
 	fun getattr fd = let
-			     val (ifs,ofs,cfs,lfs,cc,isp,osp) = ccall(posix_tty_tcgetattr, fs_intof fd)
+			     val uct = posix_tty_tcgetattr(fs_intof fd)
+			     val (ifs,ofs,cfs,lfs,isp,osp) = posix_tty_tcgetattr_termiorep uct
+			     val cc = posix_tty_tcgetattr_cc uct
+			     val () = posix_tty_tcgetattr_free uct
 			 in
 			     TIOS {
 				   iflag = I.F ifs,
@@ -287,25 +278,24 @@ structure POSIX_TTY :> POSIX_TTY where type pid = POSIX_Process.pid
 						 val (V.CC cc) = #cc tios
 						 val (B ispeed) = #ispeed tios
 						 val (B ospeed) = #ospeed tios
-						 val trep = (iflag,oflag,cflag,lflag,cc,ispeed,ospeed)
+						 val trep = (iflag,oflag,cflag,lflag,ispeed,ospeed)
 					     in
-						 ccall3(posix_tty_tcsetattr,fs_intof fd, sa, trep)
+						 posix_tty_tcsetattr(fs_intof fd, sa, trep, cc)
 					     end
 
-	fun sendbreak (fd, duration) = ccall2(posix_tty_tcsendbreak, fs_intof fd, duration)
+	fun sendbreak (fd, duration) = posix_tty_tcsendbreak(fs_intof fd, duration)
 
-	fun drain fd = ccall(posix_tty_tcdrain, fs_intof fd)
+	fun drain fd = posix_tty_tcdrain(fs_intof fd)
 
-	fun flush (fd, QS qs) = ccall2(posix_tty_tcflush,fs_intof fd, qs)
+	fun flush (fd, QS qs) = posix_tty_tcflush(fs_intof fd, qs)
 
-	fun flow (fd, FA action) = ccall2(posix_tty_tcflow,fs_intof fd, action)
+	fun flow (fd, FA action) = posix_tty_tcflow(fs_intof fd, action)
 
       end
 
-    fun getpgrp fd = P.wordToPid(int32touint32(ccall(posix_tty_tcgetpgrp,fs_intof fd)))
+    fun getpgrp fd = P.wordToPid(int32touint32(posix_tty_tcgetpgrp(fs_intof fd)))
 
-    fun setpgrp (fd, pid) = ccall2(posix_tty_tcsetpgrp,fs_intof fd,
-				  uint32toint32(P.pidToWord pid))
+    fun setpgrp (fd, pid) =
+	posix_tty_tcsetpgrp(fs_intof fd, uint32toint32(P.pidToWord pid))
 
-  end (* structure POSIX_TTY *)
-
+end

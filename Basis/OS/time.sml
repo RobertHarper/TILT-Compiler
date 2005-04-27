@@ -6,19 +6,14 @@
 
 structure Time :> TIME =
   struct
+
+    val gettimeofday : unit -> int * int = ccall0 time_gettimeofday
+
     val uint8touint32 = TiltPrim.uint8touint32
     val ulte = TiltPrim.ulte
     val op^ = String.^
 
-    fun ccall (f : ('a, 'b cresult) -->, a:'a) : 'b =
-	(case (Ccall(f,a)) of
-	    Normal r => r
-	|   Error e => raise e)
-
-(*    structure PB = PreBasis *)
-
   (* get time type from type-only structure *)
-(*    open Time *)
 
     datatype time = TIME of {sec : int, usec : int}
     exception Time
@@ -91,8 +86,7 @@ structure Time :> TIME =
     fun lessEq (TIME{sec=s1, usec=u1}, TIME{sec=s2, usec=u2}) =
 	  (s1 < s2) orelse ((s1 = s2) andalso (u1 <= u2))
 
-
-    fun now () = let val (ts, tu) = ccall(posix_time_gettimeofday,())
+    fun now () = let val (ts, tu) = gettimeofday()
 	  in
 	    TIME{sec=ts, usec=tu}
 	  end

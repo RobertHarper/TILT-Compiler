@@ -1,15 +1,16 @@
-/* Must agree with Thread_t. */
+/* Must agree with sparc.h. */
 #define MLsaveregs_disp	0
-#define proc_disp	longSz*32+8*32
-#define notinml_disp	longSz*32+8*32+CptrSz
-#define scratch_disp	longSz*32+8*32+CptrSz+longSz
-#define request_disp	longSz*32+8*32+CptrSz+longSz+doubleSz
-#define requestInfo_disp	longSz*32+8*32+CptrSz+longSz+doubleSz+longSz
-#define Csaveregs_disp	longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz
-#define writelistAlloc_disp	longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz
-#define writelistLimit_disp	longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz
-#define stackLimit_disp	longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz+MLptrSz
-#define stackTop_disp	longSz*32+8*32+CptrSz+longSz+doubleSz+longSz+longSz+32*longSz+32*doubleSz+MLptrSz+MLptrSz+intSz
+#define proc_disp	MLsaveregs_disp + 4*32 + 8*32
+#define notinml_disp	proc_disp + 4
+#define safetogc_disp	notinml_disp + 4
+#define scratch_disp	safetogc_disp + 4 + 4
+#define request_disp	scratch_disp + 8
+#define requestInfo_disp	request_disp + 4
+#define Csaveregs_disp	requestInfo_disp + 4
+#define writelistAlloc_disp	Csaveregs_disp + 4*32 + 8*32
+#define writelistLimit_disp	writelistAlloc_disp + 4
+#define stackLimit_disp	writelistLimit_disp + 4
+#define stackTop_disp	stackLimit_disp + 4
 
 #define NoRequest	0
 #define YieldRequest	1

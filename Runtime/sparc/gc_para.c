@@ -174,7 +174,7 @@ popSharedStack(SharedStack_t* ss, LocalWork_t* lw)
 		&ss->work.roots, rootLocRequest);
 	grayRegionRequest = MakeFraction(grayRegionRequest, rootLocRequest,
 		rootLocFetched);
-	if (grayRegionRequest == 0)
+	if(grayRegionRequest == 0)
 		goto done;
 
 	grayRegionFetched = getFromSharedStack(&lw->grayRegion,

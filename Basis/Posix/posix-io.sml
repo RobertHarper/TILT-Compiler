@@ -10,33 +10,30 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
 				 and type file_desc = POSIX_FileSys.file_desc
 				 and type O.flags = POSIX_FileSys.O.flags =
 
-  struct
+struct
+
+    val osval : string -> int = ccall1 posix_io_num
+    val posix_io_pipe : unit -> int * int = ccall0 posix_io_pipe
+    val posix_io_dup : int -> int = ccall1 posix_io_dup
+    val posix_io_dup2 : int * int -> unit = ccall2 posix_io_dup2
+    val posix_io_close : int -> unit = ccall1 posix_io_close
+    val read' : int * int -> string = ccall2 posix_io_read
+    val readbuf' : int * TiltPrim.word8array * int * int -> int = ccall4 posix_io_readbuf
+    val writearr' : int * TiltPrim.word8array * int * int -> int = ccall4 posix_io_writebuf
+    val fcntl_d : int * int -> int = ccall2 posix_io_fcntl_d
+    val fcntl_gfd: int -> word = ccall1 posix_io_fcntl_gfd
+    val fcntl_sfd : int * word -> unit = ccall2 posix_io_fcntl_sfd
+    val fcntl_gfl : int -> word * word = ccall1 posix_io_fcntl_gfl
+    val fcntl_sfl : int * word -> unit = ccall2 posix_io_fcntl_sfl
+    val fcntl_l : int * int * flockrep -> flockrep = ccall3 posix_io_fcntl_l
+    val posix_io_lseek : int * int * int -> int = ccall3 posix_io_lseek
+    val posix_io_fsync : int -> unit = ccall1 posix_io_fsync
 
     val int32touint32 = TiltPrim.int32touint32
     val uint32toint32 = TiltPrim.uint32toint32
 
     val unsafe_vector2array = TiltPrim.unsafe_vector2array8
     val op^ = String.^
-
-    fun ccall (f : ('a, 'b cresult) -->, a:'a) : 'b =
-	(case (Ccall(f,a)) of
-	    Normal r => r
-	|   Error e => raise e)
-
-    fun ccall2 (f : ('a, 'b, 'c cresult) -->, a:'a, b:'b) : 'c =
-	(case (Ccall(f,a,b)) of
-	    Normal r => r
-	|   Error e => raise e)
-
-    fun ccall3 (f : ('a, 'b, 'c, 'd cresult) -->, a:'a, b:'b, c:'c) : 'd =
-	(case (Ccall(f,a,b,c)) of
-	    Normal r => r
-	|   Error e => raise e)
-
-    fun ccall4 (f : ('a, 'b, 'c, 'd, 'e cresult) -->, a:'a, b:'b, c:'c, d:'d) : 'e =
-	(case (Ccall(f,a,b,c,d)) of
-	    Normal r => r
-	|   Error e => raise e)
 
     structure FS = POSIX_FileSys
 
@@ -49,7 +46,6 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
     val & = SysWord.andb
     infix ++ &
 
-    fun osval (s : string) : s_int = ccall(posix_io_num,s)
     val w_osval = SysWord.fromInt o osval
     fun fail (fct,msg) = raise TiltExn.LibFail ("POSIX_IO."^fct^": "^msg)
 
@@ -59,19 +55,17 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
     fun fs_intof fd = uint32toint32(FS.fdToWord fd)
     fun fs_fd i = FS.wordToFD(int32touint32 i)
 
-   fun pipe () = let
-          val (ifd, ofd) = ccall(posix_io_pipe,())
+    fun pipe () = let
+          val (ifd, ofd) = posix_io_pipe()
           in
             {infd = fs_fd ifd, outfd = fs_fd ofd}
           end
 
-     fun dup fd = fs_fd(ccall(posix_io_dup,fs_intof fd))
-    fun dup2 {old, new} = ccall2(posix_io_dup2,fs_intof old, fs_intof new)
+    fun dup fd = fs_fd(posix_io_dup(fs_intof fd))
+    fun dup2 {old, new} = posix_io_dup2(fs_intof old, fs_intof new)
 
-    fun close fd = ccall(posix_io_close, fs_intof fd)
+    fun close fd = posix_io_close(fs_intof fd)
 
-    fun read' (x: int, y : int) : Word8Vector.vector = ccall2(posix_io_read,x,y)
-    fun readbuf' (x : int, b : Word8Array.array, y : int, z :  int) : int = ccall4(posix_io_readbuf,x,b,y,z)
     fun readArr (fd, {buf, i, sz=NONE}) = let
           val alen = Word8Array.length buf
           in
@@ -89,9 +83,8 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
     fun readVec (fd,cnt) =
           if cnt < 0 then raise Subscript else read'(fs_intof fd, cnt)
 
-    fun writearr' (x : int, v : Word8Array.array, y : int, z : int) : int = ccall4(posix_io_writebuf,x,v,y,z)
-    fun writevec' (x : int, v : Word8Vector.vector, y : int, z : int) : int = writearr'(x,unsafe_vector2array v,
-											y,z)
+    fun writevec' (x : int, v : Word8Vector.vector, y : int, z : int) : int =
+	writearr'(x,unsafe_vector2array v, y,z)
     fun writeArr (fd,{buf, i, sz=NONE}) = let
           val alen = Word8Array.length buf
           in
@@ -151,11 +144,6 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
 
     structure O = POSIX_FileSys.O
 
-    fun fcntl_d (x : s_int, y : s_int) : s_int = ccall2(posix_io_fcntl_d,x,y)
-    fun fcntl_gfd (x : s_int) : word = ccall(posix_io_fcntl_gfd, x)
-    fun fcntl_sfd (x : s_int, y : word) : unit = ccall2(posix_io_fcntl_sfd, x, y)
-    fun fcntl_gfl (x : s_int) : (word * word) = ccall(posix_io_fcntl_gfl, x)
-    fun fcntl_sfl (x : s_int, y : word) : unit = ccall2(posix_io_fcntl_sfl, x, y)
     fun dupfd {old, base} = fs_fd (fcntl_d (fs_intof old, fs_intof base))
     fun getfd fd = FD.FDF (fcntl_gfd (fs_intof fd))
     fun setfd (fd, FD.FDF fl) = fcntl_sfd(fs_intof fd, fl)
@@ -188,7 +176,6 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
 
     type flock_rep = s_int * s_int * Position.int * Position.int * s_int
 
-    fun fcntl_l (x : s_int, y : s_int, z : flock_rep) : flock_rep = ccall3(posix_io_fcntl_l, x, y, z)
     val f_getlk = osval "F_GETLK"
     val f_setlk = osval "F_SETLK"
     val f_setlkw = osval "F_SETLKW"
@@ -226,8 +213,7 @@ structure POSIX_IO :> POSIX_IO where type open_mode = PrePosix.open_mode
     fun setlkw (fd, flock) =
           flockFromRep(false,fcntl_l(fs_intof fd,f_setlkw,flockToRep flock))
 
-    fun lseek (fd,offset,whence) = ccall3(posix_io_lseek,fs_intof fd,offset, whToWord whence)
-    fun fsync fd = ccall(posix_io_fsync, fs_intof fd)
+    fun lseek (fd,offset,whence) = posix_io_lseek(fs_intof fd,offset,whToWord whence)
+    fun fsync fd = posix_io_fsync(fs_intof fd)
 
-  end (* structure POSIX_IO *)
-
+end

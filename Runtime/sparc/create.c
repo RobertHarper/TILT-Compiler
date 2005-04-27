@@ -2,13 +2,31 @@
 #include "r.h"
 #include "sparc.h"
 
+/*
+	The sparc GC does not know about C roots.  Sparc C calls may
+	perform at most one allocation and must consider any other ML
+	pointers on hand to be invalidated by allocation.
+
+	In order to avoid a nightmare debugging session, alloc_space
+	aborts rather than let a C call allocate a second object.  It
+	uses the thread-local variable safeToGC that is set true when
+	transitioning from ML to C.
+*/
+
 static mem_t
 alloc_space(int bytesNeeded)
-{	/* XXX should allocate large request from largespace */
+{
+	/*
+		XXX should allocate large request from largespace
+	*/
 	mem_t alloc, limit, newAlloc;
 	Thread_t *th = getThread();
 	int wordsNeeded = bytesNeeded / 4;
 	if (th != NULL) {
+		if(th->safeToGC)
+			th->safeToGC = 0;
+		else
+			DIE("runtime allocated multiple objects");
 		alloc = (mem_t) th->saveregs[ALLOCPTR];
 		limit = (mem_t) th->saveregs[ALLOCLIMIT];
 		newAlloc = alloc + wordsNeeded;
@@ -46,18 +64,14 @@ get_record(ptr_t rec, int which)
 }
 
 ptr_t
-alloc_record(val_t *fields, int mask, int count)
+alloc_record(val_t* fields, int count)
 {
-	/*
-		Bits 0..(RECLEN_MAX - 1) of mask are significant.
-		Set bit i to 1 if field i is a pointer.
-	*/
+	int mask = 0;	/* pointer fields are unsafe due to possibility of gc from c */
 	int i;
 	mem_t alloc;
 	ptr_t rec;
 
 	assert(count <= RECLEN_MAX);
-	assert((mask >> count) == 0);
 
 	if (count == 0)
 		return empty_record;
@@ -69,7 +83,6 @@ alloc_record(val_t *fields, int mask, int count)
 		| (count << RECLEN_OFFSET)
 		| (mask << RECMASK_OFFSET);
 
-	/* Initialize record fields */
 	for (i=0; i<count; i++)
 		rec[i] = fields[i];
 

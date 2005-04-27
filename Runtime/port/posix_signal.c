@@ -4,6 +4,8 @@
 #include "r.h"
 #include <signal.h>
 
+static char Esignalnum[] = "posix_signal_num: bad name";
+
 static struct sysval signal_vec[] = {
 	{"abrt",	SIGABRT},
 	{"alrm",	SIGALRM},
@@ -32,8 +34,8 @@ static struct sysvals signal_values = {
 	signal_vec
 };
 
-/*int*/cresult
-posix_signal_num(string key)
+int
+posix_signal_num(cerr er, string key)
 {
-	return sysval_num("posix_signal_num", &signal_values, key);
+	return sysval_num(er, Esignalnum, &signal_values, key);
 }

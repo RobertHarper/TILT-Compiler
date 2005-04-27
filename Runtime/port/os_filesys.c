@@ -3,29 +3,25 @@
 #include "s.h"
 #include "r.h"
 
-#ifdef AVOID_TMPNAM
-	/*string*/cresult
-	posix_os_tmpname(unit unused)
-	{
+string
+os_filesys_tmpname(cerr er)
+{
+	#ifdef AVOID_TMPNAM
 		char buf[] = "/tmp/tnXXXXXX";
 		int fd = mkstemp(buf);
-		if(fd == -1)
-			return Error(SysErr(errno));
-		else {
-			string name = cstring2mlstring_alloc(buf);
-			close(fd);
-			return NormalPtr(name);
+		if(fd == -1){
+			send_errno(er,errno);
+			*buf = 0;
 		}
-	}
-#else
-	/*string*/cresult
-	posix_os_tmpname(unit unused)
-	{
+		else
+			close(fd);
+		return cstring2mlstring_alloc(buf);
+	#else
 		char* buf;
 		string res = alloc_uninit_string(L_tmpnam,&buf);
 		char *result = tmpnam(buf);
 		assert(result == buf);
 		adjust_stringlen(res,strlen(buf));
 		return res;
-	}
-#endif
+	#endif
+}

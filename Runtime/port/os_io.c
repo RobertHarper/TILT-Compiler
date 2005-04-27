@@ -4,39 +4,58 @@
 #include "r.h"
 #include <poll.h>
 
-/*intword_list*/cresult
-posix_os_poll(intword_list fd_event_list, intpair_option sec_usec_option)
+static int
+timeout(intpair_option torep)
 {
-	struct pollfd fds[10];	/* XXX: Easy limit to eliminate */
-	unsigned long count = 0;
-	int i, timeout;
-	ptr_t result = 0;        /* nil */
-
-	if(sec_usec_option != 0){ 	/* is it NONE? */
-		int *sec_usec = (int *)sec_usec_option;
+	if(torep != 0){ 	/* is it SOME? */
+		int *sec_usec = (int *)torep;
 		int sec = sec_usec[0];
 		int usec = sec_usec[1];
-		timeout = 1000 * sec + usec / 1000;
-	} else
-		timeout = -1;	/* infinite timeout */
+		return 1000 * sec + usec / 1000;
+	}
+	else
+		return -1;	/* infinite timeout */
+}
 
-	while(fd_event_list != 0){	/* is it nil? */
-		int *fd_event = (int *)(fd_event_list[0]);
+uct
+os_io_poll(cerr er, int n, intword_list evlist, intpair_option torep)
+{
+	struct pollfd* fds = (struct pollfd*)emalloc(sizeof(struct pollfd) * n);
+	int to = timeout(torep);
+	int i;
+
+	for(i=0; i<n; i++) {
+		int* fd_event = (int*)(evlist[0]);
 		int fd = fd_event[0];
-		int event = fd_event[1];
-		fd_event_list = (intword_list)(fd_event_list[1]);
-		fds[count].fd = fd;
-		fds[count].events = event;
-		count++;
-		if(count == arraysize(fds))
-			return Error(SysErr_msg("posix_os_poll: static limit exceeded"));
+		word event = fd_event[1];
+		evlist = (intword_list)(evlist[1]);
+		fds[i].fd = fd;
+		fds[i].events = event;
 	}
-	if(poll(fds,count,timeout) == -1){
-		return Error(SysErr(errno));
+	assert(evlist == 0);
+	if(poll(fds,n,to) == -1){
+		send_errno(er,errno);
+		efree(fds);
+		return 0;
 	}
-	for (i=count-1; i>=0; i--) {
-		intpair car = alloc_intint(fds[i].fd, fds[i].revents);
-		result = cons_ptr_alloc(car,result);
-	}
-	return NormalPtr(result);
+	else
+		return (uct)fds;
+}
+
+intword
+os_io_poll_nth(uct p, int n)
+{
+	struct pollfd* fds = (struct pollfd*)p;
+	val_t fields[2];
+	fields[0] = (val_t) fds[n].fd;
+	fields[1] = (val_t) fds[n].revents;
+	return alloc_record(fields, arraysize(fields));
+}
+
+unit
+os_io_poll_free(uct p)
+{
+	struct pollfd* fds = (struct pollfd*)p;
+	efree(fds);
+	return empty_record;
 }

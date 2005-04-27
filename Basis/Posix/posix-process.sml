@@ -7,23 +7,25 @@
  *)
 
 structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal =
-  struct
+struct
+
+    val osval : string -> int = ccall1 posix_process_num
+    val posix_process_fork : unit -> int = ccall0 posix_process_fork
+    val posix_process_exec : string * string list -> int = fn (c,args) => Ccall(posix_process_exec,c,args)
+    val posix_process_exece : string * string list * string list -> int = fn (c,args,es) => Ccall(posix_process_exece,c,args,es)
+    val posix_process_execp : string * string list -> int = fn (c,args) => Ccall(posix_process_execp,c,args)
+    val waitpid' : int * word -> waitpidrep = ccall2 posix_process_waitpid
+    val posix_process_exit : TiltPrim.uint8 -> int = fn v => Ccall(posix_process_exit,v)
+    val kill' : int * int -> unit = ccall2 posix_process_kill
+    val alarm' : int -> int = fn t => Ccall(posix_process_alarm,t)
+    val pause : unit -> unit = fn () => Ccall(posix_process_pause,())
+    val sleep' : int -> int = fn t => Ccall(posix_process_sleep,t)
 
     structure Sig = POSIX_Signal
 
     val ++ = SysWord.orb
     val & = SysWord.andb
     infix ++ &
-
-    fun ccall (f : ('a, 'b cresult) -->, a:'a) : 'b =
-	(case (Ccall(f,a)) of
-	    Normal r => r
-	|   Error e => raise e)
-
-    fun ccall2 (f : ('a, 'b, 'c cresult) -->, a:'a, b:'b) : 'c =
-	(case (Ccall(f,a,b)) of
-	    Normal r => r
-	|   Error e => raise e)
 
     type word = SysWord.word
     type s_int = SysInt.int
@@ -33,20 +35,25 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
     fun pidToWord (PID i) = SysWord.fromInt i
     fun wordToPid w = PID (SysWord.toInt w)
 
-    fun osval (s : string) : s_int = ccall(posix_process_num,s)
     val w_osval = SysWord.fromInt o osval
 
     fun fork () =
-          case ccall(posix_process_fork,()) of
+          case posix_process_fork() of
             0 => NONE
           | child_pid => SOME(PID child_pid)
 
-    fun exec (x: string, y : string list) : 'a =
-	raise (Ccall(posix_process_exec, x, y))
-    fun exece (x: string, y : string list, z : string list) : 'a =
-	raise (Ccall(posix_process_exece, x, y, z))
-    fun execp (x: string, y : string list) : 'a =
-	raise (Ccall(posix_process_execp, x, y))
+    fun syserr (e:int) : 'a =
+	let val msg = Ccall(syserror_msg,e)
+	    val exn = TiltExn.SysErr(msg, SOME e)
+	in  raise exn
+	end
+
+    fun exec (arg : string * string list) : 'a =
+	syserr (posix_process_exec arg)
+    fun exece (arg : string * string list * string list) : 'a =
+	syserr (posix_process_exece arg)
+    fun execp (arg : string * string list) : 'a =
+	syserr (posix_process_execp arg)
 
     datatype waitpid_arg
       = W_ANY_CHILD
@@ -64,9 +71,6 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
       | W_EXITSTATUS of Word8.word
       | W_SIGNALED of signal
       | W_STOPPED of signal
-
-      (* (pid',status,status_val) = waitpid' (pid,options)  *)
-    fun waitpid' (pid : s_int, opts : word) : s_int * s_int * s_int = ccall2(posix_process_waitpid, pid, opts)
 
     fun argToInt W_ANY_CHILD = ~1
       | argToInt (W_CHILD (PID pid)) = pid
@@ -118,20 +122,14 @@ structure POSIX_Process :> POSIX_PROCESS where type signal = POSIX_Signal.signal
 
     fun wait () = waitpid(W_ANY_CHILD,[])
 
-    fun exit (x: Word8.word) : 'a = raise (Ccall(posix_process_exit, x))
+    fun exit (x: Word8.word) : 'a = syserr(posix_process_exit x)
 
-    fun kill' (x : s_int, y : s_int) : unit = ccall2(posix_process_kill, x, y)
     fun kill (K_PROC (PID pid), s) = kill'(pid, SysWord.toInt(Sig.toWord s))
       | kill (K_SAME_GROUP, s) = kill'(~1, SysWord.toInt(Sig.toWord s))
       | kill (K_GROUP (PID pid), s) = kill'(~pid, SysWord.toInt(Sig.toWord s))
 
-    fun alarm' (x : int) : int = Ccall(posix_process_alarm, x)
     val alarm = Time.fromSeconds o alarm' o Time.toSeconds
 
-    fun pause () : unit = Ccall(posix_process_pause,())
-
-    fun sleep' (x : int) : int = Ccall(posix_process_sleep, x)
     val sleep = Time.fromSeconds o sleep' o Time.toSeconds
 
-  end (* structure POSIX_Process *)
-
+end

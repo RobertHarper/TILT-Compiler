@@ -7,11 +7,23 @@
 structure Date :> DATE =
   struct
 
+    val ascTime : tmrep -> string = fn arg => Ccall(date_asctime,arg)
+    val date_localtime : int -> tmrep = ccall1 date_localtime
+    val date_gmtime : int -> tmrep = ccall1 date_gmtime
+    val date_mktime : tmrep -> int = ccall1 date_mktime
+    val strfTime : string * tmrep -> string = fn (fmt,tm) => Ccall(date_strftime,fmt,tm)
+
+    exception Date
+
+    fun date_wrap (f:'a -> 'b) : 'a -> 'b =
+	fn a => f a handle _ => raise Date
+
+    val localTime : int -> tmrep = date_wrap date_localtime
+    val gmTime : int -> tmrep = date_wrap date_gmtime
+    val mkTime : tmrep -> int = date_wrap date_mktime
 
   (* the run-time system indexes the year off this *)
     val baseYear = 1900
-
-    exception Date
 
     datatype weekday = Mon | Tue | Wed | Thu | Fri | Sat | Sun
 
@@ -47,21 +59,6 @@ structure Date :> DATE =
 	    | Jul => 6 | Aug => 7 | Sep => 8 | Oct => 9 | Nov => 10 | Dec => 11
 	  (* end case *))
 
-    (* Call C function f and map all exceptions to Date. *)
-    fun wrap (f : ('a,'b cresult)-->, x:'a) : 'b =
-	(case (Ccall (f,x)) of
-	    Normal r => r
-	|   Error _ => raise Date)
-
-    (* note: mkTime assumes the tmrep passed to it reflects
-     * the local time zone
-     *)
-    val ascTime : tmrep -> string = fn arg => Ccall(posix_date_asctime,arg)
-    val localTime : int -> tmrep = fn arg => wrap(posix_date_localtime,arg)
-    val gmTime : int -> tmrep = fn arg => wrap(posix_date_gmtime,arg)
-    val mkTime : tmrep -> int = fn arg => wrap(posix_date_mktime,arg)
-    val strfTime : string * tmrep -> string = fn (s,tm) => Ccall(posix_date_strftime,s,tm)
-
     fun year (DATE{year, ...}) = year
     fun month (DATE{month, ...}) = month
     fun day (DATE{day, ...}) = day
@@ -79,8 +76,6 @@ structure Date :> DATE =
      * This code is taken from Reingold's paper
      *)
     local
-(*	val quot = Int.quot
-	val not = Bool.not *)
 	fun sum (f,k,p) =
 	    let fun loop (f,i,p,acc) = if (not(p(i))) then acc
 				       else loop(f,i+1,p,acc+f(i))
@@ -274,7 +269,8 @@ structure Date :> DATE =
 
 	fun fmt fmtStr d = strfTime (fmtStr, toTM d)
 
-	fun fromString (_ : string) : date option = raise TiltExn.LibFail "Date.fromString unimplemented"
+	fun fromString (_ : string) : date option =
+	    raise TiltExn.LibFail "Date.fromString unimplemented"
 
 	fun scan (_ : (char, 'a) StringCvt.reader) (_ : 'a) : (date * 'a) option =
 	    raise TiltExn.LibFail "Date.scan unimplemented"

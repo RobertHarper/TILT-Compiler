@@ -1,14 +1,15 @@
-/*
-	../../Basis/Numeric/tiltfc.int
-	../../Basis/Numeric/tiltfc.sml
-*/
+/* ../../Basis/Numeric/tiltfc.sml */
 
 #include "s.h"
 #include "r.h"
 #include <ieeefp.h>
 
+static char Eround[] = "getfc: bogus value from fpgetround";
+static char Emode[] = "setfc: bad rounding mode";
+static char Eprecision[] = "setfc: bad precision";
+
 ptr_t
-getfc(unit ignored)
+getfc(cerr er)
 {
 	fp_rnd mode = fpgetround();
 	int r;
@@ -17,13 +18,13 @@ getfc(unit ignored)
 	case FP_RN:	r = TO_NEAREST; break;
 	case FP_RP:	r = TO_POSINF; break;
 	case FP_RM:	r = TO_NEGINF; break;
-	default:	DIE("bogus value from fpgetround");
+	default:	send_errmsg(er,Eround);
 	}
 	return alloc_intint((val_t)r, (val_t)DOUBLE);
 }
 
-/*unit*/cresult
-setfc(int r, int p)
+unit
+setfc(cerr er, int r, int p)
 {
 	fp_rnd mode;
 	switch(r){
@@ -32,10 +33,13 @@ setfc(int r, int p)
 	case TO_POSINF:	mode = FP_RP; break;
 	case TO_NEGINF:	mode = FP_RM; break;
 	default:
-		return Error(SysErr_fmt("setfc: bad rounding mode: %d",r));
+		send_errmsg(er,Emode);
+		return empty_record;
 	}
-	if(p != DOUBLE)
-		return Error(SysErr_fmt("setfc: bad precision: %d",p));
+	if(p != DOUBLE){
+		send_errmsg(er,Eprecision);
+		return empty_record;
+	}
 	fpsetround(mode);
-	return NormalPtr(empty_record);
+	return empty_record;
 }

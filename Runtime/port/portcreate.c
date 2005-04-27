@@ -1,31 +1,13 @@
 #include "s.h"
 #include "r.h"
 
-static record
-alloc_pair(val_t rec1, val_t rec2, int mask)
+record
+alloc_intint(val_t rec1, val_t rec2)
 {
 	val_t fields[2];
 	fields[0] = rec1;
 	fields[1] = rec2;
-	return alloc_record(fields, mask, 2);
-}
-
-record
-alloc_ptrptr(ptr_t rec1, ptr_t rec2)
-{
-	return alloc_pair((val_t)rec1, (val_t)rec2, (1<<0)|(1<<1));
-}
-
-static record
-alloc_intptr(val_t rec1, ptr_t rec2)
-{
-	return alloc_pair(rec1, (val_t)rec2, 1<<1);
-}
-
-record
-alloc_intint(val_t rec1, val_t rec2)
-{
-	return alloc_pair(rec1, rec2, 0);
+	return alloc_record(fields, 2);
 }
 
 string
@@ -70,26 +52,6 @@ alloc_string_option(char* cstringopt)
 		: NULL;
 }
 
-ptr_t
-stringpair_ctoml_alloc(char* a, char* b)
-{
-	string ml_a = cstring2mlstring_alloc(a);
-	string ml_b = cstring2mlstring_alloc(b);
-	return alloc_ptrptr(ml_a, ml_b);
-}
-
-list
-cons_ptr_alloc(ptr_t car, list list)
-{
-	return alloc_ptrptr(car, list);
-}
-
-list
-cons_int_alloc(val_t car, list list)
-{
-	return alloc_intptr(car, list);
-}
-
 char**
 string_list_to_array_malloc(string_list list)
 {
@@ -116,50 +78,4 @@ string_list_to_array_malloc(string_list list)
 	}
 	v[listlen] = 0;
 	return v;
-}
-
-string_list
-array_to_string_list(char** arr)
-{
-	char* string = *arr;
-	char** next = arr+1;
-	if (string == NULL) return (ptr_t) 0;
-	else {
-		ptr_t car = (ptr_t) cstring2mlstring_alloc(string);
-		ptr_t cdr = array_to_string_list(next);
-		return cons_ptr_alloc(car,cdr);
-	}
-}
-
-/*
-	Must agree with Basis' datatype cresult.
-	Note that the tags are sorted by TILT.
-*/
-enum { ErrorTag, NormalTag };
-
-cresult
-Error(ptr_t exn)
-{
-	return alloc_intptr((val_t)ErrorTag, exn);
-}
-
-cresult
-Normal(val_t v)
-{
-	return alloc_intint((val_t)NormalTag, v);
-}
-
-cresult
-NormalPtr(ptr_t v)
-{
-	return alloc_intptr((val_t)NormalTag, v);
-}
-
-/*unit*/cresult
-unit_cresult(int result)
-{
-	if(result==-1)
-		return Error(SysErr(errno));
-	else
-		return NormalPtr(empty_record);
 }

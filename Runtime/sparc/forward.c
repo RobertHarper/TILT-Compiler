@@ -492,7 +492,7 @@ empty_writelist(Proc_t* proc)
 /*
 	(1) Add global roots.
 	(2) If from and to are not NULL, add the locations of all pointer
-	arrays containing back pointers
+	arrays containing back pointers as roots
 */
 void
 process_writelist(Proc_t* proc, Heap_t* from, Heap_t* to)
@@ -537,4 +537,16 @@ process_writelist(Proc_t* proc, Heap_t* from, Heap_t* to)
 			SetPush(&proc->work.roots, (ptr_t) field);
 		}
 	}
+}
+
+int
+try_process_writelist(Proc_t* proc, Thread_t* th, Heap_t* from, Heap_t* to)
+{
+	/* I don't get it.  -dave */
+	Set_t* roots = &proc->work.roots;
+	if(2 * SetLength(roots) < SetFullSize(roots)){
+		process_writelist(proc,from,to);
+		return GCSatisfiable(proc,th);
+	}
+	return 0;
 }

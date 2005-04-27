@@ -362,7 +362,7 @@ AssertMirrorPtrArray(int moduleMirrorArray)
 	assert(moduleMirrorArray == mirrorArray);
 }
 
-void
+static void
 paranoid_check_global(char* label, Heap_t** legalHeaps,
 	Bitmap_t** legalStarts, ShowType_t replicaType)
 {
@@ -379,16 +379,17 @@ paranoid_check_global(char* label, Heap_t** legalHeaps,
 	}
 }
 
-void
+static void
 paranoid_check_heap_without_start(char* label, Heap_t* curSpace,
-	Heap_t** legalHeaps, Bitmap_t* start, ShowType_t replicaType)
+	Heap_t** legalHeaps, ShowType_t replicaType)
 {
+	Bitmap_t* start = curSpace->bitmap;
 	scan_heap(label,curSpace->bottom, curSpace->cursor, 
 		curSpace->top, legalHeaps, NULL,
 		0, replicaType, start);
 }
 
-void
+static void
 paranoid_check_heap_with_start(char* label, Heap_t* curSpace,
 	Heap_t** legalHeaps, Bitmap_t** legalStarts, ShowType_t replicaType)
 {
@@ -398,7 +399,7 @@ paranoid_check_heap_with_start(char* label, Heap_t* curSpace,
 		replicaType, NULL);
 }
 
-void
+static void
 paranoid_check_stack(char* label, Thread_t* thread, Heap_t** legalHeaps,
 	Bitmap_t** legalStarts)
 {
@@ -463,14 +464,14 @@ paranoid_check_all(Heap_t* firstPrimary, Heap_t* secondPrimary,
 	int beforeGC = firstReplica == NULL;
 	char *when = beforeGC ? "Before GC" : "After GC";
 	char msg[100];
-	Heap_t *legalPrimaryHeaps[4] = {
-		NULL, NULL,NULL, NULL	};
-	Heap_t *legalReplicaHeaps[4] = {
-		NULL, NULL,NULL, NULL	};
-	Bitmap_t *legalPrimaryStarts[4] = {
-		NULL, NULL, NULL, NULL	};
-	Bitmap_t *legalReplicaStarts[4] = {
-		NULL, NULL, NULL, NULL	};
+	Heap_t* legalPrimaryHeaps[4];
+	Heap_t** nextPrimaryHeap = legalPrimaryHeaps;
+	Heap_t* legalReplicaHeaps[4];
+	Heap_t** nextReplicaHeap = legalReplicaHeaps;
+	Bitmap_t* legalPrimaryStarts[4];
+	Bitmap_t** nextPrimaryStart = legalPrimaryStarts;
+	Bitmap_t* legalReplicaStarts[4];
+	Bitmap_t** nextReplicaStart = legalReplicaStarts;
 	Heap_t **legalCurrentHeaps;
 	Bitmap_t **legalCurrentStarts;
 	Thread_t *curThread;
@@ -488,41 +489,46 @@ paranoid_check_all(Heap_t* firstPrimary, Heap_t* secondPrimary,
 		return;
 
 	assert(firstPrimary != NULL);
-	legalPrimaryHeaps[0] = firstPrimary;
-	legalPrimaryHeaps[1] = secondPrimary;
-	legalReplicaHeaps[0] = firstReplica;
-	legalReplicaHeaps[1] = secondReplica;
-	legalPrimaryStarts[0] = firstPrimary->bitmap;
-	legalPrimaryStarts[1] = secondPrimary ? secondPrimary->bitmap : NULL;
-	legalReplicaStarts[0] = firstReplica ? firstReplica->bitmap : NULL;
-	legalReplicaStarts[1] = secondReplica ? secondReplica->bitmap : NULL;
-	if (largeSpace) {
-		if (legalPrimaryHeaps[1])
-			legalPrimaryHeaps[2] = largeSpace;
-		else
-			legalPrimaryHeaps[1] = largeSpace;
-		if (legalReplicaHeaps[1])
-			legalReplicaHeaps[2] = largeSpace;
-		else
-			legalReplicaHeaps[1] = largeSpace;
+	*nextPrimaryHeap++ = firstPrimary;
+	*nextPrimaryStart++ = firstPrimary->bitmap;
+	if(secondPrimary){
+		*nextPrimaryHeap++ = secondPrimary;
+		*nextPrimaryStart++ = secondPrimary->bitmap;
 	}
+	if(largeSpace)
+		*nextPrimaryHeap++ = largeSpace;
+	*nextPrimaryHeap = NULL;
+	*nextPrimaryStart = NULL;
+
+	if(firstReplica){
+		*nextReplicaHeap++ = firstReplica;
+		*nextReplicaStart++ = firstReplica->bitmap;
+	}
+	if(secondReplica){
+		*nextReplicaHeap++ = secondReplica;
+		*nextReplicaStart++ = secondReplica->bitmap;
+	}
+	if(largeSpace)
+		*nextReplicaHeap++ = largeSpace;
+	*nextReplicaHeap = NULL;
+	*nextReplicaStart = NULL;
+	
 	sprintf(msg, "%s: first primary heap", when);
-	paranoid_check_heap_without_start(msg,firstPrimary,NULL,
-		legalPrimaryStarts[0], showReplica1);
+	paranoid_check_heap_without_start(msg,firstPrimary,NULL,showReplica1);
 	if (secondPrimary != NULL) {
 		sprintf(msg, "%s: second primary heap", when);
 		paranoid_check_heap_without_start(msg,secondPrimary,NULL,
-			legalPrimaryStarts[1], showReplica1);
+			showReplica1);
 	}
 	if (firstReplica != NULL) {
 		sprintf(msg, "%s: first replica heap", when);
 		paranoid_check_heap_without_start(msg,firstReplica,NULL,
-			legalReplicaStarts[0], showReplica2);
+			showReplica2);
 	}
 	if (secondReplica != NULL) {
 		sprintf(msg, "%s: second replica heap", when);
 		paranoid_check_heap_without_start(msg,secondReplica,NULL,
-			legalReplicaStarts[1], showReplica1);
+			showReplica1);
 	}
 
 	if (firstReplica == NULL) {
@@ -545,12 +551,24 @@ paranoid_check_all(Heap_t* firstPrimary, Heap_t* secondPrimary,
 	paranoid_check_global(msg, legalCurrentHeaps,legalCurrentStarts,
 		showReplica3);
 
-	sprintf(msg, "%s: first primary heap", when);
-	paranoid_check_heap_with_start(msg, firstPrimary, legalPrimaryHeaps,
-		legalPrimaryStarts, showReplica1);
+	/*
+		Don't bother checking the nursery after a major,
+		non-concurrent GC.  The space is dead and it may
+		contain fromSpace -> toSpace pointers that would be
+		reported as trace errors.  (This was discussed on the
+		TILT list in March 2005.)
+	*/
+	if(firstReplica != NULL && GCType == Major
+	&& (collector_type == Generational || collector_type == GenerationalParallel))
+		/* printf("Skipping paranoid check of firstPrimary after major GC\n") */;
+	else{
+		sprintf(msg, "%s: first primary heap", when);
+		paranoid_check_heap_with_start(msg, firstPrimary, legalPrimaryHeaps,
+			legalPrimaryStarts, showReplica1);
+	}
 	if (secondPrimary != NULL) {
 		if (firstReplica != NULL && secondPrimary != firstReplica) {
-			printf("Skipping paranoid check on secondPrimary on major GC\n");
+			/* printf("Skipping paranoid check of secondPrimary after major GC\n") */;
 		}
 		else {
 			sprintf(msg, "%s: second primary heap", when);

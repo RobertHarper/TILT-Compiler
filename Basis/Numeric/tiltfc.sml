@@ -1,12 +1,12 @@
 (*
-	The corresponding runtime functions should probably throw
-	SysErr for unsupported modes.
-
 	The basis library assumes all rounding modes are supported but
 	only uses the default precision and DOUBLE.
 *)
 structure TiltFc =
 struct
+
+	val getfc : unit -> int * int = ccall0 getfc
+	val setfc : int * int -> unit = ccall2 setfc
 
 	datatype rounding_mode =
 		TO_NEAREST
@@ -19,15 +19,10 @@ struct
 	|	DOUBLE
 	|	EXTENDED
 
-	fun ccall2 (f : ('a, 'b, 'c cresult) -->, a:'a, b:'b) : 'c =
-		(case (Ccall(f,a,b)) of
-			Normal r => r
-		|	Error e => raise e)
-
 	(* Must agree with the runtime. *)
 	val getfc : unit -> rounding_mode * precision =
 		fn () =>
-		let	val (r,p) = Ccall(getfc,())
+		let	val (r,p) = getfc()
 			val p =
 				(case p of
 					0 => SINGLE
@@ -56,7 +51,7 @@ struct
 				|	TO_ZERO => 1
 				|	TO_POSINF => 2
 				|	TO_NEGINF => 3)
-		in	ccall2(setfc,r,p)
+		in	setfc(r,p)
 		end
 
 end

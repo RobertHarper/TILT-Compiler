@@ -6,6 +6,9 @@
 #include <signal.h>
 #include <sys/wait.h>
 
+static char Ewaitpid[] = "posix_process_waitpid: bad status";
+static char Eprocnum[] = "posix_process_num: bad name";
+
 static struct sysval process_vec[] = {
 	{"WNOHANG",	WNOHANG},
 #ifdef WUNTRACED
@@ -18,52 +21,52 @@ static struct sysvals process_values = {
 	process_vec
 };
 
-/*int*/cresult
-posix_process_num(string key)
+int
+posix_process_num(cerr er, string key)
 {
-	return sysval_num("posix_process_num", &process_values, key);
+	return sysval_num(er, Eprocnum, &process_values, key);
 }
 
-ptr_t	/* exn */
+int
 posix_process_exec(string mlpath, string_list args)
 {
 	char* cpath = mlstring2cstring_static(mlpath);
 	char** argv = string_list_to_array_malloc(args);
-	ptr_t exn;
+	int e;
 	(void)execv(cpath, argv);
-	exn = SysErr(errno);
+	e = errno;
 	efree(argv);
-	return exn;
+	return e;
 }
 
-ptr_t /* exn */
+int
 posix_process_exece(string mlpath, string_list args, string_list envs)
 {
 	char* cpath = mlstring2cstring_static(mlpath);
 	char** argv = string_list_to_array_malloc(args);
 	char** envp = string_list_to_array_malloc(envs);
-	ptr_t exn;
+	int e;
 	(void)execve(cpath, argv, envp);
-	exn = SysErr(errno);
+	e = errno;
 	efree(argv);
 	efree(envp);
-	return exn;
+	return e;
 }
 
-ptr_t /* exn */
+int
 posix_process_execp(string mlpath, string_list args)
 {
 	char* cpath = mlstring2cstring_static(mlpath);
 	char** argv = string_list_to_array_malloc(args);
-	ptr_t exn;
+	int e;
 	(void)execvp(cpath,argv);
-	exn = SysErr(errno);
+	e = errno;
 	efree(argv);
-	return exn;
+	return e;
 }
 
-/*waitpidrep*/cresult
-posix_process_waitpid(int argpid, word options)
+ptr_t	/*waitpidrep*/
+posix_process_waitpid(cerr er, int argpid, word options)
 {
 	int status;
 	pid_t pid = waitpid(argpid, &status, options);
@@ -71,7 +74,7 @@ posix_process_waitpid(int argpid, word options)
 	val_t fields[3];
 
 	if(pid == (pid_t)-1)
-		return Error(SysErr(errno));
+		send_errno(er,errno);
 	else if(WIFEXITED(status)) {
 		how = 0;
 		val = WEXITSTATUS(status);
@@ -82,25 +85,27 @@ posix_process_waitpid(int argpid, word options)
 		how = 2;
 		val = WSTOPSIG(status);
 	} else
-		return Error(SysErr_fmt("posix_process_waitpid: bad status: %d", status));
+		send_errmsg(er,Ewaitpid);
 
 	fields[0] = (val_t) pid;
 	fields[1] = (val_t) how;
 	fields[2] = (val_t) val;
-	return NormalPtr(alloc_record(fields, 0, arraysize(fields)));
+	return alloc_record(fields, arraysize(fields));
 }
 
-ptr_t /* exn */
+int
 posix_process_exit(word8 status)
 {
 	exit(status);
-	return SysErr(errno);
+	return errno;
 }
 
-/*unit*/cresult
-posix_process_kill(int pid, int sig)
+unit
+posix_process_kill(cerr er, int pid, int sig)
 {
-	return unit_cresult(kill((pid_t)pid, sig));
+	if(kill((pid_t)pid, sig) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
 int

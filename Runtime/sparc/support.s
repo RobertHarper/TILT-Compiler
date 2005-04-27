@@ -1,14 +1,15 @@
 
  ! This code assumes that the thread pointer points to a structure
- ! containing 32 longs constituting the integer register set followed
- ! by 32 doubles constituting the floating-point register set and that
- ! the thread pointer is unmodified by call to GCFromML.  We maintain
- ! the invariant that there is only one valid register window while
- ! the mutator is running.  That is, the C parts of the runtime may
- ! use register windows (SAVE and RESTORE) but we compensate with
- ! FLUSHW.  Code that transitions from ML to C must set the
- ! thread-specific value notInML (used by signal handlers).  Code that
- ! transitions from C to ML must clear notInML and perform FLUSHW.
+ ! containing 32 longs constituting the integer register set followed by
+ ! 32 doubles constituting the floating-point register set and that the
+ ! thread pointer is unmodified by call to GCFromML.  We maintain the
+ ! invariant that there is only one valid register window while the
+ ! mutator is running.  That is, the C parts of the runtime may use
+ ! register windows (SAVE and RESTORE) but we compensate with FLUSHW.
+ ! Code that transitions from ML to C must set the thread-specific values
+ ! notInML (used by signal handlers) and safeToGC (used by the runtime
+ ! allocator).  Code that transitions from C to ML must clear notInML and
+ ! perform FLUSHW.
 
 #include "sparcasm.h"
 #include "asm.h"
@@ -225,6 +226,7 @@ GCFromML:
 	stw	RA_REG, [THREADPTR_REG + MLsaveregs_disp + RA_DISP]
 	mov	1, %r1
 	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
+	st	%r1, [THREADPTR_REG + safetogc_disp]
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs
 	nop
@@ -252,6 +254,7 @@ RestoreStackFromML:
 	stw	RA_REG, [THREADPTR_REG + MLsaveregs_disp + RA_DISP]
 	mov	1, %r1
 	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
+	st	%r1, [THREADPTR_REG + safetogc_disp]
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs
 	nop
@@ -278,6 +281,7 @@ NewStackletFromML:
 	stw	RA_REG, [THREADPTR_REG + MLsaveregs_disp + RA_DISP]
 	mov	1, %r1
 	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
+	st	%r1, [THREADPTR_REG + safetogc_disp]
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs
 	nop
@@ -304,6 +308,7 @@ PopStackletFromML:
 	stw	RA_REG, [THREADPTR_REG + MLsaveregs_disp + RA_DISP]
 	mov	1, %r1
 	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
+	st	%r1, [THREADPTR_REG + safetogc_disp]
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs
 	nop
@@ -328,6 +333,7 @@ returnToML:
 	mov	CFIRSTARG_REG, THREADPTR_REG		! restore THREADPTR_REG
 	mov	CSECONDARG_REG, %r4			! use r4 as temp for return address
 	st	%g0, [THREADPTR_REG + notinml_disp]	! returning to ML
+	st	%g0, [THREADPTR_REG + safetogc_disp]
 	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
 	call	load_regs				! don't need to save return address
 	nop
@@ -466,6 +472,7 @@ save_regs_MLtoC:
 	mov	%r4, %o7				! restore return address
 	mov	1, %r4
 	st	%r4, [THREADPTR_REG + notinml_disp]	! leaving ML
+	st	%r4, [THREADPTR_REG + safetogc_disp]
 	ld	[%r1+16], %r4				! restore r4 which we use as temp
 	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg
 	mov	THREADPTR_REG, %l0			! when calling C code, %l0 (but not %g2) is unmodified
@@ -485,6 +492,7 @@ load_regs_MLtoC:
 	flushw
 	mov	%l0, THREADPTR_REG			! restore THREADPTR_REG
 	st	%g0, [THREADPTR_REG + notinml_disp]	! entering ML
+	st	%g0, [THREADPTR_REG + safetogc_disp]
 	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
 	stw	%o0, [%r1 + 32]				! overwrite GP result register
 	std	%f0, [%r1 + 128]			! overwrite FP result register
@@ -587,6 +595,7 @@ start_client:
 	ld	[%r1+16], %r4				! restore r4 which is not restored by load_regs
 	ld	[THREADPTR_REG+MLsaveregs_disp+4], %r1	! restore r1 which was used as arg to load_regs
 	st	%g0, [THREADPTR_REG + notinml_disp]     ! entering ML
+	st	%g0, [THREADPTR_REG + safetogc_disp]
 	ld	[ASMTMP_REG + 0], RA_REG		! fetch code pointer
 	ld	[ASMTMP_REG + 4], %o0			! fetch type env
 	ld	[ASMTMP_REG + 8], %o1			! fetch term env
@@ -597,6 +606,7 @@ start_client:
 	nop
 	mov	1, ASMTMP_REG
 	st	ASMTMP_REG, [THREADPTR_REG + notinml_disp]	! returning from ML
+	st	ASMTMP_REG, [THREADPTR_REG + safetogc_disp]
 	st	%r1, [THREADPTR_REG+MLsaveregs_disp+4]		! r1 saved manually
 	st	%r4, [THREADPTR_REG+MLsaveregs_disp+16]		! r4 saved manually
 								! r15 not saved - unneeded
@@ -675,6 +685,7 @@ global_exnhandler:
 	ld	[EXNPTR_REG + 4], SP_REG
 	mov	1, %r1
 	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
+	st	%r1, [THREADPTR_REG + safetogc_disp]
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs
 	nop
@@ -696,6 +707,7 @@ raise_exception_raw:
 	flushw
 	mov	%o0, THREADPTR_REG
 	st	%g0, [THREADPTR_REG + notinml_disp]	! entering ML
+	st	%g0, [THREADPTR_REG + safetogc_disp]
 	mov	%o1, %r4				! save exn arg since load_regs leaves r4 alone
 	add	THREADPTR_REG, MLsaveregs_disp, %r1	! use ML save area of thread pointer structure
 	call	load_regs
@@ -726,6 +738,7 @@ OverflowFromML:
 	stw	RA_REG, [THREADPTR_REG + MLsaveregs_disp + RA_DISP]
 	mov	1, %r1
 	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
+	st	%r1, [THREADPTR_REG + safetogc_disp]
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs
 	nop
@@ -750,6 +763,7 @@ DivFromML:
 	stw	RA_REG, [THREADPTR_REG + MLsaveregs_disp + RA_DISP]
 	mov	1, %r1
 	st	%r1, [THREADPTR_REG + notinml_disp]		! leaving ML
+	st	%r1, [THREADPTR_REG + safetogc_disp]
 	add	THREADPTR_REG, MLsaveregs_disp, %r1		! use ML save area of thread pointer
 	call	save_regs
 	nop

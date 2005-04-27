@@ -1,3 +1,5 @@
+/* ../../Basis/OS/commandline.sml */
+
 #include "s.h"
 #include "r.h"
 #include "sparc.h"
@@ -19,9 +21,19 @@ commandline_name(unit ignored)
 	return cstring2mlstring_alloc(commandline_cmd);
 }
 
-string_list
-commandline_arguments(unit ignored)
+int
+commandline_arguments_size(unit ignored)
+{
+	int n;
+	assert(commandline_argv != NULL);
+	for(n=0; commandline_argv[n]; n++)
+		;
+	return n;
+}
+
+string
+commandline_arguments_nth(int n)
 {
 	assert(commandline_argv != NULL);
-	return array_to_string_list(commandline_argv);
+	return cstring2mlstring_alloc(commandline_argv[n]);
 }

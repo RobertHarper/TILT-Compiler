@@ -74,14 +74,14 @@ static void GCCollect_Semi(Proc_t *proc)
 
   if (ordering == ImplicitOrder) {
     if (!forceSpaceCheck) {
-      while (rootLoc = (ploc_t) SetPop(&proc->work.roots))          
+      while (rootLoc = (ploc_t) SetPop(&proc->work.roots))
 	locCopy1_noSpaceCheck(proc, rootLoc, fromSpace);
       while (globalLoc = (ploc_t) SetPop(&proc->work.globals)) 
 	locCopy1_noSpaceCheck(proc, (ploc_t) globalLoc, fromSpace);
       scanUntil_locCopy1_noSpaceCheck(proc,toSpace->range.low,fromSpace);
     }
     else {
-      while (rootLoc = (ploc_t) SetPop(&proc->work.roots))          
+      while (rootLoc = (ploc_t) SetPop(&proc->work.roots))
 	locCopy1(proc, rootLoc, fromSpace);
       while (globalLoc = (ploc_t) SetPop(&proc->work.globals)) 
 	locCopy1(proc, (ploc_t) globalLoc, fromSpace);
@@ -90,7 +90,7 @@ static void GCCollect_Semi(Proc_t *proc)
   }
   else if (ordering == HybridOrder) {
     assert(forceSpaceCheck == 1);
-    while (rootLoc = (ploc_t) SetPop(&proc->work.roots))          
+    while (rootLoc = (ploc_t) SetPop(&proc->work.roots))
       locCopy1(proc, rootLoc, fromSpace);
     while (globalLoc = (ploc_t) SetPop(&proc->work.globals)) 
       locCopy1(proc, (ploc_t) globalLoc, fromSpace);

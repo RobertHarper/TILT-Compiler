@@ -1,7 +1,4 @@
-/*
-	../../Basis/Numeric/tiltfc.int
-	../../Basis/Numeric/tiltfc.sml
-*/
+/* ../../Basis/Numeric/tiltfc.sml */
 
 #include "s.h"
 #include "r.h"
@@ -25,6 +22,9 @@ enum {
 		PE	=	3<<8,
 };
 
+static char Emode[] = "setfc: bad rounding mode";
+static char Eprecision[] = "setfc: bad precision";
+
 static int
 fnstcw(void)
 {
@@ -41,7 +41,7 @@ fldcw(int cw)
 }
 
 ptr_t
-getfc(unit ignored)
+getfc(cerr er)
 {
 	int c = fnstcw();
 	int r, p;
@@ -60,8 +60,8 @@ getfc(unit ignored)
 	return alloc_intint((val_t)r, (val_t)p);
 }
 
-/*unit*/cresult
-setfc(int r, int p)
+unit
+setfc(cerr er, int r, int p)
 {
 	int c = fnstcw() & (~(PMask|RMask));
 	int rb, pb;
@@ -71,15 +71,17 @@ setfc(int r, int p)
 	case TO_POSINF:	rb = RPI; break;
 	case TO_NEGINF:	rb = RNI; break;
 	default:
-		return Error(SysErr_fmt("setfc: bad rounding mode: %d",r));
+		send_errmsg(er, Emode);
+		return empty_record;
 	}
 	switch(p){
 	case SINGLE:	pb = PS; break;
 	case DOUBLE:	pb = PD; break;
 	case EXTENDED:	pb = PE; break;
 	default:
-		return Error(SysErr_fmt("setfc: bad precision: %d",p));
+		send_errmsg(er, Eprecision);
+		return empty_record;
 	}
 	fldcw(c | rb | pb);
-	return NormalPtr(empty_record);
+	return empty_record;
 }

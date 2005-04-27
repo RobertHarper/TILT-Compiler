@@ -432,12 +432,17 @@ struct Usage__t {
 	long counter;
 };
 
-/* Must agree with asm.h and the compiler. */
+/*
+	The first several fields must agree with asm.h and
+	../../Sparc/sparc.sml.
+*/
 struct Thread__t {
 	volatile reg_t saveregs[32];
 	volatile double fregs[32];
 	volatile Proc_t* proc;
 	volatile long notInML;
+	volatile long safeToGC;
+	volatile long padding;
 	volatile double scratch;
 	/* Why were we stoppped and how do we resume? */
 	volatile long request;
@@ -492,7 +497,7 @@ struct LocalWork__t {
 	Set_t objs;	/* Gray objects */
 	Set_t grayRegion;	/* Regions of gray objects */
 	Set_t globals;	/* Global variables */
-	Set_t roots;	/* Stack root locations containing root values */
+	Set_t roots;	/* Stack and global locations containing root values */
 	/* Used by incremental collector for breaking up scanning stacks. */
 	Set_t segments;
 	Set_t stacklets;
@@ -955,6 +960,7 @@ extern unsigned long	firsttext;
 unsigned long	objectLength(ptr_t obj, mem_t* start);
 int	empty_writelist(Proc_t*);
 void	process_writelist(Proc_t*, Heap_t*, Heap_t*);
+int	try_process_writelist(Proc_t*, Thread_t*, Heap_t*, Heap_t*);
 /* Leftover area is padded with PadHeapArea */
 void 	DischargeCopyRange(CopyRange_t*);
 /* Leftover area is padded with PadHeapArea */

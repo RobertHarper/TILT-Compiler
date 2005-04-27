@@ -1,10 +1,3 @@
-/* Must agree with the C compiler. */
-#define intSz	4
-#define longSz	4
-#define CptrSz	4
-#define MLptrSz	4
-#define doubleSz	8
-
 #define ZERO	0
 #define EXNPTR	1
 #define THREADPTR	2
@@ -38,10 +31,10 @@
 #define ASMTMP2_REG	%r17
 
 /* Must agree with Thread_t. */
-#define ALLOCPTR_DISP	(longSz * ALLOCPTR)
-#define ALLOCLIMIT_DISP	(longSz * ALLOCLIMIT)
-#define SP_DISP	(longSz * SP)
-#define RA_DISP	(longSz * RA)
-#define EXNARG_DISP	(longSz * EXNARG)
-#define ASMTMP_DISP	(longSz * ASMTMP)
-#define ASMTMP2_DISP	(longSz * ASMTMP2)
+#define ALLOCPTR_DISP	(4 * ALLOCPTR)
+#define ALLOCLIMIT_DISP	(4 * ALLOCLIMIT)
+#define SP_DISP	(4 * SP)
+#define RA_DISP	(4 * RA)
+#define EXNARG_DISP	(4 * EXNARG)
+#define ASMTMP_DISP	(4 * ASMTMP)
+#define ASMTMP2_DISP	(4 * ASMTMP2)

@@ -24,6 +24,7 @@ HFILES=\
 OFILES=\
 	barriers.o\
 	bitmap.o\
+	ccall.o\
 	commandline.o\
 	create.o\
 	date.o\
@@ -53,6 +54,7 @@ OFILES=\
 	platform.o\
 	portcreate.o\
 	portexn.o\
+	portmalloc.o\
 	posix_error.o\
 	posix_filesys.o\
 	posix_io.o\
@@ -71,6 +73,7 @@ OFILES=\
 	stack.o\
 	stats.o\
 	support.o\
+	syserror.o\
 	sysvals.o\
 	thread.o\
 	time.o\

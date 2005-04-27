@@ -3,6 +3,9 @@
 #include "s.h"
 #include "r.h"
 
+static char Ename[] = "posix_error_name: bad number";
+static char Enum[] = "posix_error_num: bad name";
+
 static struct sysval error_vec[] = {
 	{"acces",	EACCES},
 	{"again",	EAGAIN},
@@ -70,20 +73,13 @@ static struct sysvals error_values = {
 };
 
 string
-posix_error_msg(int e)
+posix_error_name(cerr er, int e)
 {
-	char* cmsg = strerror(e);
-	return cstring2mlstring_alloc(cmsg);
+	return sysval_name(er, Ename, &error_values, e);
 }
 
-/*string*/cresult
-posix_error_name(int e)
+int
+posix_error_num(cerr er, string key)
 {
-	return sysval_name("posix_error_name", &error_values, e);
-}
-
-/*int*/cresult
-posix_error_num(string key)
-{
-	return sysval_num("posix_error_num", &error_values, key);
+	return sysval_num(er, Enum, &error_values, key);
 }

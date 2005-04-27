@@ -71,24 +71,24 @@ registerLibFailExnRuntime(exn exn)
 	return empty_record;
 }
 
-static val_t
-getSubStamp()
+val_t
+getSubStamp(void)
 {
 	if(subStamp == BadStamp)
 		DIE("SubStamp uninitialized");
 	return subStamp;
 }
 
-static val_t
-getDivStamp()
+val_t
+getDivStamp(void)
 {
 	if(divStamp == BadStamp)
 		DIE("DivStamp uninitialized");
 	return divStamp;
 }
 
-static val_t
-getOvflStamp()
+val_t
+getOvflStamp(void)
 {
 	if(ovflStamp == BadStamp)
 		DIE("OverflowStamp uninitialized");
@@ -96,7 +96,7 @@ getOvflStamp()
 }
 
 static val_t
-getSysErrStamp()
+getSysErrStamp(void)
 {
 	if(sysErrStamp == BadStamp)
 		DIE("SysErrStamp uninitialized");
@@ -104,99 +104,11 @@ getSysErrStamp()
 }
 
 static val_t
-getLibFailStamp()
+getLibFailStamp(void)
 {
 	if(libFailStamp == BadStamp)
 		DIE("libFailStamp uninitialized");
 	return libFailStamp;
-}
-
-static exn
-mkExn(string exnname, val_t exnstamp, val_t exnarg, bool argpointer)
-{
-	val_t fields[3];
-	int mask = (1<<Name) | (argpointer ? (1<<Arg) : 0);
-	exn e;
-	fields[Stamp] = exnstamp;
-	fields[Arg]  = exnarg;
-	fields[Name]  = (val_t)exnname;
-	e = alloc_record(fields, mask, 3);
-	return e;
-}
-
-exn
-mkDivExn(void)
-{
-	string exnname = cstring2mlstring_alloc("Div");
-	val_t exnstamp = getDivStamp();
-	exn e = mkExn(exnname,exnstamp,(val_t)empty_record,false);
-	return e;
-}
-
-exn
-mkOverflowExn(void) 
-{
-	string exnname = cstring2mlstring_alloc("Overflow");
-	val_t exnstamp = getOvflStamp();
-	exn e = mkExn(exnname,exnstamp,(val_t)empty_record,false);
-	return e;
-}
-
-exn
-mkSubscriptExn(void)
-{
-	string exnname = cstring2mlstring_alloc("Subscript");
-	val_t exnstamp = getSubStamp();
-	exn e = mkExn(exnname,exnstamp,(val_t)empty_record,false);
-	return e;
-}
-
-static exn
-mkSysErrExn(string msg, ptr_t errno_option)
-{
-	string exnname = cstring2mlstring_alloc("SysErr");
-	val_t exnstamp = getSysErrStamp();
-	ptr_t exnarg = alloc_ptrptr(msg, errno_option);
-	exn e = mkExn(exnname,exnstamp,(val_t)exnarg,true);
-	return e;
-}
-
-static ptr_t
-some_int_option(int32 i)
-{
-	val_t fields[1];
-	fields[0] = (val_t) i;
-	return alloc_record(fields, 0, 1);
-}
-
-exn
-SysErr(int e)
-{
-	char* cmsg = strerror(e);
-	string msg = cstring2mlstring_alloc(cmsg);
-	ptr_t errno_option = some_int_option(e);
-	exn exn = mkSysErrExn(msg,errno_option);
-	return exn;
-}
-
-exn
-SysErr_msg(char* cmsg)
-{
-	string msg = cstring2mlstring_alloc(cmsg);
-	ptr_t errno_option = 0;
-	exn exn = mkSysErrExn(msg,errno_option);
-	return exn;
-}
-
-exn
-SysErr_fmt(char* fmt, ...)
-{
-	char buf[1024];
-	va_list args;
-	va_start(args, fmt);
-	vsprintf(buf, fmt, args);
-	va_end(args);
-	return SysErr_msg(buf);
 }
 
 string
@@ -209,6 +121,8 @@ exnMessageRuntime(exn exn)
 		strcpy(buf, "divide by zero");
 	} else if (exnstamp == getOvflStamp()) {
 		strcpy(buf, "overflow");
+	} else if (exnstamp == getSubStamp()) {
+		strcpy(buf, "subscript out of bounds");
 	} else if (exnstamp == getLibFailStamp()) {
 		const char* prefix = "LibFail: ";
 		string msg = (string) get_arg(exn);

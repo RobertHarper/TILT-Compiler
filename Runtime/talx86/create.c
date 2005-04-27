@@ -9,15 +9,13 @@ get_record(ptr_t rec, int which)
 }
 
 ptr_t
-alloc_record(val_t* fields, int mask, int count)
+alloc_record(val_t* fields, int count)
 {
 	if(count == 0)
 		return empty_record;
 	else {
 		size_t size = 4*count;
-		ptr_t rec = (mask == 0)
-			? (ptr_t)emalloc_atomic(size)
-			: (ptr_t)emalloc(size);
+		ptr_t rec = emalloc_atomic(size);
 		int i;
 
 		for (i=0; i<count; i++)
@@ -99,10 +97,10 @@ valof_arrayopt(option arrayopt)
 option
 some_array(ptr_t array)
 {
-	val_t fields[1];
+	ptr_t rec = emalloc(4);
+	rec[0] = (val_t) array;
 	assert(array != NULL);
-	fields[0] = (val_t) array;
-	return alloc_record(fields, 1<<0, 1);
+	return rec;
 }
 
 /*

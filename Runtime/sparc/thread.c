@@ -320,38 +320,40 @@ Proc_t *getProc(void)
   return getProcPthread();
 }
 
-void resetUsage(Usage_t *u)
+void
+resetUsage(Usage_t* u)
 {
-  u->numWrites = 0;
-  u->bytesAllocated = 0;
-  u->bytesReplicated = 0;
-  u->fieldsCopied = 0;
-  u->fieldsScanned = 0;
-  u->ptrFieldsScanned = 0;
-  u->objsCopied = 0;
-  u->objsScanned = 0;
-  u->pagesTouched = 0 ;
-  u->rootsProcessed = 0;
-  u->globalsProcessed = 0;
-  u->stackSlotsProcessed = 0;
-  u->workDone = 0;
-  u->checkWork = 0;
-  u->maxWork = 0;
-  u->counter = usageCount;
+	u->numWrites = 0;
+	u->bytesAllocated = 0;
+	u->bytesReplicated = 0;
+	u->fieldsCopied = 0;
+	u->fieldsScanned = 0;
+	u->ptrFieldsScanned = 0;
+	u->objsCopied = 0;
+	u->objsScanned = 0;
+	u->pagesTouched = 0 ;
+	u->rootsProcessed = 0;
+	u->globalsProcessed = 0;
+	u->stackSlotsProcessed = 0;
+	u->workDone = 0;
+	u->checkWork = 0;
+	u->maxWork = 0;
+	u->counter = usageCount;
 }
 
-long updateUsage(Usage_t *u)
+long
+updateUsage(Usage_t* u)
 {
-  u->workDone = (long) (u->fieldsCopied * fieldCopyWeight + 
-			u->fieldsScanned * fieldScanWeight +
-			u->ptrFieldsScanned * ptrFieldScanWeight +
-			u->objsCopied * objCopyWeight + 
-			u->objsScanned * objScanWeight +
-			u->pagesTouched * pageWeight +
-			u->rootsProcessed * rootWeight +
-			u->globalsProcessed * globalWeight +
-			u->stackSlotsProcessed * stackSlotWeight);
-  return u->workDone;
+	u->workDone = (long) (u->fieldsCopied * fieldCopyWeight + 
+		u->fieldsScanned * fieldScanWeight +
+		u->ptrFieldsScanned * ptrFieldScanWeight +
+		u->objsCopied * objCopyWeight + 
+		u->objsScanned * objScanWeight +
+		u->pagesTouched * pageWeight +
+		u->rootsProcessed * rootWeight +
+		u->globalsProcessed * globalWeight +
+		u->stackSlotsProcessed * stackSlotWeight);
+	return u->workDone;
 }
 
 void updateWorkDone(Proc_t *proc)
@@ -364,23 +366,23 @@ long bytesCopied(Usage_t *u)
   return 4 * (u->fieldsCopied + u->objsCopied);
 }
 
-static void attributeUsage(Usage_t *from, Usage_t *to)
+static void
+attributeUsage(Usage_t* from, Usage_t* to)
 {
-  to->numWrites += from->numWrites;
-  to->bytesAllocated += from->bytesAllocated;
-  to->bytesReplicated += from->bytesReplicated;
-  to->fieldsCopied += from->fieldsCopied;
-  to->fieldsScanned += from->fieldsScanned;
-  to->ptrFieldsScanned += from->ptrFieldsScanned;
-  to->objsCopied += from->objsCopied;
-  to->objsScanned += from->objsScanned;
-  to->pagesTouched += from->pagesTouched;
-  to->rootsProcessed += from->rootsProcessed;
-  to->globalsProcessed += from->globalsProcessed;
-  to->stackSlotsProcessed += from->stackSlotsProcessed;
-  resetUsage(from);
+	to->numWrites += from->numWrites;
+	to->bytesAllocated += from->bytesAllocated;
+	to->bytesReplicated += from->bytesReplicated;
+	to->fieldsCopied += from->fieldsCopied;
+	to->fieldsScanned += from->fieldsScanned;
+	to->ptrFieldsScanned += from->ptrFieldsScanned;
+	to->objsCopied += from->objsCopied;
+	to->objsScanned += from->objsScanned;
+	to->pagesTouched += from->pagesTouched;
+	to->rootsProcessed += from->rootsProcessed;
+	to->globalsProcessed += from->globalsProcessed;
+	to->stackSlotsProcessed += from->stackSlotsProcessed;
+	resetUsage(from);
 }
-
 
 void fillThread(Thread_t *th, int id)
 {  
@@ -405,53 +407,56 @@ void fillThread(Thread_t *th, int id)
 
 
 
-void init_localWork(LocalWork_t *lw, int objSize, int segSize, int globalSize, int rootSize, int stackletSize, int backObjSize, int backLocSize)
+void
+init_localWork(LocalWork_t* lw, int objSize, int segSize, int globalSize,
+	int rootSize, int stackletSize, int backObjSize, int backLocSize)
 {
-  SetInit(&lw->objs, objSize);
-  SetInit(&lw->grayRegion, 2048); /* XXX */
-  SetInit(&lw->segments, segSize);
-  SetInit(&lw->globals, globalSize);
-  SetInit(&lw->roots, rootSize);
-  SetInit(&lw->stacklets, stackletSize);
-  SetInit(&lw->backObjs, backObjSize);
-  SetInit(&lw->backLocs, backLocSize);
-  SetInit(&lw->nextBackObjs, backObjSize);
-  SetInit(&lw->nextBackLocs, backLocSize);
-  lw->hasShared = 0;
-} 
-
-int isLocalWorkAlmostEmpty(LocalWork_t *lw)
-{
-  return (SetIsEmpty(&lw->stacklets) &&
-	  SetIsEmpty(&lw->globals) &&
-	  SetIsEmpty(&lw->roots) &&
-	  SetIsEmpty(&lw->objs) &&
-	  SetIsEmpty(&lw->grayRegion) &&
-	  SetIsEmpty(&lw->segments) &&
-	  lw->hasShared == 0);
+	SetInit(&lw->objs, objSize);
+	SetInit(&lw->grayRegion, 2048); /* XXX */
+	SetInit(&lw->segments, segSize);
+	SetInit(&lw->globals, globalSize);
+	SetInit(&lw->roots, rootSize);
+	SetInit(&lw->stacklets, stackletSize);
+	SetInit(&lw->backObjs, backObjSize);
+	SetInit(&lw->backLocs, backLocSize);
+	SetInit(&lw->nextBackObjs, backObjSize);
+	SetInit(&lw->nextBackLocs, backLocSize);
+	lw->hasShared = 0;
 }
 
-int isLocalWorkEmpty(LocalWork_t *lw)
+int
+isLocalWorkAlmostEmpty(LocalWork_t* lw)
 {
-  return (SetIsEmpty(&lw->stacklets) &&
-	  SetIsEmpty(&lw->globals) &&
-	  SetIsEmpty(&lw->roots) &&
-	  SetIsEmpty(&lw->objs) &&
-	  SetIsEmpty(&lw->grayRegion) &&
-	  SetIsEmpty(&lw->segments) &&
-	  SetIsEmpty(&lw->backObjs) &&
-	  SetIsEmpty(&lw->backLocs) &&
-	  lw->hasShared == 0);
+	return (SetIsEmpty(&lw->stacklets) &&
+		SetIsEmpty(&lw->globals) &&
+		SetIsEmpty(&lw->roots) &&
+		SetIsEmpty(&lw->objs) &&
+		SetIsEmpty(&lw->grayRegion) &&
+		SetIsEmpty(&lw->segments) &&
+		lw->hasShared == 0);
 }
 
+int
+isLocalWorkEmpty(LocalWork_t* lw)
+{
+	return (SetIsEmpty(&lw->stacklets) &&
+		SetIsEmpty(&lw->globals) &&
+		SetIsEmpty(&lw->roots) &&
+		SetIsEmpty(&lw->objs) &&
+		SetIsEmpty(&lw->grayRegion) &&
+		SetIsEmpty(&lw->segments) &&
+		SetIsEmpty(&lw->backObjs) &&
+		SetIsEmpty(&lw->backLocs) &&
+		lw->hasShared == 0);
+}
 
 void thread_init(void)
 {
   int i, j;
-  assert(intSz == sizeof(int));
-  assert(longSz == sizeof(long));
-  assert(CptrSz == sizeof(int *));
-  assert(doubleSz == sizeof(double));
+  assert(sizeof(int) == 4);
+  assert(sizeof(long) == 4);
+  assert(sizeof(int *) == 4);
+  assert(sizeof(double) == 8);
   assert(sizeof(tag_t) == 4);
   assert(sizeof(val_t) == 4);
   assert(sizeof(ptr_t) == 4);

@@ -16,20 +16,30 @@ unit TiltPrim : TiltPrim = primitive
 interface TiltVectorEq = "vector_eq.int" {TiltPrim}
 unit TiltVectorEq : TiltVectorEq = "vector_eq.sml" {TiltPrim}
 
-interface TiltCresult = "cresult.int" { TiltPrim }
-unit TiltCresult : TiltCresult = "cresult.sml" { TiltPrim }
-
-interface TiltExnExtern = "General/extern.sml" {TiltPrim}
-unit TiltExnExtern : TiltExnExtern = "General/extern.sml" {TiltPrim}
+interface TiltPExtern = "Pextern.sml" {TiltPrim}
+unit TiltPExtern : TiltPExtern = "Pextern.sml" {TiltPrim}
 
 interface TiltPrelude = "Prelude.int" {TiltPrim}
-unit TiltPrelude : TiltPrelude = "Prelude.sml" {TiltPrim TiltExnExtern}
+unit TiltPrelude : TiltPrelude = "Prelude.sml" {TiltPrim TiltPExtern}
+
+interface TiltExn = "tiltexn.int" {TiltPrim TiltPrelude}
+unit TiltExn : TiltExn = "tiltexn.sml" {TiltPrim TiltPrelude TiltPExtern}
+
+interface TiltCcall = "ccall.int" {TiltPrim TiltPrelude}
+unit TiltCcall : TiltCcall = "ccall.sml" {TiltPrim TiltPrelude TiltPExtern TiltExn}
+
+interface TiltExternTys = "externtys.sml" {TiltPrim TiltPrelude}
+unit TiltExternTys : TiltExternTys = "externtys.sml" {TiltPrim TiltPrelude}
+
+interface TiltExtern = "extern.sml" {
+	TiltPrim TiltPrelude TiltExternTys TiltCcall
+}
+unit TiltExtern : TiltExtern = "extern.sml" {
+	TiltPrim TiltPrelude TiltExternTys TiltCcall
+}
 
 interface TiltCleanUp = "cleanup.int" { TiltPrim TiltPrelude }
 unit TiltCleanUp : TiltCleanUp = "cleanup.sml" { TiltPrim TiltPrelude }
-
-interface TiltExn = "tiltexn.int" {TiltPrim TiltPrelude}
-unit TiltExn : TiltExn = "tiltexn.sml" {TiltPrim TiltPrelude TiltExnExtern}
 
 interface GENERAL = "General/general.sig.sml" {
 	TiltPrim TiltPrelude
@@ -40,7 +50,7 @@ unit GENERAL : GENERAL = "General/general.sig.sml" {
 
 interface General = "General/general.int" {TiltPrim TiltPrelude GENERAL}
 unit General : General = "General/general.sml" {
-	TiltPrim TiltPrelude GENERAL TiltExnExtern TiltExn
+	TiltPrim TiltPrelude GENERAL TiltExn
 }
 
 interface OPTION = "General/option-sig.sml" {
@@ -137,12 +147,6 @@ interface TiltPreInt = "Numeric/pre-int.int" {
 unit TiltPreInt : TiltPreInt = "Numeric/pre-int.sml" {
 	TiltPrim TiltPrelude
 }
-interface TiltRealExtern = "Numeric/extern.sml" {
-	TiltPrim TiltCresult
-}
-unit TiltRealExtern : TiltRealExtern = "Numeric/extern.sml" {
-	TiltPrim TiltCresult
-}
 interface TiltPreReal = "Numeric/pre-real.int" {
 	TiltPrim TiltPrelude
 }
@@ -190,13 +194,13 @@ interface TiltSysInt = "Numeric/sys-int.int" {TiltPrim INTEGER}
 unit TiltSysInt : TiltSysInt = "Numeric/sys-int.sml" {Int32}
 interface TiltFc = "Numeric/tiltfc.int" {TiltPrim}
 unit TiltFc : TiltFc = "Numeric/tiltfc.sml" {
-	TiltPrim TiltPrelude TiltRealExtern TiltCresult
+	TiltPrim TiltPrelude TiltExtern TiltCcall
 }
 interface MATH = "Numeric/math-sig.sml" {TiltPrim}
 unit MATH : MATH = "Numeric/math-sig.sml" {TiltPrim}
 interface Math64 = "Numeric/math64c.int" {TiltPrim MATH}
 unit Math64 : Math64 = "Numeric/math64c.sml" {
-	TiltPrim TiltPrelude MATH TiltRealExtern TiltPreReal
+	TiltPrim TiltPrelude MATH TiltExtern TiltPreReal
 	TiltPreInt TiltFc
 }
 interface Math = "Numeric/math.int" {TiltPrim MATH}
@@ -227,7 +231,7 @@ unit TiltRealFmt : TiltRealFmt = "Numeric/real-format.sml" {
 interface Real64 = "Numeric/real64.int" {TiltPrim REAL}
 unit Real64 : Real64 = "Numeric/real64.sml" {
 	TiltPrim TiltPrelude TiltExn TiltRealFmt TiltNumScan
-	TiltRealExtern TiltPreReal REAL IEEEReal StringCvt Math64
+	TiltExtern TiltPreReal REAL IEEEReal StringCvt Math64
 	Int32 TiltFc
 }
 interface Real = "Numeric/real.int" {TiltPrim REAL}
@@ -388,15 +392,9 @@ interface COMMAND_LINE = "OS/commandline.sig.sml" {
 unit COMMAND_LINE : COMMAND_LINE = "OS/commandline.sig.sml" {
 	TiltPrim TiltPrelude
 }
-interface TiltCmdLine = "OS/commandline-help.sml" {
-	TiltPrim TiltPrelude
-}
-unit TiltCmdLine : TiltCmdLine = "OS/commandline-help.sml" {
-	TiltPrim TiltPrelude
-}
 interface CommandLine = "OS/commandline.int" {COMMAND_LINE}
 unit CommandLine : CommandLine = "OS/commandline.sml" {
-	TiltPrim TiltPrelude COMMAND_LINE TiltCmdLine
+	TiltPrim TiltPrelude COMMAND_LINE TiltExtern List
 }
 interface TIME = "OS/time-sig.sml" {
 	TiltPrim TiltPrelude StringCvt
@@ -404,16 +402,10 @@ interface TIME = "OS/time-sig.sml" {
 unit TIME : TIME = "OS/time-sig.sml" {
 	TiltPrim TiltPrelude StringCvt
 }
-interface TiltTimeExtern = "OS/pre-time.sml" {
-	TiltPrim TiltCresult TiltPrelude
-}
-unit TiltTimeExtern : TiltTimeExtern = "OS/pre-time.sml" {
-	TiltPrim TiltCresult TiltPrelude
-}
 interface Time = "OS/time.int" {TIME}
 unit Time : Time = "OS/time.sml" {
-	TiltPrim TiltPrelude Int String StringCvt TIME TiltCresult
-	TiltTimeExtern Real Bool TiltNumFmt Char
+	TiltPrim TiltPrelude Int String StringCvt TIME TiltCcall
+	TiltExtern Real Bool TiltNumFmt Char
 }
 interface OS_FILE_SYS = "OS/os-filesys-sig.sml" {
 	Position TiltPrim TiltPrelude Time
@@ -545,25 +537,14 @@ unit TIMER : TIMER = "timer-sig.sml" {
 }
 interface Timer = "timer.int" {TIMER}
 unit Timer : Timer = "useless-timer.sml" {
-	TiltPrim TiltPrelude TIMER TiltCresult TiltTimeExtern Time
+	TiltPrim TiltPrelude TIMER TiltCcall TiltExtern TiltExternTys Time
 }
-interface TiltPosixExternTys = "externtys.sml" {
-	TiltPrim TiltPrelude
-}
-unit TiltPosixExternTys : TiltPosixExternTys = "externtys.sml" {
-	TiltPrim TiltPrelude
-}
-interface TiltPosixExtern = "extern.sml" {
-	TiltPrim TiltPrelude TiltCresult TiltPosixExternTys
-}
-unit TiltPosixExtern : TiltPosixExtern = "extern.sml" {
-	TiltPrim TiltPrelude TiltCresult TiltPosixExternTys
-}
+
 interface TiltPrePosix = "Posix/pre-posix.int" {
 	TiltPrim SysWord
 }
 unit TiltPrePosix : TiltPrePosix = "Posix/pre-posix.sml" {
-	TiltPrim TiltPrelude TiltCresult TiltPosixExtern String
+	TiltPrim TiltPrelude TiltCcall TiltExtern String
 	SysWord TiltExn
 }
 interface DATE = "date-sig.sml" {
@@ -575,7 +556,7 @@ unit DATE : DATE = "date-sig.sml" {
 interface Date = "date.int" {DATE}
 unit Date : Date = "date.sml" {
 	TiltPrim TiltPrelude List DATE Time
-	TiltCresult TiltPosixExternTys TiltPosixExtern
+	TiltCcall TiltExternTys TiltExtern
 	Vector StringCvt Int TiltExn
 }
 interface POSIX_ERROR = "Posix/posix-error.sig.sml" {
@@ -588,7 +569,7 @@ interface TiltPosixError = "Posix/posix-error.int" {
 	TiltPrim POSIX_ERROR
 }
 unit TiltPosixError : TiltPosixError = "Posix/posix-error.sml" {
-	TiltPrim TiltPrelude POSIX_ERROR TiltCresult TiltPosixExtern
+	TiltPrim TiltPrelude POSIX_ERROR TiltCcall TiltPExtern TiltExtern
 }
 interface POSIX_FLAGS = "Posix/posix-flags-sig.sml" {
 	TiltPrim TiltPrelude SysWord
@@ -615,8 +596,8 @@ interface TiltPosixFileSys = "Posix/posix-filesys.int" {
 }
 unit TiltPosixFileSys : TiltPosixFileSys = "Posix/posix-filesys.sml" {
 	TiltPrim TiltPrelude TiltPrePosix Position Word SysWord
-	TiltPreOs TiltCresult TiltPosixExtern List Time POSIX_FILE_SYS
-	String TiltExn
+	TiltPreOs TiltExtern List Time POSIX_FILE_SYS
+	String TiltExn TiltCcall TiltExternTys
 }
 interface POSIX_PROCESS = "Posix/posix-process-sig.sml" {
 	SysWord TiltPrim TiltPrelude POSIX_FLAGS Word8 Time
@@ -632,16 +613,15 @@ unit POSIX_SIGNAL : POSIX_SIGNAL = "Posix/posix-signal-sig.sml" {
 }
 interface TiltPosixSignal = "Posix/posix-signal.int" {POSIX_SIGNAL}
 unit TiltPosixSignal : TiltPosixSignal = "Posix/posix-signal.sml" {
-	Word32 TiltSysInt SysWord TiltCresult TiltPosixExtern
-	POSIX_SIGNAL
+	TiltPrim Word32 TiltSysInt SysWord TiltCcall TiltExtern POSIX_SIGNAL
 }
 interface TiltPosixProcess = "Posix/posix-process.int" {
 	TiltPosixSignal POSIX_PROCESS
 }
 unit TiltPosixProcess : TiltPosixProcess = "Posix/posix-process.sml" {
 	TiltPrim TiltPrelude TiltPrePosix List TiltPosixSignal SysWord
-	TiltSysInt Time Word8 TiltCresult TiltPosixExtern
-	POSIX_PROCESS TiltExn
+	TiltSysInt Time Word8 TiltCcall TiltExtern POSIX_PROCESS
+	TiltExn TiltExternTys TiltPExtern
 }
 interface TiltPosixIo = "Posix/posix-io.int" {
 	POSIX_IO TiltPrePosix TiltPosixFileSys
@@ -649,8 +629,8 @@ interface TiltPosixIo = "Posix/posix-io.int" {
 unit TiltPosixIo : TiltPosixIo = "Posix/posix-io.sml" {
 	TiltPrim TiltPrelude TiltPrePosix TiltSysInt Int Position
 	Word8Vector Word8Array List POSIX_IO TiltPosixFileSys
-	TiltPosixProcess SysWord TiltCresult TiltPosixExternTys
-	TiltCresult TiltPosixExtern String TiltExn
+	TiltPosixProcess SysWord TiltExternTys TiltCcall TiltExtern
+	String TiltExn
 }
 interface POSIX_PROC_ENV = "Posix/posix-procenv-sig.sml" {
 	TiltPrim TiltPrelude SysWord Time
@@ -663,8 +643,9 @@ interface TiltPosixProcEnv = "Posix/posix-procenv.int" {
 }
 unit TiltPosixProcEnv : TiltPosixProcEnv = "Posix/posix-procenv.sml" {
 	TiltPrim TiltPrelude TiltPrePosix Time Real TiltSysInt List
-	TiltPosixFileSys TiltPosixProcess SysWord POSIX_PROC_ENV
-	TiltPosixProcess TiltCresult TiltPosixExtern
+	Vector TiltPosixFileSys TiltPosixProcess SysWord
+	POSIX_PROC_ENV TiltPosixProcess TiltCcall TiltExtern
+	TiltExternTys
 }
 interface POSIX_TTY = "Posix/posix-tty-sig.sml" {
 	TiltPrim TiltPrelude SysWord POSIX_FLAGS
@@ -678,7 +659,7 @@ interface TiltPosixTty = "Posix/posix-tty.int" {
 unit TiltPosixTty : TiltPosixTty = "Posix/posix-tty.sml" {
 	TiltPrim TiltPrelude TiltVectorEq List Word8Vector Word8Array
 	TiltSysInt TiltPosixFileSys TiltPosixProcess SysWord Byte
-	POSIX_TTY TiltCresult TiltPosixExtern
+	POSIX_TTY TiltCcall TiltExtern TiltExternTys
 }
 interface POSIX_SYS_DB = "Posix/posix-sysdb-sig.sml" {
 	TiltPrim TiltPrelude
@@ -691,7 +672,7 @@ interface TiltPosixSysDb = "Posix/posix-sysdb.int" {
 }
 unit TiltPosixSysDb : TiltPosixSysDb = "Posix/posix-sysdb.sml" {
 	TiltPrim TiltVectorEq TiltPrelude TiltPrePosix SysWord
-	POSIX_SYS_DB TiltCresult TiltPosixExtern
+	POSIX_SYS_DB TiltCcall TiltExtern List
 }
 interface POSIX = "Posix/posix-sig.sml" {
 	POSIX_ERROR POSIX_SIGNAL POSIX_PROCESS POSIX_PROC_ENV
@@ -715,7 +696,7 @@ unit TiltOsPath : TiltOsPath = "Unix/os-path.sml" {
 interface TiltOsFileSys = "Unix/os-filesys.int" {OS_FILE_SYS}
 unit TiltOsFileSys : TiltOsFileSys = "Unix/os-filesys.sml" {
 	TiltPrim TiltVectorEq TiltPrelude SysWord List OS_FILE_SYS
-	TiltOsPath Posix TiltCresult TiltPosixExtern TiltExn
+	TiltOsPath Posix TiltCcall TiltExtern TiltExn
 }
 interface TiltOsProcess = "Unix/os-process.int" {OS_PROCESS}
 unit TiltOsProcess : TiltOsProcess = "Unix/os-process.sml" {
@@ -725,7 +706,7 @@ unit TiltOsProcess : TiltOsProcess = "Unix/os-process.sml" {
 interface TiltOsIo = "Unix/os-io.int" {OS_IO TiltPreOs}
 unit TiltOsIo : TiltOsIo = "Unix/os-io.sml" {
 	TiltPrim TiltPrelude TiltVectorEq Time List Word SysWord Int
-	OS_IO TiltPreOs Posix TiltCresult TiltPosixExtern
+	OS_IO TiltPreOs Posix TiltCcall TiltExtern TiltExternTys
 }
 interface OS = "Unix/os.int" {
 	OS_SIG TiltPreOs Posix

@@ -26,10 +26,12 @@ HFILES=\
 	talx86.h\
 
 OFILES=\
+	ccall.o\
 	commandline.o\
 	create.o\
 	date.o\
 	die.o\
+	exn.o\
 	fc.o\
 	fork.o\
 	malloc.o\
@@ -38,6 +40,7 @@ OFILES=\
 	os_io.o\
 	portcreate.o\
 	portexn.o\
+	portmalloc.o\
 	posix_error.o\
 	posix_filesys.o\
 	posix_io.o\
@@ -49,6 +52,7 @@ OFILES=\
 	pre_posix.o\
 	real.o\
 	stdlib.o\
+	syserror.o\
 	sysvals.o\
 	time.o\
 	timer.o\

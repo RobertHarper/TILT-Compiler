@@ -4,6 +4,8 @@
 #include "r.h"
 #include <time.h>
 
+static char Emktime[] = "date_mktime: invalid tm";
+
 /*
 	Tmrep and tmset must agree with
 	type tmrep in ../../Basis/externtys.sml
@@ -22,7 +24,7 @@ Tmrep(struct tm* tm)
 	fields[6] = (val_t) tm->tm_wday;
 	fields[7] = (val_t) tm->tm_yday;
 	fields[8] = (val_t) tm->tm_isdst;
-	return alloc_record(fields, 0, arraysize(fields));
+	return alloc_record(fields, arraysize(fields));
 }
 
 static struct tm*
@@ -41,7 +43,7 @@ tmset(struct tm* tm, ptr_t tmrep)
 }
 
 string
-posix_date_asctime(ptr_t tmrep)
+date_asctime(ptr_t tmrep)
 {
 	struct tm tm;
 	char *cstring = asctime(tmset(&tm, tmrep));
@@ -49,37 +51,34 @@ posix_date_asctime(ptr_t tmrep)
 	return mlstring;
 }
 
-/*tmrep*/cresult
-posix_date_localtime(int time)
+ptr_t
+date_localtime(cerr er, int time)
 {
 	time_t t = (time_t)time;
 	struct tm* tm = localtime(&t);
 	if(tm==NULL)
-		return Error(SysErr(errno));
-	else
-		return NormalPtr(Tmrep(tm));
+		send_errno(er,errno);
+	return Tmrep(tm);
 }
 
-/*tmrep*/cresult
-posix_date_gmtime(int time)
+ptr_t
+date_gmtime(cerr er, int time)
 {
 	time_t t = (time_t)time;
 	struct tm* tm = gmtime(&t);
 	if(tm==NULL)
-		return Error(SysErr(errno));
-	else
-		return NormalPtr(Tmrep(tm));
+		send_errno(er,errno);
+	return Tmrep(tm);
 }
 
-/*int*/cresult
-posix_date_mktime(ptr_t tmrep)
+int
+date_mktime(cerr er, ptr_t tmrep)
 {
 	struct tm tm;
 	time_t time = mktime(tmset(&tm,tmrep));
 	if(time == (time_t)-1)
-		return Error(SysErr_msg("mkTime: invalid tm"));
-	else
-		return Normal(time);
+		send_errmsg(er,Emktime);
+	return (int)time;
 }
 
 static string
@@ -97,7 +96,7 @@ do_strftime(char* buf, int size, char* fmt, struct tm* tm)
 }
 
 string
-posix_date_strftime(string s, ptr_t tmrep)
+date_strftime(string s, ptr_t tmrep)
 {
 	char* fmt = mlstring2cstring_static(s);
 	struct tm tm;

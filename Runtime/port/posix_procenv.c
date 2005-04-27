@@ -42,46 +42,81 @@ posix_procenv_getegid(unit unused)
 	return (word)getegid();	/* never fails */
 }
 
-/*unit*/cresult
-posix_procenv_setuid(word uid)
+unit
+posix_procenv_setuid(cerr er, word uid)
 {
-	return unit_cresult(setuid((uid_t)uid));
+	if(setuid((uid_t)uid) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-/*unit*/cresult
-posix_procenv_setgid(word gid)
+unit
+posix_procenv_setgid(cerr er, word gid)
 {
-	return unit_cresult(setgid((gid_t)gid));
+	if(setgid((gid_t)gid) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-/*word_list*/cresult
-posix_procenv_getgroups(unit unused)
+typedef struct groupsrep* groupsrep;
+struct groupsrep{
+	int ngroups;
+	gid_t* groups;
+};
+
+uct
+posix_procenv_getgroups(cerr er)
 {
-	gid_t grouplist[NGROUPS_MAX];
-	int ngroups = getgroups(NGROUPS_MAX, grouplist);
-	if(ngroups == -1)
-		return Error(SysErr(errno));
-	else {
-		int i;
-		ptr_t groups = 0;	/* nil */
-		for (i=ngroups-1; i>=0; i--) {
-			val_t car = (val_t)(word)grouplist[i];
-			groups = cons_int_alloc(car, groups);
-		}
-		return NormalPtr(groups);
+	int maxgroups = NGROUPS_MAX + 1;	/* +1 for egid */
+	gid_t* groups = (gid_t*)emalloc(maxgroups * sizeof(gid_t));
+	int ngroups = getgroups(maxgroups,groups);
+	if(ngroups == -1){
+		send_errno(er,errno);
+		efree(groups);
+		return 0;
+	}
+	else{
+		groupsrep rep = enew(struct groupsrep);
+		rep->ngroups = ngroups;
+		rep->groups = (gid_t*)erealloc(groups,ngroups * sizeof(gid_t));
+		return (uct)rep;
 	}
 }
 
-/*string*/cresult
-posix_procenv_getlogin(unit unused)
+int
+posix_procenv_getgroups_size(uct p)
+{
+	groupsrep rep = (groupsrep)p;
+	return rep->ngroups;
+}
+
+word
+posix_procenv_getgroups_nth(uct p, int n)
+{
+	groupsrep rep = (groupsrep)p;
+	return rep->groups[n];
+}
+
+unit
+posix_procenv_getgroups_free(uct p)
+{
+	groupsrep rep = (groupsrep)p;
+	efree(rep->groups);
+	efree(rep);
+	return empty_record;
+}
+
+string
+posix_procenv_getlogin(cerr er)
 {
 	char* cname = getlogin();
-	if(cname == NULL)
-		return Error(SysErr(errno));
-	else {
-		string name = cstring2mlstring_alloc(cname);
-		return NormalPtr(name);
+	string name;
+	if(cname == NULL){
+		send_errno(er,errno);
+		*cname = 0;
 	}
+	name = cstring2mlstring_alloc(cname);
+	return name;
 }
 
 int
@@ -90,52 +125,85 @@ posix_procenv_getpgrp(unit unused)
 	return (int)getpgrp();	/* never fails */
 }
 
-/*int*/cresult
-posix_procenv_setsid(unit unused)
+int
+posix_procenv_setsid(cerr er)
 {
 	pid_t pid = setsid();
 	if(pid == (pid_t)-1)
-		return Error(SysErr(errno));
-	else
-		return Normal(pid);
+		send_errno(er,errno);
+	return pid;
 }
 
-/*unit*/cresult
-posix_procenv_setpgid(int pid, int pgid)
+unit
+posix_procenv_setpgid(cerr er, int pid, int pgid)
 {
-	return unit_cresult(setpgid((pid_t)pid, (pid_t)pgid));
+	if(setpgid((pid_t)pid, (pid_t)pgid) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-/*string_stringlist*/cresult
-posix_procenv_uname(unit unused)
+uct
+posix_procenv_uname(cerr er)
 {
-	struct utsname name;
-	if(uname(&name) == -1)
-		return Error(SysErr(errno));
-	else {
-		ptr_t acc = NULL;
-
-		#define ACC(n,v) acc = cons_ptr_alloc(stringpair_ctoml_alloc(n, v), acc);
-
-		ACC("sysname", name.sysname);
-		ACC("nodename", name.nodename);
-		ACC("release", name.release);
-		ACC("version", name.version);
-		ACC("machine", name.machine);
-
-		#undef ACC
-		return NormalPtr(acc);
+	struct utsname* name = enew_atomic(struct utsname);
+	if(uname(name) == -1){
+		send_errno(er,errno);
+		efree(name);
+		name = 0;
 	}
+	return (uct)name;
 }
 
-/*int*/cresult
-posix_procenv_time(unit unused)
+string
+posix_procenv_uname_sysname(uct p)
+{
+	struct utsname* name = (struct utsname*)p;
+	return cstring2mlstring_alloc(name->sysname);
+}
+
+string
+posix_procenv_uname_nodename(uct p)
+{
+	struct utsname* name = (struct utsname*)p;
+	return cstring2mlstring_alloc(name->nodename);
+}
+
+string
+posix_procenv_uname_release(uct p)
+{
+	struct utsname* name = (struct utsname*)p;
+	return cstring2mlstring_alloc(name->release);
+}
+
+string
+posix_procenv_uname_version(uct p)
+{
+	struct utsname* name = (struct utsname*)p;
+	return cstring2mlstring_alloc(name->version);
+}
+
+string
+posix_procenv_uname_machine(uct p)
+{
+	struct utsname* name = (struct utsname*)p;
+	return cstring2mlstring_alloc(name->machine);
+}
+
+unit
+posix_procenv_uname_free(uct p)
+{
+	struct utsname* name = (struct utsname*)p;
+	efree(name);
+	return empty_record;
+}
+
+int
+posix_procenv_time(cerr er)
 {
 	time_t timeval = time(NULL);
 	if(timeval == (time_t)-1)
-		return Error(SysErr(errno));
-	else
-		return Normal(timeval);
+		send_errno(er,errno);
+	return timeval;
 }
 
 /*
@@ -152,18 +220,17 @@ Timesrep(clock_t realtime, struct tms* tms)
 	fields[2] = (val_t) tms->tms_stime;
 	fields[3] = (val_t) tms->tms_cutime;
 	fields[4] = (val_t) tms->tms_cstime;
-	return alloc_record(fields, 0, arraysize(fields));
+	return alloc_record(fields, arraysize(fields));
 }
 
-/*timesrep*/cresult
-posix_procenv_times(unit unused)
+ptr_t	/*timesrep*/
+posix_procenv_times(cerr er)
 {
 	struct tms tms;
 	clock_t realtime = times(&tms);
 	if(realtime == (clock_t)-1)
-		return Error(SysErr(errno));
-	else
-		return NormalPtr(Timesrep(realtime, &tms));
+		send_errno(er,errno);
+	return Timesrep(realtime, &tms);
 }
 
 string_option
@@ -174,31 +241,43 @@ posix_procenv_getenv(string mlname)
 	return alloc_string_option(cvalue);
 }
 
-string_list
-posix_procenv_environ(unit unused)
+int
+posix_procenv_environ_size(unit unused)
 {
 	extern char** environ;
-	return array_to_string_list(environ);
+	int n;
+	for(n=0; environ[n]; n++)
+		;
+	return n;
 }
 
-/*string*/cresult
-posix_procenv_ctermid(unit unused)
+string
+posix_procenv_environ_nth(int i)
+{
+	extern char** environ;
+	return cstring2mlstring_alloc(environ[i]);
+}
+
+string
+posix_procenv_ctermid(cerr er)
 {
 	char name[L_ctermid];
-	if(ctermid(name) == NULL)
-		return Error(SysErr(errno));
-	else
-		return NormalPtr(cstring2mlstring_alloc(name));
+	if(ctermid(name) == NULL){
+		send_errno(er,errno);
+		*name = 0;
+	}
+	return cstring2mlstring_alloc(name);
 }
 
-/*string*/cresult
-posix_procenv_ttyname(int fd)
+string
+posix_procenv_ttyname(cerr er, int fd)
 {
 	char* name = ttyname(fd);
-	if(name == NULL)
-		return Error(SysErr(errno));
-	else
-		return NormalPtr(cstring2mlstring_alloc(name));
+	if(name == NULL){
+		send_errno(er,errno);
+		*name = 0;
+	}
+	return cstring2mlstring_alloc(name);
 }
 
 bool

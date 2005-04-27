@@ -4,9 +4,10 @@
  *
  *)
 
-structure Real64 :> REAL where type real = real
-			   and type Math.real = real =
-  struct
+structure Real64 :> REAL
+	where type real = real
+	where type Math.real = real =
+struct
     val abs_float = TiltPrim.fabs
     (* Respects NaN on x86. *)
     fun float_eq (a:real, b:real) : bool =
@@ -14,7 +15,9 @@ structure Real64 :> REAL where type real = real
     val float_neq = not o float_eq
 
     structure Math = Math64
-    val real_logb  : real -> int = fn arg => Ccall(real_logb, arg)
+    val logb  : real -> int = fn arg => Ccall(real_logb, arg)
+    val scalb : real * int -> real = fn (x,k) => (* Ccall(real_scalb, x, k) *)
+	raise TiltExn.LibFail "real_scalb not implemented"
 
     infix 4 == !=
     type real = real
@@ -43,8 +46,6 @@ structure Real64 :> REAL where type real = real
     fun unordered(x,y) = not(x>y orelse x <= y)
     fun ?= (x, y) = (x == y) orelse unordered(x, y)
 
-    fun real_scalb (x, k) = raise TiltExn.LibFail "scalb and real_scalb not implemented: multiarg C fun..."
-
   (* The next three values are computed laboriously, partly to
    * avoid problems with inaccurate string->float conversions
    * in the compiler itself.
@@ -62,7 +63,7 @@ structure Real64 :> REAL where type real = real
 	  fun f(x) = let
 		val y = x * 0.5
 		in
-		  if real_logb y = ~1023 then x else f y
+		  if logb y = ~1023 then x else f y
 		end
 	  in
 	    f 1.0
@@ -84,7 +85,7 @@ structure Real64 :> REAL where type real = real
 
     fun isFinite x = negInf < x andalso x < posInf
     fun isNan x = not(x==x)
-    fun isNormal x = (case real_logb x
+    fun isNormal x = (case logb x
 	   of ~1023 => (x != 0.0)
 	    | 1024 => false
 	    | _ => true
@@ -152,7 +153,7 @@ structure Real64 :> REAL where type real = real
     fun sign x = if (x < 0.0) then ~1 else if (x > 0.0) then 1
                   else if isNan x then raise Domain else 0
     fun signBit x = (* Bug: negative zero not handled properly *)
-	real_scalb(x, negate(real_logb x)) < 0.0
+	scalb(x, negate(logb x)) < 0.0
 
     fun sameSign (x, y) = signBit x = signBit y
 
@@ -173,13 +174,13 @@ structure Real64 :> REAL where type real = real
     fun class x =  (* does not distinguish between quiet and signalling NaN *)
       if signBit x
        then if x>negInf then if x == 0.0 then IEEEReal.ZERO
-	                     else if real_logb x = ~1023
+	                     else if logb x = ~1023
 			          then IEEEReal.SUBNORMAL
 			          else IEEEReal.NORMAL
 	                else if x==x then IEEEReal.INF
 			             else IEEEReal.NAN IEEEReal.QUIET
        else if x<posInf then if x == 0.0 then IEEEReal.ZERO
-	                     else if real_logb x = ~1023
+	                     else if logb x = ~1023
 			          then IEEEReal.SUBNORMAL
 			          else IEEEReal.NORMAL
 	                else if x==x then IEEEReal.INF
@@ -188,35 +189,33 @@ structure Real64 :> REAL where type real = real
     val radix = 2
     val precision = 52
 
-    val two_to_the_54 = 18014398509481984.0
-
     val two_to_the_neg_1000 =
       let fun f(i,x) = if i=0 then x else f(minus(i,1), x*0.5)
        in f(1000, 1.0)
       end
 
     fun toManExp x =
-      case real_logb x
+      case logb x
 	of ~1023 => if x==0.0 then {man=x,exp=0}
 		    else let val {man=m,exp=e} = toManExp(x*1048576.0)
 		              in {man=m,exp=minus(e,20)}
 			 end
          | 1024 => {man=x,exp=0}
-         | i => {man=real_scalb(x,negate i),exp=i}
+         | i => {man=scalb(x,negate i),exp=i}
 
     fun fromManExp {man=m,exp=e:int} =
       if (m >= 0.5 andalso m <= 1.0  orelse m <= ~0.5 andalso m >= ~1.0)
 	then if gt(e, 1020)
 	  then if gt(e, 1050) then if m>0.0 then posInf else negInf
 	       else let fun f(i,x) = if i=0 then x else f(minus(i,1),x+x)
-		       in f(minus(e,1020),  real_scalb(m,1020))
+		       in f(minus(e,1020),  scalb(m,1020))
 		      end
 	  else if lt(e, negate 1020)
 	       then if lt(e, negate 1200) then 0.0
 		 else let fun f(i,x) = if i=0 then x else f(minus(i,1), x*0.5)
-		       in f(minus(1020,e), real_scalb(m,negate 1020))
+		       in f(minus(1020,e), scalb(m,negate 1020))
 		      end
-	       else real_scalb(m,e)  (* This is the common case! *)
+	       else scalb(m,e)  (* This is the common case! *)
       else let val {man=m',exp=e'} = toManExp m
             in fromManExp{man=m', exp=plus(e',e)}
            end
@@ -281,33 +280,6 @@ structure Real64 :> REAL where type real = real
                        else if isNan x then raise Div
 			 else raise Overflow
 
-(** NOTE logb and scalb are also defined in math64.sml; do we need both??? **)
-    fun logb x = (case real_logb x
-	   of ~1023 => (* denormalized number *)
-		minus(real_logb(x * two_to_the_54), 54)
-	    | i => i
-	  (* end case *))
-
-(*
-  (* This function is IEEE double-precision specific;
-     we do not apply it to inf's and nan's *)
-    fun scalb (x, k) = if lessu(I.+(k,1022),2046)
-	  then Assembly.A.scalb(x,k)
-          else let val k1 = I.div(k, 2)
-	    in
-	      scalb(scalb(x, k1), I.-(k, k1))
-	    end
-*)
-    fun scalb (x, k) = raise TiltExn.LibFail "scalb and real_scalb not implemented: multiarg C fun..."
-(*
-if lt(plus(k,1022),2046)
-	  then Assembly.A.scalb(x,k)
-          else let val k1 = div(k, 2)
-	    in
-	      scalb(scalb(x, k1), minus(k, k1))
-	    end
-*)
-
     fun nextAfter _ = raise TiltExn.LibFail "Real.nextAfter unimplemented"
 
     fun min(x,y) = if x<y orelse isNan y then x else y
@@ -321,5 +293,4 @@ if lt(plus(k,1022),2046)
     val scan = NumScan.scanReal
     val fromString = StringCvt.scanString scan
 
-  end (* Real64 *)
-
+end

@@ -4,11 +4,7 @@
 # This script (or the equivalent) should be run before 
 # checking in any significant changes.
 #
-# Usage (from ml96): ./Bin/regress [all | tilt | nj] [outfile]
-#
-# One of [all | tilt | nj] must be specified if an outfile is 
-# specified.  If no outfile is specified, then the output will
-# be placed in a file called RegressionResults.`date`.txt.
+# Usage (from ml96): ./Bin/regress [all | tilt | nj]
 #
 # If given no arguments, just runs the NJ compiled TILT.
 # Otherwise, runs either the NJ compiled TILT, or the TILT
@@ -34,11 +30,6 @@ if make runtest ; then echo "Compiled test harness" ; else echo "Harness didn't 
 
 if [ $# -lt 1 ] ; then arg=nj ; else arg=$1 ; fi
 
-if [ $# -eq 2 ] ; then outfile=$2 ; else outfile=`pwd`/RegressionResults.`date +%m.%d.%y.%T`.txt ; fi
-
-echo "Regression results will be copied to $outfile"
-
-(
 echo "TILT regression results from `date`";
 
 if [ $arg = all -o $arg = nj ] ; then  
@@ -52,8 +43,7 @@ NJ compiled TILT results
 
     (cd ./Test ; ../Bin/runall -nf);
 fi
-) 2>&1 | tee -a $outfile
-(
+
 if [ $arg = all -o $arg = tilt ] ; then  
 
    # build TILT
@@ -68,4 +58,3 @@ TILT compiled TILT results
 
     (cd ./Test ; ../Bin/runall -f) ;
 fi
-) 2>&1 | tee -a $outfile

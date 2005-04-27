@@ -7,11 +7,13 @@ struct
 end
 
 (*
-	The runtime needs to know the stamps for these exceptions.
-	See General/tal_extern.sml
+	The runtime needs to know the stamps for these exceptions.  We
+	register them with the runtime by calling these C functions.
+	Note that all that matters is the stamp: The values passed
+	with SysErr and LibFail are ignored.
 *)
-val _ = Ccall(registerSubExnRuntime, Subscript)
-val _ = Ccall(registerDivExnRuntime, Div)
-val _ = Ccall(registerOvflExnRuntime, Overflow)
-val _ = Ccall(registerSysErrExnRuntime, TiltExn.SysErr ("",NONE))
-val _ = Ccall(registerLibFailExnRuntime, TiltExn.LibFail "")
+val () = Ccall(registerSubExnRuntime, Subscript)
+val () = Ccall(registerDivExnRuntime, Div)
+val () = Ccall(registerOvflExnRuntime, Overflow)
+val () = Ccall(registerSysErrExnRuntime, TiltExn.SysErr ("",NONE))
+val () = Ccall(registerLibFailExnRuntime, TiltExn.LibFail "")

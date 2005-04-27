@@ -7,15 +7,15 @@
  *
  *)
 
-structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc
-			   and type poll_desc = PreOS.IO.poll_desc
-                           and type poll_info = PreOS.IO.poll_info =
-  struct
+structure OS_IO :> OS_IO
+	where type iodesc = PreOS.IO.iodesc
+	where type poll_desc = PreOS.IO.poll_desc
+	where type poll_info = PreOS.IO.poll_info =
+struct
 
-    fun ccall2 (f : ('a, 'b, 'c cresult) -->, a:'a, b:'b) : 'c =
-	(case (Ccall(f,a,b)) of
-	    Normal r => r
-	|   Error e => raise e)
+    val os_io_poll : int * (int * word) list * (int * int) option -> uct = ccall3 os_io_poll
+    val os_io_poll_nth : uct * int -> int * word = fn (p,n) => Ccall(os_io_poll_nth,p,n)
+    val os_io_poll_free : uct -> unit = fn p => Ccall(os_io_poll_free,p)
 
   (* an iodesc is an abstract descriptor for an OS object that
    * supports I/O (e.g., file, tty device, socket, ...).
@@ -83,21 +83,19 @@ structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc
 
   (* polling function *)
     local
-(*      val poll' : ((int * word) list * (int * int) option) -> (int * word) list =
-	    CInterface.c_function "POSIX-OS" "poll" *)
       fun join (false, _, w) = w
         | join (true, b, w) = Word.orb(w, b)
       fun test (w, b) = (Word.andb(w, b) <> 0w0)
       val rdBit = 0w1 and wrBit = 0w2 and priBit = 0w4
-      fun fromPollDesc (PollDesc(PreOS.IO.IODesc fd, {rd, wr, pri})) =
-	    ( fd,
-	      join (rd, rdBit, join (wr, wrBit, join (pri, priBit, 0w0)))
-	    )
-      fun toPollInfo (fd, w) = PollInfo(PreOS.IO.IODesc fd, {
-	      rd = test(w, rdBit), wr = test(w, wrBit), pri = test(w, priBit)
-	    })
+      fun fromWord (w:word) : poll_flags =
+	 {rd=test(w,rdBit), wr=test(w,wrBit), pri=test(w,priBit)}
+      fun toWord ({rd,wr,pri} : poll_flags) : word =
+	 join (rd, rdBit, join (wr, wrBit, join (pri, priBit, 0w0)))
+      fun toEvent (PollDesc(PreOS.IO.IODesc fd, flags)) = (fd, toWord flags)
+      fun fromEvent (fd:int, w:word) = PollInfo(PreOS.IO.IODesc fd, fromWord w)
     in
-    fun poll (pds, timeOut) = let
+    fun poll (pds, timeOut) =
+	let
 	  val timeOut = (case timeOut
 		 of SOME t =>
 		     let val sec = Time.toSeconds t
@@ -107,10 +105,13 @@ structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc
 		     end
 		  | NONE => NONE
 		(* end case *))
-	  val info = ccall2(posix_os_poll, List.map fromPollDesc pds, timeOut)
-	  in
-	    List.map toPollInfo info
-	  end
+	  val nevents = List.length pds
+	  val events = List.map toEvent pds
+          val uct = os_io_poll(nevents,events,timeOut)
+	  val revents = List.tabulate(nevents, fn n => os_io_poll_nth(uct,n))
+	  val () = os_io_poll_free uct
+	in  List.map fromEvent revents
+	end
     end (* local *)
 
   (* check for conditions *)
@@ -119,6 +120,4 @@ structure OS_IO :> OS_IO where type iodesc = PreOS.IO.iodesc
     fun isPri (PollInfo(_, flgs)) = #pri flgs
     fun infoToPollDesc  (PollInfo arg) = PollDesc arg
 
-  end (* OS_IO *)
-
-
+end

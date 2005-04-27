@@ -7,15 +7,70 @@
 #include <utime.h>
 #include <sys/stat.h>
 
-/*int*/cresult
-posix_filesys_opendir(string dirname)
+static char Efsnum[] = "posix_filesys_num: bad name";
+static char Epathconf[] = "posix_filesys_pathconf: bad name";
+
+static struct sysval filesys_vec[] = {
+	{"A_EXEC",	X_OK},
+	{"A_FILE",	F_OK},
+	{"A_READ",	R_OK},
+	{"A_WRITE",	W_OK},
+	{"O_APPEND",	O_APPEND},
+	{"O_CREAT",	O_CREAT},
+#ifdef O_DSYNC
+	{"O_DSYNC",	O_DSYNC},
+#else
+	{"O_DSYNC",	0},
+#endif
+	{"O_EXCL",	O_EXCL},
+	{"O_NOCTTY",	O_NOCTTY},
+	{"O_NONBLOCK",	O_NONBLOCK},
+#ifdef O_RSYNC
+	{"O_RSYNC",	O_RSYNC},
+#else
+	{"O_RSYNC",	0},
+#endif
+#ifdef O_SYNC
+	{"O_SYNC",	O_SYNC},
+#else
+	{"O_SYNC",	0},
+#endif
+	{"O_TRUNC",	O_TRUNC},
+	{"irgrp",	S_IRGRP},
+	{"iroth",	S_IROTH},
+	{"irusr",	S_IRUSR},
+	{"irwxg",	S_IRWXG},
+	{"irwxo",	S_IRWXO},
+	{"irwxu",	S_IRWXU},
+	{"isgid",	S_ISGID},
+	{"isuid",	S_ISUID},
+	{"iwgrp",	S_IWGRP},
+	{"iwoth",	S_IWOTH},
+	{"iwusr",	S_IWUSR},
+	{"ixgrp",	S_IXGRP},
+	{"ixoth",	S_IXOTH},
+	{"ixusr",	S_IXUSR},
+};
+
+static struct sysvals filesys_values = {
+	arraysize(filesys_vec),
+	filesys_vec
+};
+
+word
+posix_filesys_num(cerr er, string key)
+{
+	return sysval_num(er, Efsnum, &filesys_values, key);
+}
+
+uct
+posix_filesys_opendir(cerr er, string dirname)
 {
 	char* cdir = mlstring2cstring_static(dirname);
 	DIR *dir = opendir(cdir);
 	if(dir == NULL)
-		return Error(SysErr(errno));
-	else
-		return Normal((val_t)dir);
+		send_errno(er,errno);
+	return (uct)dir;
 }
 
 static bool
@@ -26,82 +81,85 @@ filterArc(char* name)
 			|| (name[1] == '.' && name[2] == '\0'));
 }
 
-/*string*/cresult
-posix_filesys_readdir(int arg)
+string
+posix_filesys_readdir(cerr er, uct p)
 {
-	DIR* dir = (DIR *)arg;
+	DIR* dir = (DIR *)p;
 	struct dirent* entry;
 	do {
 		errno = 0;
 		entry = readdir(dir);
 	} while (entry != NULL && filterArc(entry->d_name));
 	if(entry != NULL)
-		return NormalPtr(cstring2mlstring_alloc(entry->d_name));
+		return cstring2mlstring_alloc(entry->d_name);
 	else if(errno != 0)
-		return Error(SysErr(errno));
-	else
-		return NormalPtr(cstring2mlstring_alloc(""));
+		send_errno(er,errno);
+	return cstring2mlstring_alloc("");
 }
 
 unit
-posix_filesys_rewinddir(int arg)
+posix_filesys_rewinddir(uct p)
 {
-	DIR* dir = (DIR*)arg;
+	DIR* dir = (DIR*)p;
 	rewinddir(dir);	/* can't fail */
 	return empty_record;
 }
 
-/*unit*/cresult
-posix_filesys_closedir(int arg)
+unit
+posix_filesys_closedir(cerr er, uct p)
 {
-	DIR *dir = (DIR *)arg;
-	return unit_cresult(closedir(dir));
+	DIR* dir = (DIR*)p;
+	if(closedir(dir) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-/*unit*/cresult
-posix_filesys_chdir(string dirname)
+unit
+posix_filesys_chdir(cerr er, string dirname)
 {
 	char *dir = mlstring2cstring_static(dirname);
-	return unit_cresult(chdir(dir));
+	if(chdir(dir) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-static /*string*/cresult
-do_getcwd(char* buf, int size)
+static string
+do_getcwd(cerr er, char* buf, int size)
 {
 	if(getcwd(buf,size) == NULL) {
 		int e = errno;
 		if(e==ERANGE) {
 			int n = size * 2;
 			char* newbuf = (char*)erealloc(buf,n);
-			return do_getcwd(newbuf,n);
+			return do_getcwd(er,newbuf,n);
 		} else {
 			efree(buf);
-			return Error(SysErr(e));
+			send_errno(er,e);
+			return cstring2mlstring_alloc("");
 		}
 	} else {
 		string cwd = cstring2mlstring_alloc(buf);
 		efree(buf);
-		return NormalPtr(cwd);
+		return cwd;
 	}
 }
 
-/*string*/cresult
-posix_filesys_getcwd(unit unused)
+string
+posix_filesys_getcwd(cerr er)
 {
 	int n = 1024;
 	char* buf = (char*)emalloc_atomic(n);
-	return do_getcwd(buf,n);
+	return do_getcwd(er,buf,n);
 }
 
-/*int*/cresult
-posix_filesys_openf(string filename, word oflag, word mode)
+int
+posix_filesys_openf(cerr er, string filename, word oflag, word mode)
 {
 	const char *cfilename = mlstring2cstring_static(filename);
 	int fd = open(cfilename,oflag,mode);
 	if(fd == -1)
-		return Error(SysErr(errno));
-	else
-		return Normal(fd);
+		send_errno(er,errno);
+	return fd;
 }
 
 word
@@ -110,98 +168,112 @@ posix_filesys_umask(word mask)
 	return (word)umask((mode_t)mask);	/* can't fail */
 }
 
-/*unit*/cresult
-posix_filesys_link(string from, string to)
+unit
+posix_filesys_link(cerr er, string from, string to)
 {
 	char* cfrom = mlstring2cstring_static(from);
 	char* cto = mlstring2cstring_malloc(to);
-	cresult r = unit_cresult(link(cfrom,cto));
+	if(link(cfrom,cto) == -1)
+		send_errno(er,errno);
 	efree(cto);
-	return r;
+	return empty_record;
 }
 
-/*unit*/cresult
-posix_filesys_rename(string from, string to)
+unit
+posix_filesys_rename(cerr er, string from, string to)
 {
 	char* cfrom = mlstring2cstring_static(from);
 	char* cto = mlstring2cstring_malloc(to);
-	cresult r = unit_cresult(rename(cfrom,cto));
+	if(rename(cfrom,cto) == -1)
+		send_errno(er,errno);
 	efree(cto);
-	return r;
+	return empty_record;
 }
 
-/*unit*/cresult
-posix_filesys_symlink(string from, string to)
+unit
+posix_filesys_symlink(cerr er, string from, string to)
 {
 	char* cfrom = mlstring2cstring_static(from);
 	char* cto = mlstring2cstring_malloc(to);
-	cresult r = unit_cresult(symlink(cfrom, cto));
+	if(symlink(cfrom, cto) == -1)
+		send_errno(er,errno);
 	efree(cto);
-	return r;
+	return empty_record;
 }
 
-/*unit*/cresult
-posix_filesys_mkdir(string mlDir, word mode)
+unit
+posix_filesys_mkdir(cerr er, string mlDir, word mode)
 {
 	char* cdir = mlstring2cstring_static(mlDir);
-	return unit_cresult(mkdir(cdir,mode));
+	if(mkdir(cdir,mode) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-/*unit*/cresult
-posix_filesys_mkfifo(string path, word mode)
+unit
+posix_filesys_mkfifo(cerr er, string path, word mode)
 {
 	char* cpath = mlstring2cstring_static(path);
-	return unit_cresult(mkfifo(cpath, (mode_t)mode));
+	if(mkfifo(cpath, (mode_t)mode) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-/*unit*/cresult
-posix_filesys_unlink(string arg)
+unit
+posix_filesys_unlink(cerr er, string arg)
 {
 	char* path = mlstring2cstring_static(arg);
-	return unit_cresult(unlink(path));
+	if(unlink(path) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-/*unit*/cresult
-posix_filesys_rmdir(string path)
+unit
+posix_filesys_rmdir(cerr er, string path)
 {
 	char* cpath = mlstring2cstring_static(path);
-	return unit_cresult(rmdir(cpath));
+	if(rmdir(cpath) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-static /*string*/cresult
-do_readlink(char* link, char* buf, int bufsize)
+static string
+do_readlink(cerr er, char* link, char* buf, int bufsize)
 {
 	int count = readlink(link, buf, bufsize);
 	if(count==-1) {
 		int e = errno;
 		efree(buf);
-		return Error(SysErr(e));
+		send_errno(er,e);
+		return cstring2mlstring_alloc("");
 	} else if(count == bufsize) {
 		/* link contents may be too large */
 		int newbufsize = bufsize*2;
 		char* newbuf = (char*)erealloc(buf,newbufsize);
-		return do_readlink(link,newbuf,newbufsize);
+		return do_readlink(er,link,newbuf,newbufsize);
 	} else {
 		/* readlink does not add a terminating NUL */
 		string contents = alloc_string(count,buf);
 		efree(buf);
-		return NormalPtr(contents);
+		return contents;
 	}
 }
 
-/*string*/cresult
-posix_filesys_readlink(string link)
+string
+posix_filesys_readlink(cerr er, string link)
 {
 	char* clink = mlstring2cstring_static(link);
 	int bufsize = PATH_MAX;
 	char* buf = (char*)emalloc_atomic(bufsize);
-	return do_readlink(clink, buf, bufsize);
+	return do_readlink(er,clink, buf, bufsize);
 }
 
-/*unit*/cresult
-posix_filesys_ftruncate(int fd, int length)
+unit
+posix_filesys_ftruncate(cerr er, int fd, int length)
 {
-	return unit_cresult(ftruncate(fd, (off_t)length));
+	if(ftruncate(fd, (off_t)length) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
 /*
@@ -224,43 +296,40 @@ Statrep(struct stat* stat)
 	fields[8] = (val_t) stat->st_atime;
 	fields[9] = (val_t) stat->st_mtime;
 	fields[10] = (val_t) stat->st_ctime;
-	return alloc_record(fields, 0, arraysize(fields));
+	return alloc_record(fields, arraysize(fields));
 }
 
-/*statrep*/cresult
-posix_filesys_stat(string name)
+ptr_t	/*statrep*/
+posix_filesys_stat(cerr er, string name)
 {
 	char* cname = mlstring2cstring_static(name);
 	struct stat sb;
 	if(stat(cname,&sb) == -1)
-		return Error(SysErr(errno));
-	else
-		return NormalPtr(Statrep(&sb));
+		send_errno(er,errno);
+	return Statrep(&sb);
 }
 
-/*statrep*/cresult
-posix_filesys_lstat(string name)
+ptr_t	/*statrep*/
+posix_filesys_lstat(cerr er, string name)
 {
 	char* cname = mlstring2cstring_static(name);
 	struct stat sb;
 	if(lstat(cname,&sb) == -1)
-		return Error(SysErr(errno));
-	else
-		return NormalPtr(Statrep(&sb));
+		send_errno(er,errno);
+	return Statrep(&sb);
 }
 
-/*statrep*/cresult
-posix_filesys_fstat(int fd)
+ptr_t	/*statrep*/
+posix_filesys_fstat(cerr er, int fd)
 {
 	struct stat sb;
 	if(fstat(fd,&sb) == -1)
-		return Error(SysErr(errno));
-	else
-		return NormalPtr(Statrep(&sb));
+		send_errno(er,errno);
+	return Statrep(&sb);
 }
 
-/*bool*/cresult
-posix_filesys_access(string name, word mode)
+bool
+posix_filesys_access(cerr er, string name, word mode)
 {
 	/*
 		Only allowed to raise an exception for errors
@@ -270,41 +339,49 @@ posix_filesys_access(string name, word mode)
 	if(access(cname,mode) == -1) {
 		int e = errno;
 		if(e==EINTR)
-			return Error(SysErr(e));
-		else
-			return Normal(0);
-	} else
-		return Normal(1);
+			send_errno(er,e);
+		return 0;
+	}
+	else
+		return 1;
 }
 
-/*unit*/cresult
-posix_filesys_chmod(string path, word mode)
+unit
+posix_filesys_chmod(cerr er, string path, word mode)
 {
 	char* cpath = mlstring2cstring_static(path);
-	return unit_cresult(chmod(cpath, (mode_t)mode));
+	if(chmod(cpath, (mode_t)mode) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-/*unit*/cresult
-posix_filesys_fchmod(int fd, word mode)
+unit
+posix_filesys_fchmod(cerr er, int fd, word mode)
 {
-	return unit_cresult(fchmod(fd, (mode_t)mode));
+	if(fchmod(fd, (mode_t)mode) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-/*unit*/cresult
-posix_filesys_chown(string path, word owner, word group)
+unit
+posix_filesys_chown(cerr er, string path, word owner, word group)
 {
 	char* cpath = mlstring2cstring_static(path);
-	return unit_cresult(chown(cpath, (uid_t)owner, (gid_t)group));
+	if(chown(cpath, (uid_t)owner, (gid_t)group) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-/*unit*/cresult
-posix_filesys_fchown(int fd, word owner, word group)
+unit
+posix_filesys_fchown(cerr er, int fd, word owner, word group)
 {
-	return unit_cresult(fchown(fd, (uid_t)owner, (gid_t)group));
+	if(fchown(fd, (uid_t)owner, (gid_t)group) == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-/*unit*/cresult
-posix_filesys_utime(string filename, int atime, int modtime)
+unit
+posix_filesys_utime(cerr er, string filename, int atime, int modtime)
 {
 	char* cfilename = mlstring2cstring_static(filename);
 	int r;
@@ -316,23 +393,59 @@ posix_filesys_utime(string filename, int atime, int modtime)
 		arg.modtime = modtime;
 		r = utime(cfilename,&arg);
 	}
-	return unit_cresult(r);
+	if(r == -1)
+		send_errno(er,errno);
+	return empty_record;
 }
 
-static cresult
-unimplemented(char* f)
+static struct sysval pathconf_vec[] = {
+	{"ASYNC_IO",	_PC_ASYNC_IO},
+	{"CHOWN_RESTRICTED",	_PC_CHOWN_RESTRICTED},
+#ifdef _PC_FILESIZEBITS
+	{"FILESIZEBITS",	_PC_FILESIZEBITS},
+#endif
+	{"LINK_MAX",	_PC_LINK_MAX},
+	{"MAX_CANON",	_PC_MAX_CANON},
+	{"MAX_INPUT",	_PC_MAX_INPUT},
+	{"NAME_MAX",	_PC_NAME_MAX},
+	{"NO_TRUNC",	_PC_NO_TRUNC},
+	{"PATH_MAX",	_PC_PATH_MAX},
+	{"PIPE_BUF",	_PC_PIPE_BUF},
+	{"PRIO_IO",	_PC_PRIO_IO},
+	{"SYNC_IO",	_PC_SYNC_IO},
+	{"VDISABLE",	_PC_VDISABLE},
+};
+
+static struct sysvals pathconf_values = {
+	arraysize(pathconf_vec),
+	pathconf_vec
+};
+
+int
+posix_filesys_pathconf_name(cerr er, string key)
 {
-	return Error(SysErr_fmt("%s: unimplemented", f));
+	return sysval_num(er, Epathconf, &pathconf_values, key);
 }
 
-/*intpair*/cresult
-posix_filesys_pathconf(string unused1, string unused)
+word
+posix_filesys_pathconf(cerr er, string path, int name)
 {
-	return unimplemented("posix_filesys_pathconf");
+	char* cpath = mlstring2cstring_static(path);
+	long r;
+	errno = 0;
+	r = pathconf(cpath,name);
+	if(r == -1 && errno != 0)
+		send_errno(er,errno);
+	return (word)r;
 }
 
-/*intpair*/cresult
-posix_filesys_fpathconf (int unused1, string unused)
-{ 
-	return unimplemented("posix_filesys_fpathconf");
+word
+posix_filesys_fpathconf(cerr er, int fd, int name)
+{
+	long r;
+	errno = 0;
+	r = fpathconf(fd,name);
+	if(r == -1 && errno != 0)
+		send_errno(er,errno);
+	return (word)r;
 }

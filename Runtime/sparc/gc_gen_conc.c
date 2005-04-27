@@ -311,7 +311,8 @@ static void CollectorOn(Proc_t *proc)
   assert(SetIsEmpty(&proc->work.objs));
   establishCopyRange(proc);
 
-  proc->numRoot += SetLength(&proc->work.roots) + SetLength(&proc->work.globals);
+  proc->numRoot += SetLength(&proc->work.roots) +
+	SetLength(&proc->work.globals);
 
   /* Omit popSharedObjStack */
   pushSharedStack(0,workStack, &proc->work);
@@ -380,7 +381,8 @@ static void CollectorTransition(Proc_t *proc)
      transfer work from local to shared work stack */
   procChangeState(proc, GCWork, 607);
   assert(SetIsEmpty(&proc->work.objs));
-  proc->numRoot += SetLength(&proc->work.roots) + SetLength(&proc->work.globals);
+  proc->numRoot += SetLength(&proc->work.roots) +
+	SetLength(&proc->work.globals);
 
   /* Omit popSharedObjStack */
   pushSharedStack(0,workStack, &proc->work);

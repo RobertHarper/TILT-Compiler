@@ -5,9 +5,13 @@
 		An ML value that has a pointer type.  It might be a
 		small-valued constructor (<= 256), a pointer into global data,
 		a pointer into stack data, or a pointer into one of the heaps.
+	uct
+		Ugly C Thing.  C pointers cast to word and stashed
+		away by ML.
 */
 typedef uint32	val_t;
 typedef uint32*	ptr_t;
+typedef uint32	uct;
 
 typedef ptr_t	unit;
 #	define empty_record	((unit)256)
@@ -25,8 +29,9 @@ typedef string	word8array;
 typedef const string	word8vector;
 typedef ptr_t	list;
 typedef ptr_t	option;
-typedef ptr_t	cresult;
 typedef ptr_t	exn;
+
+typedef struct cerr* cerr;
 
 #define PAIR(t,t1,t2)\
 	struct t {\
@@ -105,8 +110,8 @@ enum {
 #define USED(x)	if(x){}else{}
 
 /* sysvals.c */
-/*string*/cresult	sysval_name(char*, sysvals, int key);
-/*int*/cresult	sysval_num(char*, sysvals, string key);
+string	sysval_name(cerr, char* errmsg, sysvals, int key);
+int	sysval_num(cerr, char* errmsg, sysvals, string key);
 
 /* die.c */
 void	DIE(char* msg);
@@ -117,10 +122,15 @@ void*	emalloc(size_t size);
 void*	emalloc_atomic(size_t size);
 void*	erealloc(void* buf, size_t size);
 void	efree(void*);
+#define	enew(t)	((t*)emalloc(sizeof(t)))
+#define	enew_atomic(t)	((t*)emalloc_atomic(sizeof(t)))
+
+/* portmalloc.c */
+char*	estrdup(char*);
 
 /* ../sparc/create.c ../talx86/create.c */
-val_t	get_record(ptr_t rec, int field);
-ptr_t	alloc_record(val_t* fields, int mask, int count);
+val_t	get_record(ptr_t rec, int which);
+ptr_t	alloc_record(val_t* fields, int count);
 string	alloc_uninit_string(int strlen, char** raw);
 void	adjust_stringlen(string, int);
 int	stringlen(string);
@@ -134,7 +144,6 @@ option	some_array(ptr_t);
 char*	mlstring2cstring_static(string);
 
 /* portcreate.c */
-record	alloc_ptrptr(ptr_t, ptr_t);
 record	alloc_intint(val_t, val_t);
 string	alloc_string(int bufsize, char* buf);
 string	cstring2mlstring_alloc(char*);
@@ -145,9 +154,6 @@ char*	mlstring2cstring_malloc(string);	/* allocate a new buffer for each call */
 	NUL-terminated string.  The C type is char*.
 */
 string_option	alloc_string_option(char* cstringopt);
-stringpair	stringpair_ctoml_alloc(char*, char*);
-list	cons_ptr_alloc(ptr_t, list);
-list	cons_int_alloc(val_t, list);
 /*
 	Translate an ML string list of length n to an n+1 element array of
 	NUL-terminated strings where the last element is NULL.  The
@@ -155,26 +161,14 @@ list	cons_int_alloc(val_t, list);
 	with efree(v).
 */
 char**	string_list_to_array_malloc(string_list);
-/*
-	Translate a NULL-terminated array of NUL-terminated strings into
-	an ML string list.
-*/
-string_list	array_to_string_list(char**);
-cresult	Error(exn);	/* exn -> 'a cresult */
-cresult	Normal(val_t);	/* 'a -> 'a cresult */
-cresult	NormalPtr(ptr_t);	/* 'a -> 'a cresult */
-/*
-	For system calls that return -1 and set errno on error and
-	return 0 on success.
-*/
-cresult	unit_cresult(int retVal);
 
 /* portexn.c */
-exn	mkDivExn(void);
-exn	mkOverflowExn(void);
-exn	mkSubscriptExn(void);
-exn	SysErr(int e);
-exn	SysErr_msg(char* cmsg);
-exn	SysErr_fmt(char* fmt, ...);
+val_t	getSubStamp(void);
+val_t	getDivStamp(void);
+val_t	getOvflStamp(void);
 string	exnNameRuntime(exn);
 string	exnMessageRuntime(exn);
+
+/* ccall.c */
+void	send_errno(cerr, int);
+void	send_errmsg(cerr,char*);

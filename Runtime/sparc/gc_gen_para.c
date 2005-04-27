@@ -116,7 +116,7 @@ static void GCCollect_GenPara(Proc_t *proc)
       minor_global_scan(proc);
   }
   else {
-    process_writelist(proc, NULL, NULL);
+    process_writelist(proc, NULL, NULL);	/* Get globals; Backpointers must be ignored on major GC */
     if (isFirst)
       major_global_scan(proc);
   }
@@ -126,7 +126,8 @@ static void GCCollect_GenPara(Proc_t *proc)
   SetCopyRange(&proc->copyRange, proc, (GCType == Minor) ? fromSpace : toSpace, NULL);
   
   /* Now forward all the roots which initializes the local work stacks */
-  proc->numRoot += SetLength(&proc->work.roots) + SetLength(&proc->work.globals);
+    proc->numRoot += SetLength(&proc->work.roots) +
+	SetLength(&proc->work.globals);
   assert(primaryGlobalOffset == 0);
   if (GCType == Minor) {
     while (rootLoc = (ploc_t) SetPop(&proc->work.roots)) 
@@ -247,13 +248,8 @@ GC_GenPara(Proc_t* proc, Thread_t* th)
 			if(proc->allocStart != NULL)
 				return;
 		}
-		/* NB the comment in GC_Gen. */
-		else if(th->request < 0
-		&& 2 * SetLength(&proc->work.roots) < SetFullSize(&proc->work.roots)){
-			process_writelist(proc,nursery,fromSpace);
-			if (GCSatisfiable(proc,th))
-				return;
-		}
+		else if(try_process_writelist(proc,th,nursery,fromSpace))
+			return;
 	}
 	for(;;){
 		GCCollect_GenPara(proc);
