@@ -19,9 +19,10 @@ srvfs -P patterns releasefs /usr/swasey/src/work/ml96
 Local mount /srv/releasefs /n/test
 
 # mount and create archive
-v=1.1
+v=1.1rc1
 mount /srv/releasefs /n/tilt-$v
 cd /n; tar c tilt-$v | gzip -9 > /tmp/tilt-$v.tar.gz
 
 # kill server
-kill exportfs|rc; rm -f /srv/releasefs
+Local unmount /n/test
+rm -f /srv/releasefs
