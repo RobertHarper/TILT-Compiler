@@ -26,3 +26,7 @@ cd /n; tar c tilt-$v | gzip -9 > /tmp/tilt-$v.tar.gz
 # kill server
 Local unmount /n/test
 rm -f /srv/releasefs
+
+# cleanup
+@{cd ../Doc && mk clean}
+rm -f ../KNOWN_BUGS
