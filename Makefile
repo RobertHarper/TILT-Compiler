@@ -1,27 +1,3 @@
-# The TILT sources compile under SML/NJ version 110.0.7 and
-# under TILT.  If you are compiling with some other SML compiler, then
-# you will probably need to modify our CM files, the script ./Bin/mkheap
-# used to generate SML/NJ heaps, and perhaps some of the TILT code to
-# account for Basis library changes.
-#
-# Ensure ./Bin/smlnj has the correct path to the SML/NJ compiler.
-# If you are compiling for the talx86, then ensure ./Bin/talc has the
-# correct path to your TALx86 root directory.
-#
-# Ensure that ./Bin/cputype prints sparc, talx86, or unsupported.  (After
-# building an SML/NJ heap for TILT with "make heap", you can use
-# ./Bin/tilt-nj to run TILT with the SML/NJ runtime on unsupported
-# systems.)  If you are compiling on a sparc or x86, then look at
-# Runtime/Makefile too.
-#
-# To compile TILT, use "make" or "make with-slaves".  The latter assumes
-# that the script ./Bin/tilt-slave works on your system.
-#
-# To install into PREFIX, use "make install".  This copies binaries to
-# PREFIX/lib/tilt, manual pages to PREFIX/man, and wrapper scripts
-# to PREFIX/bin.  The wrapper scripts run TILT from RUNPREFIX/lib/tilt
-# rather than PREFIX/lib/tilt.
-
 PREFIX=/usr/local
 RUNPREFIX=$(PREFIX)
 mkheap=./Bin/mkheap
@@ -91,6 +67,7 @@ clean: FORCE
 	-$(tilt) -pp Parser/Library/project
 	-$(tilt) -pp Basis/Library/project
 	-$(tilt) -pp -fBootstrap Basis/project
+	(cd Runtime/$(cputype) && $(MAKE) nuke)
 
 slaves: FORCE
 	$(slaves) -n 4/localhost

@@ -1,61 +1,91 @@
 This is TILT version 1.1.
 
-Please send comments and bug reports to
+TILT is a compiler for Standard ML that uses Typed Intermediate
+Languages.  It can make executables and libraries for the SPARC V9 and
+Intel x86 architectures running SunOS 5.5.1, SunOS 5.7, SunOS 5.8,
+SunOS 5.9, and linux.  Tilt is a version of the compiler compiled by
+TILT.  Tilt-nj is a version of the compiler compiled by Standard ML of
+New Jersey; it should run on any Unix system supported by SML/NJ.
+(Such machines can be used as compilation slaves even if TILT can not
+generate binaries for them.)
 
-	til-developers@cs.cmu.edu
-
-Please read the file ./License/CMU containing TILT's copyright notice,
-permission notice, and disclaimer.
-
-The files ./Doc/tilt.txt and ./Doc/tilt-project.txt describe the
+The files Doc/tilt.txt and Doc/tilt-project.txt describe the
 command-line interface to TILT and the compilation manager.  The Doc
 directory also contains PostScript versions of these files.
+
+The file License/CMU contains TILT's copyright notice, permission
+notice, and disclaimer.
+
+Send comments and bug reports to
+
+	til-developers@cs.cmu.edu
 
 
 INSTALLING TILT
 
-	This release is set up to compile TILT using SML/NJ 110.0.7
-	available from
+The TILT sources compile under SML/NJ version 110.0.7 and under TILT.
+To get started, you need SML/NJ available from
 
-		http://www.smlnj.org/
+	http://www.smlnj.org/
 
-	TILT supports the SPARC V9 and Intel x86 architectures running
-	SunOS 5.5.1, SunOS 5.7, SunOS 5.8, SunOS 5.9, and linux but can
-	run on any Unix system supported by SML/NJ.  Unsupported
-	architectures can be used as compilation slaves (for any supported
-	architecture) but TILT can not generate binaries for them.
+Ensure that the script Bin/smlnj has the correct path to the SML/NJ
+compiler.  If you are attempting to compile with some other SML
+compiler, then you will probably need to modify our CM files, the
+script Bin/mkheap used to generate SML/NJ heaps, and perhaps some of
+the TILT code to account for Basis library changes.
 
-	Take a look at the comments and commands in Makefile and
-	Runtime/Makefile and then try
+On the Intel x86, a modified version of TAL 3.0 is required.  It is
+available from
 
-		make
+	http://www.cs.cmu.edu/~fox/tilt.html
 
-	to compile TILT.  On unsupported architectures, the final message
-	will be "tilt: unable to link".
+TAL requires Objective Caml available from
 
-	Once make has finished, the scripts Bin/tilt and Bin/tilt-nj will
-	run TILT out of the current directory; alternatively, you can use
+	http://caml.inria.fr/
 
-		su
-		make install
+and has been built with OCaml versions 3.07.2 and 3.08.3.  Ensure that
+Runtime/talx86/Makefile has the correct path to your TAL root
+directory and that TAL has been compiled (with "make") prior to
+compiling TILT.
 
-	to copy binaries to the directory PREFIX set in Makefile.
+Ensure that the script Bin/cputype prints sparc, talx86, or
+unsupported.
+
+Take a look at the commands in Makefile, Runtime/talx86/Makefile, and
+Runtime/sparc/Makefile and then try
+
+	make
+
+to compile TILT.  On unsupported architectures, the final message will
+be "tilt: unable to link".
+
+Once make has finished, the scripts Bin/tilt and Bin/tilt-nj will run
+TILT out of the current directory.  Alternatively, you can use
+
+	su
+
+	make install
+
+to install TILT into the directory PREFIX set in Makefile.  This
+copies binaries to PREFIX/lib/tilt, manual pages to PREFIX/man, and
+wrapper scripts to PREFIX/bin.  The installed wrapper scripts run TILT
+from RUNPREFIX/lib/tilt rather than PREFIX/lib/tilt.
 
 
 PARALLEL MAKE
 
-	If your machine is fast and has plenty of memory, then you can
-	speed up the installation of TILT by running extra compilation
-	slaves.
+If your machine has multiple CPUs and has plenty of memory, then you
+can speed up the installation of TILT by running extra compilation
+slaves.
 
-	Use "make with-slaves" rather than "make".  If the script
-	./Bin/tilt-slave works on your platform, then when once make
-	compiles TILT under SML/NJ, you will see a new window running
-	emacs with four buffers named *tilt slave n*.  The slaves will
-	contribute to the TILT compilation jobs that make starts.
+Use "make with-slaves" rather than "make".  If the script
+Bin/tilt-slave works on your platform, then when once make compiles
+TILT under SML/NJ, you will see a new window running emacs with four
+buffers named *tilt slave n*.  The slaves will contribute to the TILT
+compilation jobs that make starts.
 
-	An alternative that does not rely on the script ./Bin/tilt-slave
-	is to compile TILT under SML/NJ and then run TILT slaves by hand:
+An alternative that does not rely on the script Bin/tilt-slave is to
+compile TILT under SML/NJ and then run TILT slaves by hand:
 
 	1.  Compile TILT with SML/NJ:
 
@@ -81,55 +111,55 @@ PARALLEL MAKE
 
 INCOMPATIBILITIES
 
-	TILT has some incompatibilities with Standard ML and some
-	extensions.
+TILT has some incompatibilities with Standard ML and some extensions.
 
-	The value restriction used by TILT is different than that
-	specified in SML.  TILT treats declarations like "val a = e1 and b
-	= e2" as a derived forms for declarations like "val (a,b) =
-	(e1,e2)".  A variable in a val declaration will only be
-	generalized if the right hand side is a value and the variable
-	does not occur in the argument of a datatype constructor.
+The value restriction used by TILT is different than that specified in
+SML.  TILT treats declarations like "val a = e1 and b = e2" as a
+derived forms for declarations like "val (a,b) = (e1,e2)".  A variable
+in a val declaration will only be generalized if the right hand side
+is a value and the variable does not occur in the argument of a
+datatype constructor.
 
-	TILT does not support non-uniform datatypes.  Specifically, in a
-	strongly-connected datbind of the form
+TILT does not support non-uniform datatypes.  Specifically, in a
+strongly-connected datbind of the form
 
-		tyvarseq1 tycon1 = conbind1
-		...
-		tyvarseqn tyconn = conbindn
+	tyvarseq1 tycon1 = conbind1
 
-	TILT requires that no tyvarseq contains duplicates; there exists k
-	such that every tyvarseq has length k; and for each application
-	tyseq tyconi occurring in conbindj, tyseq = tyvarseqj.  For
-	example, TILT rejects "datatype 'a t = T of int t" but accepts
-	"datatype 'a t = T of 'a t".
+	...
 
-	TILT implements an extension to structure sharing specifications
-	(that is, "spec sharing longstrid1 = ...  longstridn") that is
-	likely to be incompatible with the extensions implemented by other
-	SML compilers.  The file ./Doc/structure_sharing.txt describes the
-	structure sharing extension planned for a future version of TILT.
+	tyvarseqn tyconn = conbindn
 
-	TILT supports signature expression of the form "sigexp where
-	longstrid1 = longstrid2" as a shorthand for a series of type
-	realizations.
+TILT requires that no tyvarseq contains duplicates; there exists k
+such that every tyvarseq has length k; and for each application tyseq
+tyconi occurring in conbindj, tyseq = tyvarseqj.  For example, TILT
+rejects "datatype 'a t = T of int t" but accepts "datatype 'a t = T of
+'a t".
+
+TILT implements an extension to structure sharing specifications (that
+is, "spec sharing longstrid1 = ...  longstridn") that is likely to be
+incompatible with the extensions implemented by other SML compilers.
+The file Doc/structure_sharing.txt describes the structure sharing
+extension planned for a future version of TILT.
+
+TILT supports signature expression of the form "sigexp where
+longstrid1 = longstrid2" as a shorthand for a series of type
+realizations.
 
 
 PLANS
 
-	Future versions of TILT will include bug fixes, performance
-	enhancements, a new structure sharing extension, and an
-	updated Basis library.  See the file ./KNOWN_BUGS lists known
-	bugs.
+Future versions of TILT will include bug fixes, performance
+enhancements, a new structure sharing extension, and an updated Basis
+library.  See the file KNOWN_BUGS lists known bugs.
 
 
 SUPPORT
 
-	Research resulting in this software was sponsored by the Air Force
-	Materiel Command (AFMC) and the Defense Advanced Research Projects
-	Agency (DARPA) under contract no. F19628-95-C-0050, and by the
-	National Science Foundation (NSF) under grant nos. EIA-9706572
-	and CCR-0121633.  The views and conclusions contained in this
-	document are those of the author and should not be interpreted as
-	representing the official policies, either expressed or implied,
-	of AFMC, DARPA, NSF, the U.S. government or any other entity.
+Research resulting in this software was sponsored by the Air Force
+Materiel Command (AFMC) and the Defense Advanced Research Projects
+Agency (DARPA) under contract no.  F19628-95-C-0050, and by the
+National Science Foundation (NSF) under grant nos.  EIA-9706572 and
+CCR-0121633.  The views and conclusions contained in this document are
+those of the author and should not be interpreted as representing the
+official policies, either expressed or implied, of AFMC, DARPA, NSF,
+the U.S.  government or any other entity.

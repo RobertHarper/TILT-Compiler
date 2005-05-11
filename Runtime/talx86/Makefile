@@ -4,11 +4,21 @@ CFLAGS=
 AS=../../Bin/talx86as
 ASFLAGS=
 
+TALCDIR=../../../talc
 DEST=../../Lib/talx86
+AUX=../../Bin/talx86/aux
 
 LIB=$(DEST)/runtime.a
 
 # The tali files are needed during assembly.
+
+PREREQ=\
+	$(AUX)/genCinit.exe\
+	$(AUX)/talc.exe\
+	$(DEST)/libgc.a\
+	$(DEST)/tal_prog.tali\
+	$(DEST)/tal_start.o\
+	$(DEST)/tal_util.o\
 
 EXTRA=\
 	$(DEST)/runtime.o\
@@ -61,6 +71,14 @@ $(DEST)/%: %
 	@echo
 	cp $< $(DEST)
 
+$(DEST)/%: $(TALCDIR)/runtime/%
+	@echo
+	cp $< $(DEST)
+
+$(AUX)/%: $(TALCDIR)/build/%
+	@echo
+	cp $< $(AUX)
+
 %.o: %.c
 	@echo
 	$(CC) $(CFLAGS) -c -o $@ $*.c
@@ -73,7 +91,8 @@ $(DEST)/%: %
 	@echo
 	$(AS) $(ASFLAGS) $*.o $*.to $?
 
-all:	$(LIB) $(EXTRA)
+
+all:	$(PREREQ) $(LIB) $(EXTRA)
 
 $(LIB): $(OFILES)
 	@echo
@@ -83,7 +102,7 @@ clean:
 	-rm -f *.o *.to
 
 nuke:
-	-rm -f *.o *.to $(LIB) $(EXTRA)
+	-rm -f *.o *.to $(PREREQ) $(LIB) $(EXTRA)
 
 $(OFILES) $(EXTRA): Makefile
 

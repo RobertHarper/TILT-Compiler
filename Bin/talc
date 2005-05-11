@@ -1,7 +1,7 @@
 #!/bin/sh
 bindir=`dirname "$0"`
-taldir=`cd "$bindir"/../../talc; pwd`
-TALCLIB="$taldir/runtime"
-PATH="$taldir/build;$PATH"
+tiltroot=`cd "$bindir"/..; pwd`
+TALCLIB="$tiltroot/Lib/talx86"
+PATH="$tiltroot/Bin/talx86/aux;$PATH"
 export TALCLIB PATH
-exec "$taldir/build/talc.exe" ${1+"$@"}
+exec "$tiltroot/Bin/talx86/aux/talc.exe" ${1+"$@"}

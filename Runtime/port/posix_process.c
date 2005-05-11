@@ -70,7 +70,7 @@ posix_process_waitpid(cerr er, int argpid, word options)
 {
 	int status;
 	pid_t pid = waitpid(argpid, &status, options);
-	int how, val;
+	int how=0, val=0;
 	val_t fields[3];
 
 	if(pid == (pid_t)-1)
