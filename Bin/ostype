@@ -1,0 +1,6 @@
+#!/bin/sh
+
+s=`uname`
+r=`uname -r`
+echo "$s$r" |
+tr '. -' '__'
