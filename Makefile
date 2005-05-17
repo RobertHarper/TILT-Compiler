@@ -81,15 +81,16 @@ slaves:
 install:
 	-mkdir $(PREFIX)/lib
 	-mkdir $(PREFIX)/lib/tilt
-	(cd Runtime && $(MAKE) DEST=$(PREFIX)/lib/tilt/Runtime install)
-	if test -f Bin/$(cputype)/tilt; then strip Bin/$(cputype)/tilt; fi
-	if test -f Bin/$(cputype)/tilt-dump; then strip Bin/$(cputype)/tilt-dump; fi
+	if test -f $(BIN)/tilt; then strip $(BIN)/tilt; fi
+	if test -f $(BIN)/tilt-dump; then strip $(BIN)/tilt-dump; fi
 	tar cf - License Bin Lib Doc | (cd $(PREFIX)/lib/tilt && tar xf -)
 	-mkdir $(PREFIX)/man
 	-mkdir $(PREFIX)/man/man1
 	-mkdir $(PREFIX)/man/man4
-	cp Doc/tilt.man $(PREFIX)/man/man1/tilt.1 && chmod 644 $(PREFIX)/man/man1/tilt.1
-	cp Doc/tilt-project.man $(PREFIX)/man/man4/tilt-project.4 && chmod 644 $(PREFIX)/man/man4/tilt-project.4
+	cp Doc/tilt.man $(PREFIX)/man/man1/tilt.1
+	chmod 644 $(PREFIX)/man/man1/tilt.1
+	cp Doc/tilt-project.man $(PREFIX)/man/man4/tilt-project.4
+	chmod 644 $(PREFIX)/man/man4/tilt-project.4
 	-mkdir $(PREFIX)/bin
 	for name in tilt tilt-nj tilt-slaves; do \
 		(echo '#!/bin/sh'; \
