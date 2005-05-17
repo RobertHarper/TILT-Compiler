@@ -1,20 +1,23 @@
-#CC=gcc -g -Werror -Wall -I . -I ../port -I ../../../talc/runtime/loader/include
-CC=gcc -O2 -g -Wall -I . -I ../port -I ../../../talc/runtime/loader/include
+OS=`../../Bin/ostype`
+#CC=gcc -g -Werror -Wall -I . -I ../port -I ../../../talc/runtime/loader/include -D__$(OS)__
+CC=gcc -O2 -g -Wall -I . -I ../port -I ../../../talc/runtime/loader/include -D__$(OS)__
 CFLAGS=
 AS=../../Bin/talx86as
 ASFLAGS=
 
 TALCDIR=../../../talc
-DEST=../../Lib/talx86
-AUX=../../Bin/talx86/aux
+DEST=../../Lib/talx86/$(OS)
+BIN=../../Bin/talx86/$(OS)
 
 LIB=$(DEST)/runtime.a
 
-# The tali files are needed during assembly.
+DIRS=\
+	$(DEST)\
+	$(BIN)\
 
 PREREQ=\
-	$(AUX)/genCinit.exe\
-	$(AUX)/talc.exe\
+	$(BIN)/genCinit.exe\
+	$(BIN)/talc.exe\
 	$(DEST)/libgc.a\
 	$(DEST)/tal_prog.tali\
 	$(DEST)/tal_start.o\
@@ -75,9 +78,9 @@ $(DEST)/%: $(TALCDIR)/runtime/%
 	@echo
 	cp $< $(DEST)
 
-$(AUX)/%: $(TALCDIR)/build/%
+$(BIN)/%: $(TALCDIR)/build/%
 	@echo
-	cp $< $(AUX)
+	cp $< $(BIN)
 
 %.o: %.c
 	@echo
@@ -91,18 +94,23 @@ $(AUX)/%: $(TALCDIR)/build/%
 	@echo
 	$(AS) $(ASFLAGS) $*.o $*.to $?
 
+all nuke:
+	$(MAKE) OS=$(OS) dirs $@_continue
 
-all:	$(PREREQ) $(LIB) $(EXTRA)
+dirs:
+	-mkdir $(DIRS)
 
-$(LIB): $(OFILES)
-	@echo
-	ar rvu $(LIB) $(OFILES)
+all_continue:	$(PREREQ) $(LIB) $(EXTRA)
 
 clean:
 	-rm -f *.o *.to
 
-nuke:
+nuke_continue:
 	-rm -f *.o *.to $(PREREQ) $(LIB) $(EXTRA)
+
+$(LIB): $(OFILES)
+	@echo
+	ar rvu $(LIB) $(OFILES)
 
 $(OFILES) $(EXTRA): Makefile
 

@@ -2,11 +2,15 @@ PREFIX=/usr/local
 RUNPREFIX=$(PREFIX)
 mkheap=./Bin/mkheap
 cputype=`./Bin/cputype`
+os=`./Bin/ostype`
+BIN=Bin/$(cputype)/$(os)
 tiltname=`./Bin/tiltname`
 tiltdumpname=`./Bin/tiltdumpname`
 tilt=./Bin/tilt-nj -vv
 slaves=:
 
+DIRS=\
+	$(BIN)
 
 all:\
 	tilt-heap\
@@ -17,50 +21,52 @@ all:\
 	smlnj-lib\
 	ml-yacc-lib\
 	arg\
+	dirs\
 	tilt\
 	dump\
 	runtest
 
-with-slaves: FORCE
+with-slaves:
 	$(MAKE) 'slaves=./Bin/tilt-slaves' all
-
-FORCE:
 
 # SML/NJ heaps
 
-heap tilt-heap: FORCE
+heap tilt-heap:
 	$(mkheap) sources.cm Bin/heap/$(tiltname) Main.main
-dump-heap: FORCE
+dump-heap:
 	$(mkheap) sources.cm Bin/heap/$(tiltdumpname) Dump.main
 
 # TILT-compiled libraries
 
-basis: FORCE
+basis:
 	$(tilt) -fBootstrap -lLib/basis Basis/project
-smlnj-lib: FORCE
+smlnj-lib:
 	$(tilt) -lLib/smlnj-lib Basis/Library/project
-ml-yacc-lib: FORCE
+ml-yacc-lib:
 	$(tilt) -lLib/ml-yacc-lib Parser/Library/project
-arg: FORCE
+arg:
 	$(tilt) -lLib/arg Util/project-arg
 
 # TILT runtime
 
-runtime: FORCE
+runtime:
 	(cd Runtime/$(cputype) && $(MAKE))
 
 # TILT-compiled binaries
 
-tilt: FORCE
-	$(tilt) -oBin/$(cputype)/$(tiltname) -c Top Top/project
-dump: FORCE
-	$(tilt) -oBin/$(cputype)/$(tiltdumpname) -c DumpTop Top/project
-runtest: FORCE
-	if test -d Test; then $(tilt) -oBin/$(cputype)/runtest -c Runtest Test/project; fi
+dirs:
+	-mkdir $(DIRS)
+
+tilt:
+	$(tilt) -o$(BIN)/$(tiltname) -c Top Top/project
+dump:
+	$(tilt) -o$(BIN)/$(tiltdumpname) -c DumpTop Top/project
+runtest:
+	if test -d Test; then $(tilt) -o$(BIN)/runtest -c Runtest Test/project; fi
 
 # Other targets
 
-clean: FORCE
+clean:
 	-if test -d Test; then $(tilt) -pp Test/project; fi
 	-$(tilt) -pp Top/project
 	-$(tilt) -pp Util/project-arg
@@ -69,10 +75,10 @@ clean: FORCE
 	-$(tilt) -pp -fBootstrap Basis/project
 	(cd Runtime/$(cputype) && $(MAKE) nuke)
 
-slaves: FORCE
+slaves:
 	$(slaves) -n 4/localhost
 
-install: FORCE
+install:
 	-mkdir $(PREFIX)/lib
 	-mkdir $(PREFIX)/lib/tilt
 	(cd Runtime && $(MAKE) DEST=$(PREFIX)/lib/tilt/Runtime install)

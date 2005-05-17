@@ -22,4 +22,3 @@ typedef double float64;
 typedef unsigned long reg_t;
 
 #define	sparc	1	/* Satisfy Perry's code */
-#define __SunOS5_5_1__	/* Temporary hack */

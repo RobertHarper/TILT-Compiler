@@ -1,15 +1,16 @@
 #!/bin/sh
 bindir=`dirname "$0"`
 cputype=`"$bindir"/cputype`
+os=`"$bindir"/ostype`
 case $cputype in
 unsupported)
 	echo 1>&2 "runtest: unsupported architecture"
 	exit 1
 	;;
 talx86)
-	exec "$bindir"/$cputype/runtest ${1+"$@"}
+	exec "$bindir"/$cputype/$os/runtest ${1+"$@"}
 	;;
 sparc)
-	exec "$bindir"/$cputype/runtest '@fixheap=20000' ${1+"$@"}
+	exec "$bindir"/$cputype/$os/runtest '@fixheap=20000' ${1+"$@"}
 	;;
 esac

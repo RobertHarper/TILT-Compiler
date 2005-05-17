@@ -1,6 +1,7 @@
 #!/bin/sh
 bindir=`dirname "$0"`
 cputype=`"$bindir"/cputype`
+os=`"$bindir"/ostype`
 tiltname=`"$bindir"/tiltname`
 case $cputype in
 unsupported)
@@ -10,6 +11,6 @@ unsupported)
 *)
 	TILTROOT=`cd "$bindir"/..; pwd`
 	export TILTROOT
-	exec "$bindir"/$cputype/"$tiltname" ${1+"$@"}
+	exec "$bindir"/$cputype/$os/"$tiltname" ${1+"$@"}
 	;;
 esac

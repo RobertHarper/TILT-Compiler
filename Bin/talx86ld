@@ -51,7 +51,8 @@ case $# in
 esac
 
 bindir=`dirname "$0"`
-runtimedir=`cd "$bindir"/../Lib/talx86; pwd`
+os=`"$bindir"/ostype`
+runtimedir=`cd "$bindir"/../Lib/talx86/$os; pwd`
 
 cputype=`"$bindir"/cputype`
 case $cputype in

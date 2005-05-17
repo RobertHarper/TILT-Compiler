@@ -17,7 +17,8 @@ case $# in
 esac
 
 bindir=`dirname "$0"`
-runtimedir=`cd "$bindir"/../Lib/sparc; pwd`
+os=`"$bindir"/ostype`
+runtimedir=`cd "$bindir"/../Lib/sparc/$os; pwd`
 
 firstdata="$runtimedir/firstdata.o"
 runtime="$runtimedir/runtime.a"

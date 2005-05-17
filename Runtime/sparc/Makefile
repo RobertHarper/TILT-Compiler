@@ -1,17 +1,21 @@
-#CC=gcc -I . -I ../port -Werror -Winline -Wimplicit -g -Wa,-xarch=v8plus -DDEBUG
-CC=gcc -I . -I ../port -Winline -Wimplicit -g -Wa,-xarch=v8plus -O2 -finline-functions
+#CC=gcc -I . -I ../port -Werror -Winline -Wimplicit -g -Wa,-xarch=v8plus -DDEBUG -D__$(OS)__
+CC=gcc -I . -I ../port -Winline -Wimplicit -g -Wa,-xarch=v8plus -O2 -finline-functions -D__$(OS)__
 CFLAGS=
 AS=/usr/ccs/bin/as -xarch=v8plus -P
 ASFLAGS=
 
-DEST=../../Lib/sparc
+DEST=../../Lib/sparc/$(OS)
 
 LIB=$(DEST)/runtime.a
 
-EXTRA=$(DEST)/firstdata.o
-
 # NB SunOS 5.5.1 make fails mysteriously if there is a backslash
 # on the last entry in lists like HFILES and OFILES.
+
+DIRS=\
+	$(DEST)
+
+EXTRA=\
+	$(DEST)/firstdata.o
 
 HFILES=\
 	s.h\
@@ -95,17 +99,23 @@ $(DEST)/%: %
 	@echo
 	$(AS) $(ASFLAGS) -o $@ $<
 
-all:	$(LIB) $(EXTRA)
+all nuke:
+	$(MAKE) OS=`../../Bin/ostype` dirs $@_continue
 
-$(LIB): $(OFILES)
-	@echo
-	ar rvu $(LIB) $(OFILES)
+dirs:
+	-mkdir $(DIRS)
+
+all_continue:	$(LIB) $(EXTRA)
 
 clean:
 	-rm -f *.o
 
-nuke:
+nuke_continue:
 	-rm -f *.o $(LIB) $(EXTRA)
+
+$(LIB): $(OFILES)
+	@echo
+	ar rvu $(LIB) $(OFILES)
 
 $(OFILES) $(EXTRA): Makefile
 
