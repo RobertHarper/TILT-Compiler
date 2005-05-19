@@ -1,6 +1,6 @@
 OS=`../../Bin/ostype`
-#CC=gcc -g -Werror -Wall -I . -I ../port -I ../../../talc/runtime/loader/include -D__$(OS)__
-CC=gcc -O2 -g -Wall -I . -I ../port -I ../../../talc/runtime/loader/include -D__$(OS)__
+#CC=gcc -g -Werror -Wall -I . -I ../port -D__$(OS)__
+CC=gcc -O2 -g -Wall -I . -I ../port -D__$(OS)__
 CFLAGS=
 AS=../../Bin/talx86as
 ASFLAGS=

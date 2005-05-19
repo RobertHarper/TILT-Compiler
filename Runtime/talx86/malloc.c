@@ -1,6 +1,10 @@
 #include "s.h"
 #include "r.h"
-#include <gc.h>
+
+extern void*	GC_malloc(size_t);
+extern void*	GC_malloc_atomic(size_t);
+extern void*	GC_realloc(void*, size_t);
+extern void	GC_free(void*);
 
 void*
 emalloc(size_t size)
