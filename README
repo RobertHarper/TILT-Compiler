@@ -49,7 +49,12 @@ directory and that TAL has been compiled (with "make") prior to
 compiling TILT.
 
 Ensure that the script Bin/cputype prints sparc, talx86, or
-unsupported.
+unsupported.  Ensure that the script Bin/ostype prints a reasonable
+tag; two machines that are not binary compatible should have distinct
+ostype tags.
+
+Ensure that the script Bin/nproc prints the number of processors on
+multiprocessor machines.
 
 Take a look at the commands in Makefile, Runtime/talx86/Makefile, and
 Runtime/sparc/Makefile and then try
@@ -74,39 +79,42 @@ from RUNPREFIX/lib/tilt rather than PREFIX/lib/tilt.
 
 PARALLEL MAKE
 
-If your machine has multiple CPUs and has plenty of memory, then you
-can speed up the installation of TILT by running extra compilation
-slaves.
+TILT runs a compilation slave for each CPU in your machine.
 
-Use "make with-slaves" rather than "make".  If the script
-Bin/tilt-slave works on your platform, then when once make compiles
-TILT under SML/NJ, you will see a new window running emacs with four
-buffers named *tilt slave n*.  The slaves will contribute to the TILT
-compilation jobs that make starts.
+You can control the number of slaves by having make invoke TILT with
+an option like "-j n" where n is the number of slaves to run; for
+example, the command
 
-An alternative that does not rely on the script Bin/tilt-slave is to
-compile TILT under SML/NJ and then run TILT slaves by hand:
+	make "tilt=./Bin/tilt-nj -vv -j1"
+
+is similar to "make" except TILT is limited to one slave.
+
+If you are compiling on a network file system and have spare machines
+you want to use as slaves, then repeat the following steps on those
+machines:
 
 	1.  Compile TILT with SML/NJ:
 
 		make heap
 
-	2.  Open a new window and run
+	2.  If a slave and the master are both x86 machines and they
+	are not binary compatible (for example, if they are running
+	different flavors of unix), then you need to build TAL and
+	TILT runtime binaries for the slave.  Do "make clean; make" in
+	the TAL directory and then
+
+		make runtime
+
+	to copy the TAL assembler and supporting files into the TILT
+	directory.  (After this step, you can do "make clean" in the
+	TAL directory.)
+
+	3.  Run
 
 		./Bin/tilt-nj -s
 
-	in the current directory.  You can do this a few times.
-
-	3.  If you are compiling on a network file system and have spare
-	machines you want to use as slaves, then repeat steps (1) and (2)
-	on those machines.
-
-	4.  Run
-
-		make
-
-	to compile TILT.  The slaves will contribute to the TILT
-	compilation jobs that make starts.
+The slaves will contribute to the TILT compilation jobs that make
+starts.
 
 
 INCOMPATIBILITIES

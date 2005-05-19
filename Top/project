@@ -81,7 +81,8 @@ unit Project : PROJECT = "project.sml" {
 unit TOOLS = "tools.sig.sml" {}
 interface Tools = "tools.int" {TOOLS}
 unit Tools : Tools = "tools.sml" {
-	TOOLS Util Stats String OS Target IntSyn Platform List Fs Listops
+	TOOLS Util Stats String OS Target IntSyn Platform List Fs
+	Listops Int
 }
 unit COMPILER = "compiler.sig.sml" {Name IntSyn}
 interface Compiler = "compiler.int" {COMPILER}
@@ -122,21 +123,19 @@ unit Master : Master = "master.sml" {
 	Bool Pos Fs
 }
 
-unit MANAGER = "manager.sig.sml" {Name}
+unit MANAGER = "manager.sig.sml" {}
 interface Manager = "manager.int" {MANAGER}
 unit Manager : Manager = "manager.sml" {
-	MANAGER Util Stats Name Slave Update Compiler Master Compiler
-	LinkParse Linkrtl Linksparc LinkIl Linknil Linklil
-	IlContext Hoist Inline NilStatic Specialize Normalize Tools
-	LilTypecheck Int List UtilError IntSyn ToNil LinkTAL
+	MANAGER Util Stats Name Slave Update Compiler Master LinkParse
+	Linkrtl Linksparc LinkIl Linknil Linklil IlContext Hoist
+	Inline NilStatic Specialize Normalize Tools LilTypecheck Int
+	List UtilError IntSyn LinkTAL Bool Substring StringCvt Arg
+	Target ToNil Version TextIO Platform
 }
 
 unit MAIN = "main.sig.sml" {OS}
 interface Main = "main.int" {MAIN}
-unit Main : Main = "main.sml" {
-	MAIN Manager Util TextIO OS Arg Platform Target Int String
-	UtilError Stats Version IntSyn Substring Bool StringCvt
-}
+unit Main : Main = "main.sml" {MAIN OS UtilError Manager}
 
 unit Dump = "dump.sml" {
 	MAIN Util Blaster Formatter List Char String Ppil IlBlast

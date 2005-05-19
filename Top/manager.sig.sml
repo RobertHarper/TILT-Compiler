@@ -1,33 +1,24 @@
 signature MANAGER =
 sig
 
-    (*
-	DiagLevel determines how verbose the compiler is; zero (the
-	default) is quiet and higher numbers are more verbose.
-    *)
-    val DiagLevel : int ref	(* Print diagnostics. *)	
-    val PrintStats : bool ref	(* Print stats after compilation. *)
-    val ResetStats : bool ref	(* Reset stats before compilation. *)
+	(*
+		DiagLevel determines how verbose the compiler is; zero (the
+		default) is quiet and higher numbers are more verbose.
+	*)
+	val DiagLevel : int ref	(* Print diagnostics. *)
+	val PrintStats : bool ref	(* Print stats after compilation. *)
+	val ResetStats : bool ref	(* Reset stats before compilation. *)
+	(*
+		NumSlaves determines how many slaves are launched; -1,
+		the default, runs one slave for each processor.
+	*)
+	val NumSlaves : int ref
 
-    type label
-    type targets = label list
-
-    val unit : string -> label
-    val interface : string -> label
-
-    (*
-	These run a master and, if boolean is true, a slave.
-    *)
-    val make : bool -> string list * targets -> unit
-    val make_exe : bool -> string list * string * targets -> unit	(* projects, exe *)
-    val make_lib : bool -> string list * string * targets -> unit	(* projects, lib *)
-
-    val purge : string list * targets -> unit
-    val purgeAll : string list * targets -> unit
-
-    (*
-	This makes the current process act as a slave.
-    *)
-    val slave : unit -> 'a
+	(*
+		This is similar to the command-line interface except
+		that (1) it does not exit on errors (2) the compiler's
+		state persists between calls to make.
+	*)
+	val make : string list -> unit
 
 end

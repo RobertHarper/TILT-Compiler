@@ -7,7 +7,6 @@ BIN=Bin/$(cputype)/$(os)
 tiltname=`./Bin/tiltname`
 tiltdumpname=`./Bin/tiltdumpname`
 tilt=./Bin/tilt-nj -vv
-slaves=:
 
 DIRS=\
 	$(BIN)
@@ -16,7 +15,6 @@ all:\
 	tilt-heap\
 	dump-heap\
 	runtime\
-	slaves\
 	basis\
 	smlnj-lib\
 	ml-yacc-lib\
@@ -25,9 +23,6 @@ all:\
 	tilt\
 	dump\
 	runtest
-
-with-slaves:
-	$(MAKE) 'slaves=./Bin/tilt-slaves' all
 
 # SML/NJ heaps
 
@@ -50,7 +45,7 @@ arg:
 # TILT runtime
 
 runtime:
-	(cd Runtime/$(cputype) && $(MAKE))
+	(cd Runtime/$(cputype) && $(MAKE) all clean)
 
 # TILT-compiled binaries
 
@@ -74,9 +69,6 @@ clean:
 	-$(tilt) -pp Basis/Library/project
 	-$(tilt) -pp -fBootstrap Basis/project
 	(cd Runtime/$(cputype) && $(MAKE) nuke)
-
-slaves:
-	$(slaves) -n 4/localhost
 
 install:
 	-mkdir $(PREFIX)/lib

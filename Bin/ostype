@@ -3,4 +3,4 @@
 s=`uname`
 r=`uname -r`
 echo "$s$r" |
-tr '. -' '__'
+tr '. +-' '____'

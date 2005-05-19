@@ -13,7 +13,7 @@
 ..
 .TH TILT 1
 .SH NAME
-tilt, tilt-nj, tilt-slaves \- Standard ML compiler
+tilt, tilt-nj \- Standard ML compiler
 .SH SYNOPSIS
 .B tilt
 [
@@ -43,13 +43,6 @@ tilt, tilt-nj, tilt-slaves \- Standard ML compiler
 .I project ...
 .PP
 .B tilt -s
-.PP
-.B tilt-slaves
-[
-.B -n
-]
-.RI [ num /] host
-.I ...
 .SH DESCRIPTION
 .PP
 TILT is a compiler for Standard ML (SML) that uses Typed Intermediate
@@ -111,11 +104,9 @@ Set
 .I F
 to false.
 .TP
-.B -m
-Prevent TILT from forking off a slave process to handle compilation.
-Compilation will proceed when slaves are started (with
-.BR "tilt -s" )
-in the current directory.
+.BI -j " n"
+Run \fIn\fR slaves to handle compilation.
+The default is to run one slave for each processor on the current machine.
 .TP
 .BI -c " U"
 Operate on unit
@@ -145,19 +136,6 @@ The default is the current architecture, if it is supported, and
 .B sparc
 otherwise.
 .PD
-.PP
-.I Tilt-slaves
-launches
-.I num
-slaves on
-.I host
-using
-.I tilt
-(or
-.I tilt-nj
-if the
-.B -n
-option is present).
 .SS Project descriptions
 .PP
 A project consists of an agglomeration of compilation units and their
