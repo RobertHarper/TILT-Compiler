@@ -2,12 +2,12 @@ This is TILT version 1.1.
 
 TILT is a compiler for Standard ML that uses Typed Intermediate
 Languages.  It can make executables and libraries for the SPARC V9 and
-Intel x86 architectures running SunOS 5.5.1, SunOS 5.7, SunOS 5.8,
-SunOS 5.9, and linux.  Tilt is a version of the compiler compiled by
-TILT.  Tilt-nj is a version of the compiler compiled by Standard ML of
-New Jersey; it should run on any Unix system supported by SML/NJ.
-(Such machines can be used as compilation slaves even if TILT can not
-generate binaries for them.)
+Intel x86 architectures running SunOS 5.5.1, SunOS 5.8, SunOS 5.9, and
+linux.  Tilt is a version of the compiler compiled by TILT.  Tilt-nj
+is a version of the compiler compiled by Standard ML of New Jersey; it
+should run on any Unix system supported by SML/NJ.  (Such machines can
+be used as compilation slaves even if TILT can not generate binaries
+for them.)
 
 The files Doc/tilt.txt and Doc/tilt-project.txt describe the
 command-line interface to TILT and the compilation manager.  The Doc
@@ -43,9 +43,9 @@ TAL requires Objective Caml available from
 
 	http://caml.inria.fr/
 
-and has been built with OCaml versions 3.07.2 and 3.08.3.  Ensure that
-Runtime/talx86/Makefile has the correct path to your TAL root
-directory and that TAL has been compiled (with "make") prior to
+and has been tested with OCaml versions 3.07.2, 3.08.0, and 3.08.3.
+Ensure that Runtime/talx86/Makefile has the correct path to your TAL
+root directory and that TAL has been compiled (with "make") prior to
 compiling TILT.
 
 Ensure that the script Bin/cputype prints sparc, talx86, or

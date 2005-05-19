@@ -17,13 +17,16 @@ use "load.sml";	(* compile TILT and the Load interface with NJ *)
 Load.toExe();	(* arrange for TILT to generate executables *)
 		(* see load.sml for other options *)
 Boot.boot();	(* compile Basis with TILT *)
-Manager.make "Top/project";
+Manager.make ["Top/project"];
 		(* compile TILT with TILT *)
-Manager.make "Bench/project";
+Manager.make ["Bench/project"];
 		(* compile benchmarks with TILT *)
 Load.make();    (* recompile the compiler after some source *)
 	        (* has been changed. *)
-
+Manager.make ["-sj1"];
+		(* run exactly one slave (useful for debugging slave exns) *)
+Manager.make ["-j0","Top/project"];
+		(* compile TILT with TILT, running no slaves (useful for debugging slave/master exns) *)
 
 
 A brief introduction to TILT's compilation manager is Doc/tilt.1 (a

@@ -48,7 +48,7 @@ tilt, tilt-nj \- Standard ML compiler
 TILT is a compiler for Standard ML (SML) that uses Typed Intermediate
 Languages.
 It can make executables and libraries for the SPARC V9 and Intel x86
-architectures running SunOS 5.5.1, SunOS 5.7, SunOS 5.8, SunOS 5.9,
+architectures running SunOS 5.5.1, SunOS 5.8, SunOS 5.9,
 and linux.
 .I Tilt
 is a version of the compiler compiled by TILT.
