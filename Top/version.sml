@@ -7,5 +7,5 @@ end =
 struct
     val majorVersion = 1
     val minorVersion = 1
-    val version = (Int.toString majorVersion ^ "." ^ Int.toString minorVersion)
+    val version = (Int.toString majorVersion ^ "." ^ Int.toString minorVersion) ^ "cvs"
 end
