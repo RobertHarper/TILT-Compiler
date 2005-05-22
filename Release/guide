@@ -1,3 +1,7 @@
+known bugs
+tilt version 2 files
+dead rtl code
+
 SCS MISC collection
 	Local 9fs afs
 	/afs/.cs.cmu.edu/misc/tilt/src/guide
@@ -10,6 +14,12 @@ Files to check:
 	../Nil/linknil.sml:/Typecheck	# should be false
 	patterns
 	talcpatterns
+
+# fix permissions
+for(i in `{du -a /usr/swasey/src/work/^(ml96 talc) | awk '{print $2}'}){
+	if(test -d $i || test -x $i) chmod 755 $i
+	if not chmod 644 $i
+}
 
 # reformat manual pages
 @{cd ../Doc && mk}
@@ -26,7 +36,7 @@ Local mount /srv/ml96 /n/test
 Local mount /srv/talc /n/talctest
 
 # mount and create archives
-v=1.1rc3
+v=1.1rc7
 tilt=tilt-$v
 talc=talc-3.0-$v
 dest=/usr/swasey/other
@@ -36,11 +46,9 @@ cd /n && tar c $tilt | gzip -9 > $dest/$tilt.tar.gz
 cd /n && tar c $talc | gzip -9 > $dest/$talc.tar.gz
 ls -l $dest/^($tilt $talc)^.tar.gz
 
-# kill servers
+# cleanup
 Local unmount /n/test
 Local unmount /n/talctest
 rm -f /srv/^(ml96 talc)
-
-# cleanup
 @{cd ../Doc && mk clean}
 rm -f ../KNOWN_BUGS
