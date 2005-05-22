@@ -1,6 +1,11 @@
+# On SunOS, some versions of GCC generate bad code with -O2.  The
+# symptom has been that TILT-compiled binaries (which are linked against
+# this runtime) do not terminate.  This problem has been seen under
+# SunOS 5.9 with GCC 3.2.3 and GCC 3.4.2.  This problem has not been
+# seen under SunOS 5.5.1 or SunOS 5.8 with GCC 2.95.3.  If you are
+# adventurous, then you can change the "-O" to "-O2" below.
 #CC=gcc -I . -I ../port -Werror -Winline -Wimplicit -g -Wa,-xarch=v8plus -DDEBUG -D__$(OS)__
-# NB -O2 causes problems with some verisons of GCC; see ../../README.
-CC=gcc -I . -I ../port -Winline -Wimplicit -g -Wa,-xarch=v8plus -O2 -finline-functions -D__$(OS)__
+CC=gcc -I . -I ../port -Winline -Wimplicit -g -Wa,-xarch=v8plus -O -finline-functions -D__$(OS)__
 CFLAGS=
 AS=/usr/ccs/bin/as -xarch=v8plus -P
 ASFLAGS=
