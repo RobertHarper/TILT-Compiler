@@ -1,4 +1,5 @@
 #CC=gcc -I . -I ../port -Werror -Winline -Wimplicit -g -Wa,-xarch=v8plus -DDEBUG -D__$(OS)__
+# NB -O2 causes problems with some verisons of GCC; see ../../README.
 CC=gcc -I . -I ../port -Winline -Wimplicit -g -Wa,-xarch=v8plus -O2 -finline-functions -D__$(OS)__
 CFLAGS=
 AS=/usr/ccs/bin/as -xarch=v8plus -P

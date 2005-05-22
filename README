@@ -64,6 +64,16 @@ Runtime/sparc/Makefile and then try
 to compile TILT.  On unsupported architectures, the final message will
 be "tilt: unable to link".
 
+On SunOS, some versions of GCC generate bad code with -O2.  The
+symptom has been that TILT-compiled binaries (which are linked against
+a C-compiled runtime) do not terminate.  This problem has been seen
+under SunOS 5.9 with GCC 3.2.3 and GCC 3.4.2.  This problem has not
+been seen under SunOS 5.5.1 or SunOS 5.8 with GCC 2.95.3.  At this
+point in the installation, you should try "./Bin/tilt".  If you do not
+see a TILT usage message, then replace "-O2" with "-O" in
+Runtime/sparc/Makefile, and re-run "make" to recompile the runtime and
+re-link TILT binaries.
+
 Once make has finished, the scripts Bin/tilt and Bin/tilt-nj will run
 TILT out of the current directory.  Alternatively, you can use
 

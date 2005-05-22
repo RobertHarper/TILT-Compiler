@@ -553,13 +553,13 @@ struct
 		in	true
 		end
 
-	fun compile_sc (tali:bool) ((desc,pdec):inputs) : bool =
-		(tali orelse
+	fun compile_sc (tali_ready:bool) ((desc,pdec):inputs) : bool =
+		(tali_ready orelse
 		let	val {name=U, asc=I, tali, ...} = I.D.D.sc pdec
 			val pctx = precontext desc
 			val pinterface = pinterface(lookup'(desc,I))
 			val pi = Fs.read_pinterface pinterface
-			val _ = compile_tali(pctx,U,pi,tali)
+			val () = compile_tali(pctx,U,pi,tali)
 		in	true
 		end)
 
@@ -575,7 +575,7 @@ struct
 			val (ilmod,pi) = elab_opt (src,opt)
 			val unchanged = write_pinterface (pctx,pinterface,pi)
 			val _ =
-				if unchanged andalso tali_ready then ()
+				if (unchanged andalso tali_ready) orelse not(Target.tal()) then ()
 				else compile_tali (pctx,U,pi,tali)
 			val _ = ack_inter()
 		in	finish_compile (desc,pdec,U,ilmod,asm,asme,asme_rel,asmi,asmi_rel,asmz,obj,tobj,using_file,tali_rel)
