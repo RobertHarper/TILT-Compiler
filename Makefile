@@ -75,7 +75,7 @@ install:
 	-mkdir $(PREFIX)/lib/tilt
 	if test -f $(BIN)/tilt; then strip $(BIN)/tilt; fi
 	if test -f $(BIN)/tilt-dump; then strip $(BIN)/tilt-dump; fi
-	tar cf - License Bin Lib Doc | (cd $(PREFIX)/lib/tilt && tar xf -)
+	tar cf - README KNOWN_BUGS License Bin Lib Doc | (cd $(PREFIX)/lib/tilt && tar xf -)
 	-mkdir $(PREFIX)/man
 	-mkdir $(PREFIX)/man/man1
 	-mkdir $(PREFIX)/man/man4
