@@ -411,8 +411,8 @@ structure LilClosure :> LILCLOSURE =
 
     local 
       val data : data list ref = ref []
-      fun add_data d = data := d :: !data
     in
+      fun add_data d = data := d :: !data
       fun add_dtuple (l,c,qs,svs) = add_data (Dtuple (l,c,qs,svs))
       fun add_dboxed (l,sv)    = add_data (Dboxed (l,sv))
       fun add_dcode (l,f)      = add_data (Dcode (l,f))
@@ -1309,8 +1309,8 @@ structure LilClosure :> LILCLOSURE =
 	      | Darray (l,sz,c,svs) => exp_label_bind (env,(l,LD.T.ptr (LD.T.array sz c)))
 	      | Dcode (l,f) => exp_label_bind(env,(l,S.Typeof.code f)))
 	val env = foldl add_dtype env data
-	val data = map (rewrite_datum env) data
-      in (data,env)
+	val _ = app (add_data o (rewrite_datum env)) data
+      in env
       end
 
 
@@ -1348,6 +1348,8 @@ structure LilClosure :> LILCLOSURE =
 	val () = reset_data()	  
 	val () = reset_rewritten()	  
 	val top_fid = Name.fresh_named_var "top_fid"
+
+	val _ = chat 1 "  Beginning analysis\n"
       
 	val (info,globals) = CA.findfv_module top_fid module
 
@@ -1365,7 +1367,7 @@ structure LilClosure :> LILCLOSURE =
 	val vimports = map (fn (l,c) => (l,rewrite_con env c)) vimports
 
 	val _ = chat 1 "  Rewriting data\n"	  
-	val (data,env) = rewrite_data env data
+	val env = rewrite_data env data
 
 	val _ = chat 1 "  Rewriting confun\n"	  
 	val confun = rewrite_con env confun
@@ -1377,7 +1379,7 @@ structure LilClosure :> LILCLOSURE =
 
 	val _ = chat 1 "  Module rewritten\n"
 
-	val data = data @ (get_data())
+	val data = get_data()
 	val () = reset_data()
 	val () = reset_rewritten()
       in  MODULE{unitname = unitname,parms = parms,entry_c = entry_c,entry_r = entry_r,timports = timports,vimports = vimports,data=data,confun=confun}

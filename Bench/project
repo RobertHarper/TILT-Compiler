@@ -16,7 +16,7 @@ unit fft = "fft.sml" {
 unit boyer = "boyer.sml" {Int RUN}
 
 unit simple = "simple.sml" {
-	Array Array2 Int Real64 Math64 List TiltPreReal RUN
+	Array Array2 Int Real64 Math64 List TiltPreReal TiltRealExtern RUN 
 }
 
 unit tyan = "tyan.sml" {

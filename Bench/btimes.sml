@@ -12,8 +12,8 @@ structure Benchmarks :> RUN =
     val benchmarks = 
       [(Life.run,"Life"),
        (Leroy.run,"Leroy"),
-(*       (Fft.run,"Fft"),
-       (Boyer.run,"Boyer"),*)
+       (Fft.run,"Fft"),
+       (Boyer.run,"Boyer"),
        (Simple.run,"Simple"),
        (Tyan.run,"Tyan"),
        (*   (Tyan1.run,"Tyan1"),
@@ -32,14 +32,14 @@ structure Benchmarks :> RUN =
 	*  (Lexgen2.run,"Lexgen2"),
 	*  (Lexgen3.run,"Lexgen3"),
 	*)
-(*       (Frank.run,"Frank"),*)
+       (Frank.run,"Frank"),
        (Arithmetic.run,"Arithmetic"),
        (Arithmetic32.run,"Arithmetic32"),
        (F_Arithmetic.run,"F_Arithmetic"),
-(*       (BarnesHut.run,"BarnesHut"),*)
+       (BarnesHut.run,"BarnesHut"),
        (PQueens.run,"PQueens"),
-(*       (Quicksort.run,"Quicksort"),
-       (Quicksort2.run,"Quicksort2"),*)
+       (Quicksort.run,"Quicksort"),
+       (Quicksort2.run,"Quicksort2"),
        (Takc.run,"Takc"),
        (Taku.run,"Taku")
        ]

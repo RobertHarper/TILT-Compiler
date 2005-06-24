@@ -2024,6 +2024,104 @@ structure Pptal :> PPTAL =
     val pp_genop' = help print_genop
     val pp_genop = help' print_genop
 
+
+
+
+    fun write_vector write add_cut vector printer = 
+      let
+	val () = Vector.app ((app write) o printer) vector
+	val () = if (Vector.length vector)>0 andalso add_cut then write (pp_print_newline ()) else ()
+      in ()
+      end
+
+    fun write_tal_imp_body' (opts : options) (write : Formatter.format -> unit) (m : tal_imp) =
+      let 
+	val writel = app write
+
+	val () = 
+	  let
+	    fun printer (l,c) = 
+	      [pp_print_string "\tTYPE\t"
+		     ,pp_print_char #"<"
+		     , pp_open_hovbox 0
+		     [
+		      id_prn l,
+		      pp_print_string " = ",
+		      print_con opts c
+		      ]
+		     ,pp_print_char #">"
+		     , pp_print_cut ()
+		     ]
+	  in  write_vector write true (#imp_abbrevs m) printer
+	  end
+
+	val () = 
+	  let
+	    fun printer (a,k) = 
+	      [pp_print_string "\tKIND\t" , 
+	       pp_print_char #"<", 
+	       (pp_open_hovbox 0 
+		[ id_prn a,
+		 pp_print_break 1 2,
+		 pp_print_string "= ",
+		 print_kind opts k
+		 ]),
+	       pp_print_char #">" ,
+	       pp_print_cut () 
+	       ]
+	  in write_vector write true (#imp_kindabbrevs m) printer
+	  end
+
+	val () = 
+	  let
+	    fun printer ((l,k,c)) =
+	      [
+	      pp_print_string "\tTYPE\t" ,
+	      pp_print_char #"<" ,
+	      pp_open_hovbox 0 [ lbl_prn l,
+				pp_print_break 1 2, pp_print_char #":", print_kind opts k,
+				pp_print_break 1 2, pp_print_string "= ",
+				print_con opts c
+				] ,
+	      pp_print_char #">" ,
+	      pp_print_cut () 
+	       ]
+	  in write_vector write true (#con_blocks m) printer
+	  end
+
+	val () = 
+	  (write(pp_print_string "\tCODE");
+	   write(pp_print_cut ());
+	   write(pp_print_cut ())
+	   )
+
+	val () = 
+	  let
+	    fun printer block = 
+	      [print_code_block opts block]
+	  in write_vector write true (#code_blocks m) printer
+	  end
+	
+	val () = 
+	  writel[pp_print_string "\tDATA", pp_print_cut (), pp_print_cut ()]
+
+	val () = 
+	  let
+	    fun printer (dblock) = [print_data_block opts dblock]
+	  in write_vector write true (#data_blocks m) printer
+	  end
+
+	val () = 
+	  writel[
+		 pp_print_string "\t_end_TAL", pp_print_cut (),
+		 pp_print_string "\tEND", pp_print_cut ()
+		 ]
+      in
+	()
+      end
+
+    fun write_tal_imp_body opts write m = write_tal_imp_body' opts write m
+
   end  (* EOF: x86talpp.ml *)
 
 

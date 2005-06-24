@@ -11,6 +11,11 @@ structure Name :> NAME =
     val debug = Stats.ff("NameDebug")
     fun debugdo t = if (!debug) then (t(); ()) else ()
 
+    (* For very large files, keeping the string portion of variables
+     * can dominate the memory usage 
+     *)
+    val keep_var_names = Stats.tt("KeepVarNames")
+
     type var   = int
 
     (* label =  (num,str) 
@@ -126,9 +131,14 @@ structure Name :> NAME =
     fun fresh_named_var (s : string) : var =
 	let val i = inc_counter var_counter
 	    val _ = update_var_counter i
-	    val s = if (size s > 0 andalso (Char.isDigit(String.sub(s,0))))
-			then "v" ^ s else s
-	    val _ = varmap := (VarMap.insert(!varmap,i,s))
+	    val _ = if !keep_var_names then 
+	      let
+		val s = if (size s > 0 andalso (Char.isDigit(String.sub(s,0))))
+			  then "v" ^ s else s
+		val _ = varmap := (VarMap.insert(!varmap,i,s))
+	      in ()
+	      end
+		    else ()
 	in  i
 	end
     fun fresh_var() = fresh_named_var ""
@@ -142,7 +152,10 @@ structure Name :> NAME =
 
     fun derived_var v = fresh_named_var(var2name v)
 
-    fun rename_var (v : var, s : string) : unit = varmap := (VarMap.insert(!varmap,v,s))
+    fun rename_var (v : var, s : string) : unit = 
+      if !keep_var_names then 
+	varmap := (VarMap.insert(!varmap,v,s))
+      else ()
 
 
     fun fresh_named_tag s = (inc_counter tag_counter,s)

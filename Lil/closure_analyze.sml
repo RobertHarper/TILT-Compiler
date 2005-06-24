@@ -69,25 +69,29 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
    structure Global = 
       struct 
 	
+	exception HashTableBug
+	fun new_table (hint) = Name.mk_var_hash_table (hint,HashTableBug)
 
-	val empty_table = VarMap.empty : (funentry ref) VarMap.map
-	val fids = ref empty_table
-	val globals : label VarMap.map ref = ref VarMap.empty
+	val fids : (var , funentry) HashTable.hash_table ref = ref (new_table(1000))
+	val globals : (var,label) HashTable.hash_table ref = ref (new_table(2000))
 	val conglobals : VarSet.set ref = ref VarSet.empty
-	fun reset () = (fids := empty_table;
-			globals := VarMap.empty;
+	fun init () = (fids := new_table(1000);
+		       globals := new_table(2000);
+		       conglobals := VarSet.empty)
+
+	fun reset () = (fids := new_table(0);
+			globals := new_table(0);
 			conglobals := VarSet.empty)
 	  
-	fun is_fid f = (case (VarMap.find(!fids,f)) of NONE => false | _ => true)
-	fun get_fids() = VarMap.foldli (fn (fid,_,acc) => VarSet.add(acc,fid)) VarSet.empty (!fids)
-	fun add_fun new_fid = fids := (VarMap.insert(!fids,new_fid,ref (empty_fun new_fid)))
+	fun is_fid f = (case (HashTable.find(!fids) f) of NONE => false | _ => true)
+	fun get_fids() = HashTable.foldi (fn (fid,_,acc) => VarSet.add(acc,fid)) VarSet.empty (!fids)
+	fun add_fun new_fid = (HashTable.insert(!fids) (new_fid,(empty_fun new_fid)))
 	  
-	fun get_entry_ref caller = 
-	  (case (VarMap.find(!fids,caller)) of
+	fun get_entry caller = 
+	  (case (HashTable.find(!fids) caller) of
 	     NONE => error ((Name.var2string caller) ^ "fid not found for get_entry")
-	   | SOME (r as (ref entry)) => (r,entry))
-	fun get_entry caller = #2 (get_entry_ref caller)
-
+	   | SOME (entry) => (entry))
+	fun set_entry caller entry = HashTable.insert(!fids) (caller,entry)
 	fun get_callee caller = #callee (get_entry caller)
 	fun get_escapee caller = #escapee (get_entry caller)
 	fun get_frees  caller = #frees (get_entry caller)
@@ -96,64 +100,64 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 
 	fun add_escape esc_fid = 
 	  let
-	    val (r,{static,escape,callee,escapee,frees}) = get_entry_ref esc_fid
+	    val {static,escape,callee,escapee,frees} = get_entry esc_fid
 	  in
-	    r := {static = static,
-		  escape = true,
-		  callee = callee,
-		  escapee = escapee,
-		  frees = frees}
+	    set_entry esc_fid {static = static,
+			       escape = true,
+			       callee = callee,
+			       escapee = escapee,
+			       frees = frees}
 	  end
 
 
 	fun add_callee (caller,callee_fid,state) = 
 	  let
-	    val (r,{static,escape,callee,escapee,frees}) = get_entry_ref caller
+	    val ({static,escape,callee,escapee,frees}) = get_entry caller
 	  in
-	    r := {static = static,
-		  escape = escape,
-		  callee = (callee_fid,state)::callee,
-		  escapee = escapee,
-		  frees = frees}
+	    set_entry caller {static = static,
+			      escape = escape,
+			      callee = (callee_fid,state)::callee,
+			      escapee = escapee,
+			      frees = frees}
 	  end
 
 	fun add_escapee (caller,escapee_fid,state) = 
 	  let
-	    val (r,{static,escape,callee,escapee,frees}) = get_entry_ref caller
+	    val ({static,escape,callee,escapee,frees}) = get_entry caller
 	  in
-	    r := {static = static,
-		  escape = escape,
-		  callee = callee,
-		  escapee = (escapee_fid,state)::escapee,
-		  frees = frees}
+	    set_entry caller {static = static,
+			      escape = escape,
+			      callee = callee,
+			      escapee = (escapee_fid,state)::escapee,
+			      frees = frees}
 	  end
 
 	fun add_frees (fid,f) =
 	  let
-	    val (r,{static,escape,callee,escapee,frees}) = get_entry_ref fid
+	    val ({static,escape,callee,escapee,frees}) = get_entry fid
 	  in
-	    r := {static = static,
-		  escape = escape,
-		  callee = callee,
-		  escapee = escapee,
-		  frees = Frees.join_frees(frees,f)}
+	    set_entry fid {static = static,
+			   escape = escape,
+			   callee = callee,
+			   escapee = escapee,
+			   frees = Frees.join_frees(frees,f)}
 	  end
 
 	fun augment_frees (fid,f) =
 	  let
-	    val (r,{static,escape,callee,escapee,frees}) = get_entry_ref fid
+	    val ({static,escape,callee,escapee,frees}) = get_entry fid
 	    val contained = Frees.contains_frees (frees,f) 
 	    val _ = if contained then () 
 		    else
-		      r := {static = static,
-			    escape = escape,
-			    callee = callee,
-			    escapee = escapee,
-			    frees = Frees.join_frees(frees,f)}
+		      set_entry fid {static = static,
+				     escape = escape,
+				     callee = callee,
+				     escapee = escapee,
+				     frees = Frees.join_frees(frees,f)}
 	  in not contained
 	  end
 	
-	fun add_global (v,l) = globals := VarMap.insert(!globals,v,l)
+	fun add_global (v,l) = HashTable.insert(!globals) (v,l)
 	fun add_globals vls = app add_global vls
 
 	fun add_conglobal v = conglobals := VarSet.add(!conglobals,v)
@@ -173,13 +177,18 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 		 VarSet.app (fn a => (PpLil.pp_var a;print "\t")) cglobs;
 		 print "\n")
 	      else ()
-	    fun remove (r as ref {static,escape,callee,escapee,frees = {cvars,vars32,vars64}}) = 
-	      r := {static = static,escape = escape,callee = callee,escapee = escapee,
-		    frees = {cvars = VarSet.difference (cvars,cglobs),vars32 = vars32,vars64 = vars64}}
-	  in VarMap.app remove (!fids)
+	    fun remove ({static,escape,callee,escapee,frees = {cvars,vars32,vars64}}) = 
+	      {static = static,escape = escape,callee = callee,escapee = escapee,
+	       frees = {cvars = VarSet.difference (cvars,cglobs),vars32 = vars32,vars64 = vars64}}
+	  in fids := HashTable.map remove (!fids)
 	  end
 
-	fun result () = (VarMap.map (fn e => !e) (!fids),!globals)
+	fun result () = 
+	  let
+	    fun ins (k,v,m) = VarMap.insert(m,k,v)
+	  in (HashTable.foldi ins VarMap.empty (!fids),
+	      HashTable.foldi ins VarMap.empty (!globals))
+	  end
       end
 
 
@@ -394,65 +403,6 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 		  | NONE => add_cvar(a,frees))
 	  in VarSet.foldl dovar frees (free_cvars_con con)
 	  end
-(*
-	  let 
-	    fun docon (env,frees,con : con) = 
-	      let 
-		val recur = findfv_con env frees
-		fun recur2 c1 c2 = findfv_con env (findfv_con env frees c1) c2
-	      in
-		(case cout con of
-		   Var_c v =>
-		     (case do_csubst_var (env,v)
-			of SOME c => findfv_con env frees c
-			 | NONE => 
-			  if (cvar_isavailable(env,frees,v))
-			    then frees
-			  else Frees.free_cvar_add(frees,v))
-		 | Nat_c w => frees
-		 | App_c (c1,c2) => recur2 c1 c2
-		 | APP_c (c,k) => recur c
-		 | Pi1_c c => recur c
-		 | Pi2_c c => recur c
-		 | Prim_c p => frees
-		 | Pr_c (j,(a,k),k',r,body)  => 
-		   let
-		     val env = con_var_bind (env,(a,k))
-		     val env = con_var_bind (env,(r,LD.K.arrow (LD.K.var j) k'))
-		     val frees = findfv_con env frees body
-		   in frees
-		   end
-		 | Case_c (c,arms,def) => 
-		   let
-		     val frees = recur c
-		     val sumk = kindof (env,c)
-		     fun sumw w = valOf (LD.KOps.sumw w sumk)
-		     fun findfv_arm env frees (w,(a,c)) = 
-		       let
-			 val env = con_var_bind (env,(a,sumw w))
-		       in findfv_con env frees c
-		       end
-		     val frees = findfv_list findfv_arm env frees arms
-		     val frees = findfv_opt findfv_con env frees def
-		   in frees
-		   end
-		 | LAM_c (j,c) => findfv_con env frees c
-		 | Lam_c ((a,k),c) =>
-		     let 
-		       val env = con_var_bind (env,(a,k))
-		     in findfv_con env frees c
-		     end
-		 | Pair_c (c1,c2) => recur2 c1 c2
-		 | Star_c => frees
-		 | Inj_c (w,k,c) => recur c
-		 | Fold_c (k,c) => recur c
-		 | Ptr_c c => recur c)
-		   
-	      end
-	  in  docon (env,frees,con)
-	  end
-	*)
-	
 	and findfv_exp (env : env) (frees : frees) (exp : exp) : frees =
 	  let 
 	    fun doexp (env,frees,e : exp) = 
@@ -463,11 +413,27 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 		 | Let_e (bnds,e) => 
 		     let
 		       val (env,frees) = findfv_bnds env frees bnds
-		     in findfv_exp env frees e
+		     in doexp(env,frees,e)
 		     end)
 	      end
 	    
 	  in doexp (env,frees,exp)
+	  end
+	and findfv_exp' (env : env) (exp : exp) : unit =
+	  let 
+	    fun doexp (env,e : exp) = 
+	      let
+	      in
+		(case #e e of
+		   Val32_e sv32 => ignore(findfv_sv32 env Frees.empty_frees sv32)
+		 | Let_e (bnds,e) => 
+		     let
+		       val env = findfv_bnds' env bnds
+		     in doexp(env,e)
+		     end)
+	      end
+	    
+	  in doexp (env,exp)
 	  end
 	and findfv_sv32 (env : env) (frees : frees) (sv32 : sv32) : frees = 
 	  let 
@@ -559,15 +525,44 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	  end
 	and findvc32list env vcs = findfv_vcxxlist exp_var32_bind env vcs
 	and findvc64list env vcs = findfv_vcxxlist exp_var64_bind env vcs
+	and findfv_bnds' (env : env) (bnds : bnd list) : env = 
+	  let
+	    fun loop(bnds,env) = 
+	      (case bnds 
+		 of [] => env
+		  | bnd::bnds => 
+		   let
+		     val (env,frees) = findfv_bnd env Frees.empty_frees bnd
+		   in loop(bnds,env)
+		   end)
+	    val res = loop(bnds,env)
+	  in res
+	  end
 	and findfv_bnds (env : env) (frees : frees) (bnds : bnd list) : (env * frees) = 
 	  let
-	    fun folder (bnd,(env,frees)) = findfv_bnd env frees bnd
-	    val res = foldl folder (env,frees) bnds
+	    fun merge (list) = 
+	      let
+		fun loop(list,frees) = 
+		  (case list
+		     of [] => frees
+		      | frees'::list => loop(list,Frees.join_frees(frees',frees)))
+	      in loop (list,Frees.empty_frees)
+	      end
+
+	    fun loop(bnds,env,freeslist) = 
+	      (case bnds 
+		 of [] => (env,merge freeslist)
+		  | bnd::bnds => 
+		   let
+		     val (env,frees) = findfv_bnd env Frees.empty_frees bnd
+		   in loop(bnds,env,frees::freeslist)
+		   end)
+
+	    val res = loop(bnds,env,[frees])
 	  in res
 	  end
 	and findfv_bnd (env : env) (frees : frees) (bnd : bnd) : (env * frees) = 
 	  let
-
 
 	    fun do_function env frees
 	      (Function {tFormals    : (var * kind) list,
@@ -890,7 +885,7 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	    val (env,frees) = findvc32list env frees eFormals
 	    val (env,frees) = findvc64list env frees fFormals
 	    val frees = findfv_con env frees rtype
-	    val frees = findfv_exp env frees body
+	    val () = findfv_exp' env body
 	  in ()
 	  end
 
@@ -989,7 +984,7 @@ structure LilClosureAnalyze :> LILCLOSURE_ANALYZE =
 	  let
 
 	    val _ = chat 1 "  Scanning for free variables\n"
-	    val _ = Global.reset ()
+	    val _ = Global.init ()
 
 	    val env = initial_env top_fid
 

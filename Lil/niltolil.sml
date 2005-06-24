@@ -987,7 +987,9 @@ structure NiltoLil :> NILTOLIL =
     fun sv64_trans (env : env) (e : Nil.exp) : Lil.sv64 * Nil.con = 
       (case e 
 	 of Nil.Var_e v => (Lil.Var_64 (rename_var env v),find_type env v)
-	  | _ => error "sv64_trans got a non-variable")
+	  | _ => (print "ERROR: ";
+		  Ppnil.pp_exp e;
+		  error "sv64_trans got a non-variable"))
 
     fun sv64_trans' (env : env) (e : Nil.exp) : Lil.sv64 = #1 (sv64_trans env e)
 

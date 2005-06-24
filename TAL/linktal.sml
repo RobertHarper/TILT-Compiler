@@ -1,6 +1,7 @@
 structure LinkTAL = 
   struct
     val diag = Stats.ff("LinkTALDiag")
+    val typecheck = Stats.bool "Typecheck"
     val show_linkmod = Stats.ff("ShowLilLinkMod")
     fun msg str = if (!diag) then print str else ()
     
@@ -17,7 +18,7 @@ structure LinkTAL =
 	val () = LilToTal.allocateInterface asm_file lilint
       in ()
       end
-    
+
     val lil_to_asm = Stats.timer("To TAL ASM",comp)
 
     val to_tal_interface = fn int => fn filename => Stats.timer ("To TAL interface",comp_int) (filename,int)
@@ -25,24 +26,29 @@ structure LinkTAL =
     fun link {asmFile : string , importfiles : string list, units : {imports:string list, name:string} list} = 
       let
 	val _ = msg "===== Generating TAL link module =====\n"
-	val linkmod = LilLinkUnit.linkunit units
+	val linkmod = Stats.timer("Generate link unit",LilLinkUnit.linkunit) units
 	val () = if !show_linkmod then 
 	  PpLil.pp_pass  {module = linkmod,
 			  name = "LINK",
 			  pass = "linkmod",
 			  header = "LINK"}
 		 else ()
-	val () = LilTypecheck.M.check linkmod
-	val linkmod = LilOptimize.optimize {doCse = true} linkmod
+ 	val () = if !typecheck then 
+	  Stats.timer("Typecheck link unit",LilTypecheck.M.check) linkmod
+		 else ()
+	val linkmod = Stats.timer("Optimize link unit",LilOptimize.optimize {doCse = true}) linkmod
 	val () = if !show_linkmod then 
 	  PpLil.pp_pass  {module = linkmod,
 			  name = "LINK",
 			  pass = "linkmod optimized",
 			  header = "LINK"}
 		 else ()
-	val () = LilTypecheck.M.check linkmod
+	val () = if !typecheck then
+	  Stats.timer("Typecheck link unit (opt)",LilTypecheck.M.check) linkmod
+		 else ()
 
-	val () = LilToTal.allocateModule asmFile NONE "TiltMain" importfiles ["tilt_main.tali"] linkmod
+	val () = Stats.timer("Emit link unit", 
+			     fn () => LilToTal.allocateModule asmFile NONE "TiltMain" importfiles ["tilt_main.tali"] linkmod) ()
       in ()
       end
 

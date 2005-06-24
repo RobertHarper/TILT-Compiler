@@ -1,0 +1,52 @@
+(*
+	Project description used to compile the basis library.
+
+	This is not used directly:  Other projects automatically
+	include $libdir/basis/project to access the compiled basis
+	library.
+*)
+
+#if not $bootstrapping
+#error "Compile the basis library with -fBootstrap."
+#endif
+
+interface TiltPrim = primitive
+unit TiltPrim : TiltPrim = primitive
+
+interface TiltVectorEq = "vector_eq.int" {TiltPrim}
+unit TiltVectorEq : TiltVectorEq = "vector_eq.sml" {TiltPrim}
+
+interface TiltCresult = "cresult.int" { TiltPrim }
+unit TiltCresult : TiltCresult = "cresult.sml" { TiltPrim }
+
+interface TiltExnExtern = "exn_extern.sml" {TiltPrim}
+unit TiltExnExtern : TiltExnExtern = "exn_extern.sml" {TiltPrim}
+
+interface TiltPrelude = "Prelude.int" {TiltPrim}
+unit TiltPrelude : TiltPrelude = "Prelude.sml" {TiltPrim TiltExnExtern}
+
+interface SpecialExtern = "special_extern.sml" {TiltPrim}
+unit SpecialExtern : SpecialExtern = "special_extern.sml" {TiltPrim}
+
+interface TiltTimeExtern = "pre-time.sml" {
+	TiltPrim TiltCresult 
+}
+unit TiltTimeExtern : TiltTimeExtern = "pre-time.sml" {
+	TiltPrim TiltCresult 
+}
+
+interface TiltRealExtern = "Numeric/extern.sml" {
+	TiltPrim TiltCresult
+}
+unit TiltRealExtern : TiltRealExtern = "Numeric/extern.sml" {
+	TiltPrim TiltCresult
+}
+
+interface WHOLE = "whole.int" {
+TiltPrim
+}
+
+unit Whole : WHOLE = "whole.sml" {
+TiltPrim TiltCresult TiltVectorEq TiltExnExtern SpecialExtern TiltTimeExtern TiltRealExtern TiltPrelude
+}
+

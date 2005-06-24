@@ -68,6 +68,18 @@ structure TalOut :> TALOUT =
 	()
       end 
 
+    fun wrapchannel' pp oc obj = 
+      let 
+	val fmtstream = Formatter.open_fmt oc
+	fun write fmt = Formatter.output_fmt (fmtstream,fmt); 
+	val () = ((pp write obj)
+		   handle any => (Formatter.close_fmt fmtstream;
+				  raise any))
+      in 
+	Formatter.close_fmt fmtstream;
+	()
+      end 
+
     fun wrapfile pp outfile obj = 
       let 
 	val oc = openOutput outfile
@@ -125,6 +137,16 @@ structure TalOut :> TALOUT =
       in ()
       end
 
+    fun channelwriter' pp channel obj = 
+      let
+	val fmtstate = set_formats()
+	  
+	val () = (wrapchannel' pp channel obj) handle any => (reset_formats fmtstate;raise any)
+	  
+	val () = reset_formats fmtstate
+      in ()
+      end
+
     fun write_imp'
       (oc : TextIO.outstream)
       (unitname : string)
@@ -136,7 +158,7 @@ structure TalOut :> TALOUT =
 	val () = channelwriter (Pptal.print_imp_header Pptal.std_options) oc unitname
 	val () = channelwriter (Pptal.print_tal_import_refs Pptal.std_options) oc imports
 	val () = channelwriter (Pptal.print_tal_export_refs Pptal.std_options) oc exports
-	val () = channelwriter (Pptal.print_tal_imp_body Pptal.std_options) oc imp
+	val () = channelwriter' (Pptal.write_tal_imp_body Pptal.std_options) oc imp
       in ()
       end
 

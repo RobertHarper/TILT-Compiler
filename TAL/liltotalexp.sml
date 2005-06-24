@@ -2614,6 +2614,9 @@ structure LilToTalExp :> LILTOTALEXP =
 	val env = TE.bind_talvar (env,(old_frame_var,fn _ => TTD.T.handler_frame scon))
 
 	(* Restore the old handler frame *)
+	(* XXX Is this right?  Shouldn't the old frame already be restored
+	 * if we got here from the handler? 
+	 *)
 	val (state,frame_tmp) = TS.reserve_temp_slot state
 	val state = TS.emit state (Tal.Mov(Tal.Reg Tal.Ebp,(frame_tmp,[])))
 	val state = sv32_trans_gop state env frame_tmp (Var_32 old_frame_var)
@@ -3376,7 +3379,11 @@ structure LilToTalExp :> LILTOTALEXP =
 
     fun code_block env d : Tal.code_block list option = 
       (case d
-	 of Dcode (l,f) => SOME (codetrans env (l,f))
+	 of Dcode (l,f) => 
+	   let
+	     val ans = SOME (codetrans env (l,f))
+	   in ans
+	   end
 	  | _ => NONE)
 
     fun data_blocks env data : Tal.data_block vector = Vector.fromList (List.concat (List.mapPartial (data_block env) data))
@@ -3402,6 +3409,7 @@ structure LilToTalExp :> LILTOTALEXP =
 	val data_blocks = data_blocks env data
 	val () = chat 2 "Translating code blocks\n"
 	val code_blocks = code_blocks env data
+	val () = chat 2 "Done with data\n"
       in (env,code_blocks,data_blocks)
       end
 

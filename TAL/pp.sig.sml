@@ -61,4 +61,7 @@ signature PPTAL =
     val print_tal_pre_mod  :  options -> string -> Tal.tal_pre_mod -> Formatter.format
 
     val pp_genop :  Tal.genop -> unit
+
+    val write_tal_imp_body :  options -> (Formatter.format -> unit) -> Tal.tal_imp -> unit
+
   end (* EOF: talpp.mli *)

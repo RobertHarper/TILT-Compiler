@@ -98,3 +98,11 @@ exn_handler_exit(exn exn)
 	fflush(stderr);
 	exit(1);
 }
+
+int 
+tal_print_ml_string(string s) 
+{
+  char * cs = mlstring2cstring_malloc(s);
+  printf("%s",cs);
+  efree(cs);
+}

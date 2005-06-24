@@ -23,11 +23,11 @@ structure Arithmetic32 :> RUN =
   fun run () = 
     let
       val x = fib 40
-      val _ = print "This should be 63245986: "
+      val _ = print "This should be 165580141: "
       val _ = print (Int32.toString x)
       val _ = print "\n"
       val x = fastfib 40
-      val _ = print "This should be 63245986: "
+      val _ = print "This should be 165580141: "
       val _ = print (Int32.toString x)
       val _ = print "\n"
       val x = fact 12

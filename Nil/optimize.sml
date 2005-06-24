@@ -1474,23 +1474,51 @@ struct
 	      fun unbox sv = 
 		let
 		  val x = Name.fresh_named_var "unboxed_arr_arg"
-		in Let_e (Sequential,[Exp_b(x,TraceKnown(TraceInfo.Notrace_Real),Prim_e(NilPrimOp(unbox_float Prim.F64), [],[], [sv]))],Var_e x)
+		in ([Exp_b(x,TraceKnown(TraceInfo.Notrace_Real),Prim_e(NilPrimOp(unbox_float Prim.F64), [],[], [sv]))],
+		    Var_e x)
 		end
+
 	      fun box oper = 
 		let
 		  val xf = Name.fresh_named_var "float_arr_res"
 		  val x = Name.fresh_named_var "boxed_arr_res"
-		in Let_e (Sequential,[Exp_b(xf,TraceKnown(TraceInfo.Notrace_Real),oper),
-				      Exp_b(x,TraceKnown(TraceInfo.Trace),Prim_e(NilPrimOp(box_float Prim.F64), [],[], [Var_e xf]))],Var_e x)
+		in Let_e (Sequential,
+			  [Exp_b(xf,TraceKnown(TraceInfo.Notrace_Real),oper),
+			   Exp_b(x,TraceKnown(TraceInfo.Trace),Prim_e(NilPrimOp(box_float Prim.F64), [],[], [Var_e xf]))],Var_e x)
 		end
 
 	      fun do_boxfloat (p,elist) = 
 		(case (p,elist)
-		   of (create_table _,[len,init]) => (false,p,[],[len,unbox init])
-		    | (create_empty_table _,_)    => (false,p,[],elist)
-		    | (sub _,[arr,i])             => (true,p,[],elist)
-		    | (update _,[arr,i,v])        => (false,p,[],[arr,i,unbox v])
-		    | (length_table _,_)          => (false,p,[],elist)
+		   of (create_table _,[len,init]) => 
+		     let 
+		       val (bnds,oper) = unbox init
+		       val x = Name.fresh_named_var "new_table"
+		       val e = 
+			 Let_e (Sequential,
+				bnds@[
+				      Exp_b(x,TraceKnown(TraceInfo.Trace),Prim_e(PrimOp p,[],[],[len,oper]))
+				      ],
+				Var_e x)
+		     in do_exp state e
+		     end
+		    | (create_empty_table _,_)    => 
+		     Prim_e(PrimOp p,[],[],map (do_exp state) elist)
+		    | (sub _,[arr,i])             => 
+		     box (Prim_e(PrimOp p,[],[],map (do_exp state) elist))
+		    | (update _,[arr,i,v])        => 
+		     let 
+		       val (bnds,v) = unbox v
+		       val x = Name.fresh_named_var "_update_"
+		       val e = 
+			 Let_e (Sequential,
+				bnds@[
+				      Exp_b(x,TraceKnown(TraceInfo.Notrace_Int),Prim_e(PrimOp p,[],[],[arr,i,v]))
+				      ],
+				Var_e x)
+		     in do_exp state e
+		     end
+		    | (length_table _,_)          => 
+		     Prim_e(PrimOp p,[],[],map (do_exp state) elist)
 		    | _ => error "Impossible")
 		   
 
@@ -1503,23 +1531,26 @@ struct
 		  (case reduce_hnf(state, c)
 		   of (_, Prim_c(Int_c is, _)) => 
 		     (case (!SpecializeArrayofChar,is)
-			of (true,_) => (false,constr(intconstr is),[],elist)
-			 | (_,Prim.W32) => (false,constr(intconstr is),[],elist)
-			 | _ => (false,constr(otherconstr true),[],elist))
-		    | (_, Prim_c(BoxFloat_c Prim.F64, _)) => do_boxfloat(constr(floatconstr Prim.F64),elist)
+			of (true,_) => 
+			  Prim_e(PrimOp(constr(intconstr is)),[],[],map (do_exp state) elist)
+			 | (_,Prim.W32) => 
+			  Prim_e(PrimOp(constr(intconstr is)),[],[],map (do_exp state) elist)
+			 | _ => 
+			  Prim_e(PrimOp(constr(otherconstr true)),[],[],map (do_exp state) elist))
+		    | (_, Prim_c(BoxFloat_c Prim.F64, _)) => 
+			do_boxfloat(constr(floatconstr Prim.F64),elist)
 		    | (_, Prim_c(Float_c is, _)) => error "This shouldn't happen?"
-		    | (hnf, _) => (false,constr(otherconstr hnf),[c],elist))
+		    | (hnf, _) => 
+			Prim_e(PrimOp(constr(otherconstr hnf)),[],[do_con state c],map (do_exp state) elist))
 		end
 		   
-	      val (boxit,p,clist,elist) =
+	      val res =
 		(case t of
 		   OtherArray _ => helper true (hd clist) elist
 		 | OtherVector _ => helper false (hd clist) elist
-		 | _ => (false,constr t,clist,elist))
-	      val clist = map (do_con state) clist
-	      val elist = map (do_exp state) elist
-	      val oper = Prim_e(PrimOp p, [],clist, elist)
-	  in if boxit then box oper else oper
+		 | _ => Prim_e(PrimOp(constr t),[],map (do_con state) clist,map (do_exp state) elist))
+
+	  in res
 	  end
 	
 	(* Convert some inject's to inject_known's *)
