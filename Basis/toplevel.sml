@@ -1,10 +1,9 @@
-(* see http://www.dina.kvl.dk/%7Esestoft/sml/top-level-chapter.html *)
+(*
+	The interface provided by TopLevel should not be assumed by
+	users of the basis library.
 
-(* The interface provided by TopLevel should not be assumed by users
-   of the basis library.
-
-   Users who want the standard top-level environment should import
-   Prelude and TopLevel.
+	Users who want the standard top-level environment should
+	import Prelude and TopLevel.
 *)
 
 (* overloads - complement's Prelude *)
@@ -56,7 +55,7 @@ val map = List.map
 val foldr = List.foldr
 val foldl = List.foldl
 
-val print = TextIO.print
+val print = TiltPrinter.print
 
 val vector = Vector.fromList
 

@@ -194,3 +194,6 @@ extern posix_filesys_utime : (cerr, string, int, int, unit) -->
 extern posix_filesys_pathconf_name : (cerr, string, int) -->
 extern posix_filesys_pathconf : (cerr, string, int, word) -->
 extern posix_filesys_fpathconf : (cerr, int, int, word) -->
+
+(* ../Runtime/port/printer.c *)
+extern printer_print : (cerr, string, unit) -->

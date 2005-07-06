@@ -74,6 +74,7 @@ OFILES=\
 	posix_sysdb.o\
 	posix_tty.o\
 	pre_posix.o\
+	printer.o\
 	queue.o\
 	real.o\
 	rooms.o\

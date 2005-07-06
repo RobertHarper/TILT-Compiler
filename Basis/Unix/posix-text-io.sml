@@ -8,4 +8,4 @@
 
 structure TextIO = TextIOFn (structure OSPrimIO = PosixTextPrimIO);
 
-
+val () = TiltPrinter.set_printer TextIO.print

@@ -63,6 +63,7 @@ OFILES=\
 	posix_sysdb.o\
 	posix_tty.o\
 	pre_posix.o\
+	printer.o\
 	real.o\
 	stdlib.o\
 	syserror.o\

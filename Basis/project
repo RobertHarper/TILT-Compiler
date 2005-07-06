@@ -38,6 +38,11 @@ unit TiltExtern : TiltExtern = "extern.sml" {
 	TiltPrim TiltPrelude TiltExternTys TiltCcall
 }
 
+interface TiltPrinter = "printer.int" { TiltPrim TiltPrelude }
+unit TiltPrinter : TiltPrinter = "printer.sml" {
+	TiltPrim TiltPrelude TiltExtern TiltCcall
+}
+
 interface TiltCleanUp = "cleanup.int" { TiltPrim TiltPrelude }
 unit TiltCleanUp : TiltCleanUp = "cleanup.sml" { TiltPrim TiltPrelude }
 
@@ -749,6 +754,7 @@ interface TextIO = "Unix/posix-text-io.int" {
 }
 unit TextIO : TextIO = "Unix/posix-text-io.sml" {
 	TiltTextIoFn TEXT_IO TiltPosixTextPrimIo TextPrimIO
+	TiltPrinter
 }
 interface BinIO = "Unix/posix-bin-io.int" {
 	TiltPrim TiltPrelude BIN_IO BinPrimIO
@@ -770,12 +776,11 @@ unit Unix : Unix = "Unix/unix.sml" {
 	TiltPosixTextPrimIo OS
 }
 interface TiltTop = "toplevel.int" {
-	TiltPrim TiltPrelude TiltPreString TiltPreInt Real Char String
-	Option List General TextIO Vector TiltExn
+	TiltPrim TiltPrelude String TiltPreInt TiltPreString
 }
 unit TiltTop : TiltTop = "toplevel.sml" {
 	TiltPrim TiltPrelude TiltPreString TiltPreInt Real Char String
-	Option List General TextIO Vector TiltExn
+	Option List General TiltPrinter Vector TiltExn
 }
 interface SML90_SIG = "General/sml90.sig.sml" {
 	TiltPrelude TiltPrim

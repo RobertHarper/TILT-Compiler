@@ -1,0 +1,13 @@
+(*
+	A version of print that can be overridden.  The default
+	printer uses the runtime.  TextIO installs its own printer.
+*)
+
+structure TiltPrinter :
+sig
+
+	val print : string -> unit
+
+	val set_printer : (string -> unit) -> unit
+
+end
