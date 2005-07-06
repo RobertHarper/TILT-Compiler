@@ -159,3 +159,7 @@
 0178 [open]	Word8Array and Array each use a single empty array.
 0179 [closed]	Array.foldri looks past end of non-empty array.
 0180 [open]	Extended vs double precision floating point.
+0181 [open]	Discarding unused variable names for improved scalability.
+0182 [open]	Directly writing TAL modules for speed.
+0183 [open]	Talc argument to increase stack size for scalability.
+0184 [open]	Improve closure analysis for scalability.

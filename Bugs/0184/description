@@ -1,0 +1,42 @@
+Number: 0184
+Title:	Improve closure analysis for scalability.
+Keywords:	scalability
+Submitter:	Leaf Petersen <leaf+@cs.cmu.edu>
+Date:	6/24/05
+Version:	CVS
+System:	talx86
+Severity:	reject
+Problem:	<description of problem>
+
+	I was able to compile large files (on the order of half of
+	tilt) for the most part in < 130M resident set size.  The one
+	major exception to this is closure_analyze.sml.  For reasons
+	that I don't understand, this pass requires vastly more
+	memory: > 500M RSS.  There are two things that should be done
+	here.
+
+	First it's worth thinking about the algorithm and
+	understanding if there's anything combinatorially bad being
+	done.  I don't think there should be: all it's doing is
+	collecting for each function name a set of the free variables
+	in that function, along with some auxilliary information about
+	the call graph.
+
+	Second, it's worth looking at the data structures in use for
+	the free varaible sets.  I suspect that they are very
+	in-efficient for this sort of thing.  One area of improvement
+	would be to find a way to improve sharing between the sets.
+	Currently, I think that a union of two sets destroys most of
+	the sharing with the old sets.  Since many sets are subsets of
+	each other, this is a real lose.  It could be worth trading
+	off time efficienty to get a more compact representation here.
+	Another possibility would be to look for a more efficient
+	representation for the underlying sets.
+
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open

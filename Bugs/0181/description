@@ -1,0 +1,50 @@
+Number: 0181
+Title:	Discarding unused variable names for improved scalability.
+Keywords:	scalability
+Submitter:	Leaf Petersen <leaf+@cs.cmu.edu>
+Date:	6/24/05
+Version:	CVS
+System:	any
+Severity:	reject
+Problem:
+
+	Added a stats flag "KeepVarNames" to name.sml, default to
+	true.  For very large files (e.g.  large portions of tilt
+	compiled whole program), the store of variable names kept in
+	the VarMap in name.sml comes to dominate the memory usage.
+	This surprises me somewhat, but empirically, not keeping names
+	for variables reduces memory usage for large files by at least
+	a factor of 3, particularly late in the compilation.
+
+	An alternative would be to add a pass which gcs the store of
+	variables periodically.  This would be easy to do with the
+	re-writers.
+
+Code:
+Transcript:
+Comments:
+
+	We should implement Leaf's suggestion.
+
+	1. Eliminate KeepVarNames and supporting code.
+
+	2. Change
+
+		reset_varmap : unit -> unit
+
+	to take a list of variables whose names should not be discarded:
+
+		reset_varmap : var list -> unit
+
+	3. Change existing applications of reset_varmap to reset_varmap nil.
+
+	4.  Implement passes that reset_varmap with the variables
+	mentioned in Nil/Lil modules and call them from Linknil and
+	Linklil.  As Leaf suggests, this is simple with the rewriters.
+	Use flags to control whether variables are reset after each
+	"normal" pass and apply sane defaults.
+
+Fix:
+Test:
+Owner: swasey
+Status: open

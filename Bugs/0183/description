@@ -1,0 +1,26 @@
+Number: 0183
+Title:	Talc argument to increase stack size for scalability.
+Keywords:	scalability
+Submitter:	Leaf Petersen <leaf+@cs.cmu.edu>
+Date:	6/24/05
+Version:	CVS
+System:	talx86
+Severity:	reject
+Problem:	<description of problem>
+
+	[F]or future reference [...] there is a command line flag that
+	you can give to ocaml compiled binaries to increase the stack
+	size.  This was needed to assemble larger TAL files.
+
+Code:
+Transcript:
+Comments:
+Fix:
+
+	Update ../../Bin/talx86as ../../Bin/talx86ld to use this flag
+	and let the user specify a talc stack size on TILT's
+	command-line.
+
+Test:
+Owner: swasey
+Status: open
