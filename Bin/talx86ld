@@ -63,6 +63,7 @@ talx86)
 		"$runtimedir/runtime.to"\
 		--std-lib "$runtimedir/stdlib"\
 		--trusted "$runtimedir/runtime.a"\
+		--link-static\
 		"$runtimedir/support.to"
 	;;
 *)
