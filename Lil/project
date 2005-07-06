@@ -112,7 +112,7 @@ unit Closure_State = "closure_state.sml" { CLOSURE_STATE
 unit CLOSURE_ANALYZE = "closure_analyze.sig.sml" { Lil Closure_State Name }
 unit Closure_Analyze = "closure_analyze.sml" { CLOSURE_ANALYZE 
 	Lil Frees Closure_State Name Listops LilDefs LilContext LilSubst Synthesis Reduce
-	Deconstruct Util Stats Option Prim List PpLil Array Int
+	Deconstruct Util Stats Option Prim List PpLil Array Int HashTable
 }
 
 unit LILCLOSE = "toclosure.sig.sml" { Lil }
