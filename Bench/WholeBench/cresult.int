@@ -1,6 +1,0 @@
-(*
-	Must agree with runtime's struct cresult.
-*)
-datatype 'a cresult =
-	Normal of 'a	(* Normal v => v *)
-|	Error of exn	(* Error e => raise e *)

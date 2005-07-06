@@ -1,7 +1,0 @@
-(* Vector equality; see ../Elaborator/equal.sml.  *)
-
-structure TiltVectorEq :
-sig
-	val vector_eq : ('a * 'a -> bool) -> 'a vector * 'a vector -> bool
-	val word8vector_eq : TiltPrim.word8vector * TiltPrim.word8vector -> bool
-end
