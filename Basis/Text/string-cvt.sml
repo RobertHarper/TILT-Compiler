@@ -138,4 +138,3 @@ structure StringCvt :> STRING_CVT =
 	       | SOME(x, _) => SOME x
 	 end
   end
-

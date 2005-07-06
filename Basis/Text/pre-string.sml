@@ -211,6 +211,4 @@ structure PreString =
             get (cs, n, [])
           end
 
-  end; (* PreString *)
-
-
+  end
