@@ -41,7 +41,7 @@ if [ $arg = all -o $arg = nj ] ; then
 NJ compiled TILT results
 ************************************************************";
 
-    (cd ./Test ; ../Bin/runall -nf);
+    if (cd ./Test ; ../Bin/runall -nf); then :; else echo "NJ compiled TILT tests failed"; exit 1; fi ;
 fi
 
 if [ $arg = all -o $arg = tilt ] ; then  
@@ -56,5 +56,5 @@ if [ $arg = all -o $arg = tilt ] ; then
 TILT compiled TILT results
 ************************************************************" ;
 
-    (cd ./Test ; ../Bin/runall -f) ;
+    if (cd ./Test ; ../Bin/runall -f) ; then :; else echo "TILT compiled TILT tests failed"; exit 1; fi ;
 fi

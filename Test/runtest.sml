@@ -367,7 +367,7 @@ struct
 	    fn (dir,file) => P.joinDirFile{dir=dir,file=file}
     in
 	fun bindir (name : string) : string =
-	    P.dir (CommandLine.name())/".."/name
+	    P.dir (CommandLine.name())/".."/".."/name
     end
 
     fun pblock b = 

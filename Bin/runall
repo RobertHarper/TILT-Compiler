@@ -13,8 +13,8 @@ echo Skipping:  `awk '/^#/ {next} $2 ~ /skip/ {print $1 " "}' $testlist`
 
 # Run the ones we expect to fail
 echo 'These tests should fail....'
-"$bindir"/runtest ${1+"$@"} -F `awk '/^#/ {next} $2 ~ /fail/ {print $1}' $testlist`
+"$bindir"/runtest ${1+"$@"} -F `awk '/^#/ {next} $2 ~ /fail/ {print $1}' $testlist` || exit 1
 
 # Run the ones we expect to succeed
 echo 'These tests should succeed....'
-"$bindir"/runtest ${1+"$@"} -S `awk '/^#/ {next} $2 ~ /pass/ {print $1}' $testlist`
+"$bindir"/runtest ${1+"$@"} -S `awk '/^#/ {next} $2 ~ /pass/ {print $1}' $testlist` || exit 1
