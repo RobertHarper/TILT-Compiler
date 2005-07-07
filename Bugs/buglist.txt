@@ -164,3 +164,4 @@
 0183 [open]	Talc argument to increase stack size for scalability.
 0184 [open]	Improve closure analysis for scalability.
 0185 [open]	Improve support for project description file parameters.
+0186 [open]	Improve sparc runtime's large object allocation.

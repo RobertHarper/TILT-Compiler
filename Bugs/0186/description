@@ -1,0 +1,42 @@
+Number: 0186
+Title:	Improve sparc runtime's large object allocation.
+Keywords:	runtime, large object space, GC
+Submitter:	David Swasey <swasey@cs.cmu.edu>
+Date:	7/7/05
+Version:	CVS
+System:	solaris
+Severity:	cosmetic
+Problem:
+
+	The sparc GC has a large object space.  The mutator allocates
+	large arrays in the LOS.  C code in the runtime always
+	allocates in the nursery; for example, posix_io_read allocates
+	the string it returns from the nursery.
+
+	For regularity, and possibly to improve performance, the
+	runtime should allocate large objects exactly as the mutator
+	does.
+
+Code:
+Transcript:
+Comments:
+
+	IIRC, the runtime only allocates large string arrays.
+
+	The code to modify is
+	../../Runtime/sparc/create.c:/alloc_space
+
+	The code to emulate is ../../Rtl/tortl-array.sml:/xarray_int
+
+	xarray_int calls ../../Runtime/sparc/gc.c:/^alloc_bigintarray
+	to allocate arrays larger than 2048 bytes (including GC tag,
+	etc).
+
+	As you fix this bug, find out if it helps performance; for
+	example, measure the time it takes to compile the basis before
+	and after the change.
+
+Fix:
+Test:
+Owner: swasey
+Status: open
