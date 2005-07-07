@@ -6,7 +6,7 @@ Date:	6/24/05
 Version:	CVS
 System:	talx86
 Severity:	reject
-Problem:	<description of problem>
+Problem:
 
 	[F]or future reference [...] there is a command line flag that
 	you can give to ocaml compiled binaries to increase the stack

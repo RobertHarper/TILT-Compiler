@@ -6,9 +6,9 @@ Date:	6/24/05
 Version:	CVS
 System:	talx86
 Severity:	cosmetic
-Problem:	<description of problem>
+Problem:
 
-	Added a function to TAL/pp.sml which writes a TAL module
+	[I] added a function to TAL/pp.sml which writes a TAL module
 	directly to an outstream instead of consing up a huge
 	serialized string data structure, and then writing that out.
 	This makes a huge difference for large files.  I only had time

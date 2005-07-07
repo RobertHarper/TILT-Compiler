@@ -6,7 +6,7 @@ Date:	6/24/05
 Version:	CVS
 System:	talx86
 Severity:	reject
-Problem:	<description of problem>
+Problem:
 
 	I was able to compile large files (on the order of half of
 	tilt) for the most part in < 130M resident set size.  The one
