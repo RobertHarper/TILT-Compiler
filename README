@@ -23,8 +23,8 @@ Send comments and bug reports to
 
 INSTALLING TILT
 
-The TILT sources compile under SML/NJ version 110.0.7 and under TILT.
-To get started, you need SML/NJ available from
+TILT compiles under SML/NJ version 110.0.7 and under TILT.  To get
+started, you need SML/NJ available from
 
 	http://www.smlnj.org/
 
@@ -54,7 +54,7 @@ tag; two machines that are not binary compatible should have distinct
 ostype tags.
 
 Ensure that the script Bin/nproc prints the number of processors on
-multiprocessor machines.
+your machine.
 
 Take a look at the commands in Makefile, Runtime/talx86/Makefile, and
 Runtime/sparc/Makefile and then try
@@ -85,7 +85,7 @@ You can control the number of slaves by having make invoke TILT with
 an option like "-j n" where n is the number of slaves to run; for
 example, the command
 
-	make "tilt=./Bin/tilt-nj -vv -j1"
+	make 'tilt=./Bin/tilt-nj -vv -j1'
 
 is similar to "make" except TILT is limited to one slave.
 
@@ -105,9 +105,8 @@ machines:
 
 		make runtime
 
-	to copy the TAL assembler and supporting files into the TILT
-	directory.  (After this step, you can do "make clean" in the
-	TAL directory.)
+	in the top-level TILT directory.  (After this step, you can do
+	"make clean" in the TAL directory.)
 
 	3.  Run
 
@@ -145,9 +144,9 @@ rejects "datatype 'a t = T of int t" but accepts "datatype 'a t = T of
 
 TILT implements an extension to structure sharing specifications (that
 is, "spec sharing longstrid1 = ...  longstridn") that is likely to be
-incompatible with the extensions implemented by other SML compilers.
-The file Doc/structure_sharing.txt describes the structure sharing
-extension planned for a future version of TILT.
+incompatible with similar extensions implemented by other SML
+compilers.  The file Doc/structure_sharing.txt describes the structure
+sharing extension planned for a future version of TILT.
 
 TILT supports signature expression of the form "sigexp where
 longstrid1 = longstrid2" as a shorthand for a series of type

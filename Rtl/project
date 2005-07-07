@@ -43,10 +43,6 @@ unit TortlSum = "tortl-sum.sml" {
 	Util Name List Int Prim TilWord32 TORTLSUM Rtl TortlBase
 	TortlRecord Rtltags Nil NilUtil Ppnil Stats
 }
-(*
-	TORTLVARARG tortl-vararg.sig
-	TortlVararg tortl-vararg
-*)
 unit TORTLARRAY = "tortl-array.sig.sml" {
 	Nil Rtl Prim TortlBase Name
 }

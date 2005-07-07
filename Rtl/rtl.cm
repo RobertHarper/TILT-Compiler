@@ -20,24 +20,8 @@ tortl-record.sig.sml
 tortl-record.sml
 tortl-array.sig.sml
 tortl-array.sml
-tortl-vararg.sig.sml
-tortl-vararg.sml
 tortl.sig.sml
 tortl.sml
-(* tortl_array.sml *)
-(* ------ the following files needed for RTL interpreter ------ *)
-rtlheap.sig.sml
-rtlheap.sml
-rtlregister.sig.sml
-rtlregister.sml
-(*
-rtloper.sig.sml
-rtloper.sml
-rtlinterp.sig.sml
-rtlinterp.sml
-rtlopt.sig.sml
-rtlopt.sml
-*)
 (* ------ the never-absent link file for this directory -------- *)
 linkrtl.sig.sml
 linkrtl.sml
