@@ -165,3 +165,4 @@
 0184 [open]	Improve closure analysis for scalability.
 0185 [open]	Improve support for project description file parameters.
 0186 [open]	Improve sparc runtime's large object allocation.
+0187 [open]	Do not phase split or link units with no sbnds.

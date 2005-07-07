@@ -1,0 +1,28 @@
+Number: 0187
+Title:	Do not phase split or link units with no sbnds.
+Keywords:	manager
+Submitter:	David Swasey <swasey@cs.cmu.edu>
+Date:	7/7/05
+Version:	CVS
+System:	any
+Severity:	cosmetic
+Problem:
+
+	Source units containing only signatures and fixity, overload,
+	and extern declarations elaborate to sdecs with no sbnds.
+	These occur frequently in TILT's sources because most
+	signatures are in their own compilation units.
+
+	It is possible to make the manager smarter about units with no
+	code: If a unit elaborates to sdecs with no sbnds, then do not
+	invoke the backend and do not link the unit into executables.
+	This would reduce the number of units linked and would avoid
+	wasting time running the backend on trivial units.
+
+Code:
+Transcript:
+Comments:
+Fix:
+Test:
+Owner: swasey
+Status: open
