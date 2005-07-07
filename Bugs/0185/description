@@ -1,0 +1,49 @@
+Number: 0185
+Title:	Improve support for project description file parameters.
+Keywords:	manager, project descriptions
+Submitter:	David Swasey <swasey@cs.cmu.edu>
+Date:	7/7/05
+Version:	CVS
+System:	any
+Severity:	cosmetic
+Problem:
+
+	In creating "tilt2" for his work on recursive modules, Derek
+	opined that the combination
+
+		val x = e
+		include "file"
+
+	is confusing because the user may expect that file can contain
+	free references to x.
+
+	These value declarations are really parameters.  We have a
+	second source of parameters: The environment.  I think we
+	should eliminate value declarations and improve our support
+	for environment variables.
+
+	The manager's current set of pre-defined identifiers
+	($linking, $cputype, etc) can be made available as simulated
+	environment variables.
+
+	The manager should require project description files to
+	declare environment variables prior to using them.
+
+		env NAME : TY
+
+	where TY can be string, int, bool.  The manager stops if NAME
+	is not in the environment or can not be parsed as a value of
+	type TY. This makes finding typos in uses of NAME easier and
+	supports non-string env variables.
+
+	Aside: It was silly not to overload = given the attempt to
+	make the expressions in project description files feel like
+	ML. That should be fixed.
+
+Code:
+Transcript:
+Comments:
+Fix:
+Test: *
+Owner: swasey
+Status: open
