@@ -5,16 +5,16 @@
 #include <math.h>	/* for ldexp */
 
 /* extract the exponent */
-int
-real_logb(double arg)
+int real_logb(double arg)
 {
-	int biasedExp = 0;
-	int temp[2];
+  union {
+    double r;
+    int t[2];
+  } exp_real;
 	assert((2 * (sizeof(int))) == sizeof(double));
-	*((double *)temp) = arg;
-	biasedExp = (int)(temp[1]);
-	biasedExp -= 1023;
-	return biasedExp;
+  exp_real.r = arg;
+  int unbiased_exp = ((exp_real.t[1] & 0x7FF00000) >> 20) - 1023;
+	return unbiased_exp;
 }
 
 #if 0
